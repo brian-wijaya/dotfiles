@@ -104,18 +104,39 @@ echo "  ~/.config/nvim -> $DOTFILES_DIR/.config/nvim"
 echo "  ~/.config/tmux/tmux.conf -> $DOTFILES_DIR/.config/tmux/tmux.conf"
 echo "  ~/.config/wezterm/wezterm.lua -> $DOTFILES_DIR/.config/wezterm/wezterm.lua"
 
-# Remind about WezTerm and fonts
+# Copy WezTerm config to Windows home directory (WezTerm on Windows looks there, not in WSL)
+echo ""
+echo "Copying WezTerm config to Windows home directory..."
+# Try to detect Windows username - common usernames to try
+WIN_USER=""
+for user in wijay $(whoami 2>/dev/null) $(id -un 2>/dev/null); do
+  if [ -d "/mnt/c/Users/$user" ]; then
+    WIN_USER="$user"
+    break
+  fi
+done
+
+if [ -n "$WIN_USER" ] && [ -d "/mnt/c/Users/$WIN_USER" ]; then
+  if cp "$DOTFILES_DIR/.config/wezterm/wezterm.lua" "/mnt/c/Users/$WIN_USER/.wezterm.lua" 2>/dev/null; then
+    echo "✓ WezTerm config copied to /mnt/c/Users/$WIN_USER/.wezterm.lua"
+  else
+    echo "⚠ Could not copy WezTerm config automatically (permission denied?)"
+    echo "   Please copy manually:"
+    echo "   cp $DOTFILES_DIR/.config/wezterm/wezterm.lua /mnt/c/Users/$WIN_USER/.wezterm.lua"
+  fi
+else
+  echo "⚠ Could not detect Windows username. Please copy WezTerm config manually:"
+  echo "   cp $DOTFILES_DIR/.config/wezterm/wezterm.lua /mnt/c/Users/YOUR_USERNAME/.wezterm.lua"
+fi
+
+# Remind about fonts
 echo ""
 echo "=== Manual Steps Required ==="
-echo "1. Copy WezTerm config to Windows (if using Windows WezTerm):"
-echo "   cp $DOTFILES_DIR/.config/wezterm/wezterm.lua /mnt/c/Users/YOUR_USERNAME/.wezterm.lua"
-echo "   Or use XDG_CONFIG_HOME: set WEZTERM_CONFIG_FILE=%USERPROFILE%\\.config\\wezterm\\wezterm.lua"
-echo ""
-echo "2. Install Nerd Fonts on Windows (run from PowerShell):"
+echo "1. Install Nerd Fonts on Windows (run from PowerShell):"
 echo "   powershell -ExecutionPolicy Bypass -File $DOTFILES_DIR/install-fonts.ps1"
 echo "   Or manually: winget install -e --id CascadiaCode.CascadiaCode-NF"
 echo ""
-echo "3. Launch nvim and wait for plugins to install"
-echo "4. Run :MasonInstallAll in Neovim"
+echo "2. Launch nvim and wait for plugins to install"
+echo "3. Run :MasonInstallAll in Neovim"
 echo ""
 echo "Done! Restart WezTerm to apply changes."

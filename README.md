@@ -6,12 +6,16 @@ Personal development environment for WSL Arch Linux + WezTerm + NvChad.
 
 ```
 dotfiles/
-├── .bashrc              # Shell config (zoxide, fzf, tmux auto-start)
-├── .tmux.conf           # tmux config (Ctrl-Space prefix, mouse, vim keys)
-├── .wezterm.lua         # WezTerm config (WSL, keybindings, theme)
+├── .bashrc                      # Shell config (zoxide, fzf, tmux auto-start)
 ├── .config/
-│   └── nvim/            # NvChad configuration
-├── packages.txt         # Arch Linux package list
+│   ├── nvim/                    # NvChad configuration
+│   ├── tmux/
+│   │   └── tmux.conf            # tmux config (Ctrl-Space prefix, mouse, vim keys)
+│   └── wezterm/
+│       └── wezterm.lua          # WezTerm config (WSL, keybindings, theme)
+├── install.sh                   # Automated setup script
+├── install-fonts.ps1            # Windows Nerd Font installer
+├── packages.txt                 # Arch Linux package list
 └── README.md
 ```
 
@@ -61,37 +65,31 @@ Or install everything from the package list:
 sudo pacman -S --needed $(cat packages.txt | awk '{print $1}')
 ```
 
-### 4. Clone and Apply Dotfiles
+### 4. Clone Dotfiles
 
 ```bash
 cd ~
 git clone https://github.com/retopo001/dotfiles.git
-
-# Backup existing configs
-mkdir -p ~/.config_backup
-mv ~/.bashrc ~/.config_backup/ 2>/dev/null
-mv ~/.tmux.conf ~/.config_backup/ 2>/dev/null
-mv ~/.config/nvim ~/.config_backup/ 2>/dev/null
-
-# Create symlinks
-ln -sf ~/dotfiles/.bashrc ~/.bashrc
-ln -sf ~/dotfiles/.tmux.conf ~/.tmux.conf
-ln -sf ~/dotfiles/.config/nvim ~/.config/nvim
 ```
 
-### 5. WezTerm Config & Fonts (Windows Side)
+### 5. Run Install Script
 
-**Copy WezTerm config:**
+The install script will:
+- Install Go (if missing) for gopls LSP server
+- Backup existing configs to `~/.config_backup/`
+- Create symlinks for all configs
+- Copy WezTerm config to Windows home directory
+
 ```bash
-cp ~/dotfiles/.wezterm.lua /mnt/c/Users/YOUR_USERNAME/.wezterm.lua
+cd ~/dotfiles
+./install.sh
 ```
 
-Or from PowerShell:
-```powershell
-Copy-Item "\\wsl$\archlinux\home\YOUR_WSL_USER\dotfiles\.wezterm.lua" "$HOME\.wezterm.lua"
-```
+**Note:** The install script automatically copies the WezTerm config to your Windows home directory (`C:\Users\YOUR_USERNAME\.wezterm.lua`) because WezTerm on Windows looks there, not in WSL.
 
-**Install Nerd Fonts (required for icons):**
+### 6. Install Nerd Fonts (Windows Side)
+
+**Required for icons in terminal and Neovim.**
 
 From PowerShell (run as Administrator for best results):
 ```powershell
@@ -102,9 +100,11 @@ powershell -ExecutionPolicy Bypass -File "\\wsl$\archlinux\home\YOUR_WSL_USER\do
 winget install -e --id CascadiaCode.CascadiaCode-NF
 ```
 
-The script will automatically download and install CascadiaCode Nerd Font. After installation, **restart WezTerm** for fonts to take effect.
+The script will automatically download and install multiple Nerd Fonts (CascadiaCode, Hack, FiraCode, JetBrainsMono). After installation, **restart WezTerm completely** for fonts to take effect.
 
-### 6. Initialize Neovim
+**If you see font warnings:** The config tries multiple font name variations. If fonts still don't work, verify they're installed in Windows Settings → Fonts, or run the install-fonts.ps1 script again.
+
+### 7. Initialize Neovim
 
 ```bash
 # First launch will install plugins
@@ -115,7 +115,7 @@ nvim
 :checkhealth
 ```
 
-### 7. Authenticate GitHub CLI
+### 8. Authenticate GitHub CLI
 
 ```bash
 gh auth login
