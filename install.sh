@@ -72,25 +72,44 @@ echo "Backing up existing configs..."
 mkdir -p ~/.config_backup
 [ -f ~/.bashrc ] && mv ~/.bashrc ~/.config_backup/
 [ -f ~/.tmux.conf ] && mv ~/.tmux.conf ~/.config_backup/
+[ -f ~/.wezterm.lua ] && mv ~/.wezterm.lua ~/.config_backup/
 [ -d ~/.config/nvim ] && mv ~/.config/nvim ~/.config_backup/
+[ -d ~/.config/tmux ] && mv ~/.config/tmux ~/.config_backup/
+[ -d ~/.config/wezterm ] && mv ~/.config/wezterm ~/.config_backup/
 
 # Create symlinks
 echo "Creating symlinks..."
 DOTFILES_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Bash config (must be in home directory)
 ln -sf "$DOTFILES_DIR/.bashrc" ~/.bashrc
-ln -sf "$DOTFILES_DIR/.tmux.conf" ~/.tmux.conf
+
+# Create .config directory structure
 mkdir -p ~/.config
+
+# Neovim config (XDG standard)
 ln -sf "$DOTFILES_DIR/.config/nvim" ~/.config/nvim
 
+# Tmux config (supports XDG_CONFIG_HOME)
+mkdir -p ~/.config/tmux
+ln -sf "$DOTFILES_DIR/.config/tmux/tmux.conf" ~/.config/tmux/tmux.conf
+
+# WezTerm config (supports XDG_CONFIG_HOME)
+mkdir -p ~/.config/wezterm
+ln -sf "$DOTFILES_DIR/.config/wezterm/wezterm.lua" ~/.config/wezterm/wezterm.lua
+
 echo "Symlinks created:"
-ls -la ~/.bashrc ~/.tmux.conf ~/.config/nvim
+echo "  ~/.bashrc -> $DOTFILES_DIR/.bashrc"
+echo "  ~/.config/nvim -> $DOTFILES_DIR/.config/nvim"
+echo "  ~/.config/tmux/tmux.conf -> $DOTFILES_DIR/.config/tmux/tmux.conf"
+echo "  ~/.config/wezterm/wezterm.lua -> $DOTFILES_DIR/.config/wezterm/wezterm.lua"
 
 # Remind about WezTerm and fonts
 echo ""
 echo "=== Manual Steps Required ==="
-echo "1. Copy WezTerm config to Windows:"
-echo "   cp $DOTFILES_DIR/.wezterm.lua /mnt/c/Users/YOUR_USERNAME/.wezterm.lua"
+echo "1. Copy WezTerm config to Windows (if using Windows WezTerm):"
+echo "   cp $DOTFILES_DIR/.config/wezterm/wezterm.lua /mnt/c/Users/YOUR_USERNAME/.wezterm.lua"
+echo "   Or use XDG_CONFIG_HOME: set WEZTERM_CONFIG_FILE=%USERPROFILE%\\.config\\wezterm\\wezterm.lua"
 echo ""
 echo "2. Install Nerd Fonts on Windows (run from PowerShell):"
 echo "   powershell -ExecutionPolicy Bypass -File $DOTFILES_DIR/install-fonts.ps1"

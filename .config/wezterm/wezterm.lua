@@ -4,9 +4,17 @@ return {
   -- Default to WSL archlinux
   default_domain = "WSL:archlinux",
 
-  -- Font settings (using common fallbacks)
+  -- Font settings (Nerd Fonts for icons)
+  -- WezTerm font names - try multiple variations to ensure compatibility
   font = wezterm.font_with_fallback({
-    "Cascadia Code",
+    { family = "CascadiaCode NF", weight = "Regular" },
+    { family = "CascadiaCode Nerd Font", weight = "Regular" },
+    { family = "Cascadia Code NF", weight = "Regular" },
+    { family = "Cascadia Code", weight = "Regular" },
+    { family = "Hack Nerd Font", weight = "Regular" },
+    { family = "FiraCode Nerd Font", weight = "Regular" },
+    { family = "Fira Code", weight = "Regular" },
+    { family = "JetBrainsMono Nerd Font", weight = "Regular" },
     "Consolas",
     "monospace",
   }),
@@ -44,3 +52,4 @@ return {
     },
   },
 }
+
