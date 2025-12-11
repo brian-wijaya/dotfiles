@@ -5,19 +5,8 @@ return {
   default_domain = "WSL:archlinux",
 
   -- Font settings (Nerd Fonts for icons)
-  -- WezTerm will try fonts in order until it finds one that exists
-  font = wezterm.font_with_fallback({
-    "Cascadia Code NF",           -- Most common Nerd Font name
-    "CascadiaCode NF",             -- Alternative name
-    "CascadiaCode Nerd Font",     -- Full name variant
-    "Cascadia Code",               -- Fallback to regular Cascadia
-    "Hack Nerd Font",
-    "FiraCode Nerd Font",
-    "Fira Code",
-    "JetBrainsMono Nerd Font",
-    "Consolas",
-    "monospace",
-  }),
+  -- Primary font: Cascadia Code NF (installed by install.sh)
+  font = wezterm.font("Cascadia Code NF"),
   font_size = 11.5,
 
   -- Terminal appearance

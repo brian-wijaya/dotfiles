@@ -40,27 +40,36 @@ function Install-NerdFont {
     }
 }
 
-# Try winget first
+# List of fonts to install (all required)
+$fontsToInstall = @(
+    @{ Name = "CascadiaCode"; Url = "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaCode.zip" },
+    @{ Name = "Hack"; Url = "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.zip" },
+    @{ Name = "FiraCode"; Url = "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip" },
+    @{ Name = "JetBrainsMono"; Url = "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip" }
+)
+
+# Try winget first for CascadiaCode (primary font)
 if (Get-Command winget -ErrorAction SilentlyContinue) {
-    Write-Host "Using winget to install Nerd Fonts..." -ForegroundColor Green
-    
-    # Install Cascadia Code Nerd Font
+    Write-Host "Using winget to install CascadiaCode NF..." -ForegroundColor Green
     winget install -e --id CascadiaCode.CascadiaCode-NF --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-Host "[OK] CascadiaCode Nerd Font installed via winget" -ForegroundColor Green
     } else {
-        Write-Host "[WARN] winget installation failed, trying manual download..." -ForegroundColor Yellow
+        Write-Host "[WARN] winget installation failed, using manual download..." -ForegroundColor Yellow
         Install-NerdFont "CascadiaCode" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaCode.zip"
     }
-    
-    # Install additional Nerd Fonts for better coverage
-    Install-NerdFont "Hack" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.zip"
-    Install-NerdFont "FiraCode" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip"
 } else {
-    Write-Host "winget not found. Installing fonts manually..." -ForegroundColor Yellow
+    Write-Host "winget not found. Installing all fonts manually..." -ForegroundColor Yellow
     Install-NerdFont "CascadiaCode" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaCode.zip"
-    Install-NerdFont "Hack" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Hack.zip"
-    Install-NerdFont "FiraCode" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip"
+}
+
+# Install all other fonts
+Write-Host ""
+Write-Host "Installing additional Nerd Fonts..." -ForegroundColor Cyan
+foreach ($font in $fontsToInstall) {
+    if ($font.Name -ne "CascadiaCode") {
+        Install-NerdFont $font.Name $font.Url
+    }
 }
 
 # Clean up temp directory

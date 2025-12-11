@@ -129,14 +129,48 @@ else
   echo "   cp $DOTFILES_DIR/.config/wezterm/wezterm.lua /mnt/c/Users/YOUR_USERNAME/.wezterm.lua"
 fi
 
-# Remind about fonts
+# Check and install Nerd Fonts on Windows (required for WezTerm icons)
 echo ""
-echo "=== Manual Steps Required ==="
-echo "1. Install Nerd Fonts on Windows (run from PowerShell):"
-echo "   powershell -ExecutionPolicy Bypass -File $DOTFILES_DIR/install-fonts.ps1"
-echo "   Or manually: winget install -e --id CascadiaCode.CascadiaCode-NF"
+echo "Checking and installing Nerd Fonts on Windows..."
+if [ -n "$WIN_USER" ] && [ -d "/mnt/c/Users/$WIN_USER" ]; then
+  # Check if primary font (Cascadia Code NF) is installed
+  CASCADIA_INSTALLED=false
+  if [ -f "/mnt/c/Users/$WIN_USER/AppData/Local/Microsoft/Windows/Fonts/CascadiaCodeNF-Regular.ttf" ] || \
+     [ -f "/mnt/c/Windows/Fonts/CascadiaCodeNF-Regular.ttf" ]; then
+    CASCADIA_INSTALLED=true
+    echo "✓ Cascadia Code NF already installed"
+  fi
+  
+  # Always run the font installer to ensure all fonts are installed
+  if command -v powershell.exe >/dev/null 2>&1; then
+    # Convert WSL path to Windows path for PowerShell
+    PS_SCRIPT_PATH=$(wslpath -w "$DOTFILES_DIR/install-fonts.ps1" 2>/dev/null)
+    
+    if [ -z "$PS_SCRIPT_PATH" ]; then
+      # Fallback if wslpath doesn't work
+      PS_SCRIPT_PATH=$(echo "$DOTFILES_DIR/install-fonts.ps1" | sed 's|/mnt/c|C:|' | sed 's|/|\\|g')
+    fi
+    
+    echo "Installing all Nerd Fonts (CascadiaCode, Hack, FiraCode, JetBrainsMono)..."
+    if powershell.exe -ExecutionPolicy Bypass -File "$PS_SCRIPT_PATH" 2>&1; then
+      echo "✓ Nerd Fonts installation completed"
+    else
+      echo "⚠ PowerShell script had issues. Fonts may still be installing..."
+      echo "   Check Windows Settings → Fonts to verify"
+    fi
+  else
+    echo "⚠ PowerShell not available. Please install fonts manually:"
+    echo "   powershell -ExecutionPolicy Bypass -File $DOTFILES_DIR/install-fonts.ps1"
+  fi
+else
+  echo "⚠ Could not detect Windows user. Please install fonts manually:"
+  echo "   powershell -ExecutionPolicy Bypass -File $DOTFILES_DIR/install-fonts.ps1"
+fi
+
 echo ""
+echo "=== Next Steps ==="
+echo "1. Restart WezTerm completely (close all windows) to apply font changes"
 echo "2. Launch nvim and wait for plugins to install"
 echo "3. Run :MasonInstallAll in Neovim"
 echo ""
-echo "Done! Restart WezTerm to apply changes."
+echo "Done!"
