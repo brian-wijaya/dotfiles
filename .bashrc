@@ -8,6 +8,11 @@
 # --- PATH ---
 export PATH="/usr/bin:$HOME/.local/bin:$PATH"
 
+# --- tmuxifier (tmux session templates) ---
+# Install with: git clone https://github.com/jimeh/tmuxifier.git ~/.tmuxifier
+export PATH="$HOME/.tmuxifier/bin:$PATH"
+eval "$(tmuxifier init -)" 2>/dev/null || true
+
 # --- Aliases ---
 alias ls='ls --color=auto'
 alias grep='grep --color=auto'
