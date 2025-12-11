@@ -6,7 +6,8 @@ return {
 
   -- Font settings (Nerd Fonts for icons)
   -- Primary font: CascadiaCode NF (installed by install.sh)
-  -- Note: Font name must match exactly what's installed (no space in "CascadiaCode")
+  -- If you get font warnings, run: wezterm ls-fonts --list-system | grep -i cascadia
+  -- to find the exact font name, then update this config
   font = wezterm.font("CascadiaCode NF"),
   font_size = 11.5,
 

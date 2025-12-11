@@ -172,8 +172,33 @@ set -g prefix C-a  # Change to Ctrl+a
 
 ## Troubleshooting
 
-### Fonts not rendering
-Ensure Nerd Fonts are installed and WezTerm is configured to use them.
+### Fonts not rendering / Font warnings
+
+**If you see font warnings in WezTerm:**
+
+1. **Verify fonts are installed:**
+   ```powershell
+   # Check if fonts are in Windows Fonts directory
+   Get-ChildItem "$env:LOCALAPPDATA\Microsoft\Windows\Fonts" | Where-Object { $_.Name -like '*Cascadia*' }
+   ```
+
+2. **Find the exact font name:**
+   ```bash
+   # In WezTerm, open a new tab and run:
+   wezterm ls-fonts --list-system | grep -i cascadia
+   ```
+   This will show the exact font name to use in the config.
+
+3. **Update the config if needed:**
+   - Edit `dotfiles/.config/wezterm/wezterm.lua`
+   - Change the font name to match what `wezterm ls-fonts` shows
+   - Copy updated config: `cp ~/dotfiles/.config/wezterm/wezterm.lua /mnt/c/Users/YOUR_USERNAME/.wezterm.lua`
+   - Restart WezTerm
+
+4. **Re-run font installer:**
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File "\\wsl$\archlinux\home\YOUR_WSL_USER\dotfiles\install-fonts.ps1"
+   ```
 
 ### tmux colors wrong
 Ensure your terminal supports truecolor. The config sets `tmux-256color`.
