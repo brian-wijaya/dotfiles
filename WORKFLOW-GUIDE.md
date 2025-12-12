@@ -23,6 +23,9 @@ Every keybinding you should know, organized by tool and source.
 - `[grug-far.lua]` = grug-far.nvim plugin config
 - `[gitlinker.lua]` = gitlinker.nvim plugin config
 - `[ufo.lua]` = nvim-ufo plugin config
+- `[neocodeium.lua]` = neocodeium plugin config
+- `[vim-repeat]` = tpope/vim-repeat plugin (makes commands repeatable)
+- `[utils/repeatable.lua]` = custom repeatable command utility
 - `[init.lua]` = plugins/init.lua (inline plugin configs)
 
 **Prefix** = `Ctrl+Space` (your tmux prefix, defined in tmux.conf)
@@ -544,11 +547,15 @@ These activate when an LSP server attaches to a buffer.
 
 | Keys | Source | Action |
 |------|--------|--------|
-| `gd` | [NVCHAD lspconfig] | Go to definition |
+| `gd` | [mappings.lua] | Go to definition (with navigation support) |
+| `]d` | [mappings.lua] | Next definition/reference/implementation |
+| `[d` | [mappings.lua] | Previous definition/reference/implementation |
 | `gD` | [NVCHAD lspconfig] | Go to declaration |
-| `gi` | [NVCHAD lspconfig] | Go to implementation |
-| `gr` | [NVCHAD lspconfig] | Go to references |
-| `K` | [NVCHAD lspconfig] | Hover documentation |
+| `gi` | [mappings.lua] | Go to implementation (with navigation support) |
+| `gr` | [mappings.lua] | Go to references (with navigation support) |
+| `K` | [ufo.lua] | Hover documentation (or peek fold) |
+| `]w` | [mappings.lua] | Next word with definition |
+| `[w` | [mappings.lua] | Previous word with definition |
 | `Ctrl+k` | [NVCHAD lspconfig] | Signature help (insert mode) |
 | `gO` | [NEOVIM] | Document symbols |
 
@@ -636,8 +643,10 @@ These activate when an LSP server attaches to a buffer.
 | `F{char}` | [NEOVIM] | Find char backward |
 | `t{char}` | [NEOVIM] | Till char forward |
 | `T{char}` | [NEOVIM] | Till char backward |
-| `;` | [NEOVIM] | Repeat f/t forward |
-| `,` | [NEOVIM] | Repeat f/t backward |
+| `;` | [NEOVIM] | Repeat last f/F/t/T in same direction |
+| `,` | [NEOVIM] | Repeat last f/F/t/T in opposite direction |
+
+**Important:** `;` and `,` only work after `f`, `F`, `t`, or `T` commands. They do NOT repeat other commands like `%`, scrolling, or navigation. For repeating other commands, use `.` (dot).
 
 ### Up-Down Motion
 
@@ -709,6 +718,25 @@ These activate when an LSP server attaches to a buffer.
 | `Ctrl+u` | [NEOVIM] | Scroll up half page |
 | `Ctrl+f` | [NEOVIM] | Scroll down full page |
 | `Ctrl+b` | [NEOVIM] | Scroll up full page |
+
+### Percentage Jumps (Repeatable)
+
+| Keys | Source | Action |
+|------|--------|--------|
+| `{n}%` | [mappings.lua] | Jump to n% of file (repeatable with `.`) |
+| `%` | [mappings.lua] | Jump to matching bracket (default behavior) |
+
+**Usage:** Type any number followed by `%` (e.g., `10%`, `25%`, `75%`) to jump to that percentage of the file. These jumps are now **repeatable with `.`** thanks to the repeatable command system.
+
+**Examples:**
+- `10%` → jumps to 10% of file, then `.` repeats it
+- `50%` → jumps to 50% of file, then `.` repeats it
+- `%` (no number) → jumps to matching bracket (unchanged behavior)
+
+### Screen Position
+
+| Keys | Source | Action |
+|------|--------|--------|
 | `zz` | [NEOVIM] | Center cursor line |
 | `zt` | [NEOVIM] | Cursor line to top |
 | `zb` | [NEOVIM] | Cursor line to bottom |
@@ -721,6 +749,24 @@ These activate when an LSP server attaches to a buffer.
 | `zL` | [NEOVIM] | Scroll half screen left |
 | `zs` | [NEOVIM] | Scroll horizontally, cursor at start |
 | `ze` | [NEOVIM] | Scroll horizontally, cursor at end |
+
+### Percentage Jumps (Custom)
+
+| Keys | Source | Action |
+|------|--------|--------|
+| `Leader j` | [mappings.lua] | Prompt for percentage (0-100) and jump |
+| `Leader j1` | [mappings.lua] | Quick jump to 10% |
+| `Leader j2` | [mappings.lua] | Quick jump to 20% |
+| `Leader j3` | [mappings.lua] | Quick jump to 30% |
+| `Leader j4` | [mappings.lua] | Quick jump to 40% |
+| `Leader j5` | [mappings.lua] | Quick jump to 50% |
+| `Leader j6` | [mappings.lua] | Quick jump to 60% |
+| `Leader j7` | [mappings.lua] | Quick jump to 70% |
+| `Leader j8` | [mappings.lua] | Quick jump to 80% |
+| `Leader j9` | [mappings.lua] | Quick jump to 90% |
+| `Leader j0` | [mappings.lua] | Quick jump to 100% |
+
+**Usage:** Press `Leader j` (Space + j) and type any percentage (e.g., `25` for 25%, `75` for 75%). For quick access to common percentages, use `Leader j1` through `Leader j0`.
 
 ### Screen Position
 
@@ -760,6 +806,8 @@ These activate when an LSP server attaches to a buffer.
 | `Ctrl+i` | [NEOVIM] | Go to newer jump position |
 | `:jumps` | [NEOVIM] | List jump locations |
 | `:clearjumps` | [NEOVIM] | Clear jump list |
+
+**Note:** Navigation commands like `%`, `gg`, `G`, `10%` are added to the jumplist. Use `Ctrl+o` to go back and `Ctrl+i` to go forward through your jump history. The `.` command does NOT repeat these - you must type the command again or use the jumplist.
 
 ### Changes
 
@@ -849,6 +897,54 @@ Use with operators: `d`, `c`, `y`, `v`, etc.
 - `vi(` = visual select inside parens
 - `ct)` = change to closing paren
 
+### Treesitter Text Objects (AST-Aware)
+
+Smart text objects based on code structure (requires treesitter-textobjects plugin).
+
+| Keys | Source | Action |
+|------|--------|--------|
+| `af` | [treesitter-textobjects] | Around function (outer) |
+| `if` | [treesitter-textobjects] | Inner function |
+| `ac` | [treesitter-textobjects] | Around class (outer) |
+| `ic` | [treesitter-textobjects] | Inner class |
+| `aa` | [treesitter-textobjects] | Around parameter |
+| `ia` | [treesitter-textobjects] | Inner parameter |
+| `ab` | [treesitter-textobjects] | Around block |
+| `ib` | [treesitter-textobjects] | Inner block |
+| `aC` | [treesitter-textobjects] | Around call |
+| `iC` | [treesitter-textobjects] | Inner call |
+| `as` | [treesitter-textobjects] | Around statement |
+| `a/` | [treesitter-textobjects] | Around comment |
+
+**Navigation with Treesitter:**
+| Keys | Source | Action |
+|------|--------|--------|
+| `]f` | [treesitter-textobjects] | Next function start |
+| `[f` | [treesitter-textobjects] | Previous function start |
+| `]F` | [treesitter-textobjects] | Next function end |
+| `[F` | [treesitter-textobjects] | Previous function end |
+| `]c` | [treesitter-textobjects] | Next class start |
+| `[c` | [treesitter-textobjects] | Previous class start |
+| `]a` | [treesitter-textobjects] | Next parameter start |
+| `[a` | [treesitter-textobjects] | Previous parameter start |
+| `]b` | [treesitter-textobjects] | Next block start |
+| `[b` | [treesitter-textobjects] | Previous block start |
+
+**Parameter Swapping:**
+| Keys | Source | Action |
+|------|--------|--------|
+| `<leader>a` | [treesitter-textobjects] | Swap with next parameter |
+| `<leader>A` | [treesitter-textobjects] | Swap with previous parameter |
+
+**Examples:**
+- `daf` = delete entire function
+- `cif` = change function body
+- `yac` = yank entire class
+- `]f` = jump to next function
+- `vif` = visually select function body
+
+**Note:** These work based on the actual code structure (AST), not just syntax. More accurate than regex-based text objects.
+
 ### Registers
 
 | Register | Source | Description |
@@ -896,7 +992,13 @@ Use with operators: `d`, `c`, `y`, `v`, etc.
 | `u` | [NEOVIM] | Undo |
 | `U` | [NEOVIM] | Undo all changes on line |
 | `Ctrl+r` | [NEOVIM] | Redo |
-| `.` | [NEOVIM] | Repeat last change |
+| `.` | [NEOVIM] + [vim-repeat] | Repeat last change or repeatable command |
+
+**Important Notes:**
+- `.` repeats the last **change** (like `dd`, `ciw`, `r`, `x`, etc.)
+- `.` also repeats **repeatable navigation commands** (like `10%`, `gg`, `G`) thanks to `vim-repeat` plugin
+- For repeating character searches (`f`/`F`/`t`/`T`), use `;` (same direction) or `,` (opposite direction)
+- Custom repeatable commands are configured in `utils/repeatable.lua` for consistency
 | `g-` | [NEOVIM] | Go to older text state |
 | `g+` | [NEOVIM] | Go to newer text state |
 | `:earlier {time}` | [NEOVIM] | Go to earlier state (e.g., 10m) |
@@ -1227,6 +1329,15 @@ Mark frequently used files and jump to them instantly with numbered shortcuts.
 |------|--------|--------|
 | `Leader gy` | [gitlinker.lua] | Copy GitHub/GitLab link to clipboard |
 
+### File Path Operations
+
+| Keys | Source | Action |
+|------|--------|--------|
+| `Leader yf` | [mappings.lua] | Yank file absolute path |
+| `Leader yr` | [mappings.lua] | Yank file relative path |
+
+**Usage:** Quickly copy file paths to clipboard for sharing, documentation, or scripts.
+
 ### UFO.nvim — Better Folding (Treesitter)
 
 | Keys | Source | Action |
@@ -1268,6 +1379,157 @@ Mark frequently used files and jump to them instantly with numbered shortcuts.
 
 **Note:** Other bracket pairs (files, windows, quickfix, yank) are disabled in config.
 
+### vim-repeat — Enhanced Repeat System
+
+| Keys | Source | Action |
+|------|--------|--------|
+| `.` | [vim-repeat] | Repeat last change or repeatable command |
+
+**What it does:** Extends Neovim's `.` command to repeat more types of commands, including custom repeatable navigation commands.
+
+**Custom Repeatable Commands:**
+- `{n}%` (percentage jumps) — now repeatable with `.`
+- More commands can be made repeatable using `utils/repeatable.lua`
+
+**Usage:** After typing `10%`, press `.` to repeat the jump. The repeatable system is extensible — new commands can be added to `utils/repeatable.lua` for consistency.
+
+### NeoCodeium — AI Code Completion (Free)
+
+Free AI-powered code completion powered by Windsurf (formerly Codeium). Provides intelligent suggestions as you type.
+
+| Keys | Mode | Source | Action |
+|------|------|--------|--------|
+| `Alt+f` | i | [neocodeium.lua] | Accept full completion |
+| `Alt+w` | i | [neocodeium.lua] | Accept word only |
+| `Alt+a` | i | [neocodeium.lua] | Accept line only |
+| `Alt+e` | i | [neocodeium.lua] | Cycle to next suggestion or trigger completion |
+| `Alt+r` | i | [neocodeium.lua] | Cycle to previous suggestion |
+| `Alt+c` | i | [neocodeium.lua] | Clear current completion |
+
+**Commands:**
+- `:NeoCodeium auth` — Authenticate and save API token (required on first use)
+- `:NeoCodeium toggle` — Toggle completions on/off
+- `:NeoCodeium chat` — Open Windsurf Chat in browser
+- `:NeoCodeium restart` — Restart the server
+
+**Setup:** After installing, run `:NeoCodeium auth` to authenticate with Windsurf. The plugin will automatically start providing completions.
+
+**Note:** Uses Alt key bindings to avoid conflicts with Tab completion. Completions appear as virtual text.
+
+---
+
+## Comprehensive Navigation Workflow
+
+### Daily Project Exploration Routine
+
+**1. Initial Project Setup (First 5 minutes)**
+```
+1. <leader>ff          → Find file (Telescope)
+2. Navigate to main entry point
+3. <leader>hm          → Mark file (Harpoon #1)
+4. <leader>ff          → Find related files
+5. <leader>hm          → Mark 4 more files (Harpoon #2-5)
+```
+
+**2. Understanding Code Flow**
+```
+1. Place cursor on function/class name
+2. gd                   → Go to definition
+3. ]d                   → Next definition (if multiple) // not doing anything?
+4. [d                   → Previous definition
+5. gr                   → Find all references
+6. ]d                   → Navigate through references
+7. gi                   → Find implementations
+8. ]d                   → Navigate implementations
+9. <C-o>                → Jump back (vim jump list)
+```
+
+**3. Quick File Switching (Harpoon)**
+```
+<leader>h1  → Jump to file #1 // how to designate files to a number?
+<leader>h2  → Jump to file #2
+<leader>h3  → Jump to file #3
+<leader>h4  → Jump to file #4
+<leader>h5  → Jump to file #5
+<leader>hh  → See all marked files
+<leader>hn  → Next in harpoon list
+<leader>hp  → Previous in harpoon list
+```
+
+**4. Learning Definitions (Hover & Navigate)**
+```
+1. K                    → Hover (show definition/tooltip)
+2. ]w                   → Next word with definition
+3. [w                   → Previous word with definition
+4. gd                   → Jump to definition
+5. <C-o>                → Jump back
+```
+
+**5. Reference Navigation**
+```
+1. gr                   → Find all references
+2. ]d                   → Next reference
+3. [d                   → Previous reference
+4. <leader>yf           → Yank file path (if you want to note it)
+```
+
+**6. Implementation Navigation**
+```
+1. gi                   → Find implementations
+2. ]d                   → Next implementation
+3. [d                   → Previous implementation
+```
+
+**7. Smart Text Object Selection**
+```
+vaf          → Select entire function
+vif          → Select function body
+vac          → Select entire class
+vic          → Select class body
+daf          → Delete entire function
+cif          → Change function body
+]f           → Jump to next function
+[f           → Jump to previous function
+```
+
+**8. File Operations**
+```
+-            → Open Oil (editable file tree)
+<leader>yf   → Yank absolute file path
+<leader>yr   → Yank relative file path
+<leader>gy   → Yank GitHub link (gitlinker)
+```
+
+### Complete Navigation Key Reference
+
+| Task | Keys | Source |
+|------|------|--------|
+| **File Navigation** | | |
+| Find files | `<leader>ff` | [NVCHAD] |
+| Live grep | `<leader>fw` | [NVCHAD] |
+| Harpoon mark | `<leader>hm` | [harpoon.lua] |
+| Harpoon jump | `<leader>h1-9` | [harpoon.lua] |
+| Oil explorer | `-` | [oil.lua] |
+| **LSP Navigation** | | |
+| Go to definition | `gd` | [mappings.lua] |
+| Next/prev result | `]d` / `[d` | [mappings.lua] |
+| Find references | `gr` | [mappings.lua] |
+| Find implementations | `gi` | [mappings.lua] |
+| Hover documentation | `K` | [ufo.lua] |
+| Next word with def | `]w` | [mappings.lua] |
+| Prev word with def | `[w` | [mappings.lua] |
+| **Text Objects** | | |
+| Function (outer) | `af` / `if` | [treesitter-textobjects] |
+| Class (outer) | `ac` / `ic` | [treesitter-textobjects] |
+| Parameter | `aa` / `ia` | [treesitter-textobjects] |
+| Block | `ab` / `ib` | [treesitter-textobjects] |
+| Call | `aC` / `iC` | [treesitter-textobjects] |
+| Next function | `]f` / `[f` | [treesitter-textobjects] |
+| **File Operations** | | |
+| Yank absolute path | `<leader>yf` | [mappings.lua] |
+| Yank relative path | `<leader>yr` | [mappings.lua] |
+| Yank git link | `<leader>gy` | [gitlinker.lua] |
+
 ---
 
 ## Quick Reference: Most Important Keys
@@ -1279,7 +1541,9 @@ Mark frequently used files and jump to them instantly with numbered shortcuts.
 | Open file tree | `Ctrl+n` | [NVCHAD] |
 | Find file by name | `Leader f f` | [NVCHAD] |
 | Search text in project | `Leader f w` | [NVCHAD] |
-| Go to definition | `gd` | [NVCHAD lspconfig] |
+| Go to definition | `gd` then `]d`/`[d` | [mappings.lua] |
+| Navigate LSP results | `]d` / `[d` | [mappings.lua] |
+| Next word with def | `]w` / `[w` | [mappings.lua] |
 | Switch buffer | `Tab` / `Shift+Tab` | [NVCHAD] |
 | Close buffer | `Leader x` | [NVCHAD] |
 | Save file | `:w Enter` or `Ctrl+s` | [NEOVIM] / [NVCHAD] |
@@ -1291,7 +1555,12 @@ Mark frequently used files and jump to them instantly with numbered shortcuts.
 | Open workflow guide | `Leader gw` | [mappings.lua] |
 | Show all keybindings | `Leader` (wait) | [which-key.lua] |
 | Launch Claude | `Leader ac` | [mappings.lua] |
+| Jump to percentage | `{n}%` then `.` | [mappings.lua] |
 | Toggle comment | `Leader /` or `gcc` | [NVCHAD] |
+| Accept AI completion | `Alt+f` | [neocodeium.lua] |
+| Accept AI word | `Alt+w` | [neocodeium.lua] |
+| Accept AI line | `Alt+a` | [neocodeium.lua] |
+| Toggle AI completion | `:NeoCodeium toggle` | [neocodeium.lua] |
 | System clipboard yank | `"+y` | [NEOVIM] |
 | System clipboard paste | `"+p` | [NEOVIM] |
 

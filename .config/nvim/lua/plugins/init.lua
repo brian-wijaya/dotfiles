@@ -11,6 +11,15 @@ return {
   -- which-key.nvim: Full panel mode for rehearsal and overview
   require "plugins.which-key",
 
+  -- vim-repeat: Makes more commands repeatable with .
+  {
+    "tpope/vim-repeat",
+    event = "VeryLazy",
+  },
+
+  -- neocodeium: Free AI completion (Windsurf/Codeium)
+  require "plugins.neocodeium",
+
   -- vim-tmux-navigator for seamless navigation
   require "plugins.vim-tmux-navigator",
 
@@ -46,6 +55,9 @@ return {
 
   -- harpoon2: Fast file navigation (ThePrimeagen)
   require "plugins.harpoon",
+
+  -- treesitter-textobjects: Smart text objects based on AST
+  require "plugins.treesitter-textobjects",
 
   -- mini.hipatterns: Highlight colors and Tailwind classes
   {
