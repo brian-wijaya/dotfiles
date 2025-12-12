@@ -1,6 +1,11 @@
 return {
   defaults = { lazy = true },
-  install = { colorscheme = { "nvchad" } },
+  install = { 
+    colorscheme = { "nvchad" },
+    -- Allow auto-installation even in vscode-neovim
+    -- The timing issues should be resolved by conditional plugin loading
+    missing = true,
+  },
 
   ui = {
     icons = {

@@ -1,8 +1,16 @@
 -- which-key.nvim: Full panel mode for rehearsal and overview
 -- Configured for large, non-scroll panel showing all mappings at once
+-- IMPORTANT: Disabled in vscode-neovim because it tries to sync layout with vscode API
+-- which causes "vscode.internal" errors. Use Cursor's built-in command palette instead.
 return {
   "folke/which-key.nvim",
   event = "VeryLazy",
+  -- Aggressively disable in vscode-neovim to avoid layout sync errors
+  -- Use lazy.nvim's cond to prevent loading, and also check in config
+  cond = function() 
+    -- Check early - if vscode is set to 1, don't load at all
+    return not (vim.g.vscode == 1)
+  end,
   init = function()
     vim.o.timeout = true
     vim.o.timeoutlen = 300
@@ -41,6 +49,10 @@ return {
     },
   },
   config = function(_, opts)
+    -- Double-check: if somehow loaded in vscode, don't set it up
+    if vim.g.vscode == 1 then
+      return
+    end
     local wk = require("which-key")
     wk.setup(opts)
     

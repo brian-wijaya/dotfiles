@@ -1,6 +1,21 @@
 vim.g.base46_cache = vim.fn.stdpath "data" .. "/base46/"
 vim.g.mapleader = " "
 
+-- Detect vscode-neovim early (before plugin loading)
+-- This allows conditional plugin loading to work correctly
+-- vscode-neovim sets vim.g.vscode = 1, but we need to handle the case where it's not set yet
+if vim.g.vscode == nil then
+  -- In vscode-neovim, this will be set to 1 by the extension
+  -- In standalone Neovim, it will remain nil (which is falsy)
+  vim.g.vscode = 0
+end
+
+-- Disable which-key layout syncing in vscode-neovim to prevent vscode.internal errors
+-- This must be set before any plugins load
+if vim.g.vscode == 1 then
+  vim.g.which_key_disable = true
+end
+
 -- bootstrap lazy and all plugins
 local lazypath = vim.fn.stdpath "data" .. "/lazy/lazy.nvim"
 

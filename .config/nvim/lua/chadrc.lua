@@ -26,4 +26,12 @@ M.base46 = {
 vim.cmd([[let &t_Cs = "\e[4:3m"]])
 vim.cmd([[let &t_Ce = "\e[4:0m"]])
 
+-- Disable which-key in vscode-neovim to prevent layout sync errors
+if vim.g.vscode == 1 then
+  M.ui = M.ui or {}
+  M.ui.whichkey = {
+    enabled = false,
+  }
+end
+
 return M

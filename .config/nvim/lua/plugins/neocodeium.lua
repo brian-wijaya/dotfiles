@@ -1,8 +1,10 @@
 -- neocodeium: Free AI completion plugin powered by Windsurf (formerly Codeium)
 -- https://github.com/monkoose/neocodeium
+-- Disable in vscode-neovim (Cursor has built-in AI completion)
 return {
   "monkoose/neocodeium",
   event = "InsertEnter",
+  cond = function() return not (vim.g.vscode == 1) end,
   config = function()
     require("neocodeium").setup({
       -- Enable by default

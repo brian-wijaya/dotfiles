@@ -5,7 +5,13 @@ return {
   dependencies = { "nvim-treesitter/nvim-treesitter" },
   event = "VeryLazy",
   config = function()
-    require("nvim-treesitter.configs").setup({
+    -- Safely require treesitter configs (may not be available if plugin not installed)
+    local ok, ts_configs = pcall(require, "nvim-treesitter.configs")
+    if not ok then
+      vim.notify("nvim-treesitter-textobjects: treesitter configs not available", vim.log.levels.WARN)
+      return
+    end
+    ts_configs.setup({
       textobjects = {
         select = {
           enable = true,

@@ -402,8 +402,8 @@ return {
         ensure_installed = {
           -- NvChad defaults
           "lua", "luadoc", "printf", "vim", "vimdoc",
-          -- Web development
-          "html", "css", "javascript", "typescript", "tsx", "jsx", "json",
+          -- Web development (tsx handles both TSX and JSX)
+          "html", "css", "javascript", "typescript", "tsx", "json",
           -- Systems & compiled languages
           "rust", "cpp", "c", "go",
           -- Markup & config
