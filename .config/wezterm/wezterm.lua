@@ -117,12 +117,8 @@ config.keys = {
     key = "F5",
     mods = "ALT",
     action = wezterm.action_callback(function(window, pane)
-      -- Spawn detached so it doesn't block
-      wezterm.run_child_process({
-        "powershell.exe", "-NoProfile", "-Command",
-        "Start-Process wezterm-gui.exe -WindowStyle Normal"
-      })
-      wezterm.sleep_ms(200)  -- Brief delay to let new instance start
+      -- Spawn new instance in background, then quit
+      os.execute('powershell.exe -NoProfile -Command "Start-Process wezterm-gui.exe"')
       window:perform_action(wezterm.action.QuitApplication, pane)
     end),
   },
@@ -147,11 +143,7 @@ config.keys = {
   { key = "UpArrow", mods = "SHIFT", action = act.ScrollByLine(-1) },
   { key = "DownArrow", mods = "SHIFT", action = act.ScrollByLine(1) },
 
-  -- Window controls
-  { key = "F11", mods = "NONE", action = act.ToggleFullScreen },  -- Fullscreen toggle
-  { key = "m", mods = "ALT", action = act.TogglePaneZoomState },  -- Zoom pane (only works with multiple panes)
-
-  -- Command palette (shows all available actions - closest to which-key)
+  -- Command palette (shows all available actions)
   { key = "P", mods = "CTRL|SHIFT", action = act.ActivateCommandPalette },
 }
 
