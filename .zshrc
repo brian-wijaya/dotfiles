@@ -122,3 +122,4 @@ fi
 if [[ -z "$TMUX" ]] && [[ -z "$WEZTERM_NOTMUX" ]] && [[ -z "$CURSOR_AGENT" ]] && [[ -z "$VSCODE_INJECTION" ]] && [[ -z "$VSCODE_CWD" ]] && [[ -z "$CURSOR_NO_TMUX" ]]; then
     tmux attach -t main 2>/dev/null || tmux new -s main -c ~
 fi
+export PATH="$HOME/bin:$PATH"
