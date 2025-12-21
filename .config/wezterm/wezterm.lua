@@ -112,17 +112,6 @@ config.keys = {
     end),
   },
 
-  -- Alt+F5 → restart WezTerm (launch new instance, close current)
-  {
-    key = "F5",
-    mods = "ALT",
-    action = wezterm.action_callback(function(window, pane)
-      -- Spawn new instance in background, then quit
-      os.execute('powershell.exe -NoProfile -Command "Start-Process wezterm-gui.exe"')
-      window:perform_action(wezterm.action.QuitApplication, pane)
-    end),
-  },
-
   -- Smart paste: image → save & paste path, text → normal paste
   -- Ctrl+V passes through to vim/tmux, only Ctrl+Shift+V is smart paste
   { key = "V", mods = "CTRL|SHIFT", action = act.EmitEvent("smart-paste") },
