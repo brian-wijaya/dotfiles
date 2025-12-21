@@ -20,11 +20,8 @@ local window_height = layouts.main.height
 -- Uses custom script that auto-increments session names (main-1, main-2, etc.)
 local function spawn_layout(layout_name)
   return wezterm.action_callback(function(window, pane)
-    wezterm.run_child_process({
-      "wezterm.exe", "start", "--cwd", "/home/bw", "--",
-      "wsl.exe", "-d", "archlinux", "-e", "zsh", "-lc",
-      "/home/bw/bin/layout " .. layout_name
-    })
+    -- Use PowerShell Start-Process to spawn detached
+    os.execute('powershell.exe -NoProfile -Command "Start-Process wezterm.exe -ArgumentList \'start\',\'--cwd\',\'/home/bw\',\'--\',\'wsl.exe\',\'-d\',\'archlinux\',\'-e\',\'zsh\',\'-lc\',\'/home/bw/bin/layout ' .. layout_name .. '\'"')
   end)
 end
 
