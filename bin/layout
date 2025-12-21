@@ -1,0 +1,55 @@
+#!/bin/bash
+# Usage: layout main|full|blank
+# Creates a fresh tmux session with auto-incrementing name
+
+layout="$1"
+
+if [[ -z "$layout" ]]; then
+  echo "Usage: layout main|full|blank"
+  exit 1
+fi
+
+# Find next available session number
+n=1
+while tmux has-session -t "${layout}-${n}" 2>/dev/null; do
+  ((n++))
+done
+session_name="${layout}-${n}"
+
+case "$layout" in
+  main|full)
+    # Create session with 3 columns: left (split), middle, right
+    tmux new-session -d -s "$session_name" -c ~
+
+    # Split into 3 columns (left 33%, middle 33%, right 33%)
+    tmux split-window -h -t "$session_name" -c ~ -l 67%
+    tmux split-window -h -t "$session_name" -c ~ -l 50%
+
+    # Split left pane vertically (nvim top, yazi bottom)
+    tmux select-pane -t "$session_name:0.0"
+    tmux split-window -v -t "$session_name" -c ~ -l 50%
+
+    # Pane layout: 0=left-top, 1=left-bottom, 2=middle, 3=right
+    # Run commands
+    tmux send-keys -t "$session_name:0.0" "nvim" Enter
+    tmux send-keys -t "$session_name:0.1" "yazi" Enter
+    tmux send-keys -t "$session_name:0.3" "claude --dangerously-skip-permissions" Enter
+    # Pane 2 (middle) stays as zsh
+
+    # Focus middle pane
+    tmux select-pane -t "$session_name:0.2"
+    ;;
+
+  blank)
+    tmux new-session -d -s "$session_name" -c ~
+    ;;
+
+  *)
+    echo "Unknown layout: $layout"
+    echo "Available: main, full, blank"
+    exit 1
+    ;;
+esac
+
+# Attach to the new session
+tmux attach-session -t "$session_name"

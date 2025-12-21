@@ -16,17 +16,14 @@ local window_y = layouts.main.y
 local window_width = layouts.main.width
 local window_height = layouts.main.height
 
--- Helper: spawn new window with layout and tmuxifier session
--- Uses wezterm CLI which works reliably from keybindings
+-- Helper: spawn new window with layout
+-- Uses custom script that auto-increments session names (main-1, main-2, etc.)
 local function spawn_layout(layout_name)
-  local layout = layouts[layout_name]
   return wezterm.action_callback(function(window, pane)
-    -- Use wezterm start to launch new window with tmuxifier
-    -- Window will use default size, but we launch tmuxifier session
     wezterm.run_child_process({
       "wezterm.exe", "start", "--cwd", "/home/bw", "--",
       "wsl.exe", "-d", "archlinux", "-e", "zsh", "-lc",
-      "tmuxifier load-session " .. layout_name
+      "/home/bw/bin/layout " .. layout_name
     })
   end)
 end
