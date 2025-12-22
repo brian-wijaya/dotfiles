@@ -3,24 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Programming Lookup Decision Trees</title>
+  <title>Programming Reference</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Segoe UI', system-ui, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      background: #0a0a0f;
       color: #e8e8e8;
       min-height: 100vh;
-      margin: 0;
-      padding: 40px 20px;
     }
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
+
+    /* Tab System */
+    .tab-container { display: flex; flex-direction: column; min-height: 100vh; }
+    .tab-nav {
+      display: flex;
+      background: #12121a;
+      border-bottom: 1px solid #2a2a3a;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
-    h1 {
+    .tab-btn {
+      padding: 16px 32px;
+      background: transparent;
+      border: none;
+      color: #888;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover { color: #aaa; background: #1a1a24; }
+    .tab-btn.active { color: #00d9ff; border-bottom-color: #00d9ff; background: #0a0a0f; }
+    .tab-content { display: none; flex: 1; overflow-y: auto; }
+    .tab-content.active { display: block; }
+
+    /* Tab 1 Styles */
+    .tab1-container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+    .tab1-container h1 {
       text-align: center;
       font-size: 2.5rem;
       margin-bottom: 10px;
@@ -29,95 +50,117 @@
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-    .subtitle {
-      text-align: center;
-      color: #888;
-      margin-bottom: 50px;
-      font-size: 1.1rem;
-    }
+    .subtitle { text-align: center; color: #888; margin-bottom: 50px; font-size: 1.1rem; }
     .tree-section {
-      background: rgba(255,255,255,0.05);
+      background: rgba(255,255,255,0.03);
       border-radius: 16px;
       padding: 30px;
       margin-bottom: 40px;
-      border: 1px solid rgba(255,255,255,0.1);
-      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.08);
     }
-    h2 {
+    .tree-section h2 {
       color: #00d9ff;
       margin-top: 0;
-      font-size: 1.5rem;
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      margin-bottom: 20px;
+      font-size: 1.4rem;
     }
-    h2::before {
-      content: '🌳';
-    }
-    pre {
+    .tree-section h2::before { content: '🌳 '; }
+    .tree-section pre {
       background: #0d1117;
       border-radius: 12px;
       padding: 25px;
       overflow-x: auto;
-      font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
-      font-size: 13px;
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 12px;
       line-height: 1.5;
-      border: 1px solid #30363d;
+      border: 1px solid #21262d;
       color: #c9d1d9;
     }
-    .legend {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 15px;
-      margin-top: 30px;
-    }
-    .legend-item {
-      background: rgba(0,217,255,0.1);
-      padding: 15px;
-      border-radius: 8px;
-      border-left: 3px solid #00d9ff;
-    }
-    .legend-item h4 {
-      margin: 0 0 5px 0;
-      color: #00ff88;
-    }
-    .legend-item p {
-      margin: 0;
-      font-size: 0.9rem;
-      color: #aaa;
-    }
-    .toolchain-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 10px;
-      margin-bottom: 25px;
-    }
+    .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 24px; }
+    .legend-item { background: rgba(0,217,255,0.08); padding: 14px; border-radius: 8px; border-left: 3px solid #00d9ff; }
+    .legend-item h4 { margin-bottom: 4px; color: #00ff88; font-size: 0.9rem; }
+    .legend-item p { font-size: 0.8rem; color: #999; }
+    .toolchain-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 20px; }
     .tool-badge {
-      background: linear-gradient(135deg, rgba(0,217,255,0.2), rgba(0,255,136,0.1));
-      padding: 10px 15px;
-      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(0,217,255,0.15), rgba(0,255,136,0.08));
+      padding: 8px 12px;
+      border-radius: 6px;
       text-align: center;
       font-weight: 600;
-      font-size: 0.85rem;
-      border: 1px solid rgba(0,217,255,0.3);
+      font-size: 0.75rem;
+      border: 1px solid rgba(0,217,255,0.2);
     }
-    .footer {
-      text-align: center;
-      color: #666;
-      margin-top: 40px;
-      font-size: 0.9rem;
+
+    /* Tab 2 Styles - Grokking Artifact */
+    .grok { padding: 20px; background: #06060a; }
+    .grok-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; max-width: 1800px; margin: 0 auto; }
+    .grok-card {
+      background: #0c0c12;
+      border: 1px solid #1a1a28;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 11px;
+    }
+    .grok-card.wide { grid-column: span 2; }
+    .grok-card.full { grid-column: 1 / -1; }
+    .grok-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #00d9ff;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #1a1a28;
+    }
+    .grok pre {
+      font-family: 'Fira Code', 'JetBrains Mono', monospace;
+      font-size: 10px;
+      line-height: 1.4;
+      color: #a0a0b0;
+      white-space: pre;
+      overflow-x: auto;
+      margin: 0;
+    }
+    .grok .hl { color: #00ff88; }
+    .grok .hl2 { color: #ff6b6b; }
+    .grok .hl3 { color: #ffd93d; }
+    .grok .hl4 { color: #6bcaff; }
+    .grok .dim { color: #555; }
+    .grok-dense { font-size: 10px; line-height: 1.6; color: #888; }
+    .grok-dense strong { color: #c0c0d0; }
+    .grok-dense code { background: #1a1a24; padding: 1px 4px; border-radius: 3px; color: #00d9ff; font-size: 9px; }
+    .grok-row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .grok-col { flex: 1; min-width: 300px; }
+    .grok-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .grok-table th { text-align: left; color: #00d9ff; padding: 6px 8px; border-bottom: 1px solid #2a2a3a; font-weight: 600; }
+    .grok-table td { padding: 6px 8px; border-bottom: 1px solid #151520; color: #888; }
+    .grok-table td:first-child { color: #c0c0d0; font-weight: 500; }
+    .grok-section { margin-bottom: 20px; }
+    .grok-section:last-child { margin-bottom: 0; }
+    .grok-label { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+
+    @media (max-width: 800px) {
+      .grok-card.wide, .grok-card.full { grid-column: span 1; }
+      .grok-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Programming Lookup Decision Trees</h1>
-    <p class="subtitle">Where to find answers when you're stuck</p>
+  <div class="tab-container">
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="lookup">Lookup Trees</button>
+      <button class="tab-btn" data-tab="grok">Grok: C→Go Mental Model</button>
+    </nav>
 
-    <!-- GENERAL DECISION TREE -->
-    <div class="tree-section">
-      <h2>General Programming Lookup</h2>
-      <pre>
+    <!-- TAB 1: LOOKUP TREES -->
+    <div id="lookup" class="tab-content active">
+      <div class="tab1-container">
+        <h1>Programming Lookup Decision Trees</h1>
+        <p class="subtitle">Where to find answers when you're stuck</p>
+
+        <div class="tree-section">
+          <h2>General Programming Lookup</h2>
+          <pre>
                             ┌─────────────────────────┐
                             │   I DON'T UNDERSTAND    │
                             │      SOMETHING...       │
@@ -161,208 +204,709 @@
     │            │             │             │
     ▼            ▼             ▼             ▼
 ┌────────────────────────────────────────────────────┐
-│                                                    │
 │  • Rubber duck debug (explain to Claude/friend)    │
 │  • Check GitHub Issues / Discussions               │
 │  • Discord/Slack community for that tech           │
 │  • Reddit: r/programming, r/webdev, r/[language]   │
 │  • Hacker News (search hn.algolia.com)             │
-│                                                    │
 └────────────────────────────────────────────────────┘
-
 
    PRIORITY ORDER
    ─────────────────────────────────────────────────────────────────────
-
    1. Official Docs ──────► Most accurate, up-to-date
    2. Claude/LLM ─────────► Quick explanations, code examples
    3. StackOverflow ──────► Real-world problems & solutions
    4. GitHub Issues ──────► Bug-specific, edge cases
-   5. Community ──────────► Discord/Reddit for opinions/help
-      </pre>
-
-      <div class="legend">
-        <div class="legend-item">
-          <h4>Official Docs</h4>
-          <p>Always start here. Most accurate and up-to-date information.</p>
+   5. Community ──────────► Discord/Reddit for opinions/help</pre>
+          <div class="legend">
+            <div class="legend-item"><h4>Official Docs</h4><p>Always start here. Most accurate and up-to-date.</p></div>
+            <div class="legend-item"><h4>DevDocs.io</h4><p>Unified searchable docs for 400+ languages.</p></div>
+            <div class="legend-item"><h4>Claude / LLMs</h4><p>Explanations, code examples, debugging.</p></div>
+            <div class="legend-item"><h4>StackOverflow</h4><p>Real problems. Check answer dates!</p></div>
+          </div>
         </div>
-        <div class="legend-item">
-          <h4>DevDocs.io</h4>
-          <p>Unified searchable docs for 400+ languages/frameworks.</p>
-        </div>
-        <div class="legend-item">
-          <h4>Claude / LLMs</h4>
-          <p>Great for explanations, code examples, and debugging help.</p>
-        </div>
-        <div class="legend-item">
-          <h4>StackOverflow</h4>
-          <p>Community answers to real problems. Check date of answers!</p>
-        </div>
-      </div>
-    </div>
 
-    <!-- TOOLCHAIN-SPECIFIC DECISION TREE -->
-    <div class="tree-section">
-      <h2>Your Toolchain Lookup Guide</h2>
-
-      <div class="toolchain-grid">
-        <div class="tool-badge">DuckDB</div>
-        <div class="tool-badge">SQLite</div>
-        <div class="tool-badge">Go</div>
-        <div class="tool-badge">C</div>
-        <div class="tool-badge">React</div>
-        <div class="tool-badge">TypeScript</div>
-        <div class="tool-badge">Next.js</div>
-        <div class="tool-badge">Tailwind</div>
-        <div class="tool-badge">Vercel</div>
-        <div class="tool-badge">Supabase</div>
-      </div>
-
-      <pre>
+        <div class="tree-section">
+          <h2>Your Toolchain Lookup Guide</h2>
+          <div class="toolchain-grid">
+            <div class="tool-badge">DuckDB</div>
+            <div class="tool-badge">SQLite</div>
+            <div class="tool-badge">Go</div>
+            <div class="tool-badge">C</div>
+            <div class="tool-badge">React</div>
+            <div class="tool-badge">TypeScript</div>
+            <div class="tool-badge">Next.js</div>
+            <div class="tool-badge">Tailwind</div>
+            <div class="tool-badge">Vercel</div>
+            <div class="tool-badge">Supabase</div>
+          </div>
+          <pre>
                               ┌─────────────────────────┐
                               │    WHAT TECHNOLOGY?     │
                               └───────────┬─────────────┘
                                           │
         ┌──────────────┬──────────────────┼──────────────────┬──────────────┐
-        │              │                  │                  │              │
         ▼              ▼                  ▼                  ▼              ▼
    ┌─────────┐   ┌──────────┐      ┌───────────┐      ┌──────────┐   ┌───────────┐
    │ DATABASE│   │ LANGUAGE │      │  FRONTEND │      │ FRAMEWORK│   │  DEPLOY   │
    └────┬────┘   └────┬─────┘      └─────┬─────┘      └────┬─────┘   └─────┬─────┘
-        │             │                  │                 │               │
         ▼             ▼                  ▼                 ▼               ▼
-   ┌─────────┐   ┌─────────┐       ┌──────────┐      ┌──────────┐   ┌───────────┐
-   │ DuckDB  │   │   Go    │       │  React   │      │ Next.js  │   │  Vercel   │
-   │ SQLite  │   │   C     │       │TypeScript│      │ Tailwind │   │ Supabase  │
-   └────┬────┘   └────┬────┘       └────┬─────┘      └────┬─────┘   └─────┬─────┘
-        │             │                 │                 │               │
-        ▼             ▼                 ▼                 ▼               ▼
-
 
 ═══════════════════════════════════════════════════════════════════════════════
-                              WHERE TO LOOK
-═══════════════════════════════════════════════════════════════════════════════
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  DUCKDB                                                                     │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → duckdb.org/docs              (Official - excellent docs)             │
-│  2nd → github.com/duckdb/duckdb     (Issues, Discussions)                   │
-│  3rd → DuckDB Discord               (Community help)                        │
-│  TIP → SQL syntax same as PostgreSQL for most queries                       │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  SQLITE                                                                     │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → sqlite.org/docs.html         (Official - the bible)                  │
-│  2nd → sqlite.org/forum             (Official forum)                        │
-│  3rd → StackOverflow [sqlite]       (Tons of Q&A)                           │
-│  TIP → Check sqlite.org/quirks.html for gotchas                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  GO                                                                         │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → go.dev/doc                   (Official docs + tour)                  │
-│  2nd → pkg.go.dev                   (Package documentation)                 │
-│  3rd → go.dev/blog                  (Deep dives, best practices)            │
-│  4th → Gophers Slack                (Community)                             │
-│  TIP → "Effective Go" is essential reading                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  C                                                                          │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → en.cppreference.com/w/c      (Best C reference)                      │
-│  2nd → man pages (man 3 printf)     (System documentation)                  │
-│  3rd → StackOverflow [c]            (Community answers)                     │
-│  TIP → "The C Programming Language" (K&R) is the classic book              │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  REACT                                                                      │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → react.dev                    (New official docs - excellent!)        │
-│  2nd → react.dev/learn              (Interactive tutorials)                 │
-│  3rd → github.com/facebook/react    (Issues, Discussions)                   │
-│  TIP → Ignore old reactjs.org - use react.dev (2023+ docs)                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  TYPESCRIPT                                                                 │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → typescriptlang.org/docs      (Official handbook)                     │
-│  2nd → typescriptlang.org/play      (Playground - test types!)              │
-│  3rd → total-typescript.com         (Matt Pocock tutorials)                 │
-│  4th → type-challenges (GitHub)     (Practice type puzzles)                 │
-│  TIP → Search "ts-reset" for better default types                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  NEXT.JS                                                                    │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → nextjs.org/docs              (Official - very good)                  │
-│  2nd → nextjs.org/learn             (Interactive course)                    │
-│  3rd → github.com/vercel/next.js    (Examples folder is gold!)              │
-│  4th → Vercel Discord               (Community + Vercel team)               │
-│  TIP → Check /examples in the repo for patterns                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  TAILWIND CSS                                                               │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → tailwindcss.com/docs         (Official - searchable!)                │
-│  2nd → tailwindui.com/components    (Official component examples)           │
-│  3rd → Tailwind Discord             (Very active community)                 │
-│  TIP → Use Ctrl+K on docs site for instant class search                     │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  VERCEL                                                                     │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → vercel.com/docs              (Platform docs)                         │
-│  2nd → vercel.com/guides            (How-to guides)                         │
-│  3rd → Vercel Discord               (Community support)                     │
-│  4th → github.com/vercel            (OSS projects)                          │
-│  TIP → Check vercel.com/templates for starter projects                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  SUPABASE                                                                   │
-│  ───────────────────────────────────────────────────────────────────────── │
-│  1st → supabase.com/docs            (Official docs)                         │
-│  2nd → supabase.com/docs/reference  (API reference)                         │
-│  3rd → github.com/supabase/supabase (Discussions, Issues)                   │
-│  4th → Supabase Discord             (Very helpful community)                │
-│  TIP → It's PostgreSQL underneath - pg docs apply!                          │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-
-═══════════════════════════════════════════════════════════════════════════════
-                           QUICK REFERENCE CHEATSHEET
-═══════════════════════════════════════════════════════════════════════════════
-
-    ┌─────────────┬────────────────────────────────┬──────────────────────────┐
-    │ TECHNOLOGY  │ PRIMARY DOCS                   │ COMMUNITY                │
-    ├─────────────┼────────────────────────────────┼──────────────────────────┤
-    │ DuckDB      │ duckdb.org/docs                │ Discord                  │
-    │ SQLite      │ sqlite.org/docs.html           │ sqlite.org/forum         │
-    │ Go          │ go.dev/doc + pkg.go.dev        │ Gophers Slack            │
-    │ C           │ cppreference.com/w/c           │ StackOverflow            │
-    │ React       │ react.dev                      │ Reactiflux Discord       │
-    │ TypeScript  │ typescriptlang.org/docs        │ TS Discord               │
-    │ Next.js     │ nextjs.org/docs                │ Vercel Discord           │
-    │ Tailwind    │ tailwindcss.com/docs           │ Tailwind Discord         │
-    │ Vercel      │ vercel.com/docs                │ Vercel Discord           │
-    │ Supabase    │ supabase.com/docs              │ Supabase Discord         │
-    └─────────────┴────────────────────────────────┴──────────────────────────┘
-      </pre>
+│  DUCKDB          duckdb.org/docs → github.com/duckdb/duckdb → Discord       │
+│  TIP: SQL syntax ≈ PostgreSQL                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  SQLITE          sqlite.org/docs.html → sqlite.org/forum → SO [sqlite]      │
+│  TIP: sqlite.org/quirks.html                                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  GO              go.dev/doc → pkg.go.dev → go.dev/blog → Gophers Slack      │
+│  TIP: Read "Effective Go"                                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  C               cppreference.com/w/c → man pages → SO [c]                  │
+│  TIP: K&R "The C Programming Language"                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  REACT           react.dev → react.dev/learn → github.com/facebook/react    │
+│  TIP: Ignore old reactjs.org                                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  TYPESCRIPT      typescriptlang.org/docs → /play → total-typescript.com     │
+│  TIP: ts-reset, type-challenges                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  NEXT.JS         nextjs.org/docs → /learn → github /examples                │
+│  TIP: Check /examples folder                                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  TAILWIND        tailwindcss.com/docs → tailwindui.com → Discord            │
+│  TIP: Ctrl+K on docs site                                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  VERCEL          vercel.com/docs → /guides → Discord                        │
+│  TIP: vercel.com/templates                                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  SUPABASE        supabase.com/docs → /reference → Discord                   │
+│  TIP: It's PostgreSQL underneath                                            │
+└─────────────────────────────────────────────────────────────────────────────┘</pre>
+        </div>
+      </div>
     </div>
 
-    <p class="footer">
-      Generated for your toolchain • Bookmark this page for quick reference
-    </p>
+    <!-- TAB 2: GROKKING ARTIFACT -->
+    <div id="grok" class="tab-content">
+      <div class="grok">
+        <div class="grok-grid">
+
+          <!-- CARD: The Stack -->
+          <div class="grok-card">
+            <div class="grok-title">The Stack: What You're Actually Learning</div>
+            <pre>
+<span class="hl">YOUR PROGRAM</span>
+     │
+     ▼
+┌─────────────────────────────────────────┐
+│ <span class="hl3">Go / Rust / C</span>    ← you write this      │
+└─────────────────────────────────────────┘
+     │ compile
+     ▼
+┌─────────────────────────────────────────┐
+│ <span class="hl4">BINARY (ELF/Mach-O/PE)</span> ← machine code │
+└─────────────────────────────────────────┘
+     │ syscall
+     ▼
+┌─────────────────────────────────────────┐
+│ <span class="hl2">KERNEL</span> (Linux/Darwin/NT)              │
+│   fork() clone() mmap() read() write()  │
+│   scheduler, memory manager, VFS        │
+└─────────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────────┐
+│ <span class="dim">HARDWARE</span>                                │
+│   CPU rings, MMU, interrupts            │
+└─────────────────────────────────────────┘
+
+<span class="dim">C exposes the syscall boundary.</span>
+<span class="dim">Go/Rust abstract it. JS hides it entirely.</span></pre>
+          </div>
+
+          <!-- CARD: Memory Layout -->
+          <div class="grok-card">
+            <div class="grok-title">Process Memory Layout</div>
+            <pre>
+HIGH ADDRESSES
+┌─────────────────────────────────────────┐
+│ <span class="hl2">STACK</span>        ← grows DOWN ↓            │
+│   local vars, return addrs, args        │
+│   auto-freed on function return         │
+├ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤
+│           (unmapped guard page)         │
+├─────────────────────────────────────────┤
+│ <span class="hl3">HEAP</span>         ← grows UP ↑              │
+│   malloc/free, new/delete               │
+│   explicit lifetime management          │
+├─────────────────────────────────────────┤
+│ <span class="hl4">BSS</span>          uninitialized globals     │
+├─────────────────────────────────────────┤
+│ <span class="hl4">DATA</span>         initialized globals       │
+├─────────────────────────────────────────┤
+│ <span class="dim">TEXT</span>         your compiled code        │
+└─────────────────────────────────────────┘
+LOW ADDRESSES (0x0 unmapped → segfault)</pre>
+          </div>
+
+          <!-- CARD: fork() -->
+          <div class="grok-card">
+            <div class="grok-title">fork() — The Unix Process Model</div>
+            <pre>
+<span class="hl">parent</span> ──┬── fork() ──┬──▶ <span class="hl">parent</span> continues (pid &gt; 0)
+         │            │
+         │            └──▶ <span class="hl3">child</span> starts here (pid = 0)
+         │                     │
+         │                     ▼
+         │               exec("/bin/ls")
+         │                     │
+         │               (replaces child image)
+         │                     │
+         ├─── wait() ◀─────────┘
+         ▼
+    (parent resumes)
+
+<span class="dim">───────────────────────────────────────────</span>
+<span class="hl2">COW</span>: pages shared until write → then copied
+<span class="hl2">PID</span>: child gets new PID, parent sees it
+<span class="hl2">FDs</span>: file descriptors duplicated (shared offset)
+<span class="hl2">Memory</span>: entire address space "copied" (COW)
+
+<span class="dim">fork() is in C because POSIX is C's ABI.</span>
+<span class="dim">Go: os/exec wraps fork+exec. No raw fork().</span></pre>
+          </div>
+
+          <!-- CARD: Syscall -->
+          <div class="grok-card">
+            <div class="grok-title">Syscall Boundary</div>
+            <pre>
+<span class="hl3">USER SPACE</span>                 <span class="hl2">KERNEL SPACE</span>
+─────────────────────────┼─────────────────────
+                         │
+  printf("hi")           │
+       │                 │
+       ▼                 │
+  libc: write()          │
+       │                 │
+       ▼                 │
+  syscall instruction ───┼───▶ sys_write()
+  (int 0x80 / syscall)   │         │
+                         │         ▼
+                         │    VFS → driver
+                         │         │
+                         │         ▼
+                         │    hardware buffer
+
+<span class="dim">───────────────────────────────────────────</span>
+<span class="hl4">Ring 3</span> (user) → <span class="hl2">Ring 0</span> (kernel) transition
+Registers: rax=syscall#, rdi/rsi/rdx=args
+Return: rax (negative = -errno)</pre>
+          </div>
+
+          <!-- CARD: C → Go Mapping -->
+          <div class="grok-card wide">
+            <div class="grok-title">C → Go Concept Translation</div>
+            <table class="grok-table">
+              <tr><th>C</th><th>Go</th><th>What Changed</th></tr>
+              <tr><td>int* p = malloc()</td><td>p := new(int)</td><td>GC handles free()</td></tr>
+              <tr><td>struct { int x; }</td><td>type T struct { x int }</td><td>Same layout, named type</td></tr>
+              <tr><td>void* + cast</td><td>interface{} / any</td><td>Type-safe boxing</td></tr>
+              <tr><td>pthread_create()</td><td>go func()</td><td>M:N scheduling, 2KB stack</td></tr>
+              <tr><td>pthread_mutex_t</td><td>sync.Mutex</td><td>Same semantics</td></tr>
+              <tr><td>pipe() + read/write</td><td>chan T</td><td>CSP channel primitive</td></tr>
+              <tr><td>setjmp/longjmp</td><td>panic/recover</td><td>Stack unwinding</td></tr>
+              <tr><td>header files (.h)</td><td>package + export (Capital)</td><td>No headers, import path</td></tr>
+              <tr><td>Makefile</td><td>go build</td><td>Implicit dependency graph</td></tr>
+              <tr><td>valgrind</td><td>-race flag</td><td>Built-in race detector</td></tr>
+            </table>
+          </div>
+
+          <!-- CARD: Concurrency Models -->
+          <div class="grok-card wide">
+            <div class="grok-title">Concurrency: Three Mental Models</div>
+            <pre>
+<span class="hl2">═══ C/POSIX THREADS ═══</span>                 <span class="hl3">═══ GO GOROUTINES ═══</span>                 <span class="hl4">═══ JS EVENT LOOP ═══</span>
+
+┌──────────┐ ┌──────────┐               ┌──────────────────────┐               ┌────────────────────┐
+│ Thread 1 │ │ Thread 2 │               │ Go Runtime (M:N)     │               │    Call Stack      │
+│ (1:1 OS) │ │ (1:1 OS) │               │ ┌────┐┌────┐┌────┐   │               └─────────┬──────────┘
+└────┬─────┘ └────┬─────┘               │ │ G1 ││ G2 ││ G3 │   │                         │
+     │            │                     │ └────┘└────┘└────┘   │               ┌─────────▼──────────┐
+     ▼            ▼                     │    ↓     ↓     ↓     │               │    Event Loop      │◀─┐
+┌─────────────────────┐                 │ ┌────────────────┐   │               └─────────┬──────────┘  │
+│   Shared Memory     │                 │ │  P (processor) │   │                         │             │
+│  (mutex required!)  │                 │ └───────┬────────┘   │               ┌─────────▼──────────┐  │
+└─────────────────────┘                 │         ▼            │               │   Callback Queue   │──┘
+                                        │ ┌────────────────┐   │               └────────────────────┘
+pthread_create()                        │ │  M (OS thread) │   │
+pthread_mutex_lock()                    │ └────────────────┘   │               setTimeout(fn, 0)
+pthread_cond_wait()                     └──────────────────────┘               fetch().then(fn)
+                                                                               async/await
+<span class="dim">1 thread = 1 OS thread</span>                 <span class="dim">N goroutines : M threads</span>              <span class="dim">1 thread, never blocks</span>
+<span class="dim">~1MB stack each</span>                        <span class="dim">~2KB stack, grows</span>                    <span class="dim">heap closures</span>
+<span class="dim">Preemptive</span>                             <span class="dim">Cooperative + preempt</span>                <span class="dim">Run-to-completion</span></pre>
+          </div>
+
+          <!-- CARD: Channel = pipe + mutex + cond -->
+          <div class="grok-card">
+            <div class="grok-title">Go Channel ≈ What in C?</div>
+            <pre>
+<span class="hl3">ch := make(chan int, 1)</span>
+
+         is roughly:
+
+<span class="hl">struct channel {</span>
+<span class="hl">    int buffer[1];</span>
+<span class="hl">    int count;</span>
+<span class="hl">    pthread_mutex_t mu;</span>
+<span class="hl">    pthread_cond_t not_empty;</span>
+<span class="hl">    pthread_cond_t not_full;</span>
+<span class="hl">};</span>
+
+<span class="dim">───────────────────────────────────────────</span>
+ch &lt;- 42     →  lock, write, signal, unlock
+x := &lt;-ch   →  lock, wait, read, unlock
+close(ch)    →  broadcast to all waiters
+
+<span class="dim">Go compiles this to runtime calls.</span>
+<span class="dim">You never touch the mutex. That's the point.</span></pre>
+          </div>
+
+          <!-- CARD: Type Systems -->
+          <div class="grok-card">
+            <div class="grok-title">Type System Topology</div>
+            <pre>
+         <span class="hl2">DYNAMIC</span>                    <span class="hl3">STATIC</span>
+             │                        │
+   ┌─────────┼─────────┐    ┌─────────┼─────────┐
+   │         │         │    │         │         │
+<span class="hl4">Python</span>    <span class="hl4">JS</span>       <span class="hl4">Ruby</span>   <span class="hl">C</span>        <span class="hl">Go</span>      <span class="hl">Rust</span>
+   │         │         │    │         │         │
+   │    (prototype)    │    │   (structural     │
+   │                   │    │    interfaces)    │
+   │                   │    │         │         │
+   └───────────────────┘    │    ┌────┴────┐    │
+       "duck typing"        │    │         │    │
+        at runtime          │ nominal   structural
+                            │    │         │    │
+                            │    ▼         ▼    │
+                            │  Java      Go     │
+                            │  C++       TS*    │
+                            └───────────────────┘
+                                (* TS = structural)
+
+<span class="dim">───────────────────────────────────────────</span>
+<span class="hl">C</span>:  weak, static, nominal, manual memory
+<span class="hl3">Go</span>: strong, static, structural, GC
+<span class="hl2">Rust</span>: strong, static, nominal+traits, ownership</pre>
+          </div>
+
+          <!-- CARD: Compilation Pipeline -->
+          <div class="grok-card">
+            <div class="grok-title">Compilation Pipeline</div>
+            <pre>
+<span class="hl">SOURCE</span>          <span class="hl3">FRONTEND</span>         <span class="hl4">BACKEND</span>          <span class="hl2">OUTPUT</span>
+
+ .c/.go         lexer            optimizer        .o / .a
+    │             │                  │              │
+    ▼             ▼                  ▼              ▼
+┌───────┐    ┌────────┐        ┌─────────┐    ┌─────────┐
+│ text  │───▶│ tokens │───▶    │   IR    │───▶│ machine │
+│       │    │        │   │    │  (SSA)  │    │  code   │
+└───────┘    └────────┘   │    └─────────┘    └─────────┘
+                          │          │
+                     ┌────┴────┐     │
+                     │   AST   │     │
+                     └────┬────┘     │
+                          │          │
+                     ┌────┴────┐     │
+                     │  type   │     │
+                     │  check  │─────┘
+                     └─────────┘
+
+<span class="dim">───────────────────────────────────────────</span>
+<span class="hl">C</span>:   cpp → cc1 → as → ld (separate steps)
+<span class="hl3">Go</span>:  go build (all-in-one, dep analysis)
+<span class="hl2">Rust</span>: rustc → LLVM IR → machine code</pre>
+          </div>
+
+          <!-- CARD: Go Syntax Looks Like JS Because... -->
+          <div class="grok-card">
+            <div class="grok-title">Go ≈ JS Syntax, C Semantics</div>
+            <pre>
+<span class="hl4">JAVASCRIPT</span>                    <span class="hl3">GO</span>
+
+function add(a, b) {          func add(a, b int) int {
+  return a + b                  return a + b
+}                             }
+
+const x = add(1, 2)           x := add(1, 2)
+
+arr.map(x => x * 2)           // no equivalent
+                              for i := range arr {
+                                arr[i] *= 2
+                              }
+
+async function f() {          func f() {
+  const r = await fetch(u)      r, _ := http.Get(u)
+  return r.json()               // already sync!
+}                             }
+
+<span class="dim">───────────────────────────────────────────</span>
+<span class="hl2">DELIBERATE BORROWING:</span>
+  • := short declaration (JS: const/let)
+  • {} blocks, no semicolons needed
+  • func keyword
+  • return x, y (multiple returns)
+
+<span class="hl2">DELIBERATE DIVERGENCE:</span>
+  • No classes, no this
+  • No exceptions (error returns)
+  • No generics until 1.18
+  • No map/filter/reduce (explicit loops)</pre>
+          </div>
+
+          <!-- CARD: Why Learn C First? -->
+          <div class="grok-card">
+            <div class="grok-title">Why C Before Go/Rust?</div>
+            <pre>
+<span class="hl3">C TEACHES:</span>
+
+  ┌─────────────────────────────────────┐
+  │ • Pointers are memory addresses     │
+  │ • Stack vs heap allocation          │
+  │ • Manual lifetime management        │
+  │ • Undefined behavior exists         │
+  │ • The OS API is C's ABI             │
+  │ • Structs = memory layout           │
+  │ • There is no runtime               │
+  └─────────────────────────────────────┘
+
+<span class="hl3">THEN GO MAKES SENSE:</span>
+
+  "Oh, Go's slice header is a struct"
+  "Channels are typed pipes with locks"
+  "Goroutines are userspace threads"
+  "The GC frees heap allocations"
+  "Interfaces are fat pointers"
+
+<span class="hl3">THEN RUST MAKES SENSE:</span>
+
+  "Ownership tracks who must free"
+  "Borrowing prevents data races"
+  "Lifetimes are compile-time scopes"
+  "No GC because compiler inserts drops"
+
+<span class="dim">───────────────────────────────────────────</span>
+<span class="dim">Skip C → everything is magic.</span>
+<span class="dim">Learn C → everything is mechanics.</span></pre>
+          </div>
+
+          <!-- CARD: String Representation -->
+          <div class="grok-card">
+            <div class="grok-title">String: Same Word, Different Thing</div>
+            <pre>
+<span class="hl">C</span>
+char* s = "hello";
+┌───┬───┬───┬───┬───┬────┐
+│ h │ e │ l │ l │ o │ \0 │  ← null-terminated
+└───┴───┴───┴───┴───┴────┘
+s = pointer to first byte
+strlen() walks until \0
+
+<span class="hl3">GO</span>
+s := "hello"
+┌──────────────────┐
+│ ptr │ len=5      │  ← string header (16 bytes)
+└──┬───────────────┘
+   ▼
+┌───┬───┬───┬───┬───┐
+│ h │ e │ l │ l │ o │  ← immutable, no \0
+└───┴───┴───┴───┴───┘
+
+<span class="hl4">JS</span>
+let s = "hello"
+┌──────────────────────────────────────┐
+│ V8 internal: rope / cons string /    │
+│ sliced string / sequential string    │
+│ (implementation hidden)              │
+└──────────────────────────────────────┘
+
+<span class="dim">───────────────────────────────────────────</span>
+C:  you manage memory, can mutate
+Go: immutable, slice creates new header
+JS: immutable, engine optimizes internally</pre>
+          </div>
+
+          <!-- CARD: Error Handling -->
+          <div class="grok-card">
+            <div class="grok-title">Error Handling Lineage</div>
+            <pre>
+<span class="hl">C</span>            return code + errno
+             if (result < 0) { perror(); }
+
+             │
+             │ "explicit but verbose"
+             ▼
+
+<span class="hl3">GO</span>           return (value, error)
+             if err != nil { return err }
+
+             │
+             │ "same pattern, type-safe"
+             ▼
+
+<span class="hl2">RUST</span>         return Result&lt;T, E&gt;
+             value? ← propagates error
+
+<span class="dim">───────────────────────────────────────────</span>
+
+<span class="hl4">MEANWHILE, EXCEPTIONS:</span>
+
+Java/Python/JS:  throw → catch
+                 (hidden control flow)
+                 (stack unwinding cost)
+                 (any function might throw)
+
+<span class="dim">───────────────────────────────────────────</span>
+Go rejected exceptions.
+"Errors are values." — Rob Pike</pre>
+          </div>
+
+          <!-- CARD: Pointer Diagram -->
+          <div class="grok-card">
+            <div class="grok-title">Pointers: One Concept, Many Notations</div>
+            <pre>
+<span class="hl">C:</span>
+int x = 42;
+int* p = &x;     // p holds address of x
+*p = 100;        // dereference, modify x
+
+  p             x
+┌─────┐       ┌─────┐
+│ 0x7f│──────▶│ 100 │
+└─────┘       └─────┘
+ (8 bytes)    (4 bytes)
+
+<span class="hl3">GO:</span>
+x := 42
+p := &x          // same concept
+*p = 100         // same syntax
+
+<span class="dim">(no pointer arithmetic in Go)</span>
+<span class="dim">(GC may move objects → no raw addrs)</span>
+
+<span class="hl2">RUST:</span>
+let x = 42;
+let p = &x;      // immutable borrow
+let p = &mut x;  // mutable borrow (exclusive)
+
+<span class="dim">(compiler enforces: 1 mut XOR N immut)</span>
+<span class="dim">(no dangling pointers possible)</span>
+
+<span class="hl4">JS:</span>
+let x = { val: 42 };
+let p = x;       // reference copy (same object)
+
+<span class="dim">(no explicit pointers, all objects by ref)</span></pre>
+          </div>
+
+          <!-- CARD: What Runs Your Code -->
+          <div class="grok-card wide">
+            <div class="grok-title">What Runs Your Code?</div>
+            <pre>
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                                     │
+│   <span class="hl">C</span>              <span class="hl3">GO</span>               <span class="hl2">RUST</span>            <span class="hl4">JS (Node/Browser)</span>      <span class="dim">PYTHON</span>            │
+│                                                                                                     │
+│   ┌──────────┐   ┌──────────┐     ┌──────────┐     ┌──────────────────┐   ┌──────────────┐          │
+│   │  binary  │   │  binary  │     │  binary  │     │    V8 / JSC      │   │  CPython     │          │
+│   │  (native)│   │  +runtime│     │  (native)│     │    (JIT + GC)    │   │  interpreter │          │
+│   └──────────┘   └──────────┘     └──────────┘     └──────────────────┘   └──────────────┘          │
+│        │              │                │                    │                    │                  │
+│        │         ┌────┴────┐           │              ┌─────┴─────┐        ┌─────┴─────┐            │
+│        │         │scheduler│           │              │event loop │        │   GIL     │            │
+│        │         │   GC    │           │              │  libuv    │        │bytecode VM│            │
+│        │         │  stack  │           │              └───────────┘        └───────────┘            │
+│        │         └─────────┘           │                                                            │
+│        ▼              ▼                ▼                    ▼                    ▼                  │
+│   ┌──────────────────────────────────────────────────────────────────────────────────────────┐      │
+│   │                                    OPERATING SYSTEM                                      │      │
+│   └──────────────────────────────────────────────────────────────────────────────────────────┘      │
+│                                                                                                     │
+│   <span class="dim">no runtime</span>       <span class="dim">~5MB runtime</span>       <span class="dim">no runtime</span>       <span class="dim">~50MB runtime</span>       <span class="dim">interpreter</span>        │
+│   <span class="dim">no GC</span>           <span class="dim">GC</span>                 <span class="dim">no GC</span>            <span class="dim">GC</span>                  <span class="dim">GC</span>                 │
+│   <span class="dim">you schedule</span>    <span class="dim">M:N scheduling</span>    <span class="dim">you schedule</span>     <span class="dim">event loop</span>          <span class="dim">GIL</span>                │
+│                                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────┘</pre>
+          </div>
+
+          <!-- CARD: Interface/Trait/Protocol -->
+          <div class="grok-card">
+            <div class="grok-title">Polymorphism Mechanisms</div>
+            <pre>
+<span class="hl">C</span>           function pointers + void*
+            struct vtable { void (*fn)(void*); };
+            <span class="dim">(manual, unsafe, but zero-cost)</span>
+
+<span class="hl3">GO</span>          interface (structural, implicit)
+            type Reader interface { Read([]byte) int }
+            <span class="dim">(any type with Read() satisfies it)</span>
+            <span class="dim">(interface = {type, pointer} pair)</span>
+
+<span class="hl2">RUST</span>        trait (nominal, explicit)
+            impl Read for MyType { ... }
+            <span class="dim">(monomorphization or dyn dispatch)</span>
+            <span class="dim">(zero-cost when static)</span>
+
+<span class="hl4">JS</span>          duck typing (runtime check)
+            if (obj.read) obj.read()
+            <span class="dim">(no compile-time checking)</span>
+
+<span class="dim">───────────────────────────────────────────</span>
+Go's interfaces = C's vtables, automated
+Rust's traits = C++'s concepts + generics
+JS = runtime property lookup</pre>
+          </div>
+
+          <!-- CARD: Allocation -->
+          <div class="grok-card">
+            <div class="grok-title">Where Does This Live?</div>
+            <pre>
+<span class="hl3">STACK</span>                         <span class="hl2">HEAP</span>
+(automatic)                   (dynamic)
+──────────────────────────────────────────
+
+<span class="hl">C:</span>
+int x = 5;      ← stack       int* p = malloc(4); ← heap
+int arr[10];    ← stack       free(p);            ← manual
+
+<span class="hl3">Go:</span>
+x := 5          ← escape      p := new(int)  ← maybe heap
+                  analysis    s := make([]int, 10)
+                  decides!    <span class="dim">// compiler decides stack/heap</span>
+
+<span class="hl2">Rust:</span>
+let x = 5;      ← stack       let p = Box::new(5); ← heap
+let arr = [0;10] ← stack      <span class="dim">// Box = unique ownership</span>
+
+<span class="hl4">JS:</span>
+let x = 5;      ← V8 decides  let obj = {};  ← always heap
+                              <span class="dim">// primitives may be stack</span>
+                              <span class="dim">// objects always heap</span>
+
+<span class="dim">───────────────────────────────────────────</span>
+C:    you decide
+Go:   compiler decides (escape analysis)
+Rust: type decides (Box/Rc/Arc = heap)
+JS:   engine decides (hidden)</pre>
+          </div>
+
+          <!-- CARD: Minimal Syscalls -->
+          <div class="grok-card">
+            <div class="grok-title">Essential Syscalls (Learn These)</div>
+            <pre>
+<span class="hl">PROCESS</span>
+  fork()     clone current process
+  exec()     replace with new program
+  exit()     terminate
+  wait()     wait for child
+
+<span class="hl3">FILES</span>
+  open()     get file descriptor
+  read()     read bytes from fd
+  write()    write bytes to fd
+  close()    release fd
+  lseek()    move read/write position
+
+<span class="hl4">MEMORY</span>
+  mmap()     map file/memory into address space
+  munmap()   unmap
+  brk()      expand heap (malloc uses this)
+
+<span class="hl2">IPC</span>
+  pipe()     create connected fd pair
+  socket()   create network endpoint
+  connect()  connect to remote socket
+  accept()   accept incoming connection
+
+<span class="dim">───────────────────────────────────────────</span>
+<span class="dim">These 16 syscalls underlie most programs.</span>
+<span class="dim">strace your-program to see them live.</span></pre>
+          </div>
+
+          <!-- CARD: Quick Commands -->
+          <div class="grok-card">
+            <div class="grok-title">Debugging Commands</div>
+            <pre>
+<span class="hl">strace ./program</span>
+  See every syscall your program makes.
+  strace -e trace=open,read,write ./program
+
+<span class="hl">ltrace ./program</span>
+  See library calls (malloc, printf, etc.)
+
+<span class="hl">ldd ./program</span>
+  Show shared library dependencies
+
+<span class="hl">nm ./program</span>
+  List symbols (functions, globals)
+
+<span class="hl">objdump -d ./program</span>
+  Disassemble to assembly
+
+<span class="hl">readelf -h ./program</span>
+  Show ELF header info
+
+<span class="hl3">GO SPECIFIC:</span>
+  go build -gcflags="-m"    ← escape analysis
+  go tool compile -S x.go   ← show assembly
+  GODEBUG=gctrace=1 ./prog  ← GC tracing
+
+<span class="hl4">GENERAL:</span>
+  time ./program            ← wall/user/sys time
+  /usr/bin/time -v ./prog   ← detailed stats</pre>
+          </div>
+
+          <!-- CARD: The 5 Questions -->
+          <div class="grok-card full">
+            <div class="grok-title">When Learning Any Language, Ask:</div>
+            <pre>
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                                                     │
+│  <span class="hl">1. WHERE DOES MEMORY LIVE?</span>           Stack vs heap. Who allocates? Who frees? GC? Ownership? Manual?             │
+│                                                                                                                     │
+│  <span class="hl3">2. WHAT EXECUTES MY CODE?</span>            Native binary? VM bytecode? JIT? Interpreter? What's the "runtime"?         │
+│                                                                                                                     │
+│  <span class="hl4">3. HOW DO I DO MANY THINGS AT ONCE?</span>  Threads? Green threads? Async/await? Event loop? CSP channels?              │
+│                                                                                                                     │
+│  <span class="hl2">4. HOW DO I HANDLE ERRORS?</span>           Exceptions? Return codes? Result types? Panic/recover?                      │
+│                                                                                                                     │
+│  <span class="dim">5. HOW DO I COMPOSE BEHAVIOR?</span>        Classes? Interfaces? Traits? Prototypes? Functions? Modules?                │
+│                                                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+<span class="dim">Answer these five for C. Then for Go. Then for Rust. Then for JS.</span>
+<span class="dim">The answers reveal the language's soul.</span></pre>
+          </div>
+
+        </div>
+      </div>
+    </div>
   </div>
+
+  <script>
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+      });
+    });
+  </script>
 </body>
 </html>
