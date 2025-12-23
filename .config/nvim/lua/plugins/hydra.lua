@@ -3,7 +3,7 @@
 
 return {
   "nvimtools/hydra.nvim",
-  event = "VeryLazy",
+  lazy = false,  -- Load immediately - handles core keybindings
   config = function()
     local Hydra = require("hydra")
 
