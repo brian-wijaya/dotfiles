@@ -32,7 +32,9 @@ return {
         hint = {
           type = "window",
           position = "bottom",
-          border = "rounded",
+          float_opts = {
+            border = "rounded",
+          },
         },
       },
       mode = "n",
