@@ -184,5 +184,25 @@ return {
         mode = "n",
       },
     })
+
+    -- ============================================
+    -- KEYMAP DISCOVERY from leader
+    -- <leader>? shows all prefix groups
+    -- ============================================
+    wk.add({
+      { "<leader>?", group = "Keymaps (ALL)" },
+      { "<leader>?[", function() wk.show({ keys = "[" }) end, desc = "[ Previous navigation" },
+      { "<leader>?]", function() wk.show({ keys = "]" }) end, desc = "] Next navigation" },
+      { "<leader>?g", function() wk.show({ keys = "g" }) end, desc = "g Go/LSP commands" },
+      { "<leader>?z", function() wk.show({ keys = "z" }) end, desc = "z Folds/View" },
+      { "<leader>?s", desc = "s Flash (jump to char)" },
+      { "<leader>?S", desc = "S Flash Treesitter (jump to node)" },
+      { "<leader>?c", desc = "c Change (operator)" },
+      { "<leader>?d", desc = "d Delete (operator)" },
+      { "<leader>?y", desc = "y Yank (operator)" },
+      { "<leader>?v", desc = "v Visual mode" },
+      { "<leader>?V", desc = "V Visual line mode" },
+      { "<leader>??", "<cmd>Telescope keymaps<cr>", desc = "Search ALL keymaps" },
+    })
   end,
 }
