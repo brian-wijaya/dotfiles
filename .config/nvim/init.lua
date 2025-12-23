@@ -28,6 +28,7 @@ require("lazy").setup({
 -- Load core config
 require "options"
 require "autocmds"
+require("config.smartjump").setup()
 
 vim.schedule(function()
   require "mappings"

@@ -77,7 +77,7 @@ git clone https://github.com/retopo001/dotfiles.git
 The install script will:
 - Install Go (if missing) for gopls LSP server
 - Backup existing configs to `~/.config_backup/`
-- Create symlinks for all configs
+- Copy all configs to their runtime locations
 - Copy WezTerm config to Windows home directory
 
 ```bash

@@ -27,7 +27,7 @@ return {
         if pending_prefix ~= nil then
           pending_prefix = nil
           hint_text = ""
-          vim.schedule(function() vim.cmd("redrawstatus") end)
+          vim.schedule(function() require('lualine').refresh({ force = true }) end)
         end
         return
       end
@@ -36,12 +36,12 @@ return {
       if prefix_hints[char] and pending_prefix == nil then
         pending_prefix = char
         hint_text = char .. ": " .. prefix_hints[char]
-        vim.schedule(function() vim.cmd("redrawstatus") end)
+        vim.schedule(function() require('lualine').refresh({ force = true }) end)
       elseif pending_prefix ~= nil then
         -- A second key was pressed, action complete
         pending_prefix = nil
         hint_text = ""
-        vim.schedule(function() vim.cmd("redrawstatus") end)
+        vim.schedule(function() require('lualine').refresh({ force = true }) end)
       end
     end, nil)
 
