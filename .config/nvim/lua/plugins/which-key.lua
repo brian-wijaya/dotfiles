@@ -54,150 +54,139 @@ return {
     wk.setup(opts)
 
     -- ============================================
-    -- EXHAUSTIVE KEY REFERENCE
-    -- All prefix groups registered for discoverability
+    -- EVERYTHING FLAT ON LEADER MENU
+    -- Press spacebar = see EVERYTHING
     -- ============================================
 
     wk.add({
-      -- Leader groups
-      { "<leader>a", group = "AI" },
-      { "<leader>b", group = "Buffer" },
-      { "<leader>c", group = "Code" },
-      { "<leader>d", group = "Debug" },
-      { "<leader>e", group = "Diagnostics" },
-      { "<leader>f", group = "Find" },
-      { "<leader>g", group = "Git" },
-      { "<leader>h", group = "Harpoon" },
-      { "<leader>m", group = "Marks" },
-      { "<leader>p", group = "Project" },
-      { "<leader>r", group = "Refactor" },
-      { "<leader>s", group = "Search" },
-      { "<leader>t", group = "Toggle" },
-      { "<leader>T", group = "Treesitter" },
-      { "<leader>w", group = "Window" },
-      { "<leader>x", group = "Trouble" },
-      { "<leader>y", group = "Yank" },
+      -- === NAVIGATION ([ and ]) ===
+      { "<leader>1", function() wk.show({ keys = "[", mode = "n" }) end, desc = "[ PREV nav menu" },
+      { "<leader>2", function() wk.show({ keys = "]", mode = "n" }) end, desc = "] NEXT nav menu" },
 
-      -- Navigation prefixes
+      -- === GO/LSP (g prefix) ===
+      { "<leader>3", function() wk.show({ keys = "g", mode = "n" }) end, desc = "g GO/LSP menu" },
+
+      -- === FOLDS (z prefix) ===
+      { "<leader>4", function() wk.show({ keys = "z", mode = "n" }) end, desc = "z FOLDS menu" },
+
+      -- === AI ===
+      { "<leader>ac", "<cmd>Claude<cr>", desc = "Claude" },
+
+      -- === BUFFER ===
+      { "<leader>bb", "<cmd>Telescope buffers<cr>", desc = "Buffer list" },
+      { "<leader>bd", "<cmd>bdelete<cr>", desc = "Delete buffer" },
+      { "<leader>bn", "<cmd>bnext<cr>", desc = "Next buffer" },
+      { "<leader>bp", "<cmd>bprev<cr>", desc = "Prev buffer" },
+
+      -- === CODE ===
+      { "<leader>ca", vim.lsp.buf.code_action, desc = "Code action" },
+      { "<leader>cf", function() require("conform").format() end, desc = "Format" },
+      { "<leader>cr", vim.lsp.buf.rename, desc = "Rename symbol" },
+
+      -- === DIAGNOSTICS ===
+      { "<leader>dd", vim.diagnostic.open_float, desc = "Line diagnostics" },
+      { "<leader>dn", vim.diagnostic.goto_next, desc = "Next diagnostic" },
+      { "<leader>dp", vim.diagnostic.goto_prev, desc = "Prev diagnostic" },
+      { "<leader>dl", "<cmd>Telescope diagnostics<cr>", desc = "List diagnostics" },
+
+      -- === FIND (Telescope) ===
+      { "<leader>ff", "<cmd>Telescope find_files<cr>", desc = "Find files" },
+      { "<leader>fg", "<cmd>Telescope live_grep<cr>", desc = "Grep text" },
+      { "<leader>fb", "<cmd>Telescope buffers<cr>", desc = "Buffers" },
+      { "<leader>fh", "<cmd>Telescope help_tags<cr>", desc = "Help" },
+      { "<leader>fo", "<cmd>Telescope oldfiles<cr>", desc = "Recent files" },
+      { "<leader>fc", "<cmd>Telescope git_commits<cr>", desc = "Git commits" },
+      { "<leader>fs", "<cmd>Telescope git_status<cr>", desc = "Git status" },
+      { "<leader>fk", "<cmd>Telescope keymaps<cr>", desc = "Keymaps" },
+      { "<leader>ft", "<cmd>TodoTelescope<cr>", desc = "TODOs" },
+
+      -- === GIT ===
+      { "<leader>gb", "<cmd>Git blame<cr>", desc = "Blame" },
+      { "<leader>gl", "<cmd>LazyGit<cr>", desc = "LazyGit" },
+      { "<leader>gd", "<cmd>Gitsigns diffthis<cr>", desc = "Diff" },
+      { "<leader>gw", "<cmd>edit /home/bw/dotfiles/docs/CURSOR-WORKFLOW-GUIDE.md<cr>", desc = "Workflow guide" },
+
+      -- === HARPOON ===
+      { "<leader>ha", function() require("harpoon"):list():add() end, desc = "Add mark" },
+      { "<leader>hh", function() require("harpoon").ui:toggle_quick_menu(require("harpoon"):list()) end, desc = "Menu" },
+      { "<leader>h1", function() require("harpoon"):list():select(1) end, desc = "File 1" },
+      { "<leader>h2", function() require("harpoon"):list():select(2) end, desc = "File 2" },
+      { "<leader>h3", function() require("harpoon"):list():select(3) end, desc = "File 3" },
+      { "<leader>h4", function() require("harpoon"):list():select(4) end, desc = "File 4" },
+
+      -- === LSP ===
+      { "<leader>li", "<cmd>LspInfo<cr>", desc = "LSP info" },
+      { "<leader>lr", "<cmd>LspRestart<cr>", desc = "LSP restart" },
+
+      -- === TOGGLE ===
+      { "<leader>tn", "<cmd>set number!<cr>", desc = "Line numbers" },
+      { "<leader>tr", "<cmd>set relativenumber!<cr>", desc = "Relative numbers" },
+      { "<leader>tw", "<cmd>set wrap!<cr>", desc = "Word wrap" },
+      { "<leader>ts", "<cmd>set spell!<cr>", desc = "Spell check" },
+      { "<leader>th", function() require("close_buffers").delete({ type = "hidden" }) end, desc = "Close hidden bufs" },
+
+      -- === TROUBLE ===
+      { "<leader>xx", "<cmd>Trouble diagnostics toggle<cr>", desc = "Diagnostics" },
+      { "<leader>xd", "<cmd>Trouble diagnostics toggle filter.buf=0<cr>", desc = "Buffer diagnostics" },
+      { "<leader>xl", "<cmd>Trouble loclist toggle<cr>", desc = "Location list" },
+      { "<leader>xq", "<cmd>Trouble qflist toggle<cr>", desc = "Quickfix" },
+      { "<leader>xt", "<cmd>Trouble todo toggle<cr>", desc = "TODOs" },
+
+      -- === YANK ===
+      { "<leader>yf", function()
+          local path = vim.api.nvim_buf_get_name(0)
+          vim.fn.setreg("+", path)
+          vim.notify("Yanked: " .. path)
+        end, desc = "Yank file path" },
+      { "<leader>yr", function()
+          local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":~:.")
+          vim.fn.setreg("+", path)
+          vim.notify("Yanked: " .. path)
+        end, desc = "Yank relative path" },
+
+      -- === WINDOW ===
+      { "<leader>wv", "<cmd>vsplit<cr>", desc = "Split vertical" },
+      { "<leader>ws", "<cmd>split<cr>", desc = "Split horizontal" },
+      { "<leader>wc", "<cmd>close<cr>", desc = "Close window" },
+      { "<leader>wo", "<cmd>only<cr>", desc = "Close others" },
+      { "<leader>w=", "<C-w>=", desc = "Equal size" },
+
+      -- === QUIT/WRITE ===
+      { "<leader>qq", "<cmd>qa<cr>", desc = "Quit all" },
+      { "<leader>qw", "<cmd>wqa<cr>", desc = "Write & quit all" },
+      { "<leader>ww", "<cmd>w<cr>", desc = "Save" },
+
+      -- === MISC ===
+      { "<leader>/", function() require("Comment.api").toggle.linewise.current() end, desc = "Comment line" },
+      { "<leader>e", "<cmd>Oil<cr>", desc = "File explorer (Oil)" },
+      { "<leader>u", "<cmd>UndotreeToggle<cr>", desc = "Undo tree" },
+    })
+
+    -- Also register the non-leader prefixes for their own menus
+    wk.add({
       { "[", group = "Previous" },
       { "]", group = "Next" },
-
-      -- g prefix (go/LSP)
       { "g", group = "Go/LSP" },
-      { "gr", group = "LSP references/rename" },
-
-      -- z prefix (folds/view)
-      { "z", group = "Folds/View" },
-
-      -- s prefix (flash)
-      { "s", desc = "Flash (jump to char)" },
-      { "S", desc = "Flash Treesitter (jump to node)" },
-    })
-
-    -- Document [ prefix mappings
-    wk.add({
-      { "[d", desc = "Previous diagnostic" },
-      { "[D", desc = "First diagnostic in buffer" },
-      { "[b", desc = "Previous buffer" },
-      { "[B", desc = "First buffer" },
-      { "[q", desc = "Previous quickfix" },
-      { "[Q", desc = "First quickfix" },
-      { "[l", desc = "Previous loclist" },
-      { "[L", desc = "First loclist" },
-      { "[t", desc = "Previous todo comment" },
-      { "[a", desc = "Previous file (arglist)" },
-      { "[ ", desc = "Add blank line above" },
-    })
-
-    -- Document ] prefix mappings
-    wk.add({
+      { "z", group = "Folds" },
+      { "[d", desc = "Prev diagnostic" },
+      { "[b", desc = "Prev buffer" },
+      { "[q", desc = "Prev quickfix" },
+      { "[t", desc = "Prev todo" },
       { "]d", desc = "Next diagnostic" },
-      { "]D", desc = "Last diagnostic in buffer" },
       { "]b", desc = "Next buffer" },
-      { "]B", desc = "Last buffer" },
       { "]q", desc = "Next quickfix" },
-      { "]Q", desc = "Last quickfix" },
-      { "]l", desc = "Next loclist" },
-      { "]L", desc = "Last loclist" },
-      { "]t", desc = "Next todo comment" },
-      { "]a", desc = "Next file (arglist)" },
-      { "] ", desc = "Add blank line below" },
-    })
-
-    -- Document g prefix mappings
-    wk.add({
-      { "gd", desc = "Go to definition" },
-      { "gD", desc = "Go to declaration" },
-      { "gi", desc = "Go to implementation" },
-      { "gr", desc = "Find references" },
-      { "grn", desc = "Rename symbol" },
-      { "gra", desc = "Code action" },
-      { "grr", desc = "References" },
-      { "gri", desc = "Implementation" },
-      { "grt", desc = "Type definition" },
-      { "gO", desc = "Document symbols" },
-      { "gc", desc = "Comment (motion)" },
+      { "]t", desc = "Next todo" },
+      { "gd", desc = "Definition" },
+      { "gr", desc = "References" },
+      { "gi", desc = "Implementation" },
+      { "gc", desc = "Comment" },
       { "gcc", desc = "Comment line" },
-      { "gx", desc = "Open URI/filepath" },
-    })
-
-    -- Document z prefix mappings
-    wk.add({
       { "zR", desc = "Open all folds" },
       { "zM", desc = "Close all folds" },
-      { "za", desc = "Toggle fold under cursor" },
-      { "zo", desc = "Open fold under cursor" },
-      { "zc", desc = "Close fold under cursor" },
-    })
-
-    -- Document Ctrl mappings
-    wk.add({
-      { "<C-h>", desc = "Navigate left (vim/tmux)" },
-      { "<C-j>", desc = "Navigate down (vim/tmux)" },
-      { "<C-k>", desc = "Navigate up (vim/tmux)" },
-      { "<C-l>", desc = "Navigate right (vim/tmux)" },
-      { "<C-d>", desc = "Scroll down (centered)" },
-      { "<C-u>", desc = "Scroll up (centered)" },
-      { "<C-s>", desc = "Save file" },
-      { "<C-a>", desc = "Increment number" },
-      { "<C-x>", desc = "Decrement number" },
-    })
-
-    -- Document other useful mappings
-    wk.add({
-      { "K", desc = "Hover documentation" },
-      { "n", desc = "Next search (centered)" },
-      { "N", desc = "Prev search (centered)" },
-      { "<Tab>", desc = "Next buffer" },
-      { "<S-Tab>", desc = "Previous buffer" },
-      { "<Esc>", desc = "Clear search highlights" },
-      { "jk", desc = "Exit insert mode", mode = "i" },
-    })
-
-    -- Custom mappings
-    wk.add({
-      { "<leader>ac", "<cmd>Claude<cr>", desc = "Launch Claude", mode = "n" },
-      {
-        "<leader>gw",
-        "<cmd>edit /home/bw/dotfiles/docs/CURSOR-WORKFLOW-GUIDE.md<cr>",
-        desc = "Open workflow guide",
-        mode = "n",
-      },
-    })
-
-    -- ============================================
-    -- NON-LEADER PREFIX ACCESS from leader menu
-    -- These show up directly when pressing spacebar
-    -- ============================================
-    wk.add({
-      { "<leader>[", function() wk.show({ keys = "[", mode = "n" }) end, desc = "Previous ([d]iag [b]uf [q]fix [t]odo)" },
-      { "<leader>]", function() wk.show({ keys = "]", mode = "n" }) end, desc = "Next (]d]iag ]b]uf ]q]fix ]t]odo)" },
-      { "<leader>k", group = "Keys/Reference" },
-      { "<leader>kg", function() wk.show({ keys = "g", mode = "n" }) end, desc = "g Go/LSP (gd gr gi gc)" },
-      { "<leader>kz", function() wk.show({ keys = "z", mode = "n" }) end, desc = "z Folds (zR zM za)" },
-      { "<leader>ks", desc = "s = Flash jump to char" },
-      { "<leader>kS", desc = "S = Flash Treesitter jump" },
-      { "<leader>kk", "<cmd>Telescope keymaps<cr>", desc = "Search ALL keymaps" },
+      { "za", desc = "Toggle fold" },
+      { "s", desc = "Flash (jump)" },
+      { "S", desc = "Flash Treesitter" },
+      { "K", desc = "Hover docs" },
     })
   end,
 }
