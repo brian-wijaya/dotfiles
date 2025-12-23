@@ -53,12 +53,18 @@ return {
     local wk = require("which-key")
     wk.setup(opts)
 
-    -- Register group names for descriptive labels
+    -- ============================================
+    -- EXHAUSTIVE KEY REFERENCE
+    -- All prefix groups registered for discoverability
+    -- ============================================
+
     wk.add({
+      -- Leader groups
       { "<leader>a", group = "AI" },
       { "<leader>b", group = "Buffer" },
       { "<leader>c", group = "Code" },
       { "<leader>d", group = "Debug" },
+      { "<leader>e", group = "Diagnostics" },
       { "<leader>f", group = "Find" },
       { "<leader>g", group = "Git" },
       { "<leader>h", group = "Harpoon" },
@@ -71,9 +77,104 @@ return {
       { "<leader>w", group = "Window" },
       { "<leader>x", group = "Trouble" },
       { "<leader>y", group = "Yank" },
+
+      -- Navigation prefixes
+      { "[", group = "Previous" },
+      { "]", group = "Next" },
+
+      -- g prefix (go/LSP)
+      { "g", group = "Go/LSP" },
+      { "gr", group = "LSP references/rename" },
+
+      -- z prefix (folds/view)
+      { "z", group = "Folds/View" },
+
+      -- s prefix (flash)
+      { "s", desc = "Flash (jump to char)" },
+      { "S", desc = "Flash Treesitter (jump to node)" },
     })
 
-    -- Register custom mappings (v3 spec)
+    -- Document [ prefix mappings
+    wk.add({
+      { "[d", desc = "Previous diagnostic" },
+      { "[D", desc = "First diagnostic in buffer" },
+      { "[b", desc = "Previous buffer" },
+      { "[B", desc = "First buffer" },
+      { "[q", desc = "Previous quickfix" },
+      { "[Q", desc = "First quickfix" },
+      { "[l", desc = "Previous loclist" },
+      { "[L", desc = "First loclist" },
+      { "[t", desc = "Previous todo comment" },
+      { "[a", desc = "Previous file (arglist)" },
+      { "[ ", desc = "Add blank line above" },
+    })
+
+    -- Document ] prefix mappings
+    wk.add({
+      { "]d", desc = "Next diagnostic" },
+      { "]D", desc = "Last diagnostic in buffer" },
+      { "]b", desc = "Next buffer" },
+      { "]B", desc = "Last buffer" },
+      { "]q", desc = "Next quickfix" },
+      { "]Q", desc = "Last quickfix" },
+      { "]l", desc = "Next loclist" },
+      { "]L", desc = "Last loclist" },
+      { "]t", desc = "Next todo comment" },
+      { "]a", desc = "Next file (arglist)" },
+      { "] ", desc = "Add blank line below" },
+    })
+
+    -- Document g prefix mappings
+    wk.add({
+      { "gd", desc = "Go to definition" },
+      { "gD", desc = "Go to declaration" },
+      { "gi", desc = "Go to implementation" },
+      { "gr", desc = "Find references" },
+      { "grn", desc = "Rename symbol" },
+      { "gra", desc = "Code action" },
+      { "grr", desc = "References" },
+      { "gri", desc = "Implementation" },
+      { "grt", desc = "Type definition" },
+      { "gO", desc = "Document symbols" },
+      { "gc", desc = "Comment (motion)" },
+      { "gcc", desc = "Comment line" },
+      { "gx", desc = "Open URI/filepath" },
+    })
+
+    -- Document z prefix mappings
+    wk.add({
+      { "zR", desc = "Open all folds" },
+      { "zM", desc = "Close all folds" },
+      { "za", desc = "Toggle fold under cursor" },
+      { "zo", desc = "Open fold under cursor" },
+      { "zc", desc = "Close fold under cursor" },
+    })
+
+    -- Document Ctrl mappings
+    wk.add({
+      { "<C-h>", desc = "Navigate left (vim/tmux)" },
+      { "<C-j>", desc = "Navigate down (vim/tmux)" },
+      { "<C-k>", desc = "Navigate up (vim/tmux)" },
+      { "<C-l>", desc = "Navigate right (vim/tmux)" },
+      { "<C-d>", desc = "Scroll down (centered)" },
+      { "<C-u>", desc = "Scroll up (centered)" },
+      { "<C-s>", desc = "Save file" },
+      { "<C-a>", desc = "Increment number" },
+      { "<C-x>", desc = "Decrement number" },
+    })
+
+    -- Document other useful mappings
+    wk.add({
+      { "K", desc = "Hover documentation" },
+      { "n", desc = "Next search (centered)" },
+      { "N", desc = "Prev search (centered)" },
+      { "<Tab>", desc = "Next buffer" },
+      { "<S-Tab>", desc = "Previous buffer" },
+      { "<Esc>", desc = "Clear search highlights" },
+      { "jk", desc = "Exit insert mode", mode = "i" },
+    })
+
+    -- Custom mappings
     wk.add({
       { "<leader>ac", "<cmd>Claude<cr>", desc = "Launch Claude", mode = "n" },
       {
