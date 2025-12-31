@@ -6,7 +6,7 @@
 # --- IMMEDIATELY prevent tmux in IDE terminals (run FIRST, before anything else) ---
 # IDE terminals should not use tmux (they have their own terminal management)
 # Covers: Cursor, VSCode, IntelliJ, PyCharm, Junie, etc.
-if [[ -n "$CURSOR_AGENT" ]] || [[ -n "$VSCODE_CWD" ]] || [[ -n "$VSCODE_INJECTION" ]] || [[ -n "$CURSOR_NO_TMUX" ]] || [[ "$TERM_PROGRAM" == "vscode" ]] || [[ "$TERMINAL_EMULATOR" == *"JetBrains"* ]] || [[ -n "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] || [[ -n "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]]; then
+if [[ -n "$CURSOR_AGENT" ]] || [[ -n "$VSCODE_CWD" ]] || [[ -n "$VSCODE_INJECTION" ]] || [[ -n "$CURSOR_NO_TMUX" ]] || [[ "$TERM_PROGRAM" == "vscode" ]] || [[ "$WSLENV" == *"TERM_PROGRAM"* ]] || [[ "$PATH" == *"cursor/resources/app/bin"* ]] || [[ "$PATH" == *"Code/bin"* ]] || [[ "$TERMINAL_EMULATOR" == *"JetBrains"* ]] || [[ -n "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] || [[ -n "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]]; then
     export CURSOR_NO_TMUX=1
     # Aggressively kill any tmux attach processes immediately
     pkill -9 -f "tmux attach.*main" 2>/dev/null || true
@@ -24,7 +24,7 @@ eval "$(starship init zsh)"
 # --- tmuxifier (tmux session templates) ---
 # Install with: git clone https://github.com/jimeh/tmuxifier.git ~/.tmuxifier
 # Skip in IDE terminals where tmux is disabled
-if [[ -z "$CURSOR_NO_TMUX" ]] && [[ -z "$CURSOR_AGENT" ]] && [[ -z "$VSCODE_CWD" ]] && [[ -z "$VSCODE_INJECTION" ]] && [[ "$TERM_PROGRAM" != "vscode" ]] && [[ "$TERMINAL_EMULATOR" != *"JetBrains"* ]] && [[ -z "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] && [[ -z "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]]; then
+if [[ -z "$CURSOR_NO_TMUX" ]] && [[ -z "$CURSOR_AGENT" ]] && [[ -z "$VSCODE_CWD" ]] && [[ -z "$VSCODE_INJECTION" ]] && [[ "$TERM_PROGRAM" != "vscode" ]] && [[ "$WSLENV" != *"TERM_PROGRAM"* ]] && [[ "$PATH" != *"cursor/resources/app/bin"* ]] && [[ "$PATH" != *"Code/bin"* ]] && [[ "$TERMINAL_EMULATOR" != *"JetBrains"* ]] && [[ -z "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] && [[ -z "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]]; then
     if [[ -d "$HOME/.tmuxifier" ]] && [[ -f "$HOME/.tmuxifier/bin/tmuxifier" ]]; then
         # Initialize tmuxifier (suppress all output and errors)
         eval "$($HOME/.tmuxifier/bin/tmuxifier init -)" >/dev/null 2>&1 || true
@@ -129,7 +129,7 @@ eval "$(atuin init zsh)"
 # or if WEZTERM_NOTMUX is set (for independent WezTerm tabs)
 
 # In IDE terminals - prevent tmux entirely
-if [[ -n "$CURSOR_AGENT" ]] || [[ -n "$VSCODE_CWD" ]] || [[ -n "$VSCODE_INJECTION" ]] || [[ -n "$CURSOR_NO_TMUX" ]] || [[ "$TERM_PROGRAM" == "vscode" ]] || [[ "$TERMINAL_EMULATOR" == *"JetBrains"* ]] || [[ -n "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] || [[ -n "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]]; then
+if [[ -n "$CURSOR_AGENT" ]] || [[ -n "$VSCODE_CWD" ]] || [[ -n "$VSCODE_INJECTION" ]] || [[ -n "$CURSOR_NO_TMUX" ]] || [[ "$TERM_PROGRAM" == "vscode" ]] || [[ "$WSLENV" == *"TERM_PROGRAM"* ]] || [[ "$PATH" == *"cursor/resources/app/bin"* ]] || [[ "$PATH" == *"Code/bin"* ]] || [[ "$TERMINAL_EMULATOR" == *"JetBrains"* ]] || [[ -n "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] || [[ -n "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]]; then
     export CURSOR_NO_TMUX=1
     # Aggressively kill any tmux attach processes (including ones started after this script)
     pkill -9 -f "tmux attach.*main" 2>/dev/null || true
@@ -144,7 +144,7 @@ if [[ -n "$CURSOR_AGENT" ]] || [[ -n "$VSCODE_CWD" ]] || [[ -n "$VSCODE_INJECTIO
 fi
 
 # Only start tmux if we're NOT in an IDE terminal and NOT already in tmux
-if [[ -z "$TMUX" ]] && [[ -z "$WEZTERM_NOTMUX" ]] && [[ -z "$CURSOR_AGENT" ]] && [[ -z "$VSCODE_INJECTION" ]] && [[ -z "$VSCODE_CWD" ]] && [[ -z "$CURSOR_NO_TMUX" ]] && [[ "$TERM_PROGRAM" != "vscode" ]] && [[ -z "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] && [[ -z "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]] && [[ "$TERMINAL_EMULATOR" != *"JetBrains"* ]]; then
+if [[ -z "$TMUX" ]] && [[ -z "$WEZTERM_NOTMUX" ]] && [[ -z "$CURSOR_AGENT" ]] && [[ -z "$VSCODE_INJECTION" ]] && [[ -z "$VSCODE_CWD" ]] && [[ -z "$CURSOR_NO_TMUX" ]] && [[ "$TERM_PROGRAM" != "vscode" ]] && [[ "$WSLENV" != *"TERM_PROGRAM"* ]] && [[ "$PATH" != *"cursor/resources/app/bin"* ]] && [[ "$PATH" != *"Code/bin"* ]] && [[ -z "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] && [[ -z "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]] && [[ "$TERMINAL_EMULATOR" != *"JetBrains"* ]]; then
     tmux attach -t main 2>/dev/null || tmux new -s main -c ~
 fi
 export PATH="$HOME/bin:$PATH"
