@@ -23,9 +23,12 @@ eval "$(starship init zsh)"
 
 # --- tmuxifier (tmux session templates) ---
 # Install with: git clone https://github.com/jimeh/tmuxifier.git ~/.tmuxifier
-if [[ -d "$HOME/.tmuxifier" ]] && [[ -f "$HOME/.tmuxifier/bin/tmuxifier" ]]; then
-    # Initialize tmuxifier (suppress errors if it fails)
-    eval "$($HOME/.tmuxifier/bin/tmuxifier init -)" 2>/dev/null || true
+# Skip in IDE terminals where tmux is disabled
+if [[ -z "$CURSOR_NO_TMUX" ]] && [[ -z "$CURSOR_AGENT" ]] && [[ -z "$VSCODE_CWD" ]] && [[ -z "$VSCODE_INJECTION" ]] && [[ "$TERMINAL_EMULATOR" != *"JetBrains"* ]] && [[ -z "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] && [[ -z "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]]; then
+    if [[ -d "$HOME/.tmuxifier" ]] && [[ -f "$HOME/.tmuxifier/bin/tmuxifier" ]]; then
+        # Initialize tmuxifier (suppress all output and errors)
+        eval "$($HOME/.tmuxifier/bin/tmuxifier init -)" >/dev/null 2>&1 || true
+    fi
 fi
 
 # --- Aliases ---
