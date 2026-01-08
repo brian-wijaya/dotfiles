@@ -1,5 +1,6 @@
 #!/bin/bash
 # Arch Linux X11/i3 Dotfiles Installer
+# Uses mirror structure: dotfiles/.config/* → ~/.config/*
 
 set -e
 
@@ -36,44 +37,28 @@ fi
 echo ""
 echo "Backing up existing configs to $BACKUP_DIR..."
 mkdir -p "$BACKUP_DIR"
-for dir in i3 polybar rofi picom dunst alacritty fish; do
+for dir in i3 polybar rofi picom dunst alacritty fish emacs; do
     [ -d "$HOME/.config/$dir" ] && cp -r "$HOME/.config/$dir" "$BACKUP_DIR/"
 done
 echo "✓ Backup complete"
 
-# Create directories
-echo ""
-echo "Creating directories..."
-mkdir -p ~/.config/{i3,polybar,rofi/themes,picom,dunst,alacritty,fish}
-mkdir -p ~/bin
-
-# Copy configs
+# Copy .config directories
 echo ""
 echo "Copying config files..."
+for dir in i3 polybar rofi picom dunst alacritty fish emacs; do
+    if [ -d "$DOTFILES_DIR/.config/$dir" ]; then
+        mkdir -p "$HOME/.config/$dir"
+        cp -r "$DOTFILES_DIR/.config/$dir/"* "$HOME/.config/$dir/"
+        echo "✓ $dir"
+    fi
+done
 
-# i3
-[ -d "$DOTFILES_DIR/i3" ] && cp -r "$DOTFILES_DIR/i3/"* ~/.config/i3/ && echo "✓ i3"
-
-# Polybar
-[ -d "$DOTFILES_DIR/polybar" ] && cp -r "$DOTFILES_DIR/polybar/"* ~/.config/polybar/ && echo "✓ polybar"
-
-# Rofi
-[ -d "$DOTFILES_DIR/rofi" ] && cp -r "$DOTFILES_DIR/rofi/"* ~/.config/rofi/ && echo "✓ rofi"
-
-# Picom
-[ -d "$DOTFILES_DIR/picom" ] && cp -r "$DOTFILES_DIR/picom/"* ~/.config/picom/ && echo "✓ picom"
-
-# Dunst
-[ -d "$DOTFILES_DIR/dunst" ] && cp -r "$DOTFILES_DIR/dunst/"* ~/.config/dunst/ && echo "✓ dunst"
-
-# Alacritty
-[ -d "$DOTFILES_DIR/alacritty" ] && cp -r "$DOTFILES_DIR/alacritty/"* ~/.config/alacritty/ && echo "✓ alacritty"
-
-# Fish
-[ -d "$DOTFILES_DIR/fish" ] && cp -r "$DOTFILES_DIR/fish/"* ~/.config/fish/ && echo "✓ fish"
-
-# Scripts
-[ -d "$DOTFILES_DIR/bin" ] && cp "$DOTFILES_DIR/bin/"* ~/bin/ 2>/dev/null && chmod +x ~/bin/* && echo "✓ scripts"
+# Scripts (bin/ stays at root level - not XDG)
+echo ""
+echo "Copying scripts..."
+mkdir -p ~/bin
+[ -d "$DOTFILES_DIR/bin" ] && cp "$DOTFILES_DIR/bin/"* ~/bin/ 2>/dev/null && chmod +x ~/bin/*
+echo "✓ scripts"
 
 # Make polybar launcher executable
 chmod +x ~/.config/polybar/launch.sh 2>/dev/null
