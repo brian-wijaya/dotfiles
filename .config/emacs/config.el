@@ -34,17 +34,14 @@
 (tool-bar-mode -1)   ; Hide tool bar (icons)
 (scroll-bar-mode -1) ; Hide scroll bar
 
-;; Remove Windows title bar (frameless window like WezTerm)
-;; This removes the title bar, minimize/maximize buttons, and external borders
-(add-to-list 'default-frame-alist '(undecorated . t))
-;; Allow resizing by dragging internal borders
-(add-to-list 'default-frame-alist '(drag-internal-border . 1))
-;; Allow moving the frame by dragging the mode line
-(add-to-list 'default-frame-alist '(drag-with-mode-line . t))
+;; NOTE: On X11/i3, we let the WM handle decorations (i3 draws the cyan border)
+;; The 'undecorated' setting was for Windows/WSL - not needed here
+;; (add-to-list 'default-frame-alist '(undecorated . t))
 
 ;; Save and restore frame geometry
 ;; Use desktop-save-mode to automatically save/restore frame size and position
 (desktop-save-mode 1)
+(setq desktop-save t)  ; Auto-save without prompting on quit
 (setq desktop-restore-frames t)
 (setq desktop-restore-forces-onscreen nil)  ; Allow frames to be positioned off-screen initially
 
@@ -91,7 +88,7 @@
 ;; There are two ways to load a theme. Both assume the theme is installed and
 ;; available. You can either set `doom-theme' or manually load a theme with the
 ;; `load-theme' function. This is the default:
-;; Default theme - will be synced with Omarchy via theme-set hook
+;; Default theme - Tokyo Night
 (setq doom-theme 'doom-tokyo-night)
 
 ;; This determines the style of line numbers in effect. If set to `nil', line

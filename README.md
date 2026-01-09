@@ -1,136 +1,140 @@
 # Dotfiles
 
-Personal development environment for WSL Arch Linux + WezTerm + NvChad.
+Arch Linux / X11 / i3 development environment with Doom Emacs, Neovim, and Tokyo Night theme.
 
 ## What's Included
 
 ```
 dotfiles/
-├── .bashrc                      # Shell config (zoxide, fzf, tmux auto-start)
 ├── .config/
-│   ├── nvim/                    # NvChad configuration
-│   ├── tmux/
-│   │   └── tmux.conf            # tmux config (Ctrl-Space prefix, mouse, vim keys)
-│   └── wezterm/
-│       └── wezterm.lua          # WezTerm config (WSL, keybindings, theme)
-├── install.sh                   # Automated setup script
-├── install-fonts.ps1            # Windows Nerd Font installer
-├── packages.txt                 # Arch Linux package list
-└── README.md
+│   ├── i3/              # i3 window manager
+│   ├── polybar/         # Status bar
+│   ├── rofi/            # App launcher
+│   ├── picom/           # Compositor (transparency, animations)
+│   ├── dunst/           # Notifications
+│   ├── nvim/            # Neovim (NvChad)
+│   ├── doom/            # Doom Emacs user config
+│   ├── tmux/            # tmux config
+│   ├── fish/            # Fish shell
+│   ├── alacritty/       # Terminal (reference config)
+│   ├── ghostty/         # Terminal (default)
+│   ├── wezterm/         # Terminal
+│   └── wallpaper/       # Wallpapers
+├── bin/                 # Custom scripts
+├── .bashrc              # Bash config
+├── .zshrc               # Zsh config
+├── .zshenv              # Zsh environment
+├── archlinux/
+│   └── packages.txt     # Package list
+└── install.sh           # Setup script
 ```
 
-## Prerequisites
-
-- Windows 10/11 with WSL2
-- [WezTerm](https://wezfurlong.org/wezterm/installation.html) installed on Windows
-
-## Fresh Install Guide
-
-### 1. Install Arch Linux on WSL
-
-```powershell
-# In PowerShell (Admin)
-wsl --install -d archlinux
-```
-
-### 2. Initial Arch Setup
+## Quick Start
 
 ```bash
-# Update system
-sudo pacman -Syu
+# Clone dotfiles
+git clone https://github.com/YOUR_USERNAME/dotfiles.git ~/dotfiles
 
-# Install yay (AUR helper)
-sudo pacman -S --needed git base-devel
-git clone https://aur.archlinux.org/yay.git
-cd yay && makepkg -si
-cd .. && rm -rf yay
-```
-
-### 3. Install Packages
-
-```bash
-# Core packages (essential)
-sudo pacman -S neovim tmux fzf ripgrep zoxide git github-cli nodejs npm python-pynvim xclip unzip wget curl
-
-# Nerd Fonts (for terminal icons)
-sudo pacman -S ttf-jetbrains-mono-nerd ttf-firacode-nerd ttf-cascadia-code-nerd
-
-# Optional but recommended
-sudo pacman -S lazygit bat eza fd htop btop tree
-```
-
-Or install everything from the package list:
-```bash
-# Install all packages (includes many nerd fonts)
-sudo pacman -S --needed $(cat packages.txt | awk '{print $1}')
-```
-
-### 4. Clone Dotfiles
-
-```bash
-cd ~
-git clone https://github.com/retopo001/dotfiles.git
-```
-
-### 5. Run Install Script
-
-The install script will:
-- Install Go (if missing) for gopls LSP server
-- Backup existing configs to `~/.config_backup/`
-- Copy all configs to their runtime locations
-- Copy WezTerm config to Windows home directory
-
-```bash
+# Run install script
 cd ~/dotfiles
 ./install.sh
 ```
 
-**Note:** The install script automatically copies the WezTerm config to your Windows home directory (`C:\Users\YOUR_USERNAME\.wezterm.lua`) because WezTerm on Windows looks there, not in WSL.
+The install script will:
+- Backup existing configs to `~/.config_backup/`
+- Create symlinks for all configs
+- Install Doom Emacs if not present
+- Set up Neovim plugins
 
-### 6. Install Nerd Fonts (Windows Side)
+## Manual Installation
 
-**Required for icons in terminal and Neovim.**
-
-From PowerShell (run as Administrator for best results):
-```powershell
-# Option 1: Use the automated script
-powershell -ExecutionPolicy Bypass -File "\\wsl$\archlinux\home\YOUR_WSL_USER\dotfiles\install-fonts.ps1"
-
-# Option 2: Use winget (if available)
-winget install -e --id CascadiaCode.CascadiaCode-NF
-```
-
-The script will automatically download and install multiple Nerd Fonts (CascadiaCode, Hack, FiraCode, JetBrainsMono). After installation, **restart WezTerm completely** for fonts to take effect.
-
-**If you see font warnings:** The config tries multiple font name variations. If fonts still don't work, verify they're installed in Windows Settings → Fonts, or run the install-fonts.ps1 script again.
-
-### 7. Initialize Neovim
+### 1. Install Packages
 
 ```bash
-# First launch will install plugins
-nvim
+# Core packages
+sudo pacman -S --needed - < ~/dotfiles/archlinux/packages.txt
 
-# Inside Neovim, wait for Lazy to finish, then:
+# AUR packages (install yay first)
+yay -S xidlehook i3lock-color clipmenu satty impala bluetui pulsemixer
+```
+
+### 2. Link Configs
+
+```bash
+# Create symlinks (or copy)
+ln -sf ~/dotfiles/.config/* ~/.config/
+ln -sf ~/dotfiles/.bashrc ~/.bashrc
+ln -sf ~/dotfiles/.zshrc ~/.zshrc
+ln -sf ~/dotfiles/.zshenv ~/.zshenv
+ln -sf ~/dotfiles/bin ~/bin
+```
+
+### 3. Install Doom Emacs
+
+```bash
+git clone --depth 1 https://github.com/doomemacs/doomemacs ~/.config/emacs
+~/.config/emacs/bin/doom install
+
+# Add to PATH (fish)
+fish_add_path ~/.config/emacs/bin
+```
+
+### 4. Initialize Neovim
+
+```bash
+nvim  # Lazy.nvim will install plugins automatically
 :MasonInstallAll
-:checkhealth
 ```
 
-### 8. Authenticate GitHub CLI
+### 5. Set Default Shell
 
 ```bash
-gh auth login
-gh auth setup-git
+chsh -s /usr/bin/fish  # or zsh
 ```
 
-## Keybindings
+## Key Bindings
 
-### WezTerm
+### i3 Window Manager
+
 | Key | Action |
 |-----|--------|
-| `Ctrl+Shift+T` | New independent bash tab |
-| `Ctrl+Shift+N` | New Neovim tab |
+| `Super` | Modifier key |
+| `Super+Space` | App launcher (rofi) |
+| `Super+Return` | Terminal (ghostty) |
+| `Super+E` | Emacs |
+| `Super+W` | Close window |
+| `Super+F` | Fullscreen |
+| `Super+T` | Toggle floating |
+| `Super+1-9` | Switch workspace |
+| `Super+Shift+1-9` | Move to workspace |
+| `Super+Arrow` | Focus direction |
+| `Super+Shift+Arrow` | Move window |
+| `Super+K` | Show keybindings |
+
+### Applications
+
+| Key | Action |
+|-----|--------|
+| `Super+Shift+B` | Browser (Chromium) |
+| `Super+Shift+F` | File manager (Nautilus) |
+| `Super+Shift+N` | Neovim in terminal |
+| `Super+Shift+T` | btop (system monitor) |
+| `Super+Shift+M` | Spotify |
+| `Super+Shift+O` | Obsidian |
+
+### System
+
+| Key | Action |
+|-----|--------|
+| `Super+Escape` | System menu |
+| `Super+Ctrl+L` | Lock screen |
+| `Super+M` | Logout |
+| `Super+Shift+R` | Restart i3 |
+| `Print` | Screenshot |
+| `Super+Ctrl+V` | Clipboard history |
 
 ### tmux (prefix: `Ctrl+Space`)
+
 | Key | Action |
 |-----|--------|
 | `prefix + c` | New window |
@@ -139,79 +143,99 @@ gh auth setup-git
 | `prefix + h/j/k/l` | Navigate panes |
 | `prefix + x` | Kill pane |
 
-### Neovim (NvChad)
+### Doom Emacs
+
 | Key | Action |
 |-----|--------|
-| `Space` | Leader key |
-| `Space + f + f` | Find files (Telescope) |
-| `Space + f + w` | Live grep |
-| `Space + t + h` | Change theme |
+| `SPC` | Leader key |
+| `SPC f f` | Find file |
+| `SPC b b` | Switch buffer |
+| `SPC s p` | Search in project |
+| `SPC g g` | Magit (git) |
+| `SPC c d` | Jump to definition |
+| `SPC q q` | Quit |
 
-## Behavior
+## Terminals
 
-- **Open WezTerm** → Auto-starts tmux in `~/signal-assembly-platform`
-- **Click + button** → Joins existing tmux session
-- **Ctrl+Shift+T** → Independent bash (no tmux)
-- **Ctrl+Shift+N** → Opens Neovim directly
+Three terminal configs are included, all with matching Tokyo Night theme:
 
-## Customization
+- **ghostty** (default) - Fast, GPU-accelerated
+- **alacritty** - Reference config, minimal
+- **wezterm** - Feature-rich, Lua config
 
-### Change Default Directory
-
-Edit `.bashrc` line 21 and `.wezterm.lua` cwd paths:
-```bash
-cd ~/your-project-directory
+Change default in `~/.config/i3/config`:
+```
+set $term ghostty
 ```
 
-### Change tmux Prefix
+## Shells
 
-Edit `.tmux.conf` line 3:
+Three shell configs at feature parity:
+
+- **fish** - Default, modern syntax
+- **zsh** - Bash-compatible, plugin ecosystem
+- **bash** - Fallback, always available
+
+All include: starship prompt, zoxide (cd), atuin (history), fzf (fuzzy find), eza (ls), tmux auto-start.
+
+## Emacs Daemon
+
+Emacs starts as a daemon automatically (via i3 autostart). `Super+E` opens an instant emacsclient.
+
 ```bash
-set -g prefix C-a  # Change to Ctrl+a
+# Manual control
+emacs --daemon          # Start daemon
+emacsclient -c          # Open client
+emacsclient -e '(kill-emacs)'  # Stop daemon
+```
+
+## Updating
+
+```bash
+# Update Doom packages
+doom upgrade
+
+# After changing init.el
+doom sync
+
+# After changing i3/polybar config
+Super+Shift+R  # Restart i3
 ```
 
 ## Troubleshooting
 
-### Fonts not rendering / Font warnings
-
-**If you see font warnings in WezTerm:**
-
-1. **Verify fonts are installed:**
-   ```powershell
-   # Check if fonts are in Windows Fonts directory
-   Get-ChildItem "$env:LOCALAPPDATA\Microsoft\Windows\Fonts" | Where-Object { $_.Name -like '*Cascadia*' }
-   ```
-
-2. **Find the exact font name:**
-   ```bash
-   # In WezTerm, open a new tab and run:
-   wezterm ls-fonts --list-system | grep -i cascadia
-   ```
-   This will show the exact font name to use in the config.
-
-3. **Update the config if needed:**
-   - Edit `dotfiles/.config/wezterm/wezterm.lua`
-   - Change the font name to match what `wezterm ls-fonts` shows
-   - Copy updated config: `cp ~/dotfiles/.config/wezterm/wezterm.lua /mnt/c/Users/YOUR_USERNAME/.wezterm.lua`
-   - Restart WezTerm
-
-4. **Re-run font installer:**
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File "\\wsl$\archlinux\home\YOUR_WSL_USER\dotfiles\install-fonts.ps1"
-   ```
-
-### tmux colors wrong
-Ensure your terminal supports truecolor. The config sets `tmux-256color`.
-
-### Neovim checkhealth errors
+**Fonts not rendering?**
 ```bash
-:checkhealth
+sudo pacman -S ttf-jetbrains-mono-nerd
+fc-cache -fv
 ```
-Install missing providers:
+
+**Emacs not starting?**
 ```bash
-npm install -g neovim
-pip install pynvim
+doom doctor
+doom sync
 ```
+
+**i3 not loading?**
+```bash
+# Check for config errors
+i3 -C
+```
+
+**LSP not working in Neovim/Emacs?**
+```bash
+# Install language servers
+sudo pacman -S typescript-language-server python-lsp-server clang
+go install golang.org/x/tools/gopls@latest
+rustup component add rust-analyzer
+```
+
+## Theme
+
+Tokyo Night color scheme throughout:
+- Background: `#1a1b26`
+- Foreground: `#c0caf5`
+- Accent: `#33ccff`
 
 ## License
 

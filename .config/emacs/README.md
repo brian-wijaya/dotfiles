@@ -1,267 +1,176 @@
-# Doom Emacs Configuration Backup
+# Doom Emacs Configuration
 
-This directory contains a backup of the Doom Emacs configuration files.
+Doom Emacs user config for Arch Linux / X11.
 
 ## Files
 
 - `init.el` - Module configuration (which Doom modules are enabled)
 - `config.el` - Custom configuration and settings
-- `packages.el` - Additional package declarations (currently empty/default)
-- `WORKFLOW-GUIDE.md` - Comprehensive workflow guide with all keybindings (accessible via `SPC f w`)
+- `packages.el` - Additional package declarations
+- `WORKFLOW-GUIDE.md` - Comprehensive workflow guide with keybindings (`SPC f w`)
 
-## Setup Instructions
+## Quick Start
 
-### Prerequisites
+If using the dotfiles install script, Doom is set up automatically. Otherwise:
 
-1. **Emacs 30.1+** installed (this config was tested with Emacs 30.1)
-2. **Git** installed
-3. **Doom Emacs** installed (see below)
-4. **Windows-specific tools:**
-   - Chocolatey package manager
-   - `fd` (faster alternative to `find`)
-   - `ripgrep` (`rg`)
-   - `gsudo` (for elevated commands)
+```bash
+# Install emacs
+sudo pacman -S emacs ripgrep fd
 
-### Installation Steps
-
-#### 1. Install Doom Emacs
-
-If you haven't already installed Doom Emacs:
-
-```powershell
-# Clone Doom Emacs
+# Clone Doom Emacs framework
 git clone --depth 1 https://github.com/doomemacs/doomemacs ~/.config/emacs
 
-# Add Doom to PATH (add to your PowerShell profile)
-$env:PATH += ";$env:USERPROFILE\.config\emacs\bin"
+# Copy user config (this directory) to ~/.config/doom
+mkdir -p ~/.config/doom
+cp init.el config.el packages.el ~/.config/doom/
+
+# Install Doom
+~/.config/emacs/bin/doom install
+
+# Add to PATH (fish)
+fish_add_path ~/.config/emacs/bin
+
+# Or for bash/zsh, add to .bashrc/.zshrc:
+export PATH="$HOME/.config/emacs/bin:$PATH"
 ```
 
-#### 2. Install Required System Dependencies
+## Daemon Mode (Recommended)
 
-```powershell
-# Using Chocolatey (run as administrator or with gsudo)
-gsudo choco install git fd ripgrep gsudo -y
+For instant startup, run Emacs as a daemon:
 
-# Install fonts
-gsudo choco install jetbrainsmono firacode -y
+```bash
+# Start daemon
+emacs --daemon
 
-# Install Harper grammar checker (optional but configured)
-gsudo choco install harper -y
+# Open client (instant)
+emacsclient -c
+
+# Or with fallback (starts daemon if needed)
+emacsclient -c -a ""
 ```
 
-#### 3. Restore Configuration Files
+The i3 config auto-starts the daemon and binds `Super+E` to emacsclient.
 
-Copy the configuration files to your Doom directory:
-
-```powershell
-# Backup existing config (if any)
-if (Test-Path "$env:USERPROFILE\.config\doom") {
-    Move-Item "$env:USERPROFILE\.config\doom" "$env:USERPROFILE\.config\doom.backup"
-}
-
-# Create doom config directory
-New-Item -ItemType Directory -Path "$env:USERPROFILE\.config\doom" -Force
-
-# Copy config files
-Copy-Item "init.el" "$env:USERPROFILE\.config\doom\init.el"
-Copy-Item "config.el" "$env:USERPROFILE\.config\doom\config.el"
-Copy-Item "packages.el" "$env:USERPROFILE\.config\doom\packages.el"
-Copy-Item "WORKFLOW-GUIDE.md" "$env:USERPROFILE\.config\doom\WORKFLOW-GUIDE.md"
-```
-
-#### 4. Initialize Doom Emacs
-
-```powershell
-# Navigate to doom directory
-cd $env:USERPROFILE\.config\doom
-
-# Run doom install (this will install all packages)
-doom install --no-env
-
-# Sync packages (this may take several minutes)
-doom sync
-```
-
-#### 5. Restart Emacs
-
-Close and restart Emacs. The configuration should now be active.
-
-## Configuration Highlights
-
-### Enabled Modules
+## Enabled Modules
 
 **Completion:**
 - `vertico` - Modern completion framework
 - `corfu` - Inline completion with orderless
 
 **UI:**
+- `doom-dashboard` - Startup screen
 - `ligatures` - Font ligatures (→, ⇒, etc.)
-- `unicode` - Extended Unicode support (Hebrew, etc.)
-- `ibuffer` - Enhanced buffer management
-- `eww` - Built-in web browser
+- `modeline` - Doom modeline
+- `ophints` - Operation hints
+- `vc-gutter` - Git diff in fringe
 
 **Editor:**
 - `evil` - Vim keybindings
-- `multiple-cursors` - Sublime-style multi-cursor editing
+- `multiple-cursors` - Multi-cursor editing
+- `snippets` - Code snippets
 
 **Tools:**
-- `(lsp +eglot)` - Language Server Protocol support
-- `(lookup +dictionary)` - Dictionary and thesaurus lookup
+- `(lsp +eglot)` - Language Server Protocol
+- `magit` - Git interface
 - `tree-sitter` - Better syntax highlighting
-- `editorconfig` - Respects .editorconfig files
-- `vterm` - Fast terminal emulation
+- `vterm` - Terminal emulation
 
 **Languages:**
-- `(javascript +lsp)` - JavaScript/TypeScript with LSP
-- `(cc +lsp)` - C/C++ with LSP
-- `(go +lsp)` - Go with LSP
-- `(rust +lsp)` - Rust with LSP
-- `python` - Python support
-- `org` - Org mode for note-taking
-- `web` - HTML/CSS/web frameworks
-- And many more...
+- `(javascript +lsp +tree-sitter)` - JS/TS
+- `(go +lsp +tree-sitter)` - Go
+- `(rust +lsp +tree-sitter)` - Rust
+- `(python +lsp +tree-sitter)` - Python
+- `(cc +lsp +tree-sitter)` - C/C++
+- `org` - Org mode
+- `markdown` - Markdown
+- `web` - HTML/CSS
+- `sh` - Shell scripts
 
-### Key Customizations
+## Key Bindings
 
-1. **Fonts:**
-   - Primary: JetBrains Mono
-   - Fallback: Fira Code (for ligatures and Hebrew)
+### General
+| Key | Action |
+|-----|--------|
+| `SPC` | Leader key |
+| `SPC f f` | Find file |
+| `SPC f r` | Recent files |
+| `SPC b b` | Switch buffer |
+| `SPC s s` | Search in buffer |
+| `SPC s p` | Search in project |
+| `C-h/j/k/l` | Navigate windows |
 
-2. **Window Navigation:**
-   - `C-h/j/k/l` for window navigation (vim-style)
+### Code
+| Key | Action |
+|-----|--------|
+| `SPC c d` | Jump to definition |
+| `SPC c r` | Find references |
+| `SPC c a` | Code actions |
+| `SPC c f` | Format buffer |
 
-3. **Org Mode:**
-   - Custom agenda dashboard
-   - Auto-clocking on task state changes
-   - Capture templates for todos, events, projects, etc.
+### Git (Magit)
+| Key | Action |
+|-----|--------|
+| `SPC g g` | Magit status |
+| `SPC g b` | Git blame |
+| `SPC g l` | Git log |
 
-4. **Harper Grammar Checker:**
-   - Configured for `text-mode`, `org-mode`, and `markdown-mode`
-   - Requires `harper-ls` in PATH
+### Org Mode
+| Key | Action |
+|-----|--------|
+| `SPC o a` | Org agenda |
+| `SPC o c` | Org capture |
+| `SPC m t` | Toggle TODO |
 
-5. **Performance Optimizations:**
-   - GC threshold: 256MB
-   - Deferred native compilation
-   - GCMH optimizations
+### Other
+| Key | Action |
+|-----|--------|
+| `SPC f w` | Open workflow guide |
+| `SPC h r r` | Reload Doom |
+| `SPC q q` | Quit |
 
-## Windows-Specific Notes
+## Language Servers
 
-### fd Executable Path
+Install LSPs for your languages:
 
-The config includes a Windows-specific fix for the `fd` executable path:
+```bash
+# JavaScript/TypeScript
+sudo pacman -S typescript-language-server
 
-```elisp
-(setq doom-fd-executable "C:\\ProgramData\\chocolatey\\bin\\fd.exe")
+# Python
+sudo pacman -S python-lsp-server
+
+# Go
+go install golang.org/x/tools/gopls@latest
+
+# Rust
+rustup component add rust-analyzer
+
+# C/C++
+sudo pacman -S clang
 ```
 
-If `fd` is installed elsewhere, update this path in `config.el`.
+## Updating
 
-### Font Installation
+```bash
+# Update Doom packages
+doom upgrade
 
-Fonts are installed via Chocolatey. If you prefer manual installation:
-- JetBrains Mono: https://www.jetbrains.com/lp/mono/
-- Fira Code: https://github.com/tonsky/FiraCode
+# After changing init.el
+doom sync
 
-### Harper Grammar Checker
-
-Harper is installed via Chocolatey. To verify installation:
-
-```powershell
-harper-ls --version
-```
-
-If not found, install it:
-```powershell
-gsudo choco install harper -y
+# After changing config.el (no sync needed)
+# Just restart or: SPC h r r
 ```
 
 ## Troubleshooting
 
-### Ligatures Not Showing
+**Slow startup?** Use daemon mode (see above).
 
-1. Ensure Fira Code is installed
-2. Restart Emacs
-3. Run `M-x doom/reload-font` in Emacs
-4. Check that Emacs 28+ with Harfbuzz support is installed
-
-### Hebrew Characters Not Displaying
-
-1. Ensure `unicode` module is enabled in `init.el`
-2. Ensure Fira Code is installed (used as fallback)
-3. First startup may take 30-60 seconds to build Unicode cache
-4. Check `doom-symbol-font` is set to Fira Code in `config.el`
-
-### fd Command Not Found
-
-1. Verify `fd` is installed: `fd --version`
-2. Check PATH includes Chocolatey bin: `C:\ProgramData\chocolatey\bin`
-3. Update `doom-fd-executable` path in `config.el` if installed elsewhere
-
-### LSP Not Working
-
-1. Ensure `(lsp +eglot)` is enabled in `init.el`
-2. Install language servers for your languages:
-   - TypeScript/JavaScript: `npm install -g typescript-language-server`
-   - Python: `pip install python-lsp-server`
-   - Rust: `rustup component add rust-analyzer`
-   - Go: `go install golang.org/x/tools/gopls@latest`
-3. Restart Emacs after installing language servers
-
-### Dictionary/Thesaurus Not Working
-
-1. Ensure `(lookup +dictionary)` is enabled in `init.el`
-2. Run `doom sync` to install dictionary packages
-3. Use `SPC s d t` for dictionary, `SPC s d T` for thesaurus
-
-## Key Bindings Reference
-
-### Navigation
-- `SPC` - Leader key
-- `SPC f f` - Find file
-- `SPC f p` - Find file in private config
-- `SPC s s` - Search in buffer
-- `SPC s j` - Jump to symbol
-- `C-h/j/k/l` - Navigate windows
-
-### Org Mode
-- `SPC o a` - Open agenda
-- `SPC o c` - Capture
-- `C-c e` - Set effort
-- `C-c i` - Clock in
-- `C-c o` - Clock out
-
-### Lookup
-- `SPC s d t` - Dictionary lookup
-- `SPC s d T` - Thesaurus lookup
-
-### Other
-- `C-s` - Save buffer
-- `C-=` - Zoom in
-- `C--` - Zoom out
-- `SPC f w` - Open workflow guide (comprehensive keybinding reference)
-- `SPC t m` - Toggle minimap (if enabled)
-
-## Updating Configuration
-
-After modifying `init.el`:
-```powershell
-cd $env:USERPROFILE\.config\doom
-doom sync
+**Fonts not working?** Install JetBrains Mono Nerd Font:
+```bash
+sudo pacman -S ttf-jetbrains-mono-nerd
 ```
 
-After modifying `config.el`:
-- No sync needed, just restart Emacs or run `M-x doom/reload`
+**LSP not working?** Check language server is installed and in PATH.
 
-## Additional Resources
-
-- [Doom Emacs Documentation](https://docs.doomemacs.org/)
-- [Doom Emacs GitHub](https://github.com/doomemacs/doomemacs)
-- [Harper Grammar Checker](https://writewithharper.com/)
-- [Org Mode Manual](https://orgmode.org/manual/)
-
-## Notes
-
-- This configuration is optimized for Windows
-- Hebrew language support is configured via Unicode module
-- Ligatures require Emacs 28+ with Harfbuzz support
-- First startup may be slow due to package installation and Unicode cache generation
+**Tree-sitter grammars missing?** Run `M-x treesit-install-language-grammar`.

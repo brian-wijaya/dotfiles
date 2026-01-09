@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""
+i3 Center Single Window Daemon
+
+Centers and limits width of single tiled windows on wide screens.
+Similar to Hyprland's dwindle single_window_aspect_ratio feature.
+
+Requires: python-i3ipc (pip install i3ipc or pacman -S python-i3ipc)
+"""
+
+import i3ipc
+import subprocess
+
+# Maximum width ratio for single windows (0.6 = 60% of screen width)
+MAX_WIDTH_RATIO = 0.65
+
+# Minimum screen width to apply centering (skip on small screens)
+MIN_SCREEN_WIDTH = 2000
+
+
+def get_screen_dimensions():
+    """Get primary screen dimensions using xrandr."""
+    try:
+        output = subprocess.check_output(
+            ["xrandr", "--query"], text=True
+        )
+        for line in output.split("\n"):
+            if " connected primary" in line or (" connected" in line and "primary" not in output):
+                # Parse resolution like "3840x2160+0+0"
+                parts = line.split()
+                for part in parts:
+                    if "x" in part and "+" in part:
+                        res = part.split("+")[0]
+                        width, height = res.split("x")
+                        return int(width), int(height)
+    except Exception:
+        pass
+    return 1920, 1080  # fallback
+
+
+def count_tiled_windows(workspace):
+    """Count non-floating tiled windows in workspace."""
+    count = 0
+    for node in workspace.descendents():
+        if node.type == "con" and node.window and not node.floating:
+            count += 1
+    return count
+
+
+def get_tiled_window(workspace):
+    """Get the single tiled window if there's exactly one."""
+    tiled = []
+    for node in workspace.descendents():
+        if node.type == "con" and node.window and not node.floating:
+            tiled.append(node)
+    return tiled[0] if len(tiled) == 1 else None
+
+
+def center_window(i3, window, screen_width, screen_height):
+    """Center and resize a window to max width ratio."""
+    max_width = int(screen_width * MAX_WIDTH_RATIO)
+
+    # Calculate gaps (assume 10px inner + 10px outer = 20px each side)
+    gaps = 40
+    available_width = screen_width - gaps
+    available_height = screen_height - gaps - 30  # 30 for polybar
+
+    if available_width <= max_width:
+        return  # Screen not wide enough
+
+    target_width = min(max_width, available_width)
+    left_margin = (available_width - target_width) // 2 + 20  # 20 = gap offset
+
+    # Use i3 commands to resize and position
+    # First, make it floating temporarily to position, then tile back
+    # Actually, better approach: use resize command with pixel values
+
+    # For i3, we can't easily center tiled windows without floating
+    # Instead, use floating + sticky positioning
+    commands = [
+        f'[con_id={window.id}] floating enable',
+        f'[con_id={window.id}] resize set {target_width} px {available_height} px',
+        f'[con_id={window.id}] move position {left_margin} px 30 px',
+    ]
+
+    for cmd in commands:
+        i3.command(cmd)
+
+
+def reset_window(i3, window):
+    """Reset window to normal tiling."""
+    i3.command(f'[con_id={window.id}] floating disable')
+
+
+def check_and_center(i3, workspace):
+    """Check workspace and center single window if applicable."""
+    screen_width, screen_height = get_screen_dimensions()
+
+    if screen_width < MIN_SCREEN_WIDTH:
+        return
+
+    window = get_tiled_window(workspace)
+    if window:
+        center_window(i3, window, screen_width, screen_height)
+
+
+def on_window_event(i3, event):
+    """Handle window events."""
+    if event.change in ("new", "close", "move", "floating"):
+        tree = i3.get_tree()
+        focused = tree.find_focused()
+        if focused and focused.workspace():
+            workspace = focused.workspace()
+            tiled_count = count_tiled_windows(workspace)
+
+            if tiled_count == 1:
+                check_and_center(i3, workspace)
+            elif tiled_count > 1:
+                # Multiple windows - ensure all are tiled normally
+                for node in workspace.descendents():
+                    if node.type == "con" and node.window:
+                        # Check if it was centered by us (floating but not user-floating)
+                        pass  # i3 handles this automatically
+
+
+def on_workspace_event(i3, event):
+    """Handle workspace focus events."""
+    if event.change == "focus":
+        workspace = event.current
+        tiled_count = count_tiled_windows(workspace)
+        if tiled_count == 1:
+            check_and_center(i3, workspace)
+
+
+def main():
+    i3 = i3ipc.Connection()
+
+    # Subscribe to events
+    i3.on("window", on_window_event)
+    i3.on("workspace", on_workspace_event)
+
+    # Check current workspace on startup
+    tree = i3.get_tree()
+    focused = tree.find_focused()
+    if focused and focused.workspace():
+        workspace = focused.workspace()
+        if count_tiled_windows(workspace) == 1:
+            check_and_center(i3, workspace)
+
+    # Run event loop
+    i3.main()
+
+
+if __name__ == "__main__":
+    main()
