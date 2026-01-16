@@ -29,21 +29,33 @@
 ;; refresh your font settings. If Emacs still can't find your font, it likely
 ;; wasn't installed correctly. Font issues are rarely Doom issues!
 
+
 ;; Hide UI bars for a cleaner, minimalist look
-(menu-bar-mode -1)   ; Hide menu bar (File, Edit, etc.)
-(tool-bar-mode -1)   ; Hide tool bar (icons)
-(scroll-bar-mode -1) ; Hide scroll bar
+;;(menu-bar-mode -1)   ; Hide menu bar (File, Edit, etc.)
+;;(tool-bar-mode -1)   ; Hide tool bar (icons)
+;;(scroll-bar-mode -1) ; Hide scroll bar
+
+;; Load vault programs
+(add-to-list 'load-path "/home/bw/vault/programs/prog-speak")
+(add-to-list 'load-path "/home/bw/vault/programs/org-reader")
+(require 'prog-speak)
+(require 'org-audio)
+
 
 ;; NOTE: On X11/i3, we let the WM handle decorations (i3 draws the cyan border)
 ;; The 'undecorated' setting was for Windows/WSL - not needed here
 ;; (add-to-list 'default-frame-alist '(undecorated . t))
 
-;; Save and restore frame geometry
-;; Use desktop-save-mode to automatically save/restore frame size and position
+;; Save and restore session (buffers, windows, etc.)
 (desktop-save-mode 1)
-(setq desktop-save t)  ; Auto-save without prompting on quit
-(setq desktop-restore-frames t)
-(setq desktop-restore-forces-onscreen nil)  ; Allow frames to be positioned off-screen initially
+(setq desktop-restore-frames t
+      desktop-restore-forces-onscreen nil
+      desktop-auto-save-timeout 60
+      desktop-restore-eager 5)  ; Restore 5 buffers immediately, rest lazily
+
+;; Ensure desktop is restored in daemon mode
+(when (daemonp)
+  (add-hook 'server-after-make-frame-hook #'desktop-read))
 
 ;; Function to manually save current frame geometry
 (defun my/save-frame-geometry ()
@@ -97,7 +109,7 @@
 
 ;; If you use `org' and don't want your org files in the default location below,
 ;; change `org-directory'. It must be set before org loads!
-(setq org-directory "~/org/")
+(setq org-directory "~/vault/org/")
 
 
 
@@ -134,12 +146,28 @@
 ;; You can also try 'gd' (or 'C-c c d') to jump to their definition and see how
 ;; they are implemented.
 
+;; Enable clipboard support
+(setq evil-want-clipboard t)
+
+;; Sync Emacs kill ring with system clipboard
+(setq select-enable-clipboard t
+      select-enable-primary t
+      x-select-enable-clipboard-manager t)
+
 ;; Send files to trash instead of fully deleting
 (setq delete-by-moving-to-trash t)
 ;; Save automatically
 (setq auto-save-default t)
 ;; Remove "Really exit Emacs?" confirmation dialog
 (setq confirm-kill-emacs nil)
+
+;; Restart daemon properly (kills daemon, restarts it, opens new frame)
+(defun my/restart-emacs-daemon ()
+  "Restart the Emacs daemon and open a new client frame."
+  (interactive)
+  (desktop-save-in-desktop-dir)
+  (call-process-shell-command "nohup sh -c 'sleep 1 && emacs --daemon && emacsclient -c' >/dev/null 2>&1 &")
+  (kill-emacs))
 
 ;; Performance optimizations
 ;; Note: Doom already sets some of these, but these values are safe overrides
@@ -155,8 +183,23 @@
 ;; Version control optimization (limit to Git only for faster operations)
 (setq vc-handled-backends '(Git))
 
+;; Vterm configuration
+(after! vterm
+  (setq vterm-buffer-name-string "vterm %s")
+  (defun my/vterm-in-home ()
+    (interactive)
+    (let ((default-directory "~/"))
+      (vterm))))
+
 ;; Speed of which-key popup
 (setq which-key-idle-delay 0.2)
+
+;; Which-key floating overlay (no window resizing)
+(use-package! which-key-posframe
+  :after which-key
+  :config
+  (which-key-posframe-mode)
+  (setq which-key-posframe-poshandler 'posframe-poshandler-frame-bottom-center))
 
 
 
@@ -168,10 +211,6 @@
 (setq read-file-name-completion-ignore-case t
       read-buffer-completion-ignore-case t
       completion-ignore-case t)
-;; Use the familiar C-x C-f interface for directory completion
-(map! :map minibuffer-mode-map
-      :when (featurep! :completion vertico)
-      "C-x C-f" #'find-file)
 
 ;; Save minibuffer history - enables command history in M-x
 (use-package! savehist
@@ -196,15 +235,6 @@
         vertico-resize t)
   ;; Enable alternative filter methods
   (setq vertico-sort-function #'vertico-sort-history-alpha)
-  ;; Quick actions keybindings
-  (define-key vertico-map (kbd "C-j") #'vertico-next)
-  (define-key vertico-map (kbd "C-k") #'vertico-previous)
-  (define-key vertico-map (kbd "M-RET") #'vertico-exit-input)
-
-  ;; History navigation
-  (define-key vertico-map (kbd "M-p") #'vertico-previous-history)
-  (define-key vertico-map (kbd "M-n") #'vertico-next-history)
-  (define-key vertico-map (kbd "C-r") #'consult-history)
 
   ;; Configure orderless for better filtering
   (setq completion-styles '(orderless basic)
@@ -223,10 +253,7 @@
 (use-package! vertico-repeat
   :after vertico
   :config
-  (add-hook 'minibuffer-setup-hook #'vertico-repeat-save)
-  (map! :leader
-        (:prefix "r"
-         :desc "Repeat completion" "v" #'vertico-repeat)))
+  (add-hook 'minibuffer-setup-hook #'vertico-repeat-save))
 
 ;; TODO Not currently working
 ;; Enhanced sorting and filtering with prescient
@@ -245,13 +272,6 @@
   (setq marginalia-max-relative-age 0
         marginalia-align 'right))
 
-;; Corrected Embark configuration
-(map! :leader
-      (:prefix ("k" . "embark")  ;; Using 'k' prefix instead of 'e' which conflicts with elfeed
-       :desc "Embark act" "a" #'embark-act
-       :desc "Embark dwim" "d" #'embark-dwim
-       :desc "Embark collect" "c" #'embark-collect))
-
 ;; Configure consult for better previews
 (after! consult
   (setq consult-preview-key "M-."
@@ -269,32 +289,8 @@
    consult-bookmark consult-recent-file consult-xref
    :preview-key '(:debounce 0.4 any)))
 
-;; Enhanced directory navigation
-(use-package! consult-dir
-  :bind
-  (("C-x C-d" . consult-dir)
-   :map vertico-map
-   ("C-x C-d" . consult-dir)
-   ("C-x C-j" . consult-dir-jump-file)))
-
-;; Add additional useful shortcuts
-(map! :leader
-      (:prefix "s"
-       :desc "Command history" "h" #'consult-history
-       :desc "Recent directories" "d" #'consult-dir))
-
-;; Saving with C-s
-(map! "C-s" #'save-buffer)
-
-;; Open workflow guide
-(map! :leader
-      (:prefix "f"
-       :desc "Open workflow guide" "w" (lambda () (interactive)
-                                         (find-file (expand-file-name "WORKFLOW-GUIDE.md" doom-user-dir)))))
-
-;; Zoom in/out
-(global-set-key (kbd "C-=") 'text-scale-increase)
-(global-set-key (kbd "C--") 'text-scale-decrease)
+;; Enhanced directory navigation (keybindings in non-standard section below)
+(use-package! consult-dir)
 
 ;; Line wrapping
 (global-visual-line-mode t)
@@ -309,46 +305,36 @@
   :custom (org-modules '(org-habit)))
 
 (after! org
-  ;; Keybindings for org mode
-  (map! :map org-mode-map
-        :n "<M-left>" #'org-do-promote
-        :n "<M-right>" #'org-do-demote)
-  
   ;; Auto-clock in when state changes to STRT (starting)
   (defun my/org-clock-in-if-starting ()
     "Clock in when the task state changes to STRT"
     (when (and (string= org-state "STRT")
                (not (org-clock-is-active)))
       (org-clock-in)))
-  
+
   ;; Auto-clock out when leaving STRT state
   (defun my/org-clock-out-if-not-starting ()
     "Clock out when leaving STRT state"
     (when (and (org-clock-is-active)
                (not (string= org-state "STRT")))
       (org-clock-out)))
-  
+
   ;; Add hooks for auto clocking
   (add-hook 'org-after-todo-state-change-hook 'my/org-clock-in-if-starting)
   (add-hook 'org-after-todo-state-change-hook 'my/org-clock-out-if-not-starting)
-  
+
   ;; Show habits in agenda
   (setq org-habit-show-all-today t)
   (setq org-habit-graph-column 1)
-  
+
   ;; Agenda view improvements
   (add-hook 'org-agenda-mode-hook
             (lambda ()
               (visual-line-mode -1)
               (setq truncate-lines 1)))
-  
+
   ;; Prevent clock from stopping when marking subtasks as done
-  (setq org-clock-out-when-done nil)
-  
-  ;; Additional keybindings
-  (define-key org-mode-map (kbd "C-c e") #'org-set-effort)
-  (define-key org-mode-map (kbd "C-c i") #'org-clock-in)
-  (define-key org-mode-map (kbd "C-c o") #'org-clock-out))
+  (setq org-clock-out-when-done nil))
 
 ;; Org Agenda - Custom dashboard view
 (setq org-agenda-remove-tags t)
@@ -385,28 +371,28 @@
       '(("t" "Todo" entry
          (file+headline "~/org/inbox.org" "Inbox")
          "* TODO %^{Task}\n:PROPERTIES:\n:CREATED: %U\n:CAPTURED: %a\n:END:\n%?")
-        
+
         ("e" "Event" entry
          (file+headline "~/org/calendar.org" "Events")
          "* %^{Event}\n%^{SCHEDULED}T\n:PROPERTIES:\n:CREATED: %U\n:CAPTURED: %a\n:END:\n%?")
-        
+
         ("d" "Deadline" entry
          (file+headline "~/org/calendar.org" "Deadlines")
          "* TODO %^{Task}\nDEADLINE: %^{Deadline}T\n:PROPERTIES:\n:CREATED: %U\n:CAPTURED: %a\n:END:\n%?")
-        
+
         ("p" "Project" entry
          (file+headline "~/org/projects.org" "Projects")
          "* PROJ %^{Project name}\n:PROPERTIES:\n:CREATED: %U\n:CAPTURED: %a\n:END:\n** TODO %?")
-        
+
         ("i" "Idea" entry
          (file+headline "~/org/ideas.org" "Ideas")
          "** IDEA %^{Idea}\n:PROPERTIES:\n:CREATED: %U\n:CAPTURED: %a\n:END:\n%?")
-        
+
         ("b" "Bookmark" entry
          (file+headline "~/org/bookmarks.org" "Inbox")
          "** [[%^{URL}][%^{Title}]]\n:PROPERTIES:\n:CREATED: %U\n:END:\n\n"
          :empty-lines 0)
-        
+
         ("n" "Note" entry
          (file+headline "~/org/notes.org" "Inbox")
          "* [%<%Y-%m-%d %a>] %^{Title}\n:PROPERTIES:\n:CREATED: %U\n:CAPTURED: %a\n:END:\n%?"
@@ -421,48 +407,17 @@
       (insert (format "[[file:%s]]\n" selected-file))
       (org-display-inline-images))))
 
-;; Bind image insertion to C-c C-i in org mode
-(with-eval-after-load 'org
-  (define-key org-mode-map (kbd "C-c C-i") #'my/org-insert-image))
-
 ;; Org Babel - Execute code blocks in org files
 (after! org
   (org-babel-do-load-languages
    'org-babel-load-languages
    '((shell . t)))  ; Enable shell execution (add more languages as needed)
-  
+
   (setq org-src-fontify-natively t
         org-src-preserve-indentation t
         org-src-tab-acts-natively t
         org-src-window-setup 'current-window))
 
-;; ============================================================================
-;; Window Navigation - Use C-hjkl instead of arrow keys
-;; ============================================================================
-
-;; Navigate between window splits using C-hjkl (vim-style)
-(map! :map general-override-mode-map
-      "C-h" #'evil-window-left
-      "C-j" #'evil-window-down
-      "C-k" #'evil-window-up
-      "C-l" #'evil-window-right
-      ;; Window resizing with Shift
-      "S-<right>" (lambda () (interactive)
-                    (if (window-in-direction 'left)
-                        (evil-window-decrease-width 5)
-                      (evil-window-increase-width 5)))
-      "S-<left>"  (lambda () (interactive)
-                    (if (window-in-direction 'right)
-                        (evil-window-decrease-width 5)
-                      (evil-window-increase-width 5)))
-      "S-<up>"    (lambda () (interactive)
-                    (if (window-in-direction 'below)
-                        (evil-window-decrease-height 2)
-                      (evil-window-increase-height 2)))
-      "S-<down>"  (lambda () (interactive)
-                    (if (window-in-direction 'above)
-                        (evil-window-decrease-height 2)
-                      (evil-window-increase-height 2))))
 
 ;; ============================================================================
 ;; Harper Grammar Checker Setup
@@ -518,12 +473,6 @@
         (cl-loop for (service . _) in define-word-services
                  collect (cons service #'+eval-display-results-in-popup))))
 
-;; Custom keybindings for lookup (if not already bound)
-(map! :leader
-      (:prefix "s"
-       :desc "Dictionary lookup" "d" #'+lookup/dictionary-definition
-       :desc "Thesaurus lookup" "D" #'+lookup/synonyms))
-
 ;; ============================================================================
 ;; EWW Browser Configuration
 ;; ============================================================================
@@ -540,3 +489,130 @@
 ;; Company provides popup-based completion, while Corfu provides inline completion
 ;; You're using Corfu which is more modern and integrated with Vertico
 ;; No need to change - Corfu is better for your setup
+
+;; ============================================================================
+;; 01-16-26 Non-Standard Keybindings
+;; ============================================================================
+;; These keybindings override Doom Emacs defaults.
+
+;; --------------------------------------------------------------------------
+;; Leader key bindings
+;; --------------------------------------------------------------------------
+
+;; Restart emacs daemon (SPC q r)
+(map! :leader "q r" #'my/restart-emacs-daemon)
+
+;; Embark actions under "k" prefix (SPC k a/d/c)
+(map! :leader
+      (:prefix ("k" . "embark")
+       :desc "Embark act" "a" #'embark-act
+       :desc "Embark dwim" "d" #'embark-dwim
+       :desc "Embark collect" "c" #'embark-collect))
+
+;; Search prefix additions (SPC s h/d)
+(map! :leader
+      (:prefix "s"
+       :desc "Command history" "h" #'consult-history
+       :desc "Recent directories" "d" #'consult-dir))
+
+;; Dictionary/thesaurus lookup (SPC s d/D)
+(map! :leader
+      (:prefix "s"
+       :desc "Dictionary lookup" "d" #'+lookup/dictionary-definition
+       :desc "Thesaurus lookup" "D" #'+lookup/synonyms))
+
+;; Open workflow guide (SPC f w)
+(map! :leader
+      (:prefix "f"
+       :desc "Open workflow guide" "w" (lambda () (interactive)
+                                         (find-file (expand-file-name "WORKFLOW-GUIDE.md" doom-user-dir)))))
+
+;; Vertico repeat (SPC r v)
+(map! :leader
+      (:prefix "r"
+       :desc "Repeat completion" "v" #'vertico-repeat))
+
+;; --------------------------------------------------------------------------
+;; Global keybindings
+;; --------------------------------------------------------------------------
+
+;; Save with C-s (overrides isearch-forward)
+(map! "C-s" #'save-buffer)
+
+;; Zoom in/out
+(global-set-key (kbd "C-=") 'text-scale-increase)
+(global-set-key (kbd "C--") 'text-scale-decrease)
+
+;; --------------------------------------------------------------------------
+;; Vterm keybindings
+;; --------------------------------------------------------------------------
+
+(after! vterm
+  ;; Override default vterm bindings for home directory
+  (map! :leader "o t" #'my/vterm-in-home
+        :leader "o T" #'my/vterm-in-home)
+  ;; Pass C-c through to terminal (overrides C-c prefix)
+  (evil-define-key '(normal insert visual emacs) vterm-mode-map (kbd "C-c") #'vterm-send-C-c)
+  (define-key vterm-mode-map (kbd "C-c") #'vterm-send-C-c))
+
+;; --------------------------------------------------------------------------
+;; Vertico keybindings
+;; --------------------------------------------------------------------------
+
+(after! vertico
+  ;; Quick actions (overrides defaults)
+  (define-key vertico-map (kbd "C-j") #'vertico-next)
+  (define-key vertico-map (kbd "C-k") #'vertico-previous)
+  (define-key vertico-map (kbd "M-RET") #'vertico-exit-input)
+  ;; History navigation
+  (define-key vertico-map (kbd "M-p") #'vertico-previous-history)
+  (define-key vertico-map (kbd "M-n") #'vertico-next-history)
+  (define-key vertico-map (kbd "C-r") #'consult-history))
+
+;; --------------------------------------------------------------------------
+;; Minibuffer keybindings
+;; --------------------------------------------------------------------------
+
+(map! :map minibuffer-mode-map
+      :when (featurep! :completion vertico)
+      "C-x C-f" #'find-file)
+
+;; --------------------------------------------------------------------------
+;; Consult-dir keybindings
+;; --------------------------------------------------------------------------
+
+(use-package! consult-dir
+  :bind
+  (("C-x C-d" . consult-dir)
+   :map vertico-map
+   ("C-x C-d" . consult-dir)
+   ("C-x C-j" . consult-dir-jump-file)))
+
+;; --------------------------------------------------------------------------
+;; Org-mode keybindings
+;; --------------------------------------------------------------------------
+
+(after! org
+  ;; Promote/demote with M-left/M-right in normal mode
+  (map! :map org-mode-map
+        :n "<M-left>" #'org-do-promote
+        :n "<M-right>" #'org-do-demote)
+  ;; Clock and effort keybindings
+  (define-key org-mode-map (kbd "C-c e") #'org-set-effort)
+  (define-key org-mode-map (kbd "C-c i") #'org-clock-in)
+  (define-key org-mode-map (kbd "C-c o") #'org-clock-out))
+
+;; Image insertion (C-c C-i in org)
+(with-eval-after-load 'org
+  (define-key org-mode-map (kbd "C-c C-i") #'my/org-insert-image))
+
+;; --------------------------------------------------------------------------
+;; General override unbindings
+;; --------------------------------------------------------------------------
+
+(after! general
+  (define-key general-override-mode-map (kbd "C-h") nil)
+  (define-key general-override-mode-map (kbd "C-j") nil)
+  (define-key general-override-mode-map (kbd "C-k") nil)
+  (define-key general-override-mode-map (kbd "C-l") nil))
+
