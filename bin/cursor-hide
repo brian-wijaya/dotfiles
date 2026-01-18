@@ -1,0 +1,66 @@
+#!/bin/bash
+# Cursor hide/show state machine
+# Usage: cursor-hide hide | cursor-hide show | cursor-hide watch
+#
+# Hides cursor by moving it off-screen. Watcher monitors for mouse movement
+# and restores cursor position when user moves the mouse.
+
+STATE_FILE="/tmp/cursor-state"
+
+hide_cursor() {
+    # Move cursor off-screen (bottom-right corner)
+    xdotool mousemove 9999 9999
+    echo "hidden" > "$STATE_FILE"
+}
+
+show_cursor() {
+    # Just mark as visible - cursor is already where user moved it
+    echo "visible" > "$STATE_FILE"
+}
+
+start_watcher() {
+    # Don't start if already running
+    if pgrep -f "cursor-hide watch" > /dev/null; then
+        return
+    fi
+
+    # Start watcher in background
+    nohup "$0" watch > /dev/null 2>&1 &
+}
+
+watch_mouse() {
+    # Off-screen position where we hide the cursor
+    local hidden_x=9999
+    local hidden_y=9999
+
+    while true; do
+        sleep 0.1
+
+        # Only act when in hidden state
+        [[ -f "$STATE_FILE" ]] && [[ "$(cat $STATE_FILE)" == "hidden" ]] || continue
+
+        # Get current position
+        eval $(xdotool getmouselocation --shell)
+
+        # If mouse moved away from hidden position, user moved it - show cursor
+        if [[ "$X" -lt "$hidden_x" ]] || [[ "$Y" -lt "$hidden_y" ]]; then
+            show_cursor
+        fi
+    done
+}
+
+case "$1" in
+    hide)
+        hide_cursor
+        start_watcher
+        ;;
+    show)
+        show_cursor
+        ;;
+    watch)
+        watch_mouse
+        ;;
+    *)
+        echo "Usage: cursor-hide hide|show|watch"
+        ;;
+esac
