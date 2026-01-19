@@ -1,0 +1,33 @@
+#!/bin/bash
+# Cycle through brightness presets: 100 → 50 → 25 → 10 → 100
+#
+# REQUIREMENTS:
+#   - ddcutil installed (sudo pacman -S ddcutil)
+#   - i2c-dev kernel module loaded (sudo modprobe i2c-dev)
+#   - DisplayPort connection (DDC/CI doesn't work over HDMI on AW3423DW)
+#   - User in i2c group: sudo usermod -aG i2c $USER (then re-login)
+#
+# Test with: ddcutil detect
+# If "I2C slave address x37 is unresponsive" - you're on HDMI, switch to DisplayPort
+
+# VCP code 10 = brightness
+current=$(ddcutil getvcp 10 --brief 2>/dev/null | awk '{print $4}')
+
+if [ -z "$current" ]; then
+    notify-send "Brightness" "DDC/CI not available (requires DisplayPort)" -u critical
+    exit 1
+fi
+
+if [ "$current" -gt 75 ]; then
+    ddcutil setvcp 10 50
+    notify-send "Brightness" "50%" -t 1000
+elif [ "$current" -gt 40 ]; then
+    ddcutil setvcp 10 25
+    notify-send "Brightness" "25%" -t 1000
+elif [ "$current" -gt 15 ]; then
+    ddcutil setvcp 10 10
+    notify-send "Brightness" "10%" -t 1000
+else
+    ddcutil setvcp 10 100
+    notify-send "Brightness" "100%" -t 1000
+fi
