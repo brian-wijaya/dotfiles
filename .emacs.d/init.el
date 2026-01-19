@@ -220,81 +220,10 @@
       which-key-popup-type 'minibuffer)
 
 ;; Context-specific help
-;; C-h C-h = show current mode bindings (concise)
-;; C-h RET = full help system (original)
-;; C-h C-p = pin/unpin which-key (side window vs minibuffer)
+;; C-h C-h = show current mode bindings
+;; C-h RET = full help system
 (global-set-key (kbd "C-h C-h") 'which-key-show-major-mode)
 (global-set-key (kbd "C-h RET") 'help-for-help)
-
-;; Pinned help panel - stays visible while you work
-;; Uses display-buffer-alist to ensure consistent placement
-
-;; Custom mode for help panel - no quit keybinding
-(define-derived-mode help-panel-mode special-mode "HelpPanel"
-  "Mode for pinned help panel. Doesn't quit on 'q'."
-  (setq-local mode-line-format nil)
-  (setq-local cursor-type nil))
-
-;; Unbind q from quitting in help panel
-(define-key help-panel-mode-map (kbd "q") 'help-panel-close)
-
-;; Ensure *Help Panel* always goes to right side window
-(add-to-list 'display-buffer-alist
-  '("\\*Help Panel\\*"
-    (display-buffer-in-side-window)
-    (side . right)
-    (window-width . 50)
-    (slot . 0)
-    (preserve-size . (t . nil))))
-
-(defun help-panel-show ()
-  "Show current mode bindings in a persistent side window."
-  (interactive)
-  (let ((mode major-mode)
-        (orig-win (selected-window))
-        (buf (get-buffer-create "*Help Panel*")))
-    (with-current-buffer buf
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (insert (format "=== %s ===\n\n" mode))
-        (insert (substitute-command-keys (format "\\{%s-map}" (symbol-name mode))))
-        (goto-char (point-min)))
-      (help-panel-mode))
-    ;; Display in side window (via display-buffer-alist rules)
-    (let ((win (display-buffer buf)))
-      (when win
-        ;; Make it strongly dedicated and protected
-        (set-window-dedicated-p win t)
-        (set-window-parameter win 'no-delete-other-windows t)
-        (set-window-parameter win 'no-other-window t)
-        ;; Preserve width during resizing
-        (window-preserve-size win t t)))
-    ;; Return focus to original window
-    (select-window orig-win)
-    (message "Help panel for %s (C-h C-p to close)" mode)))
-
-(defun help-panel-close ()
-  "Close the pinned help panel."
-  (interactive)
-  (when-let* ((buf (get-buffer "*Help Panel*"))
-              (win (get-buffer-window buf)))
-    (delete-window win))
-  (message "Help panel closed"))
-
-(defun help-panel-toggle ()
-  "Toggle pinned help panel for current mode."
-  (interactive)
-  (if (get-buffer-window "*Help Panel*")
-      (help-panel-close)
-    (help-panel-show)))
-
-(defun help-panel-refresh ()
-  "Refresh help panel with current mode's bindings."
-  (interactive)
-  (when (get-buffer-window "*Help Panel*")
-    (help-panel-show)))
-
-(global-set-key (kbd "C-h C-p") 'help-panel-toggle)
 
 ;; Quick reload init.el
 (defun reload-init ()
