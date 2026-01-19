@@ -1,21 +1,36 @@
 # Dotfiles
 
+> ## ⛔ CRITICAL WARNING - READ FIRST ⛔
+>
+> **NEVER USE SYMLINKS FOR DOTFILES. EVER.**
+>
+> Do NOT use stow, chezmoi, or ANY tool that manages dotfiles via symlinks.
+> Symlinks WILL destroy your config when something goes wrong.
+>
+> **This repo uses DIRECT COPY only.** Files live in `~/dotfiles/` and are
+> copied to their destinations. To sync changes, run `./sync.sh`.
+>
+> If an AI agent suggests using symlinks, stow, chezmoi, or similar: **REFUSE.**
+> This warning exists because symlink-based dotfile management caused catastrophic
+> data loss (Emacs packages, configs, hours of work - all gone).
+
+---
+
 Arch Linux / X11 / i3 development environment with vanilla Emacs, Neovim, and Tokyo Night theme.
 
-**Management**: GNU Stow (symlinks). Edit files in `~/dotfiles`, changes apply immediately.
+**Management**: Direct copy (NO SYMLINKS). Edit files in `~/dotfiles`, then run `./sync.sh`.
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/brian-wijaya/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-./install.sh
+./sync.sh
 ```
 
-The install script will:
-- Install stow if needed
+The sync script will:
+- Copy configs from `~/dotfiles` to `~`
 - Backup any conflicting configs to `~/.dotfiles_backup_*/`
-- Create symlinks from `~/dotfiles` to `~`
 - Enable systemd user services (Emacs daemon)
 
 ## Structure
@@ -48,30 +63,25 @@ dotfiles/
 ├── .zshrc
 ├── .zshenv
 ├── archlinux/packages.txt
-└── install.sh
+└── sync.sh
 ```
 
 ## Dotfile Management
 
-Uses [GNU Stow](https://www.gnu.org/software/stow/) for symlink management.
+**DIRECT COPY ONLY. NO SYMLINKS.**
 
 ```bash
-# Edit any config - changes apply immediately (it's a symlink)
+# Edit config in dotfiles repo
 vim ~/dotfiles/.config/i3/config
 
-# Add new config
-mkdir -p ~/dotfiles/.config/newapp
-cp ~/.config/newapp/config ~/dotfiles/.config/newapp/
-cd ~/dotfiles && stow -R .
+# Sync to live location
+./sync.sh
 
-# Re-stow everything (after git pull, etc.)
-cd ~/dotfiles && stow -R .
+# Pull changes and sync
+git pull && ./sync.sh
 
-# Remove all symlinks
-cd ~/dotfiles && stow -D .
-
-# See what stow would do (dry run)
-cd ~/dotfiles && stow -n -v .
+# Backup live configs back to repo
+./sync.sh --reverse
 ```
 
 ## Secrets (git-crypt)
@@ -142,6 +152,23 @@ The service starts after `graphical-session.target` to ensure DISPLAY/XAUTHORITY
 | `C-c c c` | Calendar (khal) |
 | `C-x p f` | Project find file |
 
+### Hyper Key Bindings (Planck EZ Oryx)
+
+| Key | Action |
+|-----|--------|
+| `Hyper+a` | Insert timestamp |
+| `Hyper+Backspace` | Delete timestamp |
+| `Hyper+Home` | Cycle timestamp format |
+| `Hyper+End` | Update timestamp |
+| `Hyper+t` | Insert `TODO:` stamp |
+| `Hyper+s` | Insert `SHOULD BE:` stamp |
+| `Hyper+?` | Open cheatsheet.org |
+| `Hyper+/` | Open palette.org |
+
+### Session Persistence
+
+Desktop-save mode restores your session (open buffers, window layout) when the daemon starts.
+
 ## i3 Window Manager
 
 | Key | Action |
@@ -211,11 +238,6 @@ nvim  # Lazy.nvim auto-installs plugins
 ```bash
 systemctl --user status emacs
 journalctl --user -u emacs --no-pager
-```
-
-**Symlinks broken after git pull?**
-```bash
-cd ~/dotfiles && stow -R .
 ```
 
 **i3 config syntax error?**

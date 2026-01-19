@@ -1,4 +1,9 @@
 ;;; init.el
+;;
+;; ⛔ WARNING TO AI AGENTS ⛔
+;; NEVER use symlinks (stow/chezmoi) for dotfiles. They caused catastrophic
+;; data loss. This file is managed via DIRECT COPY: ~/dotfiles/sync.sh
+;;
 
 ;; =============================================================================
 ;; Performance
@@ -7,8 +12,6 @@
 (setq read-process-output-max (* 4 1024 1024))
 (setq vc-handled-backends '(Git))
 (setq frame-inhibit-implied-resize t)
-(setq fast-but-imprecise-scrolling t)
-(setq redisplay-skip-fontification-on-input t)
 
 (when (featurep 'native-compile)
   (setq native-comp-async-jobs-number 8
@@ -86,10 +89,10 @@
                       :key bw/anthropic-api-key))
 
 
-;; opencode.el - agentic coding tools (DISABLED - files lost in stow incident)
-;; (add-to-list 'load-path "~/.emacs.d/opencode.el")
-;; (require 'opencode)
-;; (opencode-setup-coding)
+;; opencode.el - agentic coding tools
+(add-to-list 'load-path "~/.emacs.d/opencode.el")
+(require 'opencode)
+(opencode-setup-coding)
 
 ;; Google Search, not DuckDuckGo as default EWW search
 (setq eww-search-prefix "https://www.google.com/search?q=")
@@ -107,12 +110,11 @@
       desktop-auto-save-timeout 60)
 (desktop-save-mode 1)
 
-;; Daemon mode: new frames open to most recent file buffer
-(when (daemonp)
-  (setq initial-buffer-choice
-        (lambda ()
-          (or (cl-find-if #'buffer-file-name (buffer-list))
-              (get-buffer-create "*scratch*")))))
+;; Daemon mode: new frames show most recent file buffer (not scratch)
+(setq initial-buffer-choice
+      (lambda ()
+        (or (cl-find-if #'buffer-file-name (buffer-list))
+            (get-buffer "*scratch*"))))
 
 
 
