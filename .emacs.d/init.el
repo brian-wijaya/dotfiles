@@ -215,7 +215,7 @@
 (global-set-key (kbd "C-x C-B") 'ibuffer)          ; buffer manager (powerful)
 
 ;; Quick reference files
-(global-set-key (kbd "C-c ?") (lambda () (interactive)
+(global-set-key (kbd "C-c h") (lambda () (interactive)
                                 (find-file "~/.emacs.d/cheatsheet.org")))
 (global-set-key (kbd "C-c p") (lambda () (interactive)
                                 (find-file "~/.emacs.d/palette.org")))

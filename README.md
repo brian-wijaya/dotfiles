@@ -148,7 +148,8 @@ The service starts after `graphical-session.target` to ensure DISPLAY/XAUTHORITY
 | `C-c f` | Find file in project |
 | `C-c g` | Magit status |
 | `C-c d` | Devdocs lookup |
-| `C-c ?` | Open cheatsheet |
+| `C-c h` | Open cheatsheet |
+| `C-c p` | Open palette |
 | `C-c c c` | Calendar (khal) |
 | `C-x p f` | Project find file |
 
@@ -162,8 +163,6 @@ The service starts after `graphical-session.target` to ensure DISPLAY/XAUTHORITY
 | `Hyper+End` | Update timestamp |
 | `Hyper+t` | Insert `TODO:` stamp |
 | `Hyper+s` | Insert `SHOULD BE:` stamp |
-| `Hyper+?` | Open cheatsheet.org |
-| `Hyper+/` | Open palette.org |
 
 ### Session Persistence
 
