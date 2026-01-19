@@ -94,9 +94,17 @@
 (require 'opencode)
 (opencode-setup-coding)
 
-;; Google Search, not DuckDuckGo as default EWW search
+;; EWW browser config
 (setq eww-search-prefix "https://www.google.com/search?q=")
-(global-set-key (kbd "C-c w") 'eww)  ;; quick access
+(setq eww-home-url "file:///home/bw/.emacs.d/docs-home.html")
+
+(defun docs-home ()
+  "Open documentation index in EWW."
+  (interactive)
+  (eww-open-file "~/.emacs.d/docs-home.html"))
+
+(global-set-key (kbd "C-c w") 'eww)        ;; web browser
+(global-set-key (kbd "C-c W") 'docs-home)  ;; docs index
 
 
 ;; =============================================================================
@@ -210,6 +218,60 @@
 (which-key-mode 1)
 (setq which-key-idle-delay 0.5
       which-key-popup-type 'minibuffer)
+
+;; Context-specific help
+;; C-h C-h = show current mode bindings (concise)
+;; C-h RET = full help system (original)
+;; C-h C-p = pin/unpin which-key (side window vs minibuffer)
+(global-set-key (kbd "C-h C-h") 'which-key-show-major-mode)
+(global-set-key (kbd "C-h RET") 'help-for-help)
+
+;; Pinned help panel - stays visible while you work
+(defun help-panel-show ()
+  "Show current mode bindings in a persistent side window."
+  (interactive)
+  (let* ((mode major-mode)
+         (buf (get-buffer-create "*Help Panel*")))
+    (with-current-buffer buf
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (format "=== %s ===\n\n" mode))
+        (insert (substitute-command-keys (format "\\{%s-map}" (symbol-name mode))))
+        (goto-char (point-min)))
+      (special-mode)
+      (setq-local mode-line-format nil))
+    (let ((win (display-buffer-in-side-window buf
+                 '((side . right)
+                   (window-width . 50)
+                   (preserve-size . (t . nil))))))
+      (set-window-dedicated-p win t)
+      (set-window-parameter win 'no-delete-other-windows t))
+    (message "Help panel for %s (C-h C-p to close)" mode)))
+
+(defun help-panel-close ()
+  "Close the pinned help panel."
+  (interactive)
+  (when-let ((win (get-buffer-window "*Help Panel*")))
+    (delete-window win))
+  (message "Help panel closed"))
+
+(defun help-panel-toggle ()
+  "Toggle pinned help panel for current mode."
+  (interactive)
+  (if (get-buffer-window "*Help Panel*")
+      (help-panel-close)
+    (help-panel-show)))
+
+(global-set-key (kbd "C-h C-p") 'help-panel-toggle)
+
+;; Quick reload init.el
+(defun reload-init ()
+  "Eval init.el to reload config."
+  (interactive)
+  (load-file "~/.emacs.d/init.el")
+  (message "init.el reloaded!"))
+
+(global-set-key (kbd "C-c R") 'reload-init)
 
 ;; =============================================================================
 ;; Navigation (high-value bindings)
