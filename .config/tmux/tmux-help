@@ -1,0 +1,180 @@
+#!/bin/bash
+# Tmux Help - Paginated keybinding reference
+# Navigation: ←/→ or h/l to change pages, q to quit
+
+TOTAL_PAGES=5
+
+page0() {
+cat << 'EOF'
+                      ┌─────────────────────────────────┐
+                      │      PAGE 0: ESSENTIALS         │
+                      └─────────────────────────────────┘
+
+  CREATE                                SWITCH
+  ──────                                ──────
+  c          New window                 n / p      Next/prev window
+  -          New pane (horizontal)      0-9        Jump to window N
+  |          New pane (vertical)        w          Choose window
+  :new       New session                s          Choose session
+                                        C-h/j/k/l  Switch panes (vim)
+
+  CLOSE                                 EXTRAS
+  ─────                                 ──────
+  x          Kill pane                  r          Reload config
+  &          Kill window                I          Install plugins
+  d          Detach session             :          Command prompt
+                                        ?          This help
+
+EOF
+}
+
+page1() {
+cat << 'EOF'
+                      ┌─────────────────────────────────┐
+                      │       PAGE 1: NAVIGATION        │
+                      └─────────────────────────────────┘
+
+  PANE NAVIGATION (no prefix)           PANE NAVIGATION (prefix)
+  ───────────────────────────           ────────────────────────
+  C-h        Pane left (vim-aware)      o          Cycle panes
+  C-j        Pane down (vim-aware)      ;          Last pane
+  C-k        Pane up (vim-aware)        q          Show pane numbers
+  C-l        Pane right (vim-aware)     m          Mark pane
+  C-\        Last pane (vim-aware)      M          Clear mark
+
+  PANE MANAGEMENT                       PANE RESIZING
+  ───────────────                       ─────────────
+  |          Split vertical             <          Resize left
+  -          Split horizontal           >          Resize right
+  x          Kill pane                  +          Resize up
+  z          Zoom toggle                =          Resize down
+  !          Break to new window        E          Spread evenly
+  { }        Swap up/down
+EOF
+}
+
+page2() {
+cat << 'EOF'
+                      ┌─────────────────────────────────┐
+                      │   PAGE 2: WINDOWS & SESSIONS    │
+                      └─────────────────────────────────┘
+
+  WINDOW OPS                            WINDOW NAVIGATION
+  ──────────                            ─────────────────
+  c          New window                 n          Next window
+  &          Kill window                p          Previous window
+  ,          Rename window              l          Last window
+  .          Move window                0-9        Jump to window N
+  '          Jump to index              f          Find window
+  w          Choose window
+
+  NO PREFIX                             SESSIONS
+  ─────────                             ────────
+  S-Left     Previous window            d          Detach
+  S-Right    Next window                s          Choose session
+  M-H        Previous window            $          Rename session
+  M-L        Next window                ( )        Prev/next session
+                                        L          Last session
+                                        D          Choose client
+EOF
+}
+
+page3() {
+cat << 'EOF'
+                      ┌─────────────────────────────────┐
+                      │       PAGE 3: COPY & EDIT       │
+                      └─────────────────────────────────┘
+
+  ENTER/EXIT COPY MODE                  SELECTION (in copy mode)
+  ────────────────────                  ────────────────────────
+  [          Enter copy mode            v          Begin selection
+  S-PgUp     Enter + scroll up          C-v        Rectangle toggle
+  q          Exit copy mode             Space      Begin (default)
+  Escape     Exit copy mode
+
+  YANK/PASTE                            SCROLLING (in copy mode)
+  ──────────                            ────────────────────────
+  y          Yank to clipboard          S-PgUp/Dn  Page up/down
+  ]          Paste buffer               C-u/C-d    Half page
+  #          List buffers               g / G      Top / bottom
+  prefix y   Copy path (~/...)          H/M/L      Top/mid/bottom line
+  prefix Y   Copy path (full)
+
+  SEARCH (in copy mode)                 MOVEMENT (in copy mode)
+  ─────────────────────                 ───────────────────────
+  /          Search forward             w/b        Word forward/back
+  ?          Search backward            e          End of word
+  n / N      Next/prev match            0 / $      Line start/end
+EOF
+}
+
+page4() {
+cat << 'EOF'
+                      ┌─────────────────────────────────┐
+                      │         PAGE 4: SYSTEM          │
+                      └─────────────────────────────────┘
+
+  CONFIG                                PLUGINS (TPM)
+  ──────                                ─────────────
+  r          Reload config              I          Install plugins
+  :          Command prompt             U          Update plugins
+  C          Customize mode
+
+  INFO & META                           SPECIAL
+  ───────────                           ───────
+  ?          This help                  Space      Which-key menu
+  t          Show clock                 W          Workflow guide
+  ~          Show messages              /          Describe key
+  i          Display info
+
+
+
+EOF
+}
+
+show_page() {
+    local page=$1
+    clear
+    case $page in
+        0) page0 ;;
+        1) page1 ;;
+        2) page2 ;;
+        3) page3 ;;
+        4) page4 ;;
+    esac
+    printf "\n"
+    printf "              ←/→ or h/l: navigate   •   Page %d/%d   •   q: close\n" "$page" "$((TOTAL_PAGES-1))"
+}
+
+# Main loop
+page=${1:-0}
+while true; do
+    show_page $page
+
+    # Read single keypress (including arrow keys)
+    read -rsn1 key
+
+    # Handle arrow keys (they send escape sequences)
+    if [[ $key == $'\x1b' ]]; then
+        read -rsn2 -t 0.1 key
+        case $key in
+            '[D') key='h' ;;  # Left arrow
+            '[C') key='l' ;;  # Right arrow
+        esac
+    fi
+
+    case $key in
+        h|H)
+            ((page--))
+            [[ $page -lt 0 ]] && page=$((TOTAL_PAGES-1))
+            ;;
+        l|L)
+            ((page++))
+            [[ $page -ge $TOTAL_PAGES ]] && page=0
+            ;;
+        q|Q)
+            clear
+            exit 0
+            ;;
+    esac
+done

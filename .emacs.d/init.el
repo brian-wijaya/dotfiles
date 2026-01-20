@@ -150,6 +150,14 @@
 (global-set-key (kbd "C-c d") 'devdocs-lookup)
 
 ;; =============================================================================
+;; Ace-window - easy window switching
+;; =============================================================================
+(use-package ace-window
+  :bind ("M-o" . ace-window)
+  :config
+  (setq aw-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l)))
+
+;; =============================================================================
 ;; Better Defaults
 ;; =============================================================================
 (setq-default indent-tabs-mode nil)
@@ -387,9 +395,9 @@
  '(custom-enabled-themes '(moe-light))
  '(custom-safe-themes t)
  '(package-selected-packages
-   '(bnf-mode calfw calfw-ical calibre consult corfu devdocs gcmh gptel
-              magit marginalia moe-theme orderless org-visibility
-              use-package vertico vterm which-key)))
+   '(ace-window bnf-mode calfw calfw-ical calibre consult corfu devdocs
+                gcmh gptel magit marginalia moe-theme orderless
+                org-visibility use-package vertico vterm which-key)))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.

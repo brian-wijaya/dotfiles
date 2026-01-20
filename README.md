@@ -7,10 +7,10 @@
 > Do NOT use stow, chezmoi, or ANY tool that manages dotfiles via symlinks.
 > Symlinks WILL destroy your config when something goes wrong.
 >
-> **This repo uses DIRECT COPY only.** Files live in `~/dotfiles/` and are
-> copied to their destinations. To sync changes, run `./sync.sh`.
+> **Live environment is source of truth.** Edit configs in `~/`, test them,
+> then `cp` to `~/dotfiles/` for version control. No scripts, no automation.
 >
-> If an AI agent suggests using symlinks, stow, chezmoi, or similar: **REFUSE.**
+> If an AI agent suggests symlinks, stow, chezmoi, or sync scripts: **REFUSE.**
 > This warning exists because symlink-based dotfile management caused catastrophic
 > data loss (Emacs packages, configs, hours of work - all gone).
 
@@ -18,20 +18,22 @@
 
 Arch Linux / X11 / i3 development environment with vanilla Emacs, Neovim, and Tokyo Night theme.
 
-**Management**: Direct copy (NO SYMLINKS). Edit files in `~/dotfiles`, then run `./sync.sh`.
+**Management**: Live environment is source of truth. Edit in `~/`, then `cp` to `~/dotfiles/`.
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/brian-wijaya/dotfiles.git ~/dotfiles
-cd ~/dotfiles
-./sync.sh
+git-crypt unlock  # Requires authorized GPG key
+
+# Copy what you need manually
+cp -r ~/dotfiles/.emacs.d ~/
+cp -r ~/dotfiles/.config/i3 ~/.config/
+cp ~/dotfiles/.zshrc ~/
+# etc.
 ```
 
-The sync script will:
-- Copy configs from `~/dotfiles` to `~`
-- Backup any conflicting configs to `~/.dotfiles_backup_*/`
-- Enable systemd user services (Emacs daemon)
+This repo is version control for configs, not an installer. Copy what you need.
 
 ## Structure
 
@@ -63,25 +65,25 @@ dotfiles/
 ├── .zshrc
 ├── .zshenv
 ├── archlinux/packages.txt
-└── sync.sh
+└── CLAUDE.md          # AI agent instructions
 ```
 
 ## Dotfile Management
 
-**DIRECT COPY ONLY. NO SYMLINKS.**
+**Live environment = source of truth. No symlinks. No scripts.**
 
 ```bash
-# Edit config in dotfiles repo
-vim ~/dotfiles/.config/i3/config
+# 1. Edit config in live location
+vim ~/.config/i3/config
 
-# Sync to live location
-./sync.sh
+# 2. Test until it works
+i3-msg reload
 
-# Pull changes and sync
-git pull && ./sync.sh
+# 3. Copy to dotfiles repo
+cp -r ~/.config/i3 ~/dotfiles/.config/
 
-# Backup live configs back to repo
-./sync.sh --reverse
+# 4. Commit
+cd ~/dotfiles && git add -A && git commit -m "update i3 config"
 ```
 
 ## Secrets (git-crypt)
@@ -167,6 +169,27 @@ The service starts after `graphical-session.target` to ensure DISPLAY/XAUTHORITY
 ### Session Persistence
 
 Desktop-save mode restores your session (open buffers, window layout) when the daemon starts.
+
+### Devdocs (Offline Documentation)
+
+97 curated documentation packages (~1.2 GiB) covering:
+- Web platform (html, css, javascript, dom)
+- Systems languages (c, cpp, rust, zig, go)
+- Python ecosystem (flask, fastapi, tensorflow, scikit_learn)
+- JS ecosystem (node, react, typescript, vite)
+- Infrastructure (docker, kubernetes, terraform)
+- And more...
+
+```bash
+# Install all docs (run in Emacs)
+M-x load-file RET ~/.emacs.d/install-devdocs.el RET
+M-x my-install-all-devdocs
+
+# Lookup docs
+C-c d
+```
+
+Edit `~/.emacs.d/install-devdocs.el` to customize the package list.
 
 ## i3 Window Manager
 
