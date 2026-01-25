@@ -277,17 +277,17 @@
     (which-key-mode 1)
     (setq which-key-idle-delay 0.3)
     (which-key-add-key-based-replacements
-      "SPC b" "buffers"
-      "SPC f" "files"
-      "SPC g" "git"
-      "SPC h" "help"
-      "SPC n" "notes"
-      "SPC o" "open"
-      "SPC p" "project"
-      "SPC q" "quit"
-      "SPC s" "search"
-      "SPC t" "toggle"
-      "SPC w" "windows"))
+      "SPC b" "📄 buffers"
+      "SPC f" "📂 files"
+      "SPC g" "🌿 git"
+      "SPC h" "❓ help"
+      "SPC n" "📝 notes"
+      "SPC o" "📖 open"
+      "SPC p" "🗂️ project"
+      "SPC q" "🚪 quit"
+      "SPC s" "🔍 search"
+      "SPC t" "🔀 toggle"
+      "SPC w" "🪟 windows"))
 
   ) ;; END default-doom
 
@@ -923,11 +923,11 @@
   (define-key evil-normal-state-map (kbd "SPC") 'bw/leader-map)
 
   ;; -------------------------------------------------------------------------
-  ;; 🖥️ UI - Doom style
+  ;; 🖥️ UI - Doom style (with menu bar for discoverability)
   ;; -------------------------------------------------------------------------
-  (menu-bar-mode -1)
-  (tool-bar-mode -1)
-  (scroll-bar-mode -1)
+  (menu-bar-mode 1)    ;; Keep menu bar for discoverability (ADR-003)
+  (tool-bar-mode -1)   ;; No toolbar (too bulky)
+  (scroll-bar-mode -1) ;; No scroll bar
   (global-display-line-numbers-mode 1)
   (global-hl-line-mode 1)
   (column-number-mode 1)
@@ -954,16 +954,18 @@
   ;; 🔑 Keyhints - Discoverable prefix keys in side window (ADR-003)
   ;; ---------------------------------------------------------------------------
   (defvar bw/keyhints-buffer nil "Buffer for keyhints content.")
-  (defvar bw/keyhints-timer nil "Timer for updating keyhints.")
 
   (defun bw/discover-prefixes ()
     "Discover available prefix keys for current context."
     (let* ((bindings (which-key--get-current-bindings))
-           (prefixes '()))
+           (prefixes '())
+           (has-bracket-open nil)
+           (has-bracket-close nil)
+           (has-z nil))
       ;; Always add SPC leader if evil is loaded
       (when (and (bound-and-true-p evil-mode)
                  (keymapp (lookup-key evil-normal-state-map (kbd "SPC"))))
-        (push '("SPC" . "leader") prefixes))
+        (push '("SPC" . "👑leader") prefixes))
       (dolist (b bindings)
         (let ((key (car b))
               (desc (cdr b)))
@@ -971,17 +973,22 @@
                     (string-suffix-p "-prefix" desc)
                     (string-suffix-p "-command" desc))
             (cond
-             ((string= key "C-x") (push '("C-x" . "emacs") prefixes))
-             ((string= key "C-c") (push '("C-c" . "mode") prefixes))
-             ((string= key "C-h") (push '("C-h" . "help") prefixes))
-             ((string= key "M-x") (push '("M-x" . "cmd") prefixes))
-             ((string= key "M-g") (push '("M-g" . "goto") prefixes))
-             ((string= key "M-s") (push '("M-s" . "search") prefixes))
-             ((string= key "g") (push '("g" . "go") prefixes))
-             ((string= key "z") (push '("z" . "fold") prefixes))
-             ((string= key "[") (push '("[" . "prev") prefixes))
-             ((string= key "]") (push '("]" . "next") prefixes))))))
-      (nreverse prefixes)))
+             ((string= key "C-x") (push '("C-x" . "⚙️emacs") prefixes))
+             ((string= key "C-c") (push '("C-c" . "🎛️mode") prefixes))
+             ((string= key "C-h") (push '("C-h" . "❓help") prefixes))
+             ((string= key "M-x") (push '("M-x" . "🚀cmd") prefixes))
+             ((string= key "M-g") (push '("M-g" . "🎯goto") prefixes))
+             ((string= key "M-s") (push '("M-s" . "🔍search") prefixes))
+             ((string= key "g") (push '("g" . "🏃go") prefixes))
+             ((string= key "z") (setq has-z t))
+             ((string= key "[") (setq has-bracket-open t))
+             ((string= key "]") (setq has-bracket-close t))))))
+      ;; nreverse main prefixes, then append [, ], z in that order
+      (let ((result (nreverse prefixes)))
+        (when has-bracket-open (setq result (append result '(("[" . "⬅️")))))
+        (when has-bracket-close (setq result (append result '(("]" . "➡️")))))
+        (when has-z (setq result (append result '(("z" . "📁fold")))))
+        result)))
 
   (defun bw/format-keyhints ()
     "Format discovered prefixes as a string."
@@ -992,9 +999,10 @@
     "Create the keyhints side window (above echo area)."
     (setq bw/keyhints-buffer (get-buffer-create "*keyhints*"))
     (with-current-buffer bw/keyhints-buffer
-      (erase-buffer)
-      (insert (propertize (bw/format-keyhints)
-                         'face '(:foreground "#7c828d")))
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (propertize (bw/format-keyhints)
+                           'face '(:foreground "#7c828d"))))
       (setq mode-line-format nil
             header-line-format nil
             cursor-type nil
@@ -1018,11 +1026,19 @@
           (insert (propertize (bw/format-keyhints)
                              'face '(:foreground "#7c828d")))))))
 
-  ;; Initialize keyhints after frame is ready
-  (add-hook 'window-setup-hook #'bw/keyhints-create)
+  ;; Initialize keyhints after which-key loads (event-driven)
+  (with-eval-after-load 'which-key
+    (if after-init-time
+        (bw/keyhints-create)
+      (add-hook 'emacs-startup-hook #'bw/keyhints-create)))
 
-  ;; Timer to update content on idle
-  (setq bw/keyhints-timer (run-with-idle-timer 0.5 t #'bw/keyhints-update))
+  ;; Update keyhints on relevant events (event-driven, no polling)
+  (add-hook 'buffer-list-update-hook #'bw/keyhints-update)
+  (add-hook 'window-configuration-change-hook #'bw/keyhints-update)
+  (with-eval-after-load 'evil
+    (add-hook 'evil-normal-state-entry-hook #'bw/keyhints-update)
+    (add-hook 'evil-insert-state-entry-hook #'bw/keyhints-update)
+    (add-hook 'evil-visual-state-entry-hook #'bw/keyhints-update))
 
   (use-package solaire-mode
     :demand t
@@ -1992,9 +2008,52 @@
       "u" "↩️ undo"
       "v" "➕ split-v"
       "w" "🔄 ace"
-      "x" "🔀 swap")
+      "x" "🔀 swap"))
 
-)
+  ;; -------------------------------------------------------------------------
+  ;; 🎈 which-key-posframe (floating popup above modeline with gap)
+  ;; -------------------------------------------------------------------------
+  (use-package posframe
+    :demand t)
+
+  (use-package which-key-posframe
+    :demand t
+    :after (which-key posframe)
+    :config
+    ;; Multi-column layout like Doom
+    (setq which-key-max-display-columns 5
+          which-key-max-description-length 35)
+
+    ;; Override the show function for proper positioning and sizing
+    (defun bw/which-key-posframe--show-buffer (act-popup-dim)
+      "Show which-key posframe above modeline, full width with margins."
+      (when (posframe-workable-p)
+        (let* ((buf (get-buffer " *which-key*"))
+               (height (car act-popup-dim))
+               (max-height (min height 15)))
+          (when buf
+            (posframe-show buf
+                           :height max-height
+                           :min-width (- (frame-width) 8)
+                           :poshandler (lambda (info)
+                                         (let* ((pw (plist-get info :parent-frame-width))
+                                                (ph (plist-get info :parent-frame-height))
+                                                (cw (plist-get info :posframe-width))
+                                                (ch (plist-get info :posframe-height))
+                                                (bottom-margin 130))
+                                           (cons (/ (- pw cw) 2)
+                                                 (- ph ch bottom-margin))))
+                           :background-color "#21242b"
+                           :foreground-color "#bbc2cf"
+                           :border-width 1
+                           :border-color "#51afef")))))
+
+    (advice-add 'which-key-posframe--show-buffer
+                :override #'bw/which-key-posframe--show-buffer)
+
+    (set-face-attribute 'which-key-posframe nil :background "#21242b")
+    (set-face-attribute 'which-key-posframe-border nil :background "#51afef")
+    (which-key-posframe-mode 1))
 
   ;; -------------------------------------------------------------------------
   ;; 🌲 Neotree (eager)
