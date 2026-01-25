@@ -948,46 +948,105 @@
     (doom-modeline-mode 1)
     (setq doom-modeline-height 25)
 
-    ;; -------------------------------------------------------------------------
-    ;; 🔑 Keyhints - Discoverable prefix keys in modeline (ADR-003)
-    ;; -------------------------------------------------------------------------
-    (defun bw/discover-prefixes ()
-      "Discover available prefix keys for current context."
-      (let* ((bindings (which-key--get-current-bindings))
-             (prefixes '()))
-        (when (and (bound-and-true-p evil-mode)
-                   (eq evil-state 'normal)
-                   (keymapp (lookup-key evil-normal-state-map (kbd "SPC"))))
-          (push '("SPC" . "leader") prefixes))
-        (dolist (b bindings)
-          (let ((key (car b))
-                (desc (cdr b)))
-            (when (string= desc "prefix")
-              (cond
-               ((string= key "C-c") (push '("C-c" . "mode") prefixes))
-               ((string= key "C-x") (push '("C-x" . "emacs") prefixes))
-               ((string= key "M-g") (push '("M-g" . "goto") prefixes))
-               ((string= key "M-s") (push '("M-s" . "search") prefixes))
-               ((string= key "g") (push '("g" . "go") prefixes))
-               ((string= key "z") (push '("z" . "fold") prefixes))
-               ((string= key "[") (push '("[" . "prev") prefixes))
-               ((string= key "]") (push '("]" . "next") prefixes))))))
-        (nreverse prefixes)))
+)
 
-    (defun bw/format-keyhints ()
-      "Format discovered prefixes as a modeline string."
-      (mapconcat (lambda (p) (format "%s:%s" (car p) (cdr p)))
-                 (bw/discover-prefixes) " "))
+  ;; ---------------------------------------------------------------------------
+  ;; 🔑 Keyhints - Discoverable prefix keys in child frame (ADR-003)
+  ;; ---------------------------------------------------------------------------
+  (defvar bw/keyhints-frame nil "Child frame for keyhints display.")
+  (defvar bw/keyhints-buffer nil "Buffer for keyhints content.")
+  (defvar bw/keyhints-timer nil "Timer for updating keyhints.")
 
-    (doom-modeline-def-segment keyhints
-      "Display available prefix keys."
-      (when (bound-and-true-p which-key-mode)
-        (propertize (concat " " (bw/format-keyhints) " ")
-                    'face 'doom-modeline-buffer-minor-mode)))
+  (defun bw/discover-prefixes ()
+    "Discover available prefix keys for current context."
+    (let* ((bindings (which-key--get-current-bindings))
+           (prefixes '()))
+      (when (and (bound-and-true-p evil-mode)
+                 (eq evil-state 'normal)
+                 (keymapp (lookup-key evil-normal-state-map (kbd "SPC"))))
+        (push '("SPC" . "leader") prefixes))
+      (dolist (b bindings)
+        (let ((key (car b))
+              (desc (cdr b)))
+          (when (or (string= desc "prefix")
+                    (string-suffix-p "-prefix" desc)
+                    (string-suffix-p "-command" desc))
+            (cond
+             ((string= key "C-x") (push '("C-x" . "emacs") prefixes))
+             ((string= key "C-c") (push '("C-c" . "mode") prefixes))
+             ((string= key "C-h") (push '("C-h" . "help") prefixes))
+             ((string= key "M-x") (push '("M-x" . "cmd") prefixes))
+             ((string= key "M-g") (push '("M-g" . "goto") prefixes))
+             ((string= key "M-s") (push '("M-s" . "search") prefixes))
+             ((string= key "g") (push '("g" . "go") prefixes))
+             ((string= key "z") (push '("z" . "fold") prefixes))
+             ((string= key "[") (push '("[" . "prev") prefixes))
+             ((string= key "]") (push '("]" . "next") prefixes))))))
+      (nreverse prefixes)))
 
-    (doom-modeline-def-modeline 'main
-      '(bar modals matches buffer-info remote-host buffer-position selection-info)
-      '(keyhints misc-info minor-modes input-method buffer-encoding major-mode process vcs check)))
+  (defun bw/format-keyhints ()
+    "Format discovered prefixes as a string."
+    (mapconcat (lambda (p) (format "%s:%s" (car p) (cdr p)))
+               (bw/discover-prefixes) " "))
+
+  (defun bw/keyhints-create ()
+    "Create the keyhints child frame."
+    (when (display-graphic-p)
+      (setq bw/keyhints-buffer (get-buffer-create " *keyhints*"))
+      (with-current-buffer bw/keyhints-buffer
+        (erase-buffer)
+        (insert (bw/format-keyhints)))
+      (let ((parent (selected-frame)))
+        (setq bw/keyhints-frame
+              (make-frame
+               `((parent-frame . ,parent)
+                 (width . 150)
+                 (height . 1)
+                 (left . 0)
+                 (top . ,(- (frame-pixel-height parent)
+                           (frame-char-height parent) 25))
+                 (undecorated . t)
+                 (no-accept-focus . t)
+                 (no-focus-on-map . t)
+                 (internal-border-width . 0)
+                 (vertical-scroll-bars . nil)
+                 (horizontal-scroll-bars . nil)
+                 (menu-bar-lines . 0)
+                 (tool-bar-lines . 0)
+                 (tab-bar-lines . 0)
+                 (background-color . "#21242b")
+                 (foreground-color . "#bbc2cf"))))
+        (with-selected-frame bw/keyhints-frame
+          (switch-to-buffer bw/keyhints-buffer t t)
+          (setq mode-line-format nil
+                cursor-type nil)))))
+
+  (defun bw/keyhints-update ()
+    "Update keyhints content."
+    (when (and (frame-live-p bw/keyhints-frame)
+               (buffer-live-p bw/keyhints-buffer))
+      (with-current-buffer bw/keyhints-buffer
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert (propertize (bw/format-keyhints)
+                             'face '(:foreground "#bbc2cf")))))))
+
+  (defun bw/keyhints-reposition ()
+    "Reposition keyhints frame after parent resize."
+    (when (frame-live-p bw/keyhints-frame)
+      (let* ((parent (frame-parent bw/keyhints-frame))
+             (ph (frame-pixel-height parent))
+             (ch (frame-char-height bw/keyhints-frame)))
+        (modify-frame-parameters bw/keyhints-frame
+                                 `((top . ,(- ph ch 25))
+                                   (width . 1.0))))))
+
+  ;; Initialize keyhints after frame is ready
+  (add-hook 'window-setup-hook #'bw/keyhints-create)
+  (add-hook 'window-size-change-functions (lambda (_) (bw/keyhints-reposition)))
+
+  ;; Timer to update content on idle
+  (run-with-idle-timer 0.5 t #'bw/keyhints-update)
 
   (use-package solaire-mode
     :demand t
