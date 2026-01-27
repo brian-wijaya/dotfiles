@@ -1,0 +1,54 @@
+feature: deepwiki
+description: DeepWiki code intelligence integration — view wiki, ask questions, browse frontend
+vocabularies: [emacs, browser]
+
+stories:
+  - name: View wiki for current project
+    preconditions:
+      - http: { url: "http://localhost:8001/health", expect: 200 }
+      - focused: { class: "Emacs" }
+      - emacs_mode: { match: "go-ts-mode\\|emacs-lisp-mode\\|python-ts-mode" }
+    steps:
+      - key: "space c m"
+      - wait: 3
+    expect:
+      - screenshot: "deepwiki-view-result"
+      - emacs_buffer_exists: { args: ["*deepwiki:*"], match: "#<buffer" }
+      - emacs_minibuffer: { not_match: "error" }
+
+  - name: Ask question via RAG
+    preconditions:
+      - http: { url: "http://localhost:8001/health", expect: 200 }
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space c shift+m"
+      - wait: 1
+      - type: "What does this project do?"
+      - key: "Return"
+      - wait: 5
+    expect:
+      - screenshot: "deepwiki-ask-result"
+      - emacs_buffer_exists: { args: ["*deepwiki-ask*"], match: "#<buffer" }
+      - emacs_minibuffer: { not_match: "error\\|void" }
+
+  - name: Browse opens frontend in browser
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space c shift+w"
+      - wait: 2
+    expect:
+      - screenshot: "deepwiki-browse"
+      - window_count: { class: "Google-chrome", min: 1 }
+
+  - name: Server down shows helpful error
+    preconditions:
+      - http: { url: "http://localhost:8001/health", expect: fail }
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space c m"
+      - wait: 2
+    expect:
+      - screenshot: "deepwiki-error"
+      - emacs_buffer_exists: { args: ["*deepwiki:*"], match: "nil" }
+      - emacs_minibuffer: { match: "not reachable\\|unavailable\\|failed" }
