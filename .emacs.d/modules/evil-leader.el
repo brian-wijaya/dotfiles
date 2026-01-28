@@ -9,6 +9,7 @@
 (evil-define-key 'normal 'global (kbd "<leader>") 'bw/leader-map)
 
 ;; Sub-keymaps for each prefix
+(define-prefix-command 'bw/leader-a-map) ; applications
 (define-prefix-command 'bw/leader-b-map) ; buffers
 (define-prefix-command 'bw/leader-c-map) ; code
 (define-prefix-command 'bw/leader-f-map) ; files
@@ -26,6 +27,7 @@
 (define-prefix-command 'bw/leader-w-map) ; windows
 
 ;; Bind sub-keymaps to leader
+(define-key bw/leader-map (kbd "a") 'bw/leader-a-map)
 (define-key bw/leader-map (kbd "b") 'bw/leader-b-map)
 (define-key bw/leader-map (kbd "c") 'bw/leader-c-map)
 (define-key bw/leader-map (kbd "f") 'bw/leader-f-map)

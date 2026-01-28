@@ -23,6 +23,13 @@
 (define-key bw/leader-map (kbd "~") 'bw/which-key-explore-toggle)
 
 ;; =========================================================================
+;; SPC a - applications
+;; =========================================================================
+(define-key bw/leader-a-map (kbd "r") 'elfeed)
+;; Spec 05: explorer
+(define-key bw/leader-a-map (kbd "~") (lambda () (interactive) (bw/which-key-explore-prefix "SPC a")))
+
+;; =========================================================================
 ;; SPC b - buffers
 ;; =========================================================================
 (define-key bw/leader-b-map (kbd "b") 'consult-buffer)
@@ -311,6 +318,7 @@
 
   ;; --- Leader prefix labels ---
   (which-key-add-keymap-based-replacements bw/leader-map
+    "a" "📱+apps"
     "b" "📋+buffers"
     "c" "💻+code"
     "f" "📂+files"
@@ -338,6 +346,11 @@
     "`" "↩️ last-buf"
     "u" "🔢 universal"
     "x" "📝 scratch"
+    "~" "🔭 explore")
+
+  ;; --- Applications ---
+  (which-key-add-keymap-based-replacements bw/leader-a-map
+    "r" "📰 RSS feeds"
     "~" "🔭 explore")
 
   ;; --- Buffers ---

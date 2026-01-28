@@ -1,0 +1,194 @@
+# Emacs Workstation Spec Verification Stories
+# Run with: /e2e-test-debug-loop emacs-workstation
+
+feature: emacs-workstation
+description: Verification of specs 03-14 for Emacs workstation refactor
+vocabularies: [emacs]
+
+vocabulary:
+  emacs_running:
+    tool: bash
+    cmd: "pgrep -x emacs"
+  
+stories:
+  # Spec 03: Elfeed RSS
+  - name: Elfeed opens with SPC a r
+    preconditions:
+      - focused: { class: "Emacs" }
+      - emacs_mode: { not_match: "elfeed" }
+    steps:
+      - key: "space a r"
+      - wait: 3
+    expect:
+      - screenshot: "elfeed-opened"
+      - emacs_buffer: { match: "elfeed" }
+
+  - name: Elfeed shows feeds
+    preconditions:
+      - focused: { class: "Emacs" }
+      - emacs_buffer: { match: "elfeed" }
+    steps:
+      - key: "g r"
+      - wait: 5
+    expect:
+      - screenshot: "elfeed-feeds"
+      - emacs_minibuffer: { not_match: "error" }
+
+  - name: Elfeed quit
+    preconditions:
+      - focused: { class: "Emacs" }
+      - emacs_buffer: { match: "elfeed" }
+    steps:
+      - key: "q"
+      - wait: 1
+    expect:
+      - screenshot: "elfeed-quit"
+      - emacs_buffer: { not_match: "elfeed" }
+
+  # Spec 06: vsnake
+  - name: vsnake mode activates with SPC w V
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space f f"
+      - wait: 1
+      - type: "/home/bw/.emacs.d/init.el"
+      - key: "Return"
+      - wait: 1
+      - key: "space w V"
+      - wait: 1
+    expect:
+      - screenshot: "vsnake-activated"
+      - emacs_minibuffer: { match: "vsnake" }
+
+  - name: vsnake exit with q
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "q"
+      - wait: 1
+    expect:
+      - screenshot: "vsnake-exit"
+      - emacs_window_count: { match: "1" }
+
+  # Spec 07: which-key-explore
+  - name: which-key explorer opens with SPC ~
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space asciitilde"
+      - wait: 1
+    expect:
+      - screenshot: "wke-opened"
+      - window_count: { class: "Emacs", min: 1 }
+
+  - name: which-key explorer exits with q
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "q"
+      - wait: 1
+    expect:
+      - screenshot: "wke-closed"
+
+  # Spec 10: imenu-list
+  - name: imenu-list opens with SPC t i
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space f f"
+      - wait: 1
+      - type: "/home/bw/.emacs.d/modules/bindings-doom-full.el"
+      - key: "Return"
+      - wait: 1
+      - key: "space t i"
+      - wait: 1
+    expect:
+      - screenshot: "imenu-list-opened"
+      - emacs_buffer_exists: { args: ["*Ilist*"], match: "buffer" }
+
+  - name: imenu-list closes with SPC t i
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space t i"
+      - wait: 1
+    expect:
+      - screenshot: "imenu-list-closed"
+
+  # Spec 11: dirvish
+  - name: dirvish opens with SPC o -
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space o minus"
+      - wait: 2
+    expect:
+      - screenshot: "dirvish-opened"
+      - emacs_mode: { match: "dirvish\\|dired" }
+
+  - name: dirvish quit with q
+    preconditions:
+      - focused: { class: "Emacs" }
+      - emacs_mode: { match: "dirvish\\|dired" }
+    steps:
+      - key: "q"
+      - wait: 1
+    expect:
+      - screenshot: "dirvish-quit"
+
+  # Spec 12: doc-panel
+  - name: doc-panel opens with SPC c p
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space f f"
+      - wait: 1
+      - type: "/home/bw/.emacs.d/modules/helpers.el"
+      - key: "Return"
+      - wait: 1
+      - key: "space c p"
+      - wait: 1
+    expect:
+      - screenshot: "doc-panel-opened"
+      - emacs_buffer_exists: { args: ["*doc-panel*"], match: "buffer" }
+
+  - name: doc-panel closes with SPC c p
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space c p"
+      - wait: 1
+    expect:
+      - screenshot: "doc-panel-closed"
+
+  # Spec 13: symbols-outline
+  - name: symbols-outline opens with SPC c o
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space c o"
+      - wait: 2
+    expect:
+      - screenshot: "symbols-outline-opened"
+      - emacs_buffer_exists: { args: ["*Outline*"], match: "buffer" }
+
+  # Basic sanity checks
+  - name: which-key shows on SPC
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "space"
+      - wait: 1
+    expect:
+      - screenshot: "which-key-popup"
+      - window_count: { class: "Emacs", min: 1 }
+
+  - name: which-key dismisses with Escape
+    preconditions:
+      - focused: { class: "Emacs" }
+    steps:
+      - key: "Escape"
+      - wait: 1
+    expect:
+      - screenshot: "which-key-dismissed"

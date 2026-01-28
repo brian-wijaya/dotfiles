@@ -51,6 +51,7 @@
   (load (expand-file-name "breadcrumb" mod))
   (load (expand-file-name "symbols-outline" mod))
   (load (expand-file-name "deepwiki" mod))
+  (load (expand-file-name "elfeed" mod))
 
   ;; --- Bindings (must come after all modules define their commands) ---
   (load (expand-file-name "bindings-doom-full" mod))
