@@ -1,10 +1,10 @@
 ---
-name: e2e-test
-description: Run end-to-end tests that emulate human input via X11 keystrokes, verify outcomes with somatic differential QA, and produce structured test reports with screenshots. Use when the user wants to validate features, run acceptance tests, or verify a deployment.
-argument-hint: [story-file or feature-name]
+name: e2e-test-debug-loop
+description: Persistent end-to-end test loop that emulates human input via X11, verifies outcomes with somatic differential QA, retries failures via orchestrator, and produces structured reports with screenshots. Integrates with Python orchestrator for multi-session coordination.
+argument-hint: [story-file or feature-name] [--persist]
 ---
 
-# E2E Test Runner
+# E2E Test Debug Loop
 
 ## Arguments
 
@@ -183,14 +183,60 @@ The goal is a complete visual record of every UI state transition. Screenshots a
 - **Note peripheral observations.** While executing a story, if something unrelated looks wrong — a broken modeline, a missing icon, a window that shouldn't be there, a font rendering issue — log it in the report under a "Peripheral Observations" section for that story. This is not distraction. Tunnel vision misses real problems. A tester with broad awareness catches issues that unit tests never will.
 - **Retry for visual fidelity.** If a screenshot is ambiguous (content still loading, cursor obscuring text, window mid-resize), re-run that step to get a clean capture. The report should be readable by someone who wasn't present.
 
-## Persistence Loop
+## Persistence via Ralph Loop
 
-The runner does not stop at first failure. After completing all stories:
+A skill prompt cannot make Claude retry across session boundaries — Claude processes instructions once and exits. Real persistence requires an **external loop** that intercepts the exit and re-injects the task. The ralph-loop plugin provides this.
 
-1. Collect FAIL stories (not BLOCKED)
-2. If any FAIL, re-run only those stories from scratch
-3. If a retry flips a FAIL to PASS, record both attempts in the report
-4. If a retry produces the same failures with the same actual values, stop — the failure is genuine
-5. Maximum 3 attempts per story before declaring it a hard failure
+### How it works
 
-This emulates a human tester who retries flaky steps before filing a bug. Genuine failures surface clearly because they reproduce consistently.
+When e2e-test has failures that need retrying, it activates ralph-loop:
+
+1. After the first full pass, if any stories are FAIL (not BLOCKED), write a state file summarizing which stories failed and why
+2. Invoke `/ralph-loop` with the e2e-test prompt and completion promise `ALL E2E STORIES PASS OR BLOCKED`
+3. Ralph's Stop hook intercepts exit, checks for `<promise>ALL E2E STORIES PASS OR BLOCKED</promise>`
+4. If the promise is absent (failures remain), ralph blocks exit and re-injects the prompt
+5. Claude wakes in the same session, reads the state file, re-runs only failing stories
+6. When all stories are genuinely PASS or BLOCKED, emit the promise to exit the loop
+
+### State file: `.claude/e2e-state.local.md`
+
+Written after each pass. Contains:
+
+```markdown
+---
+feature: deepwiki
+attempt: 2
+stories_total: 4
+stories_pass: 2
+stories_fail: 1
+stories_blocked: 1
+---
+
+## Failing Stories
+- Server down shows helpful error: expected minibuffer match "not reachable", got "Wrong type argument"
+
+## Blocked Stories
+- Ask question via RAG: BLOCKED — http localhost:8001 refused
+
+## Peripheral Observations
+- Modeline shows wrong branch name in deepwiki buffer
+```
+
+### When NOT to use ralph-loop
+
+- If the user only wants a single pass (default without `--persist` flag)
+- If all failures are BLOCKED (infrastructure missing, not code bugs)
+- If the same failures reproduce identically across 3 attempts (genuine bugs, not flakiness)
+
+### Activation
+
+The skill checks user intent:
+- `/e2e-test deepwiki` — single pass, report results
+- `/e2e-test deepwiki --persist` — ralph-loop until 100% or stagnation
+- If failures exist after single pass, ask user: "N stories failed. Run persistent retry loop?"
+
+### Stagnation detection
+
+Between attempts, compare the current failure set to the previous one. If identical failures with identical actual values appear twice in a row, the failures are genuine — emit the completion promise and stop. Do not burn iterations on deterministic bugs.
+
+The report records all attempts, not just the final one. Each attempt's screenshots, expects, and peripheral observations are preserved.
