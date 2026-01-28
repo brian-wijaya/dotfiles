@@ -1,0 +1,213 @@
+#!/bin/bash
+# Enhanced clipboard manager - Windows 11 style floating panel
+# Features: history, pinned items, emoji picker
+# Usage: clipboard-menu [--emoji|--history|--pin]
+
+PINNED_FILE="$HOME/.local/share/clipboard-pins.txt"
+EMOJI_FILE="$HOME/.local/share/emoji-favorites.txt"
+CLIPMENU_DIR="${XDG_RUNTIME_DIR:-/tmp}/clipmenu.${USER}/"
+
+# Ensure files exist
+mkdir -p "$(dirname "$PINNED_FILE")"
+touch "$PINNED_FILE" "$EMOJI_FILE" 2>/dev/null
+
+# Get mouse position for floating panel
+eval $(xdotool getmouselocation --shell)
+MOUSE_X=$X
+MOUSE_Y=$Y
+
+# Floating panel style - appears near cursor
+ROFI_STYLE="
+window {
+    location: north west;
+    anchor: north west;
+    x-offset: ${MOUSE_X}px;
+    y-offset: ${MOUSE_Y}px;
+    width: 380px;
+    border: 2px solid;
+    border-color: #7c9;
+    border-radius: 8px;
+    padding: 0;
+}
+listview {
+    lines: 12;
+    scrollbar: false;
+    fixed-height: false;
+}
+element {
+    padding: 8px 12px;
+}
+element selected {
+    background-color: #334;
+}
+inputbar {
+    padding: 10px;
+    background-color: #222;
+}
+"
+
+# Emoji grid style
+EMOJI_STYLE="
+window {
+    location: north west;
+    anchor: north west;
+    x-offset: ${MOUSE_X}px;
+    y-offset: ${MOUSE_Y}px;
+    width: 420px;
+    border: 2px solid;
+    border-color: #f90;
+    border-radius: 8px;
+}
+listview {
+    columns: 8;
+    lines: 6;
+    spacing: 4px;
+    scrollbar: false;
+}
+element {
+    padding: 8px;
+    horizontal-align: 0.5;
+}
+element selected {
+    background-color: #334;
+}
+inputbar {
+    padding: 10px;
+}
+"
+
+# Common emojis
+DEFAULT_EMOJIS="😀 😂 🤣 😊 😍 🥰 😘 😎 🤔 🤨 😏 😒 🙄 😬 😅 😢 😭 😤 😡 🤬
+👍 👎 👏 🙌 🤝 ✌️ 🤞 🤟 🤙 👋 🖐️ ✋ 👊 ✊ 🤛 🤜 💪 🦾 🖕 🫡
+❤️ 🧡 💛 💚 💙 💜 🖤 🤍 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 🫶
+⭐ 🌟 ✨ 💫 🔥 💯 ✅ ❌ ⚠️ ❓ ❗ 💡 🎉 🎊 🏆 🥇 💀 💩
+➡️ ⬅️ ⬆️ ⬇️ ↗️ ↘️ ↙️ ↖️ ↕️ ↔️ 🔄 🔃 🔙 🔚 🔛 🔜 🔝"
+
+show_emoji_picker() {
+    local emojis
+    if [[ -s "$EMOJI_FILE" ]]; then
+        emojis=$(cat "$EMOJI_FILE"; echo; echo "$DEFAULT_EMOJIS")
+    else
+        emojis="$DEFAULT_EMOJIS"
+    fi
+
+    local selected
+    selected=$(echo "$emojis" | tr ' ' '\n' | grep -v '^$' | rofi -dmenu -p "😀" -i \
+        -theme-str "$EMOJI_STYLE")
+
+    [[ -z "$selected" ]] && return
+
+    echo -n "$selected" | xclip -selection clipboard
+    notify-send -t 600 -h string:x-canonical-private-synchronous:clipboard "$selected" "" -i edit-copy
+    sleep 0.1
+    ~/bin/clipboard-paste
+}
+
+show_history() {
+    if [[ -d "$CLIPMENU_DIR" ]]; then
+        CM_LAUNCHER=rofi clipmenu
+    else
+        notify-send "Clipboard" "No history available"
+    fi
+}
+
+pin_current() {
+    local current
+    current=$(xclip -selection clipboard -o 2>/dev/null)
+
+    if [[ -z "$current" ]]; then
+        notify-send "Clipboard" "Nothing to pin"
+        return
+    fi
+
+    if grep -Fxq "$current" "$PINNED_FILE" 2>/dev/null; then
+        notify-send "Clipboard" "Already pinned"
+        return
+    fi
+
+    local temp=$(mktemp)
+    echo "$current" > "$temp"
+    cat "$PINNED_FILE" >> "$temp" 2>/dev/null
+    mv "$temp" "$PINNED_FILE"
+    notify-send -t 1200 "📌 Pinned" "${current:0:40}..." -i edit-copy
+}
+
+unpin_item() {
+    if [[ ! -s "$PINNED_FILE" ]]; then
+        notify-send "Clipboard" "No pinned items"
+        return
+    fi
+
+    local selected
+    selected=$(cat "$PINNED_FILE" | rofi -dmenu -p "🗑️ Unpin" -i \
+        -theme-str "$ROFI_STYLE")
+
+    [[ -z "$selected" ]] && return
+
+    grep -Fxv "$selected" "$PINNED_FILE" > "$PINNED_FILE.tmp"
+    mv "$PINNED_FILE.tmp" "$PINNED_FILE"
+    notify-send -t 800 "Unpinned" "${selected:0:30}..."
+}
+
+show_main_menu() {
+    local menu=""
+
+    # Pinned items first
+    if [[ -s "$PINNED_FILE" ]]; then
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && menu+="📌 ${line:0:50}"$'\n'
+        done < "$PINNED_FILE"
+        menu+="─────────────────────"$'\n'
+    fi
+
+    # Actions
+    menu+="😀 Emoji"$'\n'
+    menu+="📋 History"$'\n'
+    menu+="📌 Pin clipboard"$'\n'
+    menu+="🗑️ Unpin..."$'\n'
+    menu+="🧹 Clear history"
+
+    local selected
+    selected=$(echo -e "$menu" | rofi -dmenu -p "📋" -i -theme-str "$ROFI_STYLE")
+
+    [[ -z "$selected" ]] && return
+
+    case "$selected" in
+        "😀 Emoji")
+            show_emoji_picker
+            ;;
+        "📋 History")
+            show_history
+            ;;
+        "📌 Pin clipboard")
+            pin_current
+            ;;
+        "🗑️ Unpin...")
+            unpin_item
+            ;;
+        "🧹 Clear history")
+            [[ -d "$CLIPMENU_DIR" ]] && rm -f "$CLIPMENU_DIR"/*
+            notify-send -t 800 "Clipboard" "Cleared"
+            ;;
+        📌\ *)
+            # Pinned item - extract and paste
+            local content="${selected#📌 }"
+            local full
+            full=$(grep -F "$content" "$PINNED_FILE" | head -1)
+            [[ -n "$full" ]] && echo -n "$full" | xclip -selection clipboard
+            sleep 0.1
+            ~/bin/clipboard-paste
+            ;;
+        ─*)
+            show_main_menu
+            ;;
+    esac
+}
+
+case "$1" in
+    --emoji|-e) show_emoji_picker ;;
+    --history|-h) show_history ;;
+    --pin|-p) pin_current ;;
+    --unpin|-u) unpin_item ;;
+    *) show_main_menu ;;
+esac

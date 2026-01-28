@@ -1,0 +1,184 @@
+#!/bin/bash
+# Windows VM management script (adapted from Omarchy for X11)
+
+COMPOSE_FILE="$HOME/.config/windows/docker-compose.yml"
+
+check_prerequisites() {
+    # Check for KVM support
+    if [ ! -e /dev/kvm ]; then
+        echo "KVM not available. Run: sudo modprobe kvm-amd (or kvm-intel)"
+        exit 1
+    fi
+
+    # Check docker
+    if ! command -v docker &> /dev/null; then
+        echo "Docker not installed. Run: sudo pacman -S docker"
+        exit 1
+    fi
+}
+
+install_windows() {
+    check_prerequisites
+
+    mkdir -p "$HOME/.windows"
+    mkdir -p "$HOME/.config/windows"
+    mkdir -p "$HOME/Windows"
+
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        echo "Creating docker-compose.yml..."
+        cat << 'EOF' > "$COMPOSE_FILE"
+services:
+  windows:
+    image: dockurr/windows
+    container_name: windows-vm
+    environment:
+      VERSION: "11"
+      RAM_SIZE: "8G"
+      CPU_CORES: "4"
+      DISK_SIZE: "64G"
+      USERNAME: "user"
+      PASSWORD: "password"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - 8006:8006
+      - 3389:3389/tcp
+      - 3389:3389/udp
+    volumes:
+      - ~/.windows:/storage
+      - ~/Windows:/shared
+    restart: always
+    stop_grace_period: 2m
+EOF
+    fi
+
+    echo "Starting Windows VM installation..."
+    echo "This will download Windows 11 (~6GB). Monitor at: http://127.0.0.1:8006"
+    echo ""
+
+    docker-compose -f "$COMPOSE_FILE" up -d
+
+    echo ""
+    echo "Opening browser to monitor installation..."
+    xdg-open "http://127.0.0.1:8006" 2>/dev/null &
+
+    echo ""
+    echo "Installation running in background."
+    echo "Once complete, run: windows-vm launch"
+}
+
+launch_windows() {
+    check_prerequisites
+
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        echo "Windows VM not installed. Run: windows-vm install"
+        exit 1
+    fi
+
+    # Extract credentials
+    WIN_USER=$(grep "USERNAME:" "$COMPOSE_FILE" | sed 's/.*USERNAME: "\(.*\)"/\1/' | tr -d '"')
+    WIN_PASS=$(grep "PASSWORD:" "$COMPOSE_FILE" | sed 's/.*PASSWORD: "\(.*\)"/\1/' | tr -d '"')
+    [ -z "$WIN_USER" ] && WIN_USER="user"
+    [ -z "$WIN_PASS" ] && WIN_PASS="password"
+
+    # Start if not running
+    CONTAINER_STATUS=$(docker inspect --format='{{.State.Status}}' windows-vm 2>/dev/null)
+    if [ "$CONTAINER_STATUS" != "running" ]; then
+        echo "Starting Windows VM..."
+        docker-compose -f "$COMPOSE_FILE" up -d
+        echo "Waiting for VM to boot (30 seconds)..."
+        sleep 30
+    fi
+
+    echo "Connecting via RDP..."
+    echo "  User: $WIN_USER"
+    echo "  Shared folder: ~/Windows (appears as network share in Windows)"
+    echo ""
+
+    # Connect with xfreerdp
+    xfreerdp3 /u:"$WIN_USER" /p:"$WIN_PASS" /v:127.0.0.1:3389 \
+        /dynamic-resolution /cert:ignore /sound /microphone \
+        +clipboard /title:"Windows VM"
+}
+
+stop_windows() {
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        echo "Windows VM not configured."
+        exit 1
+    fi
+
+    echo "Stopping Windows VM..."
+    docker-compose -f "$COMPOSE_FILE" down
+    echo "Done."
+}
+
+status_windows() {
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        echo "Windows VM not installed. Run: windows-vm install"
+        exit 0
+    fi
+
+    CONTAINER_STATUS=$(docker inspect --format='{{.State.Status}}' windows-vm 2>/dev/null)
+
+    if [ -z "$CONTAINER_STATUS" ]; then
+        echo "Windows VM: Not created"
+        echo "Run: windows-vm install"
+    elif [ "$CONTAINER_STATUS" = "running" ]; then
+        echo "Windows VM: RUNNING"
+        echo ""
+        echo "  Web console: http://127.0.0.1:8006"
+        echo "  RDP: windows-vm launch"
+        echo "  Stop: windows-vm stop"
+        echo ""
+        echo "  Shared folder: ~/Windows"
+    else
+        echo "Windows VM: $CONTAINER_STATUS"
+        echo "Run: windows-vm launch"
+    fi
+}
+
+remove_windows() {
+    echo "Stopping and removing Windows VM..."
+    docker-compose -f "$COMPOSE_FILE" down 2>/dev/null
+    docker rmi dockurr/windows 2>/dev/null
+
+    echo ""
+    read -p "Also remove VM data (~/.windows)? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        rm -rf "$HOME/.windows"
+        echo "VM data removed."
+    fi
+
+    rm -f "$COMPOSE_FILE"
+    echo "Done."
+}
+
+show_help() {
+    echo "Windows VM management"
+    echo ""
+    echo "Usage: windows-vm <command>"
+    echo ""
+    echo "Commands:"
+    echo "  install   Download and set up Windows 11 VM"
+    echo "  launch    Start VM and connect via RDP"
+    echo "  stop      Stop the running VM"
+    echo "  status    Show VM status"
+    echo "  remove    Remove VM and optionally its data"
+    echo "  help      Show this help"
+    echo ""
+    echo "Shared folder: ~/Windows (accessible from both Linux and Windows)"
+}
+
+case "${1:-help}" in
+    install) install_windows ;;
+    launch|start) launch_windows ;;
+    stop|down) stop_windows ;;
+    status) status_windows ;;
+    remove) remove_windows ;;
+    help|--help|-h) show_help ;;
+    *) echo "Unknown command: $1"; show_help; exit 1 ;;
+esac

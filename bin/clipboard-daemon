@@ -1,0 +1,16 @@
+#!/bin/bash
+# Clipboard daemon - watches for changes and shows universal feedback
+# Uses clipnotify to detect changes, shows notification on copy
+
+last_clip=""
+
+while clipnotify; do
+    # Get current clipboard content (first 50 chars for comparison)
+    current_clip=$(xclip -selection clipboard -o 2>/dev/null | head -c 50)
+
+    # Only notify if clipboard actually changed (avoid duplicates)
+    if [[ "$current_clip" != "$last_clip" && -n "$current_clip" ]]; then
+        notify-send -t 800 -h string:x-canonical-private-synchronous:clipboard "Copied" "" -i edit-copy
+        last_clip="$current_clip"
+    fi
+done

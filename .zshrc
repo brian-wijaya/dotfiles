@@ -136,6 +136,10 @@ fi
 [[ -f /usr/share/fzf/key-bindings.zsh ]] && source /usr/share/fzf/key-bindings.zsh
 [[ -f /usr/share/fzf/completion.zsh ]] && source /usr/share/fzf/completion.zsh
 
+# --- Fish-style plugins ---
+source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+
 # --- tmux: Update pane current path on directory change ---
 if [[ -n "$TMUX" ]]; then
     _update_tmux_pwd() {
@@ -152,3 +156,4 @@ fi
 if [[ $_in_ide -eq 0 ]] && [[ -z "$TMUX" ]] && [[ -z "$WEZTERM_NOTMUX" ]]; then
     tmux attach -t main 2>/dev/null || tmux new -s main -c ~
 fi
+export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"

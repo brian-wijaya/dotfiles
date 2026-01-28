@@ -1,4 +1,4 @@
-;;; bindings-doom-full.el --- bw-doom SPC keybindings + which-key labels -*- lexical-binding: t; -*-
+;; bindings-doom-full.el --- bw-doom SPC keybindings + which-key labels -*- lexical-binding: t; -*-
 ;;
 ;; All SPC leader bindings for the bw-doom profile.
 ;; Requires: evil-leader.el (keymap structure), all modules loaded.
