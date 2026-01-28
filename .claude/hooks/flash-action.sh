@@ -26,3 +26,17 @@ echo "$(date +%s.%N) $LABEL $FILE" >> ~/.claude/action-flash.log
 
 # Quick visual flash via notify-send (low urgency, short timeout)
 notify-send -u low -t 500 "$LABEL" "$FILE" 2>/dev/null || true
+
+# Detect errors
+IS_ERROR=$(echo "$DATA" | jq -r '.tool_result // "" | tostring | test("(?i)error|failed|exception|traceback")' 2>/dev/null)
+
+# Sound feedback per tool type (async)
+if [ "$IS_ERROR" = "true" ]; then
+  ~/.claude/hooks/play-sound.sh error &
+else
+  case "$TOOL" in
+    Edit|Write) ~/.claude/hooks/play-sound.sh file-write & ;;
+    Grep|Glob)  ~/.claude/hooks/play-sound.sh search-complete & ;;
+    *)          ~/.claude/hooks/play-sound.sh tool-complete & ;;
+  esac
+fi

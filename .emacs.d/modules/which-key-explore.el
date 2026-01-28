@@ -175,11 +175,16 @@ Returns the label string or nil."
       (goto-char (point-min))
       (forward-line 2) ; skip header
       (setq buffer-read-only t)
-      (bw/wke-mode 1))
-    (display-buffer-in-side-window buf
-                                   '((side . bottom)
-                                     (window-height . 0.4)))
-    (select-window (get-buffer-window buf))))
+      (bw/wke-mode 1)
+      (when (fboundp 'evil-emacs-state)
+        (evil-emacs-state)))
+    (display-buffer buf
+                    '((display-buffer-in-side-window)
+                      (side . bottom)
+                      (window-height . 0.4)))
+    (let ((win (get-buffer-window buf)))
+      (when (window-live-p win)
+        (select-window win)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Parsing current line

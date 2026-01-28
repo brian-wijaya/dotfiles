@@ -1,0 +1,411 @@
+#+TITLE: Input Emulation — Perpetual Specification
+#+AUTHOR: bw + Claude
+#+DESCRIPTION: Decision calculus for human-emulated input in bw's environment
+
+* Purpose
+
+When the agent emulates human input (e2e tests, demonstrations, automation),
+it must choose actions the way the user would — using the keybindings the user
+configured, at speeds the user would type, with navigation strategies the user
+would employ. This file encodes those decisions.
+
+* Status: Active
+* Last elicited: 2026-01-28
+
+* Environment
+
+| Component | Value |
+|-----------|-------|
+| WM | i3 |
+| Editor | Emacs 30.2, Evil mode, bw/leader-map on SPC |
+| Terminal | Ghostty |
+| Browser | Google Chrome + Vimium-C |
+| Shell | zsh inside tmux |
+| Input tools | x11_key, x11_type, x11_click (xdotool) |
+
+* Preference: Typing Speed
+:PROPERTIES:
+:STATUS: settled
+:ELICITED: 2026-01-28
+:SOURCE: e2e-test session, user correction during Story 4
+:END:
+
+** Decision
+
+50 WPM average (~240ms per character). Realistic variance.
+
+** Calculus
+
+#+begin_src
+x11_type: delay=200 (ms between characters)
+x11_key between separate keys: sleep 300-500ms
+Thinking tax between logical groups: sleep 500-1500ms
+After error/backspace: sleep 350-500ms
+After menu/popup appears: sleep 800-1200ms (reading)
+After file loads: sleep 500-800ms (orienting)
+#+end_src
+
+* Preference: Navigation Decision Hierarchy
+:PROPERTIES:
+:STATUS: settled
+:ELICITED: 2026-01-28
+:SOURCE: e2e-test session, user correction during Story 4
+:END:
+
+** Context
+
+When the agent needs to reach a target (file, buffer, position), it must
+choose the method the user is most likely "supposed" to use. The user
+configured keybindings for a reason — demonstrate them.
+
+** Decision
+
+Strict priority order. Use the first applicable method.
+
+** Calculus
+
+#+begin_src
+PRIORITY 1: DEDICATED KEYBINDING
+  If the target has a direct SPC binding, use it.
+  Example: init.el → SPC f E (edit-init)
+  Example: recent file → SPC f r or SPC o f
+  Example: switch buffer → SPC b b
+
+PRIORITY 2: RECENT/FREQUENT ACCESS
+  SPC f r (recent files) + partial name + selection
+  SPC b b (buffer switch) + partial name + selection
+  SPC b l (last buffer) for toggle-back
+
+PRIORITY 3: TAB COMPLETION
+  SPC f f (find-file) + partial path + TAB for each segment
+  Pause 300-500ms before each TAB (reading completions)
+  Never type more than one directory segment without TAB
+
+PRIORITY 4: IN-BUFFER NAVIGATION (Evil motions)
+  w, b, e — word motion
+  f, F, t, T — char find
+  /, ? — search
+  gg, G — top/bottom
+  { } — paragraph
+  NEVER: right-arrow × N or raw character counting
+
+PRIORITY 5: RAW TYPING (last resort)
+  Only for novel paths/strings with no shortcut
+  Still use TAB completion for directory segments
+#+end_src
+
+* Preference: Mouse Usage
+:PROPERTIES:
+:STATUS: settled
+:ELICITED: 2026-01-28
+:SOURCE: e2e SKILL.md, keyboard-first navigation section
+:END:
+
+** Decision
+
+Mouse is a failure mode. Keyboard-first for everything.
+Mouse click logged as MOUSE_FALLBACK degradation event in reports.
+
+* Preference: Window Management
+:PROPERTIES:
+:STATUS: settled
+:ELICITED: 2026-01-28
+:SOURCE: e2e SKILL.md, no-magic principle
+:END:
+
+** Calculus
+
+#+begin_src
+Switch workspace:     x11_key "super+N"
+Focus adjacent:       x11_key "super+Direction"
+Move window to ws N:  x11_key "super+shift+N"
+Split horizontal:     SPC w s  (or SPC w 2)
+Split vertical:       SPC w v  (or SPC w 3)
+Close window:         SPC w d  (or SPC w 0)
+Only window:          SPC w 1
+Balance:              SPC w =
+Maximize:             SPC w m
+Ace-window:           SPC w w
+#+end_src
+
+* Leader Map Reference (bw/leader-map)
+
+Complete SPC binding tree as of 2026-01-28.
+
+** SPC (root)
+| Key | Binding |
+|-----|---------|
+| SPC | M-x |
+| . | find-file |
+| , | buffer |
+| / | ripgrep |
+| : | eval |
+| ; | eval |
+| ' | repeat |
+| ` | last-buf |
+| ! | shell-cmd |
+| & | async-cmd |
+| * | symbol |
+| u | universal |
+| x | scratch |
+| ~ | explore |
+
+** SPC f (+files)
+| Key | Binding | Note |
+|-----|---------|------|
+| f | find | find-file with completion |
+| r | recent | consult-recent-file |
+| s | save | |
+| S | save-all | |
+| p | project | project file |
+| e | dired-init | open .emacs.d in dired |
+| E | edit-init | open init.el directly |
+| c | copy | |
+| D | delete | |
+| R | rename | |
+| y | yank-path | |
+
+** SPC b (+buffers)
+| Key | Binding |
+|-----|---------|
+| b | switch |
+| d | kill |
+| k | kill |
+| n | next |
+| p | prev |
+| s | save |
+| l | last |
+| N | new |
+| r | revert |
+| R | rename |
+| x | scratch |
+| z | bury |
+| e | editor |
+| i | ibuffer |
+
+** SPC o (+open)
+| Key | Binding |
+|-----|---------|
+| - | dirvish |
+| a | org-agenda |
+| A | bw-agenda |
+| b | bookmark |
+| B | set-bookmark |
+| c | calendar |
+| C | bw-calendar |
+| d | dirvish-open |
+| e | eshell |
+| f | recent |
+| g | gptel |
+| i | imenu |
+| m | mail |
+| M | man |
+| n | capture |
+| o | opencode |
+| p | processes |
+| P | palette |
+| r | recent |
+| s | shell |
+| S | cal-sync |
+| t | vterm |
+| T | neotree |
+| F | neotree-find |
+| w | eww |
+| D | docs-home |
+
+** SPC w (+windows)
+| Key | Binding |
+|-----|---------|
+| 1 | only |
+| 2 | split-h |
+| 3 | split-v |
+| 0 | delete |
+| d | delete |
+| h/j/k/l | navigate |
+| H/J/K/L | move |
+| + | taller |
+| - | shorter |
+| < | narrower |
+| > | wider |
+| = | balance |
+| m | maximize |
+| o | other |
+| r | redo |
+| s | split-h |
+| u | undo |
+| v | split-v |
+| w | ace |
+| x | swap |
+| V | vsnake |
+
+** SPC t (+toggle)
+| Key | Binding |
+|-----|---------|
+| b | scrollbar |
+| c | fill-col |
+| f | flymake |
+| F | fullscreen |
+| h | hl-line |
+| i | imenu-list |
+| I | indent |
+| l | line-nums |
+| r | read-only |
+| s | spell |
+| t | theme |
+| v | visible |
+| w | word-wrap |
+| z | zen |
+
+** SPC c (+code)
+| Key | Binding |
+|-----|---------|
+| a | eglot-code-actions |
+| d | xref-find-definitions |
+| D | xref-find-references |
+| f | eglot-format |
+| r | eglot-rename |
+| y | duplicate-line |
+| w | delete-trailing-whitespace |
+| x | flymake-diagnostics |
+| p | doc-panel |
+| P | doc-panel-pin |
+| k | quick-doc |
+| h | call-hierarchy |
+| H | type-hierarchy |
+| o | symbols-outline |
+| t | treesit-explore |
+| T | treesit-inspect |
+| m | deepwiki-view |
+| M | deepwiki-ask |
+| W | deepwiki-browse |
+
+** SPC s (+search)
+| Key | Binding |
+|-----|---------|
+| b | all-buffers |
+| d | directory |
+| f | find-file |
+| g | grep |
+| i | imenu |
+| I | imenu-all |
+| l | line |
+| m | bookmark |
+| o | outline |
+| p | ripgrep |
+| r | register |
+| s | line |
+| S | symbol |
+
+** SPC g (+git)
+| Key | Binding |
+|-----|---------|
+| g | status |
+| b | blame |
+| l | log |
+| c | commit |
+| C | clone |
+| d | diff |
+| f | fetch |
+| F | pull |
+| i | init |
+| p | push |
+| r | rebase |
+| s | stage |
+| S | stash |
+| t | tag |
+
+** SPC h (+help)
+| Key | Binding |
+|-----|---------|
+| f | function |
+| v | variable |
+| k | key |
+| m | mode |
+| b | bindings |
+| i | info |
+| d | devdocs |
+| a | apropos |
+| c | char |
+| e | messages |
+| F | face |
+| l | lossage |
+| M | man |
+| o | symbol |
+| p | library |
+| P | package |
+| t | tutorial |
+| w | where-is |
+| x | command |
+
+** SPC i (+insert)
+| Key | Binding |
+|-----|---------|
+| t | TODO |
+| S | SHOULD-BE |
+| d | timestamp |
+| e | emoji |
+| f | file |
+| r | register |
+| s | snippet |
+| u | unicode |
+| y | kill-ring |
+
+** SPC n (+notes)
+| Key | Binding |
+|-----|---------|
+| a | agenda |
+| c | capture |
+
+** SPC p (+project)
+| Key | Binding |
+|-----|---------|
+| ! | shell-cmd |
+| & | async-cmd |
+| b | buffer |
+| c | compile |
+| d | dired |
+| e | eshell |
+| f | find-file |
+| F | find-dir |
+| g | grep |
+| k | kill-bufs |
+| p | switch |
+| r | replace |
+| s | ripgrep |
+| x | run-cmd |
+
+** SPC q (+quit)
+| Key | Binding |
+|-----|---------|
+| f | del-frame |
+| K | save-kill |
+| q | save-quit |
+| Q | quit-now |
+| r | restart |
+| R | bw-restart |
+
+* Common Task Dispatch Table
+
+Quick lookup: given a task during e2e, what keystrokes to use.
+
+| Task | Keys | Notes |
+|------|------|-------|
+| Open init.el | SPC f E | Direct binding |
+| Open .emacs.d in dired | SPC f e | Direct binding |
+| Open recent file | SPC f r | Then type partial name |
+| Switch to buffer | SPC b b | Then type partial name |
+| Toggle back to last buffer | SPC b l | Or SPC ` |
+| Open any file | SPC f f | Then TAB-complete path |
+| Open dirvish | SPC o - | File manager |
+| Toggle imenu-list | SPC t i | Sidebar toggle |
+| Toggle doc-panel | SPC c p | Documentation panel |
+| Show symbols-outline | SPC c o | Code outline |
+| Toggle vsnake | SPC w V | Reading mode |
+| Save current buffer | SPC f s | Or SPC b s |
+| Kill current buffer | SPC b d | Or SPC b k |
+| Single window | SPC w 1 | Close all splits |
+| Split right | SPC w v | Vertical split |
+| Git status | SPC g g | Magit |
+| Ripgrep project | SPC / | Or SPC s p |
+| M-x | SPC SPC | Command palette |
+| Escape/cancel | Escape | Return to normal state |
