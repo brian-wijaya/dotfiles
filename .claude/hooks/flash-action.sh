@@ -30,13 +30,28 @@ notify-send -u low -t 500 "$LABEL" "$FILE" 2>/dev/null || true
 # Detect errors
 IS_ERROR=$(echo "$DATA" | jq -r '.tool_result // "" | tostring | test("(?i)error|failed|exception|traceback")' 2>/dev/null)
 
-# Sound feedback per tool type (async)
+# Detect git commit in Bash commands
+CMD=$(echo "$DATA" | jq -r '.tool_input.command // ""')
+IS_COMMIT=$(echo "$CMD" | grep -qE 'git commit' && echo true || echo false)
+IS_BUILD=$(echo "$CMD" | grep -qE 'make|cargo build|npm run build|go build|gcc|ninja' && echo true || echo false)
+
+# Sound feedback (async)
 if [ "$IS_ERROR" = "true" ]; then
-  ~/.claude/hooks/play-sound.sh error &
+  if [ "$IS_BUILD" = "true" ]; then
+    ~/.claude/hooks/play-sound.sh build-fail &
+  else
+    ~/.claude/hooks/play-sound.sh error &
+  fi
+elif [ "$IS_COMMIT" = "true" ]; then
+  ~/.claude/hooks/play-sound.sh commit &
+elif [ "$IS_BUILD" = "true" ]; then
+  ~/.claude/hooks/play-sound.sh build-success &
 else
   case "$TOOL" in
     Edit|Write) ~/.claude/hooks/play-sound.sh file-write & ;;
     Grep|Glob)  ~/.claude/hooks/play-sound.sh search-complete & ;;
+    mcp__somatic-hud__post_message|mcp__somatic-hud__flash_text)
+                ~/.claude/hooks/play-sound.sh hud-post & ;;
     *)          ~/.claude/hooks/play-sound.sh tool-complete & ;;
   esac
 fi
