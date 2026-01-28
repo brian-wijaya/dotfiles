@@ -26,9 +26,13 @@ Parse the story file header. For each entry in `vocabularies:`, load the corresp
 
 Show story count, names, and precondition summary. Ask user to confirm before running.
 
-### 4. RUN STORIES
+### 4. RUN STORIES (persistence loop)
 
-For each story, execute:
+Run all stories. After each full pass, check results. If any stories are FAIL (not BLOCKED), loop back and re-run only the failing stories. Continue until either all stories are PASS/BLOCKED or a retry produces no improvement (same failures twice in a row). Each retry is a new attempt — reset state, re-baseline, re-execute from scratch.
+
+Track attempt count per story. Reports include all attempts, not just the final one.
+
+Per story per attempt:
 
 ```
 ANNOUNCE
@@ -49,6 +53,7 @@ EXECUTE
   For each step:
     somatic-temporal now → step_start_ns
     Execute via appropriate tool (x11_key, x11_type, x11_click, wait)
+    x11_screenshot after EVERY step that changes visual state
     somatic-temporal delta(step_start_ns) → step_duration
 
 VERIFY
@@ -168,3 +173,24 @@ Precondition failure → story marked **BLOCKED** with reason, not FAIL.
 - Failed stories log expected vs actual for every failed expectation
 - BLOCKED stories are not failures — they indicate missing infrastructure
 - Never skip the DISPLAY PLAN step — user must approve before execution
+
+## Visual Capture Discipline
+
+The goal is a complete visual record of every UI state transition. Screenshots are the primary artifact — the report is built from them.
+
+- **Screenshot after every step that changes visual state.** Not just baseline and result — capture each intermediate state. A keystroke that opens a menu, a wait that lets content load, a click that navigates — each gets a screenshot.
+- **Catch transients.** If a UI element flashes briefly (loading indicator, notification, animation), attempt to capture it. If missed, re-run the story with tighter screenshot timing around that step. Missing a transient is not a failure — it's a reason to retry.
+- **Note peripheral observations.** While executing a story, if something unrelated looks wrong — a broken modeline, a missing icon, a window that shouldn't be there, a font rendering issue — log it in the report under a "Peripheral Observations" section for that story. This is not distraction. Tunnel vision misses real problems. A tester with broad awareness catches issues that unit tests never will.
+- **Retry for visual fidelity.** If a screenshot is ambiguous (content still loading, cursor obscuring text, window mid-resize), re-run that step to get a clean capture. The report should be readable by someone who wasn't present.
+
+## Persistence Loop
+
+The runner does not stop at first failure. After completing all stories:
+
+1. Collect FAIL stories (not BLOCKED)
+2. If any FAIL, re-run only those stories from scratch
+3. If a retry flips a FAIL to PASS, record both attempts in the report
+4. If a retry produces the same failures with the same actual values, stop — the failure is genuine
+5. Maximum 3 attempts per story before declaring it a hard failure
+
+This emulates a human tester who retries flaky steps before filing a bug. Genuine failures surface clearly because they reproduce consistently.
