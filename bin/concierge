@@ -1,0 +1,34 @@
+#!/bin/bash
+# Concierge daemon manager — pauses agents when user is active
+PIDFILE="$HOME/.claude/orchestrator/concierge.pid"
+DAEMON="$HOME/.claude/orchestrator/concierge-daemon.py"
+LOGFILE="$HOME/.claude/orchestrator/concierge.log"
+
+case "${1:-start}" in
+  start)
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "Concierge already running (pid $(cat "$PIDFILE"))"
+      exit 0
+    fi
+    python3 "$DAEMON" >> "$LOGFILE" 2>&1 &
+    echo $! > "$PIDFILE"
+    echo "Concierge started (pid $!)"
+    ;;
+  stop)
+    if [ -f "$PIDFILE" ]; then
+      kill "$(cat "$PIDFILE")" 2>/dev/null
+      rm -f "$PIDFILE"
+      echo "Concierge stopped"
+    else
+      echo "Concierge not running"
+    fi
+    ;;
+  status)
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "Concierge running (pid $(cat "$PIDFILE"))"
+    else
+      echo "Concierge not running"
+    fi
+    ;;
+  *) echo "Usage: concierge {start|stop|status}" ;;
+esac

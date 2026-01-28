@@ -1,0 +1,81 @@
+feature: sonification
+description: Sound feedback and lifecycle daemon integration tests
+
+stories:
+  - name: play-sound-session-start
+    description: play-sound.sh plays session-start without error
+    steps:
+      - action: bash
+        command: ~/.claude/hooks/play-sound.sh session-start
+    expect:
+      - type: bash_exit_code
+        command: ~/.claude/hooks/play-sound.sh session-start
+        value: 0
+
+  - name: play-sound-error
+    description: play-sound.sh plays error sound without error
+    steps:
+      - action: bash
+        command: ~/.claude/hooks/play-sound.sh error
+    expect:
+      - type: bash_exit_code
+        command: ~/.claude/hooks/play-sound.sh error
+        value: 0
+
+  - name: e2e-sound-pass
+    description: e2e-sound.sh plays pass without error
+    steps:
+      - action: bash
+        command: ~/.claude/hooks/e2e-sound.sh pass
+    expect:
+      - type: bash_exit_code
+        command: ~/.claude/hooks/e2e-sound.sh pass
+        value: 0
+
+  - name: lifecycle-sound-unlock
+    description: lifecycle-sound.sh plays unlock without error
+    steps:
+      - action: bash
+        command: ~/.claude/hooks/lifecycle-sound.sh unlock
+    expect:
+      - type: bash_exit_code
+        command: ~/.claude/hooks/lifecycle-sound.sh unlock
+        value: 0
+
+  - name: orchestrator-pause-session
+    description: Orchestrator pause_session changes state to paused
+    preconditions:
+      - type: bash_exit_code
+        command: "python3 -c \"import socket; s=socket.socket(socket.AF_UNIX); s.connect('$HOME/.claude/orchestrator/daemon.sock'); s.close()\""
+        value: 0
+    steps:
+      - action: bash
+        command: |
+          echo '{"method":"register_session","params":{"session_id":"test-sonification","capabilities":["bash"]}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+      - action: bash
+        command: |
+          echo '{"method":"claim_task","params":{"session_id":"test-sonification"}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock || true
+      - action: bash
+        command: |
+          echo '{"method":"pause_session","params":{"session_id":"test-sonification"}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+    expect:
+      - type: bash_output_contains
+        command: |
+          echo '{"method":"get_status","params":{}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+        value: "paused"
+
+  - name: orchestrator-resume-session
+    description: Orchestrator resume_session changes state to working
+    preconditions:
+      - type: bash_exit_code
+        command: "python3 -c \"import socket; s=socket.socket(socket.AF_UNIX); s.connect('$HOME/.claude/orchestrator/daemon.sock'); s.close()\""
+        value: 0
+    steps:
+      - action: bash
+        command: |
+          echo '{"method":"resume_session","params":{"session_id":"test-sonification"}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+    expect:
+      - type: bash_output_contains
+        command: |
+          echo '{"method":"get_status","params":{}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+        value: "working"

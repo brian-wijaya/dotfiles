@@ -1,0 +1,34 @@
+#!/bin/bash
+# Unlock detector manager — resumes agents on screen unlock
+PIDFILE="$HOME/.claude/orchestrator/unlock-detector.pid"
+DAEMON="$HOME/.claude/orchestrator/unlock-detector.py"
+LOGFILE="$HOME/.claude/orchestrator/unlock-detector.log"
+
+case "${1:-start}" in
+  start)
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "Unlock detector already running (pid $(cat "$PIDFILE"))"
+      exit 0
+    fi
+    python3 "$DAEMON" >> "$LOGFILE" 2>&1 &
+    echo $! > "$PIDFILE"
+    echo "Unlock detector started (pid $!)"
+    ;;
+  stop)
+    if [ -f "$PIDFILE" ]; then
+      kill "$(cat "$PIDFILE")" 2>/dev/null
+      rm -f "$PIDFILE"
+      echo "Unlock detector stopped"
+    else
+      echo "Unlock detector not running"
+    fi
+    ;;
+  status)
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "Unlock detector running (pid $(cat "$PIDFILE"))"
+    else
+      echo "Unlock detector not running"
+    fi
+    ;;
+  *) echo "Usage: unlock-detector {start|stop|status}" ;;
+esac

@@ -111,6 +111,61 @@ DOCUMENT SETUP
 
 **Safety**: Never close windows with unsaved work. For Emacs, use `x11_key "space b s"` (save buffer) or similar before closing. State queries like `emacsclient -e '(buffer-modified-p)'` can check for unsaved changes.
 
+### 3.6. CONCIERGE PROTOCOL
+
+The agent is a concierge — it serves in shared space, never owns it. The user is always the guest with priority. This protocol governs cohabitation of the desktop during test runs.
+
+**Core principle**: The user can use their machine normally on other workspaces, and may interact with the test workspace at any time. The agent adapts; the user never waits.
+
+```
+SHARED SPACE RULES:
+
+1. NEVER ASSUME EXCLUSIVE ACCESS
+   - The user may move, resize, or focus any window at any time
+   - The user may switch to the test workspace and interact with the test subject
+   - The user may be using their own Emacs instance on another workspace
+   - Query window geometry (somatic-geometry, i3_windows) before every action
+     that depends on window position
+
+2. ADAPT TO ENVIRONMENTAL CHANGES
+   - Before each story: re-query target window ID and geometry
+   - If target window moved/resized: adjust coordinates silently, continue
+   - If target window was closed: mark story BLOCKED, log reason, continue
+   - If target window lost focus mid-story: pause, re-focus via keyboard, resume
+   - If an unknown window appeared on test workspace: work around it
+
+3. NEVER KILL PROCESSES
+   - If a process conflict arises (e.g., two Emacs instances), do NOT pkill
+   - Instead: pause execution, notify the user via somatic-hud post_message
+     AND output a message in the conversation (the user may be on another workspace)
+   - Wait for user response — do not block the conversation while waiting
+   - The user decides what to do with their processes
+
+4. USER INPUT PRIORITY
+   - If somatic-input-capture detects physical keyboard input (source_id
+     matches a physical device, not xdotool's virtual device), pause for 2s
+   - This means the user is actively typing somewhere — don't compete
+   - Resume automatically after 2s of physical input silence
+   - Log pauses in the report: "Paused {duration}s: user input detected"
+
+5. GRACEFUL DEGRADATION
+   - If the test workspace becomes unusable (user rearranged everything),
+     pause and ask: "Your test workspace has changed. Want me to continue
+     with the new layout, reset, or stop?"
+   - Never silently fail — always surface the issue
+
+6. PROCESS SAFETY ESCALATION
+   When a process conflict requires user attention:
+     a. Flash warning via somatic-hud (red, 300ms)
+     b. Output message in conversation: describe the conflict, what you need
+     c. Continue processing other non-conflicting stories if possible
+     d. Return to blocked stories after user responds
+   The user should never feel interrupted — the agent works around problems
+   and asks for help asynchronously.
+```
+
+**Input source differentiation**: XI2 source tagging (via `source_id` in KeyEvent) distinguishes physical keyboard input (user) from virtual input (xdotool/agent). Physical device IDs are typically low numbers (3-12); xdotool creates virtual devices with higher IDs. The agent can detect user activity by filtering for physical source IDs in the somatic-input-capture stream.
+
 ## Human Emulation Presentation
 
 E2E tests are not just functional verification — they are **demonstrations** of human-like interaction, presented as if to an audience viewing through the primary monitor. The tester acts as a **digital choreographer**, demonstrating input sequences in real time that the user can learn from and replicate.
@@ -187,13 +242,96 @@ Either way, the purpose is:
 2. The user can follow along and learn
 3. The tester might demonstrate more efficient approaches the user hasn't tried
 
+### Cognitive Realism Model
+
+**Source of truth**: `~/vault/perpetual/input-emulation.org` — the perpetual specification for all input emulation decisions, including the full leader map reference and common task dispatch table. Consult it before every e2e run.
+
+The tester emulates a **proficient but unhurried human** — someone who knows their tools well, uses efficient keybindings, but thinks between actions. No rain man behavior. The observer should feel they're watching a skilled colleague work, not a script execute.
+
+#### Typing Speed
+
+**Target: 50 WPM average** (~240ms per character), with realistic variance:
+
+```
+BASE_DELAY = 240ms per character
+VARIANCE:
+  Common words/paths:     200-280ms (muscle memory)
+  Uncommon strings:       280-400ms (reading/thinking)
+  After errors/backspace: 350-500ms (recovery pause)
+  Between logical groups: 500-1500ms (thinking tax)
+
+x11_type delay parameter: 200 (ms between chars)
+x11_key between separate keys: 300-500ms (sleep between calls)
+```
+
+**Thinking tax**: Pause 500-1500ms between logically distinct operations. Examples:
+- After opening a menu, before selecting an item
+- After a file loads, before navigating within it
+- After reading minibuffer output, before next command
+- Between unrelated key sequences
+
+#### Navigation Decision Model
+
+When the tester needs to reach a target (file, buffer, position), choose the method **the user is most likely supposed to use**, given their configuration:
+
+```
+DECISION HIERARCHY (highest priority first):
+
+1. DEDICATED KEYBINDING
+   If the target has a direct binding (e.g., SPC f i for init.el,
+   SPC b b for buffer list), USE IT.
+   Query: emacs_elisp to check for bindings before typing paths.
+   The user configured these bindings for a reason — demonstrate them.
+
+2. RECENT/FREQUENT ACCESS
+   If the target is a recently visited file/buffer:
+     SPC b b (buffer switch) + partial name + TAB/RET
+     SPC f r (recent files) + partial name
+   Humans revisit files, not re-navigate from scratch.
+
+3. TAB COMPLETION
+   If typing a path, use TAB aggressively:
+     ~/.em TAB → ~/.emacs.d/
+     init TAB → init.el
+   Never type a full path when TAB would complete it.
+   Pause 300-500ms before each TAB (reading the completion).
+
+4. RELATIVE NAVIGATION
+   If already near the target:
+     In Emacs: w, b, e for word motion; gg, G for top/bottom
+     In file manager: h, l, j, k for directory traversal
+   Never type absolute paths when relative motion is shorter.
+
+5. RAW TYPING (last resort)
+   Only for truly novel paths or strings with no shortcut.
+   Even then, use TAB completion for directory segments.
+```
+
+**Anti-patterns (FORBIDDEN):**
+- Typing `/home/bw/.emacs.d/init.el` when `SPC f i` or `SPC f r` + "init" works
+- Typing full filenames when TAB completion is available
+- Moving cursor 13 characters right instead of using `w` twice
+- Any navigation that requires knowing exact character counts
+
+#### Audio Feedback
+
+During e2e execution, all keystrokes produce audio feedback:
+- **Regular keys**: Short tap sound (material-design ui_tap variants, rotated)
+- **Modifier keys** (Shift, Ctrl, Super, Alt): Distinct modifier sound
+- **Return/Enter**: Confirm sound
+- **Escape**: Cancel/dismiss sound
+- **Backspace**: Error-correction sound
+
+Audio is provided by the keystroke sound daemon (somatic-input-capture based).
+If the daemon is not running, note in the report that keystroke audio was unavailable.
+
 ### Principles
 
 1. **Workspace Visibility**: The test workspace must remain active and visible throughout testing. Use human keybindings (e.g., `super+1`) to switch workspaces, never direct commands.
 
-2. **Human-Paced Input**: Never input faster than a human could reasonably type or click.
-   - Keystrokes: ~100-150ms between keys (not instant)
-   - Key sequences: pause briefly between logical groups
+2. **Human-Paced Input**: Follow the Cognitive Realism Model above.
+   - 50 WPM average (~240ms per character)
+   - Thinking tax between logical groups (500-1500ms)
    - After significant actions: wait for visual feedback before continuing
    - This allows an observer to follow along and mentally trace each input
 
@@ -238,13 +376,28 @@ BETWEEN STORIES:
   Brief pause (500ms-1s) to let observer register completion
 ```
 
+### 3.5. CONCIERGE EXEMPTION
+
+Before running stories, exempt this session from concierge pausing:
+```
+IF orchestrator is running (daemon.sock exists):
+  Call set_session_state(session_id, "e2e_running") via orchestrator socket
+  This prevents the concierge daemon from pausing this session during e2e
+```
+
+After all stories complete (in GENERATE REPORT), restore state:
+```
+IF session was set to e2e_running:
+  Call set_session_state(session_id, "working") via orchestrator socket
+```
+
 ### 4. RUN STORIES
 
 For each story, execute:
 
 ```
 ANNOUNCE
-  somatic-hud flash_text(story.name, x=50, y=50, color="#FFFF00", duration_ms=200)
+  somatic-hud post_message(story.name, x=50, y=50, color="#FFFF00", duration_ms=200)
 
 BASELINE
   somatic-temporal now → start_ns
@@ -279,6 +432,11 @@ RESULT
   PASS: all expects passed → flash green
   FAIL: any expect failed → flash red, log expected vs actual
   BLOCKED: precondition unmet → flash yellow
+
+SOUND FEEDBACK
+  On PASS:    Bash "~/.claude/hooks/e2e-sound.sh pass"
+  On FAIL:    Bash "~/.claude/hooks/e2e-sound.sh fail"
+  On BLOCKED: Bash "~/.claude/hooks/e2e-sound.sh blocked"
 ```
 
 ### 5. RETRY LOOP (Orchestrator Integration)
@@ -292,6 +450,7 @@ IF any story FAILED:
 
   Track failure hashes for stagnation detection
   IF 3 identical failures → mark STAGNATED, stop retrying
+    Bash "~/.claude/hooks/e2e-sound.sh stagnated"
 ```
 
 ### 6. GENERATE REPORT
@@ -328,13 +487,39 @@ Duration: {total}s
 
 ### 7. PERSIST TO VAULT
 
+E2E results are structured knowledge that accumulates across runs. Each run produces facts that enable regression detection, flakiness tracking, and feature health monitoring.
+
 ```
 vault-rag save_session(
   summary: "E2E: {feature} — {pass}/{total} passed, {fail} failed, {blocked} blocked",
   topics: ["e2e-test", "{feature}"],
-  key_facts: ["story:{name}:{PASS|FAIL|BLOCKED}:{reason}" for each story]
+  key_facts: [
+    // Per-story results with duration and failure detail
+    "e2e:{feature}:{story-name}:PASS:{duration_s}s",
+    "e2e:{feature}:{story-name}:FAIL:{duration_s}s:{expected}!={actual}",
+    "e2e:{feature}:{story-name}:BLOCKED:{reason}",
+
+    // Run-level metadata
+    "e2e-run:{feature}:{date}:{pass}/{total}",
+    "e2e-run:{feature}:retries:{retry_count}",
+    "e2e-run:{feature}:stagnated:{story-name}" (if any),
+
+    // Concierge protocol events
+    "e2e-concierge:pause:{duration_s}s:user-input" (if user input caused pause),
+    "e2e-concierge:mouse-fallback:{story-name}:{reason}" (if keyboard nav failed),
+    "e2e-concierge:window-moved:{story-name}" (if target geometry changed mid-run),
+
+    // Regression detection: compare against previous run facts
+    // If vault-rag search_sessions(query="e2e:{feature}") returns prior results,
+    // emit regression/fix facts:
+    "e2e-regression:{feature}:{story-name}:was-PASS-now-FAIL",
+    "e2e-fix:{feature}:{story-name}:was-FAIL-now-PASS",
+    "e2e-flaky:{feature}:{story-name}:inconsistent-across-{N}-runs"
+  ]
 )
 ```
+
+**Regression detection procedure**: Before persisting, search vault for the most recent prior e2e run of the same feature. Compare per-story results. Any story that changed status (PASS→FAIL, FAIL→PASS, new BLOCKED) emits a regression/fix/flaky fact. This creates a queryable history: "which stories regressed this week?" becomes a vault-rag search.
 
 ## Rules
 

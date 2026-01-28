@@ -48,6 +48,8 @@ class SessionState(Enum):
     BLOCKED = "blocked"
     STAGNATED = "stagnated"
     CRASHED = "crashed"
+    PAUSED = "paused"
+    E2E_RUNNING = "e2e_running"
 
 class TaskState(Enum):
     PENDING = "pending"
@@ -416,8 +418,8 @@ class Orchestrator:
         if not session:
             return {"error": "session not found"}
 
-        if session.state == SessionState.WORKING:
-            return {"error": "session already working on a task"}
+        if session.state in (SessionState.WORKING, SessionState.PAUSED, SessionState.E2E_RUNNING):
+            return {"error": f"session cannot claim tasks in state {session.state.value}"}
 
         pending = self.db.get_pending_tasks()
         for task in pending:
@@ -590,6 +592,71 @@ class Orchestrator:
 
         return {"decision": "allow", "reason": "no pending work"}
 
+    # ------------------------------------------------------------------
+    # Concierge / lifecycle methods
+    # ------------------------------------------------------------------
+
+    def pause_session(self, session_id: str) -> dict:
+        """Pause a WORKING session (preserves current_task_id)."""
+        session = self.db.get_session(session_id)
+        if not session:
+            return {"error": "session not found"}
+        if session.state != SessionState.WORKING:
+            return {"error": f"cannot pause session in state {session.state.value}"}
+        session.state = SessionState.PAUSED
+        self.db.upsert_session(session)
+        self.logger.info(f"Session {session_id} paused")
+        return {"session_id": session_id, "state": "paused"}
+
+    def resume_session(self, session_id: str) -> dict:
+        """Resume a PAUSED session back to WORKING."""
+        session = self.db.get_session(session_id)
+        if not session:
+            return {"error": "session not found"}
+        if session.state != SessionState.PAUSED:
+            return {"error": f"cannot resume session in state {session.state.value}"}
+        session.state = SessionState.WORKING
+        self.db.upsert_session(session)
+        self.logger.info(f"Session {session_id} resumed")
+        return {"session_id": session_id, "state": "working"}
+
+    def pause_all_sessions(self) -> dict:
+        """Pause all WORKING sessions (e.g., on screen lock)."""
+        sessions = self.db.get_all_sessions()
+        paused = 0
+        for s in sessions:
+            if s.state == SessionState.WORKING:
+                s.state = SessionState.PAUSED
+                self.db.upsert_session(s)
+                paused += 1
+        self.logger.info(f"Paused {paused} sessions")
+        return {"paused": paused}
+
+    def resume_all_sessions(self) -> dict:
+        """Resume all PAUSED sessions (e.g., on screen unlock)."""
+        sessions = self.db.get_all_sessions()
+        resumed = 0
+        for s in sessions:
+            if s.state == SessionState.PAUSED:
+                s.state = SessionState.WORKING
+                self.db.upsert_session(s)
+                resumed += 1
+        self.logger.info(f"Resumed {resumed} sessions")
+        return {"resumed": resumed}
+
+    def set_session_state(self, session_id: str, state: str) -> dict:
+        """Manually set session state (for e2e exemption, etc.)."""
+        session = self.db.get_session(session_id)
+        if not session:
+            return {"error": "session not found"}
+        try:
+            session.state = SessionState(state)
+        except ValueError:
+            return {"error": f"invalid state: {state}"}
+        self.db.upsert_session(session)
+        self.logger.info(f"Session {session_id} state set to {state}")
+        return {"session_id": session_id, "state": state}
+
 # ============================================================================
 # Server
 # ============================================================================
@@ -657,6 +724,11 @@ class Server:
             "get_task": lambda p: self.orchestrator.get_task_status(p["task_id"]),
             "get_status": lambda _: self.orchestrator.get_status(),
             "should_continue": lambda p: self.orchestrator.should_session_continue(p["session_id"]),
+            "pause_session": lambda p: self.orchestrator.pause_session(p["session_id"]),
+            "resume_session": lambda p: self.orchestrator.resume_session(p["session_id"]),
+            "pause_all_sessions": lambda _: self.orchestrator.pause_all_sessions(),
+            "resume_all_sessions": lambda _: self.orchestrator.resume_all_sessions(),
+            "set_session_state": lambda p: self.orchestrator.set_session_state(p["session_id"], p["state"]),
         }
 
         if method not in methods:
