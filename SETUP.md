@@ -138,7 +138,7 @@ claude
 
 Claude will start with `~/.claude.json` loaded, giving it access to the sudo MCP server.
 
-### 9. Tell Claude: **"Run /system-setup"**
+### 9. Tell Claude: **"Set up the rest from SETUP.md"**
 
 Claude takes over from here. It will install all packages, deploy all configs, build all MCP servers, and verify the setup.
 
@@ -146,7 +146,7 @@ Claude takes over from here. It will install all packages, deploy all configs, b
 
 ## Part 2: LLM Steps (Claude does the rest)
 
-Everything below is automated by the `/system-setup` skill. The sequencing matters — each phase unlocks the next. Claude already has sudo access via the sudo MCP deployed in Part 1.
+Everything below should be executed by Claude. The sequencing matters — each phase unlocks the next. Claude already has sudo access via the sudo MCP deployed in Part 1.
 
 ### Phase 1: System Packages
 

@@ -22,6 +22,8 @@ Arch Linux / X11 / i3 development environment with vanilla Emacs, Neovim, and To
 
 ## Quick Start
 
+**Full setup guide**: See [SETUP.md](SETUP.md) for complete fresh-system instructions.
+
 ```bash
 git clone https://github.com/brian-wijaya/dotfiles.git ~/dotfiles
 git-crypt unlock  # Requires authorized GPG key
@@ -34,6 +36,15 @@ cp ~/dotfiles/.zshrc ~/
 ```
 
 This repo is version control for configs, not an installer. Copy what you need.
+
+## Backup
+
+Use `/backup-dotfile` in Claude Code to sync live configs back to this repo:
+1. Reads `MANIFEST` for tracked paths
+2. Copies changed files from `~/` to `~/dotfiles/`
+3. Commits and pushes
+
+The `MANIFEST` file lists all tracked paths. Edit it to add/remove tracked configs.
 
 ## Structure
 
@@ -109,15 +120,50 @@ If you clone this repo without unlocking, encrypted files will be binary. The co
 
 ## Emacs
 
-**Vanilla Emacs** (no Doom/Spacemacs). Config at `~/.emacs.d/init.el`.
+Modular vanilla Emacs with profile system. Config at `~/.emacs.d/`.
 
-Features:
+### Structure
+
+```
+.emacs.d/
+├── init.el           — loader (~50 lines, selects profile)
+├── custom.el         — custom-set-variables/faces
+├── modules/          — feature modules (40+ files)
+│   ├── pkg-setup.el      — package management
+│   ├── evil-core.el      — vim emulation
+│   ├── completion.el     — vertico/corfu/marginalia
+│   ├── bindings-doom-full.el  — SPC leader bindings
+│   └── ...
+├── profiles/         — profile definitions
+│   ├── bw-doom.el        — daily driver (doom theme, evil, SPC leader)
+│   ├── bw-vanilla.el     — light theme, C-c bindings
+│   ├── default-doom.el   — minimal doom-style
+│   └── default-vanilla.el — stock Emacs
+└── secrets.el        — API keys (git-crypt encrypted)
+```
+
+### Profiles
+
+Set `bw/active-profile` in init.el to switch:
+
+| Profile | Theme | Leader | Menu Bar |
+|---------|-------|--------|----------|
+| `bw-doom` | doom-one | SPC | Yes |
+| `bw-vanilla` | moe-light | C-c | No |
+| `default-doom` | doom-one | SPC | No |
+| `default-vanilla` | stock | C-x | Yes |
+
+### Features
+
 - gptel (Claude/OpenAI LLM client)
 - eglot (built-in LSP)
 - vertico/corfu/marginalia (completion)
 - tree-sitter (syntax highlighting)
 - devdocs (offline documentation)
 - magit (git)
+- evil (vim emulation)
+- dirvish (file manager)
+- which-key (key hints)
 
 ### Daemon (systemd)
 
