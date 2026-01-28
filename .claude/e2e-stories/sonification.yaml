@@ -51,17 +51,17 @@ stories:
     steps:
       - action: bash
         command: |
-          echo '{"method":"register_session","params":{"session_id":"test-sonification","capabilities":["bash"]}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+          echo '{"method":"register_session","params":{"session_id":"test-sonification","capabilities":["bash"]}}' | socat - UNIX-CONNECT:/home/bw/.claude/orchestrator/daemon.sock
       - action: bash
         command: |
-          echo '{"method":"claim_task","params":{"session_id":"test-sonification"}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock || true
+          echo '{"method":"set_session_state","params":{"session_id":"test-sonification","state":"working"}}' | socat - UNIX-CONNECT:/home/bw/.claude/orchestrator/daemon.sock
       - action: bash
         command: |
-          echo '{"method":"pause_session","params":{"session_id":"test-sonification"}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+          echo '{"method":"pause_session","params":{"session_id":"test-sonification"}}' | socat - UNIX-CONNECT:/home/bw/.claude/orchestrator/daemon.sock
     expect:
       - type: bash_output_contains
         command: |
-          echo '{"method":"get_status","params":{}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+          echo '{"method":"get_status","params":{}}' | socat - UNIX-CONNECT:/home/bw/.claude/orchestrator/daemon.sock
         value: "paused"
 
   - name: orchestrator-resume-session
@@ -73,9 +73,9 @@ stories:
     steps:
       - action: bash
         command: |
-          echo '{"method":"resume_session","params":{"session_id":"test-sonification"}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+          echo '{"method":"resume_session","params":{"session_id":"test-sonification"}}' | socat - UNIX-CONNECT:/home/bw/.claude/orchestrator/daemon.sock
     expect:
       - type: bash_output_contains
         command: |
-          echo '{"method":"get_status","params":{}}' | socat - UNIX:~/.claude/orchestrator/daemon.sock
+          echo '{"method":"get_status","params":{}}' | socat - UNIX-CONNECT:/home/bw/.claude/orchestrator/daemon.sock
         value: "working"

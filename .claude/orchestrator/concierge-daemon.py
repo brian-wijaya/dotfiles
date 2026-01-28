@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Concierge daemon — pauses agent sessions when user is active at the keyboard/mouse.
 
-Polls somatic-fusion for typing/pointer activity. When user becomes active,
-pauses all WORKING orchestrator sessions. When user goes idle (2s debounce),
+Polls xprintidle for X11 idle time. When user becomes active (idle < threshold),
+pauses all WORKING orchestrator sessions. When user goes idle (idle >= threshold),
 resumes them.
 
-Sessions in E2E_RUNNING state are exempt from pausing.
+Sessions in E2E_RUNNING state are exempt (they aren't WORKING, so pause_all skips them).
 """
 
 import json
@@ -17,26 +17,22 @@ import time
 
 ORCHESTRATOR_SOCK = os.path.expanduser("~/.claude/orchestrator/daemon.sock")
 POLL_INTERVAL = 0.5  # seconds
-IDLE_DEBOUNCE = 2.0  # seconds of inactivity before resuming
+IDLE_THRESHOLD_MS = 2000  # 2s of X11 idle before resuming agents
 SOUND_SCRIPT = os.path.expanduser("~/.claude/hooks/lifecycle-sound.sh")
 
-# State
 STATE_IDLE = "idle"
 STATE_ACTIVE = "active"
 
 
-def get_snapshot() -> dict:
-    """Get somatic fusion snapshot via MCP stdio JSON-RPC."""
+def get_x11_idle_ms() -> int:
+    """Get X11 idle time in milliseconds via xprintidle."""
     try:
-        proc = subprocess.run(
-            ["somatic-fusion"],
-            input=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "get_snapshot", "params": {}}),
-            capture_output=True, text=True, timeout=2
+        result = subprocess.run(
+            ["xprintidle"], capture_output=True, text=True, timeout=2
         )
-        resp = json.loads(proc.stdout)
-        return resp.get("result", {})
+        return int(result.stdout.strip())
     except Exception:
-        return {}
+        return 999999  # Assume idle on error
 
 
 def orchestrator_call(method: str, params: dict = None) -> dict:
@@ -66,40 +62,27 @@ def play_sound(event: str):
 
 def main():
     state = STATE_IDLE
-    last_active_time = 0.0
-    idle_count = 0  # consecutive idle readings for debounce
 
-    print(f"Concierge daemon started (poll={POLL_INTERVAL}s, debounce={IDLE_DEBOUNCE}s)")
+    print(f"Concierge daemon started (poll={POLL_INTERVAL}s, idle_threshold={IDLE_THRESHOLD_MS}ms)", flush=True)
 
     while True:
         try:
-            snapshot = get_snapshot()
-            typing = snapshot.get("typing_active", False)
-            pointer_idle = snapshot.get("pointer_idle", True)
-            user_active = typing or not pointer_idle
+            idle_ms = get_x11_idle_ms()
+            user_active = idle_ms < IDLE_THRESHOLD_MS
 
-            if user_active:
-                last_active_time = time.time()
-                idle_count = 0
+            if user_active and state == STATE_IDLE:
+                state = STATE_ACTIVE
+                result = orchestrator_call("pause_all_sessions")
+                paused = result.get("paused", 0)
+                print(f"[concierge] User active (idle {idle_ms}ms) — paused {paused} sessions")
+                play_sound("concierge-pause")
 
-                if state == STATE_IDLE:
-                    # Transition: IDLE → ACTIVE
-                    state = STATE_ACTIVE
-                    result = orchestrator_call("pause_all_sessions")
-                    paused = result.get("paused", 0)
-                    print(f"User active — paused {paused} sessions")
-                    play_sound("concierge-pause")
-            else:
-                idle_count += 1
-                idle_duration = time.time() - last_active_time
-
-                if state == STATE_ACTIVE and idle_duration >= IDLE_DEBOUNCE:
-                    # Transition: ACTIVE → IDLE (debounced)
-                    state = STATE_IDLE
-                    result = orchestrator_call("resume_all_sessions")
-                    resumed = result.get("resumed", 0)
-                    print(f"User idle ({idle_duration:.1f}s) — resumed {resumed} sessions")
-                    play_sound("concierge-resume")
+            elif not user_active and state == STATE_ACTIVE:
+                state = STATE_IDLE
+                result = orchestrator_call("resume_all_sessions")
+                resumed = result.get("resumed", 0)
+                print(f"[concierge] User idle ({idle_ms}ms) — resumed {resumed} sessions")
+                play_sound("concierge-resume")
 
             time.sleep(POLL_INTERVAL)
 
