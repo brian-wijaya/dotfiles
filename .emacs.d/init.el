@@ -33,6 +33,11 @@
 ;; Global guards (all profiles)
 (load (expand-file-name "modules/memory-protection" user-emacs-directory))
 
+;; Somatic sensor integration (requires somatic-dbus running)
+(require 'somatic nil t)
+(when (featurep 'somatic)
+  (somatic-mode 1))
+
 ;; Load profile
 (let ((profile-file (expand-file-name
                      (format "profiles/%s.el" bw/active-profile)

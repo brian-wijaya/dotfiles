@@ -65,16 +65,16 @@ filesystem:
   privileged_command → sudo (MCP)
 
 somatic:
-  timestamp → somatic-temporal now/delta
-  transient_alert → somatic-hud flash_text
-  pre_irreversible → somatic-safety check_permission
-  user_state → somatic-fusion get_snapshot
-  typing_rhythm → somatic-input-timing get_timing
-  pointer_state → somatic-pointer get_dynamics
-  x11_events → somatic-x11-bus get_events
-  clipboard_meta → somatic-clipboard get_latest
-  window_geometry → somatic-geometry get_layout
-  keystrokes → somatic-input-capture get_keystrokes
+  timestamp → somatic now/delta
+  transient_alert → somatic post_message
+  pre_irreversible → somatic check_permission
+  user_state → somatic get_snapshot
+  typing_rhythm → somatic get_timing
+  pointer_state → somatic get_dynamics
+  x11_events → somatic get_events
+  clipboard_meta → somatic get_latest
+  window_geometry → somatic get_layout
+  keystrokes → somatic get_keystrokes
 
 knowledge:
   search_vault → vault-rag search_hybrid
@@ -82,7 +82,7 @@ knowledge:
   get_document → vault-rag get_document
 
 cross_context:
-  pre_irreversible → somatic-safety check_permission, then somatic-hud flash_text (red)
+  pre_irreversible → somatic check_permission, then somatic flash_text (red)
   post_visual_change → get_anomalies + get_events(count=20), then i3_windows, then x11_screenshot
   compound_sequence → BASELINE(get_snapshot + get_events) → SETUP → ACT → VERIFY(get_anomalies + get_events + screenshot, diff against baseline)
 </tool_dispatch>

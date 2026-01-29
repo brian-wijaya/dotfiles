@@ -23,5 +23,12 @@ try:
         message
     ], check=False)
 
+    # Sound feedback
+    import os
+    subprocess.Popen([
+        os.path.expanduser('~/.claude/hooks/play-sound.sh'),
+        'notification'
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 except Exception as e:
     print(f"Notification hook error: {e}", file=sys.stderr)
