@@ -1,0 +1,40 @@
+# Dotfiles MANIFEST Tracking E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: manifest-exists
+    description: MANIFEST file exists and is readable
+    steps:
+      - bash: "test -f ~/dotfiles/MANIFEST && echo 'exists'"
+    verify:
+      - Equals: "exists"
+
+  - name: manifest-has-entries
+    description: MANIFEST contains tracked paths
+    steps:
+      - bash: "grep -c '^/' ~/dotfiles/MANIFEST"
+    verify:
+      - Greater: 10
+
+  - name: tracked-files-exist
+    description: Tracked files exist in dotfiles repo
+    steps:
+      - bash: "test -f ~/dotfiles/.zshrc && echo 'zshrc-exists'"
+      - bash: "test -f ~/dotfiles/.gitconfig && echo 'gitconfig-exists'"
+    verify:
+      - Contains: "exists"
+
+  - name: dotfiles-git-clean
+    description: Dotfiles repo has no uncommitted changes after backup
+    steps:
+      - bash: "cd ~/dotfiles && git status --short | wc -l"
+    verify:
+      - Equals: "0"
+
+  - name: dotfiles-has-remote
+    description: Dotfiles repo is connected to remote
+    steps:
+      - bash: "cd ~/dotfiles && git remote -v | grep origin"
+    verify:
+      - Contains: "github.com"

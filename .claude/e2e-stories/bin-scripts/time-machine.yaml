@@ -1,0 +1,46 @@
+# Time Machine File Protection E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: snapshot-timer-active
+    description: Snapshot timer is enabled and running
+    steps:
+      - service_active: time-machine-snapshot.timer
+    verify:
+      - Equals: "active"
+
+  - name: archive-timer-scheduled
+    description: Archive timer is scheduled for daily run
+    steps:
+      - systemd_timer_next: time-machine-archive.timer
+    verify:
+      - Contains: "03:00"
+
+  - name: snapshot-creates-version
+    description: Snapshots capture file versions
+    steps:
+      - bash: "echo 'test v1' > /tmp/tm-test.txt"
+      - bash: "sleep 65"  # Wait for next snapshot
+      - bash: "echo 'test v2' > /tmp/tm-test-new.txt && mv /tmp/tm-test-new.txt /tmp/tm-test.txt"
+      - bash: "time-machine list /tmp/tm-test.txt | grep -c 'snapshot'"
+    verify:
+      - Greater: 0
+
+  - name: restore-recovers-file
+    description: Restore command recovers previous version
+    steps:
+      - bash: "echo 'original' > /tmp/tm-restore.txt"
+      - bash: "sleep 65"
+      - bash: "echo 'modified' > /tmp/tm-restore-new.txt && mv /tmp/tm-restore-new.txt /tmp/tm-restore.txt"
+      - bash: "time-machine restore /tmp/tm-restore.txt --id $(time-machine list /tmp/tm-restore.txt | awk 'NR==4 {print $4}') -y"
+      - bash: "cat /tmp/tm-restore.txt"
+    verify:
+      - Contains: "original"
+
+  - name: stats-show-storage
+    description: Stats command shows storage usage
+    steps:
+      - bash: "time-machine stats | grep 'Total size'"
+    verify:
+      - Contains: "GB"

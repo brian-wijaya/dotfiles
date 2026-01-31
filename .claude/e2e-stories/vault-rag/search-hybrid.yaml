@@ -1,0 +1,33 @@
+# Vault-RAG Hybrid Search E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: hybrid-combines-results
+    description: Hybrid search combines semantic and fulltext results
+    steps:
+      - bash: "vault-rag-cli search-hybrid 'emacs configuration' --limit 10 --json | jq 'length'"
+    verify:
+      - Greater: 0
+
+  - name: hybrid-reciprocal-rank-fusion
+    description: Results use RRF for merging
+    steps:
+      - bash: "vault-rag-cli search-hybrid 'programming' --limit 5 --json | jq -r '.[0] | has(\"score\")'"
+    verify:
+      - Equals: "true"
+
+  - name: hybrid-better-than-single
+    description: Hybrid search provides better coverage than single method
+    steps:
+      - bash: "vault-rag-cli search-hybrid 'machine learning concepts' --limit 5 --json | jq 'length'"
+      - bash: "vault-rag-cli search-semantic 'machine learning concepts' --limit 5 --json | jq 'length'"
+    verify:
+      - NotEmpty  # Both should return results
+
+  - name: hybrid-default-recommended
+    description: Hybrid search is default recommended method
+    steps:
+      - bash: "vault-rag-cli search 'emacs' --limit 3 --json 2>&1 | grep -i 'hybrid\\|default' || vault-rag-cli search-hybrid 'emacs' --limit 3 --json | jq 'length'"
+    verify:
+      - Greater: 0

@@ -1,0 +1,44 @@
+# Somatic Pointer Dynamics Server E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: pointer-position-tracking
+    description: Mouse pointer position is tracked accurately
+    steps:
+      - bash: "xdotool mousemove 500 300"
+      - bash: "sleep 0.2"
+      - somatic_pointer_position
+    verify:
+      - Contains: "500"
+      - Contains: "300"
+
+  - name: pointer-movement-detection
+    description: Pointer movement is detected
+    steps:
+      - bash: "xdotool mousemove 100 100"
+      - bash: "sleep 0.2"
+      - bash: "xdotool mousemove 200 200"
+      - bash: "sleep 0.2"
+      - bash: "somatic-cli pointer --history 5 --json | jq 'length'"
+    verify:
+      - Greater: 1
+
+  - name: pointer-velocity-calculation
+    description: Pointer velocity is calculated
+    steps:
+      - bash: "xdotool mousemove 0 0"
+      - bash: "sleep 0.1"
+      - bash: "xdotool mousemove 1000 1000"
+      - bash: "sleep 0.2"
+      - bash: "somatic-cli pointer --dynamics --json | jq -r '.velocity'"
+    verify:
+      - Greater: 0
+
+  - name: pointer-idle-detection
+    description: Pointer idle state is detected
+    steps:
+      - bash: "sleep 2"
+      - bash: "somatic-cli pointer --idle --json | jq -r '.idle_ms'"
+    verify:
+      - Greater: 1000

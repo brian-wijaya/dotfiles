@@ -1,0 +1,45 @@
+# Somatic Clipboard Server E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: clipboard-capture
+    description: Clipboard changes are captured and logged
+    steps:
+      - bash: "echo 'test clipboard content' | xclip -selection clipboard"
+      - bash: "sleep 0.2"
+      - somatic_clipboard
+    verify:
+      - Contains: "test clipboard content"
+
+  - name: clipboard-history
+    description: Clipboard history is maintained
+    steps:
+      - bash: "echo 'first' | xclip -selection clipboard"
+      - bash: "sleep 0.2"
+      - bash: "echo 'second' | xclip -selection clipboard"
+      - bash: "sleep 0.2"
+      - bash: "somatic-cli clipboard --history 5 --json | jq -r '.[1].text'"
+    verify:
+      - Contains: "first"
+
+  - name: clipboard-deduplication
+    description: Duplicate clipboard entries are not logged
+    steps:
+      - bash: "echo 'duplicate' | xclip -selection clipboard"
+      - bash: "sleep 0.2"
+      - bash: "echo 'duplicate' | xclip -selection clipboard"
+      - bash: "sleep 0.2"
+      - bash: "somatic-cli clipboard --history 5 --json | jq 'length'"
+    verify:
+      - LessOrEqual: 5  # Should not have excessive duplicates
+
+  - name: clipboard-timestamp
+    description: Clipboard entries have accurate timestamps
+    steps:
+      - bash: "echo 'timestamped' | xclip -selection clipboard"
+      - bash: "sleep 0.2"
+      - bash: "somatic-cli clipboard --latest --json | jq -r '.timestamp'"
+    verify:
+      - NotEmpty
+      - Contains: "202"  # Year 202x

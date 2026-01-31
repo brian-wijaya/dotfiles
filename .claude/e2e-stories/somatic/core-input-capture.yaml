@@ -1,0 +1,53 @@
+# Somatic Input Capture Server E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: input-capture-running
+    description: Input capture server is active and capturing events
+    steps:
+      - service_active: somatic-input-capture
+      - somatic_event_recent
+    verify:
+      - Contains: "KeyPress|KeyRelease|ButtonPress"
+
+  - name: keystroke-logging
+    description: Keystrokes are logged with timestamps
+    steps:
+      - bash: "echo 'test' | xdotool type --clearmodifiers -"
+      - bash: "sleep 0.5"
+      - somatic_keystroke_count
+    verify:
+      - Greater: 3  # At least 't', 'e', 's', 't'
+
+  - name: keystroke-translation
+    description: Keystrokes are translated to UTF-8
+    steps:
+      - bash: "tail -1 ~/.claude/keylog.jsonl | jq -r '.key'"
+    verify:
+      - NotEmpty
+
+  - name: input-rate-detection
+    description: Input rate is calculated correctly
+    steps:
+      - bash: "xdotool type --delay 100 'rapid'"
+      - bash: "sleep 0.5"
+      - somatic_timing_get_history
+    verify:
+      - Contains: "rate"
+
+  - name: typing-detection
+    description: System detects when user is typing
+    steps:
+      - bash: "xdotool type 'typing test'"
+      - somatic_typing
+    verify:
+      - Equals: "true"
+
+  - name: idle-detection
+    description: System detects idle state correctly
+    steps:
+      - bash: "sleep 2"
+      - somatic_idle_time
+    verify:
+      - Greater: 1000  # > 1 second
