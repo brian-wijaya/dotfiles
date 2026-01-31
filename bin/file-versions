@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Browse and restore file versions.
+
+Usage:
+    file-versions list <path>      - Show all versions of a file
+    file-versions restore <path> <version>  - Restore specific version
+    file-versions browse           - Interactive browser (TUI)
+    file-versions stats            - Show storage statistics
+"""
+
+import sqlite3
+import sys
+from datetime import datetime
+from pathlib import Path
+import shutil
+
+VERSION_DIR = Path.home() / ".local/share/file-versions"
+CONTENT_DIR = VERSION_DIR / "content"
+METADATA_DB = VERSION_DIR / "metadata.db"
+
+
+def list_versions(file_path: str):
+    """List all versions of a file."""
+    conn = sqlite3.connect(str(METADATA_DB))
+    versions = conn.execute("""
+        SELECT id, timestamp, file_size, operation, content_hash
+        FROM versions
+        WHERE file_path = ?
+        ORDER BY timestamp DESC
+    """, (file_path,)).fetchall()
+
+    if not versions:
+        print(f"No versions found for: {file_path}")
+        return
+
+    print(f"\nVersions of: {file_path}\n")
+    print(f"{'ID':<6} {'Timestamp':<20} {'Size':<10} {'Operation':<10} {'Hash':<16}")
+    print("=" * 70)
+
+    for vid, timestamp, size, operation, hash_val in versions:
+        dt = datetime.fromisoformat(timestamp)
+        size_str = f"{size:,}" if size else "N/A"
+        hash_short = hash_val[:12]
+        print(f"{vid:<6} {dt.strftime('%Y-%m-%d %H:%M:%S'):<20} {size_str:<10} {operation:<10} {hash_short:<16}")
+
+    print(f"\nTo restore: file-versions restore {file_path} <ID>")
+
+
+def restore_version(file_path: str, version_id: int, output_path: str = None):
+    """Restore a specific version of a file."""
+    conn = sqlite3.connect(str(METADATA_DB))
+    version = conn.execute("""
+        SELECT content_hash, timestamp
+        FROM versions
+        WHERE id = ? AND file_path = ?
+    """, (version_id, file_path)).fetchone()
+
+    if not version:
+        print(f"Error: Version {version_id} not found for {file_path}")
+        sys.exit(1)
+
+    content_hash, timestamp = version
+    content_file = CONTENT_DIR / content_hash
+
+    if not content_file.exists():
+        print(f"Error: Content file missing (hash: {content_hash})")
+        sys.exit(1)
+
+    # Determine output path
+    if output_path is None:
+        output_path = file_path
+
+    output_path = Path(output_path)
+
+    # Backup current file if it exists
+    if output_path.exists():
+        backup_path = output_path.with_suffix(output_path.suffix + '.bak')
+        shutil.copy2(output_path, backup_path)
+        print(f"Backed up current file to: {backup_path}")
+
+    # Restore version
+    shutil.copy2(content_file, output_path)
+    dt = datetime.fromisoformat(timestamp)
+    print(f"✓ Restored version from {dt.strftime('%Y-%m-%d %H:%M:%S')} to: {output_path}")
+
+
+def show_stats():
+    """Show storage statistics."""
+    conn = sqlite3.connect(str(METADATA_DB))
+
+    total_versions = conn.execute("SELECT COUNT(*) FROM versions").fetchone()[0]
+    total_files = conn.execute("SELECT COUNT(DISTINCT file_path) FROM versions").fetchone()[0]
+    total_size = conn.execute("SELECT SUM(file_size) FROM versions").fetchone()[0] or 0
+
+    # Count content files
+    content_files = list(CONTENT_DIR.glob("*"))
+    content_size = sum(f.stat().st_size for f in content_files if f.is_file())
+
+    # Recent activity
+    recent = conn.execute("""
+        SELECT COUNT(*) FROM versions
+        WHERE timestamp > datetime('now', '-7 days')
+    """).fetchone()[0]
+
+    print("\n" + "=" * 50)
+    print("File Version Storage Statistics")
+    print("=" * 50)
+    print(f"Total versions stored:     {total_versions:,}")
+    print(f"Unique files tracked:      {total_files:,}")
+    print(f"Total tracked size:        {total_size / (1024**3):.2f} GB")
+    print(f"Deduplicated storage:      {content_size / (1024**3):.2f} GB")
+    print(f"Dedup ratio:               {total_size / max(content_size, 1):.1f}x")
+    print(f"Versions (last 7 days):    {recent:,}")
+    print(f"Storage location:          {VERSION_DIR}")
+    print("=" * 50 + "\n")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(1)
+
+    command = sys.argv[1]
+
+    if command == "list":
+        if len(sys.argv) < 3:
+            print("Usage: file-versions list <path>")
+            sys.exit(1)
+        list_versions(sys.argv[2])
+
+    elif command == "restore":
+        if len(sys.argv) < 4:
+            print("Usage: file-versions restore <path> <version_id> [output_path]")
+            sys.exit(1)
+        output = sys.argv[4] if len(sys.argv) > 4 else None
+        restore_version(sys.argv[2], int(sys.argv[3]), output)
+
+    elif command == "stats":
+        show_stats()
+
+    elif command == "browse":
+        print("Interactive browser not yet implemented - use 'list' and 'restore' commands")
+        sys.exit(1)
+
+    else:
+        print(f"Unknown command: {command}")
+        print(__doc__)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

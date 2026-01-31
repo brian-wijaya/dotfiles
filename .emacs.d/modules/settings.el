@@ -4,6 +4,11 @@
 (setq ring-bell-function 'ignore)
 (setq use-short-answers t)
 
+;; Disable confirmation prompts
+(setq confirm-kill-emacs nil)
+(setq confirm-kill-processes nil)
+(setq confirm-nonexistent-file-or-buffer nil)
+
 (setq select-enable-clipboard t)
 (setq select-enable-primary nil)
 (electric-pair-mode 1)

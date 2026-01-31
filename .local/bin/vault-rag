@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""Vault-RAG resource control - Manual indexing mode management.
+
+Commands:
+    vault-rag index    - Force aggressive indexing mode NOW (manual override)
+    vault-rag auto     - Return to automatic mode (6-hour idle threshold)
+    vault-rag status   - Show current mode and state
+"""
+
+import subprocess
+import sys
+from pathlib import Path
+
+
+LOCK_FILE = Path.home() / ".claude/orchestrator/vault-rag-manual-mode.lock"
+DROP_IN_DIR = Path.home() / ".config/systemd/user/vault-rag-watcher.service.d"
+DROP_IN_FILE = DROP_IN_DIR / "runtime.conf"
+
+
+def apply_aggressive_limits():
+    """Apply aggressive vault-rag limits for manual indexing."""
+    DROP_IN_DIR.mkdir(parents=True, exist_ok=True)
+    DROP_IN_FILE.write_text("""[Service]
+Environment=VAULT_RAG_MAX_MEMORY_MB=32768
+Environment=VAULT_RAG_MAX_DB_GB=500
+Environment=VAULT_RAG_MAX_CHUNKS=11700000
+Environment=VAULT_RAG_MAX_DOCS=1170000
+MemoryMax=40G
+MemoryHigh=32G
+CPUQuota=100%
+IOWeight=500
+""")
+
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+    subprocess.run(["systemctl", "--user", "restart", "vault-rag-watcher"], check=False)
+
+    print("✓ Applied AGGRESSIVE indexing limits (32GB RAM, 100% CPU)")
+
+
+def apply_conservative_limits():
+    """Apply conservative vault-rag limits for normal operation."""
+    DROP_IN_DIR.mkdir(parents=True, exist_ok=True)
+    DROP_IN_FILE.write_text("""[Service]
+Environment=VAULT_RAG_MAX_MEMORY_MB=8192
+Environment=VAULT_RAG_MAX_DB_GB=100
+Environment=VAULT_RAG_MAX_CHUNKS=2340000
+Environment=VAULT_RAG_MAX_DOCS=234000
+MemoryMax=12G
+MemoryHigh=8G
+CPUQuota=50%
+IOWeight=100
+""")
+
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+    subprocess.run(["systemctl", "--user", "restart", "vault-rag-watcher"], check=False)
+
+    print("✓ Applied CONSERVATIVE limits (8GB RAM, 50% CPU)")
+
+
+def cmd_index():
+    """Force aggressive indexing mode NOW."""
+    print("Switching to aggressive indexing mode...")
+    apply_aggressive_limits()
+
+    # Create lockfile to tell concierge "manual mode - don't auto-trigger aggressive"
+    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LOCK_FILE.write_text("manual\n")
+
+    print("✓ Manual indexing mode active")
+    print("  - Aggressive limits applied")
+    print("  - Concierge will restore conservative mode when you return")
+    print("  - Run 'vault-rag auto' to return to automatic 6-hour idle mode")
+
+    try:
+        subprocess.run(
+            ["notify-send", "Vault-RAG: Manual Indexing",
+             "Aggressive mode active - full system resources"],
+            timeout=2, check=False
+        )
+    except Exception:
+        pass
+
+
+def cmd_auto():
+    """Return to automatic mode (6-hour idle threshold)."""
+    print("Returning to automatic mode...")
+
+    if LOCK_FILE.exists():
+        LOCK_FILE.unlink()
+        print("✓ Removed manual override")
+
+    apply_conservative_limits()
+
+    print("✓ Automatic mode restored")
+    print("  - Conservative limits active")
+    print("  - Concierge will auto-switch after 6 hours idle")
+
+    try:
+        subprocess.run(
+            ["notify-send", "Vault-RAG: Automatic Mode",
+             "Conservative limits restored - auto-switching enabled"],
+            timeout=2, check=False
+        )
+    except Exception:
+        pass
+
+
+def cmd_status():
+    """Show current mode and state."""
+    manual_mode = LOCK_FILE.exists()
+
+    # Check current systemd limits
+    result = subprocess.run(
+        ["systemctl", "--user", "show", "vault-rag-watcher", "-p", "EffectiveMemoryMax"],
+        capture_output=True, text=True, check=False
+    )
+
+    memory_max = "unknown"
+    if result.returncode == 0:
+        for line in result.stdout.split("\n"):
+            if line.startswith("EffectiveMemoryMax="):
+                bytes_val = line.split("=")[1]
+                if bytes_val.isdigit():
+                    gb_val = int(bytes_val) / (1024**3)
+                    memory_max = f"{gb_val:.0f}GB"
+
+    mode = "MANUAL" if manual_mode else "AUTO"
+    limits = "AGGRESSIVE (32GB)" if memory_max == "40GB" else "CONSERVATIVE (8GB)"
+
+    print(f"Mode: {mode}")
+    print(f"Current limits: {limits}")
+    print(f"Memory max: {memory_max}")
+
+    if manual_mode:
+        print("\n→ Manual override active - concierge won't auto-trigger aggressive mode")
+        print("  Run 'vault-rag auto' to restore automatic 6-hour idle switching")
+    else:
+        print("\n→ Automatic mode - concierge will switch to aggressive after 6h idle")
+        print("  Run 'vault-rag index' to force aggressive mode now")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        print("\nUsage: vault-rag {index|auto|status}")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+
+    if cmd == "index":
+        cmd_index()
+    elif cmd == "auto":
+        cmd_auto()
+    elif cmd == "status":
+        cmd_status()
+    else:
+        print(f"Unknown command: {cmd}")
+        print("\nUsage: vault-rag {index|auto|status}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -24,6 +24,7 @@
 (define-prefix-command 'bw/leader-q-map) ; quit
 (define-prefix-command 'bw/leader-s-map) ; search
 (define-prefix-command 'bw/leader-t-map) ; toggle
+(define-prefix-command 'bw/leader-v-map) ; vault
 (define-prefix-command 'bw/leader-w-map) ; windows
 
 ;; Bind sub-keymaps to leader
@@ -40,6 +41,7 @@
 (define-key bw/leader-map (kbd "q") 'bw/leader-q-map)
 (define-key bw/leader-map (kbd "s") 'bw/leader-s-map)
 (define-key bw/leader-map (kbd "t") 'bw/leader-t-map)
+(define-key bw/leader-map (kbd "v") 'bw/leader-v-map)
 (define-key bw/leader-map (kbd "w") 'bw/leader-w-map)
 
 ;; Nested prefixes

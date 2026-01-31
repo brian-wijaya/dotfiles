@@ -27,9 +27,7 @@
   "Disable auto-revert for database files to prevent constant revert messages."
   (when (and buffer-file-name
              (string-match-p "\\.\\(db\\|sqlite3?\\)$" buffer-file-name))
-    (auto-revert-mode -1)
-    (when (yes-or-no-p (format "Kill database buffer %s? " (buffer-name)))
-      (kill-buffer))))
+    (auto-revert-mode -1)))
 
 (add-hook 'find-file-hook #'bw/maybe-disable-auto-revert)
 

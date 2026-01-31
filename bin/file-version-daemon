@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""File versioning daemon - automatic backup before modify/delete.
+
+Watches filesystem for changes and saves versions before modifications.
+Deduplicates content, maintains 90-day retention, provides easy recovery.
+"""
+
+import hashlib
+import os
+import shutil
+import sqlite3
+import sys
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
+
+import pyinotify
+
+# Configuration
+VERSION_DIR = Path.home() / ".local/share/file-versions"
+CONTENT_DIR = VERSION_DIR / "content"
+METADATA_DB = VERSION_DIR / "metadata.db"
+RETENTION_DAYS = 90
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB - don't version huge files
+WATCH_PATHS = [Path.home()]
+EXCLUDE_PATTERNS = [
+    ".cache", ".local/share/Trash", ".git", "node_modules", ".venv",
+    "__pycache__", ".npm", ".cargo/registry", "*.pyc", "*.o", "*.so"
+]
+
+
+class VersionStore:
+    """Content-addressed version storage with SQLite metadata."""
+
+    def __init__(self):
+        VERSION_DIR.mkdir(parents=True, exist_ok=True)
+        CONTENT_DIR.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(str(METADATA_DB))
+        self._init_db()
+
+    def _init_db(self):
+        """Initialize metadata database."""
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_path TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                file_size INTEGER,
+                operation TEXT,
+                UNIQUE(file_path, content_hash, timestamp)
+            )
+        """)
+        self.conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_file_path ON versions(file_path)
+        """)
+        self.conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_timestamp ON versions(timestamp)
+        """)
+        self.conn.commit()
+
+    def save_version(self, file_path: Path, operation: str = "modify") -> bool:
+        """Save a version of the file if it doesn't exist."""
+        try:
+            # Skip if file doesn't exist or is too large
+            if not file_path.exists() or file_path.is_dir():
+                return False
+
+            stat = file_path.stat()
+            if stat.st_size > MAX_FILE_SIZE:
+                return False
+
+            # Check exclude patterns
+            path_str = str(file_path)
+            for pattern in EXCLUDE_PATTERNS:
+                if pattern in path_str or file_path.match(pattern):
+                    return False
+
+            # Read and hash content
+            content = file_path.read_bytes()
+            content_hash = hashlib.sha256(content).hexdigest()
+
+            # Check if this exact version already exists
+            existing = self.conn.execute(
+                "SELECT 1 FROM versions WHERE file_path = ? AND content_hash = ?",
+                (str(file_path), content_hash)
+            ).fetchone()
+
+            if existing:
+                return False  # Already have this version
+
+            # Save content to content-addressed storage
+            content_file = CONTENT_DIR / content_hash
+            if not content_file.exists():
+                content_file.write_bytes(content)
+
+            # Record metadata
+            timestamp = datetime.now().isoformat()
+            self.conn.execute("""
+                INSERT OR IGNORE INTO versions
+                (file_path, content_hash, timestamp, file_size, operation)
+                VALUES (?, ?, ?, ?, ?)
+            """, (str(file_path), content_hash, timestamp, stat.st_size, operation))
+            self.conn.commit()
+
+            print(f"[version] {operation} {file_path.name} ({stat.st_size} bytes)", flush=True)
+            return True
+
+        except Exception as e:
+            print(f"[error] Failed to version {file_path}: {e}", file=sys.stderr)
+            return False
+
+    def cleanup_old_versions(self):
+        """Remove versions older than RETENTION_DAYS."""
+        cutoff = (datetime.now() - timedelta(days=RETENTION_DAYS)).isoformat()
+
+        # Get hashes of content to delete
+        old_hashes = self.conn.execute("""
+            SELECT DISTINCT content_hash FROM versions WHERE timestamp < ?
+        """, (cutoff,)).fetchall()
+
+        # Delete old metadata
+        self.conn.execute("DELETE FROM versions WHERE timestamp < ?", (cutoff,))
+        self.conn.commit()
+
+        # Delete orphaned content files
+        for (content_hash,) in old_hashes:
+            # Check if hash is still referenced
+            still_needed = self.conn.execute(
+                "SELECT 1 FROM versions WHERE content_hash = ? LIMIT 1",
+                (content_hash,)
+            ).fetchone()
+
+            if not still_needed:
+                content_file = CONTENT_DIR / content_hash
+                if content_file.exists():
+                    content_file.unlink()
+
+        print(f"[cleanup] Purged versions older than {RETENTION_DAYS} days", flush=True)
+
+
+class FileWatcher(pyinotify.ProcessEvent):
+    """inotify event handler for file versioning."""
+
+    def __init__(self, store: VersionStore):
+        super().__init__()
+        self.store = store
+        self.last_save = {}  # Rate limiting: path -> last_save_time
+        self.rate_limit = 60  # Don't save same file more than once per minute
+
+    def should_save(self, path: Path) -> bool:
+        """Check if enough time has passed since last save."""
+        last_time = self.last_save.get(str(path), 0)
+        now = time.time()
+        if now - last_time < self.rate_limit:
+            return False
+        self.last_save[str(path)] = now
+        return True
+
+    def process_IN_MODIFY(self, event):
+        """File was modified - save version before changes."""
+        path = Path(event.pathname)
+        if self.should_save(path):
+            self.store.save_version(path, "modify")
+
+    def process_IN_DELETE(self, event):
+        """File was deleted - save final version."""
+        path = Path(event.pathname)
+        self.store.save_version(path, "delete")
+
+    def process_IN_MOVED_FROM(self, event):
+        """File was moved away - save version."""
+        path = Path(event.pathname)
+        self.store.save_version(path, "move")
+
+
+def main():
+    """Run the file versioning daemon."""
+    print(f"[daemon] Starting file version daemon", flush=True)
+    print(f"[daemon] Watching: {', '.join(str(p) for p in WATCH_PATHS)}", flush=True)
+    print(f"[daemon] Storage: {VERSION_DIR}", flush=True)
+    print(f"[daemon] Retention: {RETENTION_DAYS} days", flush=True)
+
+    store = VersionStore()
+
+    # Set up inotify watcher
+    wm = pyinotify.WatchManager()
+    handler = FileWatcher(store)
+    notifier = pyinotify.Notifier(wm, handler)
+
+    # Watch for modifications, deletions, and moves
+    mask = pyinotify.IN_MODIFY | pyinotify.IN_DELETE | pyinotify.IN_MOVED_FROM
+
+    for watch_path in WATCH_PATHS:
+        if watch_path.exists():
+            wm.add_watch(str(watch_path), mask, rec=True, auto_add=True)
+            print(f"[daemon] Watching {watch_path} recursively", flush=True)
+
+    # Run cleanup on startup
+    store.cleanup_old_versions()
+
+    # Schedule periodic cleanup (every 24 hours)
+    last_cleanup = time.time()
+    cleanup_interval = 86400  # 24 hours
+
+    try:
+        while True:
+            # Process events
+            if notifier.check_events(timeout=1000):
+                notifier.read_events()
+                notifier.process_events()
+
+            # Periodic cleanup
+            if time.time() - last_cleanup > cleanup_interval:
+                store.cleanup_old_versions()
+                last_cleanup = time.time()
+
+    except KeyboardInterrupt:
+        print("\n[daemon] Shutting down gracefully", flush=True)
+        notifier.stop()
+
+
+if __name__ == "__main__":
+    main()

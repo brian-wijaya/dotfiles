@@ -8,8 +8,26 @@ Type=simple
 ExecStart=/home/bw/vault/programs/vault-rag/.venv/bin/python /home/bw/vault/programs/vault-rag/scripts/watcher.py
 WorkingDirectory=/home/bw/vault/programs/vault-rag
 Environment=VAULT_ROOT=/home/bw/vault
+# Conservative base limits (user active)
+# These are overridden by concierge daemon drop-ins when user idle 6h+
+Environment=VAULT_RAG_MAX_MEMORY_MB=8192
+Environment=VAULT_RAG_MAX_DB_GB=100
+Environment=VAULT_RAG_MAX_CHUNKS=2340000
+Environment=VAULT_RAG_MAX_DOCS=234000
 Restart=on-failure
 RestartSec=10
+
+# Resource limits (systemd enforcement - conservative base)
+# Concierge daemon applies aggressive limits via drop-in when idle 6h+
+# Conservative: 8GB RAM allows embedding 100+ files in parallel
+# App respects 8192MB (8G) limit
+# Systemd soft-warns at 8G (MemoryHigh)
+# Systemd hard-kills at 12G (MemoryMax) - provides 4GB safety margin
+MemoryMax=12G
+MemoryHigh=8G
+CPUQuota=50%
+IOWeight=100
+TasksMax=100
 
 # Logging
 StandardOutput=append:/home/bw/vault/data/logs/watcher.log
