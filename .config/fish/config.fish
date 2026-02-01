@@ -37,6 +37,7 @@ fish_add_path ~/bin ~/.local/bin ~/.config/emacs/bin $GOPATH/bin
 # --- Environment ---
 set -gx GOPATH $HOME/go
 set -gx DOOMDIR ~/.config/doom
+set -gx NLTK_DATA $HOME/.cache/nltk_data
 
 # --- Starship prompt ---
 if type -q starship
