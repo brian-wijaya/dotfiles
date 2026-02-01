@@ -1,0 +1,84 @@
+# Vault-RAG File Indexing E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: index-file-basic
+    description: Can index a file into the vault
+    steps:
+      - bash: "echo 'Test content for indexing' > /tmp/test-index.txt"
+      - bash: "vault-rag-cli index-file /tmp/test-index.txt --json | jq -r '.status'"
+    verify:
+      - Contains: "success|indexed|ok"
+
+  - name: index-file-chunks
+    description: File indexing creates chunks
+    steps:
+      - bash: "printf 'Paragraph one.\n\nParagraph two.\n\nParagraph three.' > /tmp/test-chunks.txt"
+      - bash: "vault-rag-cli index-file /tmp/test-chunks.txt --json | jq -r '.chunks'"
+    verify:
+      - Greater: 0
+
+  - name: index-file-embeddings
+    description: Indexed chunks have embeddings
+    steps:
+      - bash: "echo 'Machine learning is fascinating' > /tmp/test-embed.txt"
+      - bash: "vault-rag-cli index-file /tmp/test-embed.txt --json | jq -r '.embeddings'"
+    verify:
+      - Greater: 0
+
+  - name: index-file-metadata
+    description: Indexed files preserve metadata
+    steps:
+      - bash: "echo 'Test metadata content' > /tmp/test-meta.txt"
+      - bash: "vault-rag-cli index-file /tmp/test-meta.txt --json | jq -r '.document_id'"
+    verify:
+      - NotEmpty
+
+  - name: index-org-file
+    description: Can index Org mode files
+    steps:
+      - bash: "echo '* Heading\n** Subheading\nContent here' > /tmp/test.org"
+      - bash: "vault-rag-cli index-file /tmp/test.org --source-type org --json | jq -r '.status'"
+    verify:
+      - Contains: "success|indexed|ok"
+
+  - name: index-markdown-file
+    description: Can index Markdown files
+    steps:
+      - bash: "echo '# Title\n## Subtitle\nMarkdown content' > /tmp/test.md"
+      - bash: "vault-rag-cli index-file /tmp/test.md --source-type markdown --json | jq -r '.status'"
+    verify:
+      - Contains: "success|indexed|ok"
+
+  - name: index-duplicate-detection
+    description: Detects duplicate file indexing
+    steps:
+      - bash: "echo 'Unique content test' > /tmp/test-dup.txt"
+      - bash: "vault-rag-cli index-file /tmp/test-dup.txt --json"
+      - bash: "vault-rag-cli index-file /tmp/test-dup.txt --json | jq -r '.status'"
+    verify:
+      - Contains: "exists|duplicate|already"
+
+  - name: index-chunk-size-config
+    description: Respects chunk size configuration
+    steps:
+      - bash: "printf '%0.s-' {1..2000} > /tmp/test-large.txt"
+      - bash: "vault-rag-cli index-file /tmp/test-large.txt --chunk-size 500 --json | jq -r '.chunks'"
+    verify:
+      - Greater: 2
+
+  - name: index-embedding-dimension
+    description: Embeddings have correct dimensions
+    steps:
+      - bash: "echo 'Embedding dimension test' > /tmp/test-dim.txt"
+      - bash: "vault-rag-cli index-file /tmp/test-dim.txt --json | jq -r '.embedding_dim'"
+    verify:
+      - Equals: "768"
+
+  - name: index-file-not-found
+    description: Handles missing file gracefully
+    steps:
+      - bash: "vault-rag-cli index-file /tmp/nonexistent-file.txt 2>&1 || true"
+    verify:
+      - Contains: "not found|does not exist|error"

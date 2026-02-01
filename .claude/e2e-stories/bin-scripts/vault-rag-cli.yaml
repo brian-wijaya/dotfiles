@@ -1,0 +1,48 @@
+# Vault-RAG Command-Line Tool E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: search-semantic-query
+    description: Semantic search returns relevant results
+    steps:
+      - bash: "vault-rag search 'machine learning' --limit 5 | wc -l"
+    verify:
+      - Greater: 0
+
+  - name: index-file-content
+    description: Index command adds file to database
+    steps:
+      - bash: "echo 'Test document for indexing' > /tmp/vrag-test.txt"
+      - bash: "vault-rag index /tmp/vrag-test.txt"
+      - bash: "vault-rag search 'Test document' --limit 1"
+    verify:
+      - Contains: "vrag-test.txt"
+
+  - name: stats-show-database
+    description: Stats command displays database metrics
+    steps:
+      - bash: "vault-rag stats | grep 'Total documents'"
+    verify:
+      - Contains: "documents"
+
+  - name: session-management
+    description: Session tracking records interactions
+    steps:
+      - bash: "vault-rag sessions --recent 10 | wc -l"
+    verify:
+      - GreaterOrEqual: 0
+
+  - name: cluster-discovery
+    description: Cluster search finds related documents
+    steps:
+      - bash: "vault-rag clusters --list | head -5"
+    verify:
+      - Contains: "Cluster"
+
+  - name: hybrid-search-mode
+    description: Hybrid search combines semantic and fulltext
+    steps:
+      - bash: "vault-rag search 'python programming' --mode hybrid --limit 3 | wc -l"
+    verify:
+      - Greater: 0

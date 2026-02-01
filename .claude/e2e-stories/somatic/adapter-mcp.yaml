@@ -1,0 +1,47 @@
+# Somatic MCP (Model Context Protocol) Adapter E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: mcp-adapter-running
+    description: MCP adapter service is active
+    steps:
+      - service_active: somatic-mcp-adapter
+      - bash: "somatic-cli mcp --ping --json | jq -r '.alive'"
+    verify:
+      - Equals: "true"
+
+  - name: mcp-tool-registration
+    description: Somatic tools are registered in MCP
+    steps:
+      - bash: "somatic-cli mcp --list-tools --json | jq '.tools | length'"
+    verify:
+      - Greater: 0
+
+  - name: mcp-tool-invocation
+    description: MCP tools can be invoked
+    steps:
+      - bash: "somatic-cli mcp --invoke get_status --json | jq -r '.result'"
+    verify:
+      - NotEmpty
+
+  - name: mcp-resource-listing
+    description: MCP resources are listed
+    steps:
+      - bash: "somatic-cli mcp --list-resources --json | jq '.resources | length'"
+    verify:
+      - Greater: 0
+
+  - name: mcp-prompt-templates
+    description: MCP prompt templates are available
+    steps:
+      - bash: "somatic-cli mcp --list-prompts --json | jq '.prompts | length'"
+    verify:
+      - GreaterOrEqual: 0
+
+  - name: mcp-session-management
+    description: MCP sessions are managed
+    steps:
+      - bash: "somatic-cli mcp --create-session --json | jq -r '.session_id'"
+    verify:
+      - NotEmpty

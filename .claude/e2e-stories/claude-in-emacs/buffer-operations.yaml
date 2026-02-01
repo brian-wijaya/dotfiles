@@ -1,0 +1,46 @@
+# Claude in Emacs Buffer Operations E2E Tests
+
+vocabularies: [emacs, services]
+
+stories:
+  - name: emacs-create-buffer
+    description: Can create a new buffer
+    steps:
+      - bash: "emacsclient -e '(with-current-buffer (get-buffer-create \"*new-buffer-test*\") (buffer-name))'"
+    verify:
+      - Contains: "*new-buffer-test*"
+
+  - name: emacs-delete-buffer
+    description: Can delete a buffer
+    steps:
+      - bash: "emacsclient -e '(progn (get-buffer-create \"*delete-me*\") (kill-buffer \"*delete-me*\") (not (get-buffer \"*delete-me*\")))'"
+    verify:
+      - Contains: "t"
+
+  - name: emacs-save-buffer
+    description: Can save buffer to file
+    steps:
+      - bash: "emacsclient -e '(with-current-buffer (get-buffer-create \"*save-test*\") (insert \"save this\") (write-file \"/tmp/emacs-save-test.txt\") (file-exists-p \"/tmp/emacs-save-test.txt\"))'"
+    verify:
+      - Contains: "t"
+
+  - name: emacs-revert-buffer
+    description: Can revert buffer from file
+    steps:
+      - bash: "emacsclient -e '(progn (with-temp-file \"/tmp/revert-test.txt\" (insert \"original\")) (with-current-buffer (find-file-noselect \"/tmp/revert-test.txt\") (erase-buffer) (insert \"modified\") (revert-buffer t t) (buffer-string)))'"
+    verify:
+      - Contains: "original"
+
+  - name: emacs-list-buffers
+    description: Can retrieve list of all buffers
+    steps:
+      - bash: "emacsclient -e '(progn (get-buffer-create \"*list-test-1*\") (get-buffer-create \"*list-test-2*\") (length (buffer-list)))'"
+    verify:
+      - Greater: 1
+
+  - name: emacs-switch-buffer
+    description: Can switch to different buffer
+    steps:
+      - bash: "emacsclient -e '(progn (get-buffer-create \"*switch-target*\") (with-current-buffer \"*switch-target*\" (insert \"switched\")) (with-current-buffer \"*switch-target*\" (buffer-string)))'"
+    verify:
+      - Contains: "switched"

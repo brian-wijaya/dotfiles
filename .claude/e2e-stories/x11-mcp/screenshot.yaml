@@ -1,0 +1,52 @@
+# X11 MCP Screenshot E2E Tests
+
+vocabularies: [i3, services]
+
+stories:
+  - name: screenshot-full-screen
+    description: Can capture full screen screenshot
+    steps:
+      - bash: "rm -f /tmp/test-screenshot.png"
+      - bash: "x11-screenshot --output /tmp/test-screenshot.png && test -f /tmp/test-screenshot.png && echo 'success'"
+    verify:
+      - Equals: "success"
+
+  - name: screenshot-active-window
+    description: Can capture active window screenshot
+    steps:
+      - bash: "rm -f /tmp/test-window.png"
+      - bash: "x11-screenshot --window active --output /tmp/test-window.png && test -f /tmp/test-window.png && echo 'success'"
+    verify:
+      - Equals: "success"
+
+  - name: screenshot-window-by-id
+    description: Can capture window by ID
+    steps:
+      - i3_focused_window_id
+      - bash: "rm -f /tmp/test-window-id.png"
+      - bash: "WINDOW_ID=$(i3-msg -t get_tree | jq -r '.. | select(.focused? == true) | .window') && x11-screenshot --window $WINDOW_ID --output /tmp/test-window-id.png && test -f /tmp/test-window-id.png && echo 'success'"
+    verify:
+      - Equals: "success"
+
+  - name: screenshot-region
+    description: Can capture specific region
+    steps:
+      - bash: "rm -f /tmp/test-region.png"
+      - bash: "x11-screenshot --region 100x100+0+0 --output /tmp/test-region.png && test -f /tmp/test-region.png && echo 'success'"
+    verify:
+      - Equals: "success"
+
+  - name: screenshot-file-format
+    description: Screenshot is valid PNG
+    steps:
+      - bash: "x11-screenshot --output /tmp/test-format.png && file /tmp/test-format.png"
+    verify:
+      - Contains: "PNG image data"
+
+  - name: screenshot-dimensions
+    description: Screenshot has valid dimensions
+    steps:
+      - bash: "x11-screenshot --output /tmp/test-dims.png && identify -format '%wx%h' /tmp/test-dims.png"
+    verify:
+      - Contains: "x"
+      - NotEmpty

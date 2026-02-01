@@ -1,0 +1,60 @@
+# Systemd User Services E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: systemd-user-dir-exists
+    description: User systemd directory exists in dotfiles
+    steps:
+      - bash: "test -d ~/dotfiles/.config/systemd/user && echo 'exists'"
+    verify:
+      - Equals: "exists"
+
+  - name: custom-services-present
+    description: Custom user services defined
+    steps:
+      - bash: "find ~/dotfiles/.config/systemd/user -name '*.service' | wc -l"
+    verify:
+      - Greater: 0
+
+  - name: systemd-timers-present
+    description: Systemd timers for scheduled tasks
+    steps:
+      - bash: "find ~/dotfiles/.config/systemd/user -name '*.timer' | wc -l"
+    verify:
+      - Greater: 0
+
+  - name: service-dependencies-defined
+    description: Services have dependencies configured
+    steps:
+      - bash: "grep -r 'Wants\\|Requires\\|After\\|Before' ~/dotfiles/.config/systemd/user/*.service 2>/dev/null | wc -l"
+    verify:
+      - Greater: 0
+
+  - name: service-restart-policy
+    description: Services have restart policies
+    steps:
+      - bash: "grep -r 'Restart=' ~/dotfiles/.config/systemd/user/*.service 2>/dev/null | wc -l"
+    verify:
+      - Greater: 0
+
+  - name: timer-has-schedule
+    description: Timers have OnCalendar or OnBootSec
+    steps:
+      - bash: "grep -r 'OnCalendar\\|OnBootSec\\|OnUnitActiveSec' ~/dotfiles/.config/systemd/user/*.timer 2>/dev/null | wc -l"
+    verify:
+      - Greater: 0
+
+  - name: service-environment-vars
+    description: Services configure environment variables
+    steps:
+      - bash: "grep -r 'Environment=' ~/dotfiles/.config/systemd/user/*.service 2>/dev/null | wc -l"
+    verify:
+      - Greater: 0
+
+  - name: systemd-user-enabled
+    description: User systemd services are enabled
+    steps:
+      - bash: "systemctl --user list-unit-files --state=enabled | grep -c '.service'"
+    verify:
+      - Greater: 0

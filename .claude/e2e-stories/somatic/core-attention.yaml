@@ -1,0 +1,58 @@
+# Somatic Attention/Focus Tracking Server E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: attention-service-running
+    description: Attention tracking server is active
+    steps:
+      - service_active: somatic-attention
+      - somatic_get_focus
+    verify:
+      - NotEmpty
+
+  - name: window-focus-tracking
+    description: Active window focus is tracked
+    steps:
+      - bash: "xdotool search --name 'emacs' windowactivate || true"
+      - bash: "sleep 0.3"
+      - somatic_get_focus
+    verify:
+      - Contains: "window_id"
+
+  - name: focus-transitions
+    description: Focus transitions are logged
+    steps:
+      - bash: "xdotool search --name 'emacs' windowactivate || true"
+      - bash: "sleep 0.3"
+      - bash: "xdotool search --class 'firefox' windowactivate || true"
+      - bash: "sleep 0.3"
+      - somatic_get_transitions
+    verify:
+      - Greater: 0
+
+  - name: attention-duration-tracking
+    description: Attention duration per window is calculated
+    steps:
+      - bash: "xdotool search --name 'emacs' windowactivate || true"
+      - bash: "sleep 1"
+      - bash: "somatic-cli attention --stats --json | jq -r '.total_duration_ms'"
+    verify:
+      - Greater: 500
+
+  - name: focus-anchor-setting
+    description: Focus anchor can be set for attention tracking
+    steps:
+      - somatic_set_anchor
+      - somatic_get_focus
+    verify:
+      - Contains: "anchor"
+
+  - name: attention-metrics
+    description: Attention metrics are collected
+    steps:
+      - bash: "sleep 1"
+      - somatic_get_metrics
+    verify:
+      - Contains: "attention"
+      - Contains: "focus_count"

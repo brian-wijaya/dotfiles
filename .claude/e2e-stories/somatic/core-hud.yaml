@@ -1,0 +1,58 @@
+# Somatic Heads-Up Display (HUD) Overlay Server E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: hud-service-running
+    description: HUD overlay server is active
+    steps:
+      - service_active: somatic-hud
+      - somatic_get_status
+    verify:
+      - Contains: "hud"
+
+  - name: text-flash-display
+    description: Text can be flashed on HUD
+    steps:
+      - somatic_flash_text
+      - bash: "sleep 0.2"
+      - bash: "somatic-cli hud --query --json | jq -r '.active'"
+    verify:
+      - Equals: "true"
+
+  - name: icon-flash-display
+    description: Icons can be flashed on HUD
+    steps:
+      - somatic_flash_icon
+      - bash: "sleep 0.2"
+      - bash: "somatic-cli hud --query --json | jq -r '.icon_visible'"
+    verify:
+      - Equals: "true"
+
+  - name: hud-message-queuing
+    description: HUD messages are queued
+    steps:
+      - somatic_flash_text
+      - somatic_flash_text
+      - bash: "somatic-cli hud --queue --json | jq 'length'"
+    verify:
+      - Greater: 0
+
+  - name: hud-dismiss
+    description: HUD messages can be dismissed
+    steps:
+      - somatic_flash_text
+      - somatic_dismiss
+      - bash: "somatic-cli hud --query --json | jq -r '.active'"
+    verify:
+      - Equals: "false"
+
+  - name: hud-dismiss-all
+    description: All HUD messages can be dismissed
+    steps:
+      - somatic_flash_text
+      - somatic_flash_icon
+      - somatic_dismiss_all
+      - bash: "somatic-cli hud --queue --json | jq 'length'"
+    verify:
+      - Equals: 0

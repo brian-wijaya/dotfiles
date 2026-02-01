@@ -1,0 +1,69 @@
+# Somatic Safety Checks and Validation Server E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: safety-service-running
+    description: Safety validation server is active
+    steps:
+      - service_active: somatic-safety
+      - somatic_get_status
+    verify:
+      - Contains: "safety"
+
+  - name: permission-checking
+    description: Permissions are validated before actions
+    steps:
+      - somatic_check_permission
+    verify:
+      - Contains: "allowed"
+
+  - name: rate-limiting
+    description: Rate limiting is enforced
+    steps:
+      - bash: "for i in {1..10}; do somatic-cli event --inject click; done"
+      - bash: "sleep 0.2"
+      - somatic_get_rate_status
+    verify:
+      - Contains: "rate_limited"
+
+  - name: duplicate-event-filtering
+    description: Duplicate events are filtered
+    steps:
+      - bash: "somatic-cli event --inject keypress --key 'a'"
+      - bash: "somatic-cli event --inject keypress --key 'a'"
+      - bash: "sleep 0.2"
+      - somatic_is_duplicate
+    verify:
+      - Equals: "true"
+
+  - name: approval-request
+    description: High-risk actions require approval
+    steps:
+      - somatic_request_approval
+    verify:
+      - Contains: "pending"
+
+  - name: token-validation
+    description: Security tokens are validated
+    steps:
+      - somatic_validate_token
+    verify:
+      - Contains: "valid"
+
+  - name: safety-policy-enforcement
+    description: Safety policies are enforced
+    steps:
+      - bash: "somatic-cli safety --set-policy max_rate=10 --json"
+      - somatic_get_policy
+    verify:
+      - Contains: "max_rate"
+
+  - name: safety-violation-logging
+    description: Safety violations are logged
+    steps:
+      - bash: "for i in {1..50}; do somatic-cli event --inject click; done"
+      - bash: "sleep 0.3"
+      - bash: "somatic-cli safety --violations --json | jq 'length'"
+    verify:
+      - Greater: 0

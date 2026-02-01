@@ -1,0 +1,47 @@
+# Somatic gRPC Adapter E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: grpc-adapter-running
+    description: gRPC adapter service is active
+    steps:
+      - service_active: somatic-grpc-adapter
+      - bash: "somatic-cli grpc --health-check --json | jq -r '.serving'"
+    verify:
+      - Equals: "true"
+
+  - name: grpc-event-streaming
+    description: Events can be streamed via gRPC
+    steps:
+      - bash: "timeout 2 somatic-cli grpc --stream-events --json | jq -r 'select(.event_type) | .event_type' | head -1 || true"
+    verify:
+      - NotEmpty
+
+  - name: grpc-unary-calls
+    description: Unary gRPC calls work correctly
+    steps:
+      - bash: "somatic-cli grpc --get-status --json | jq -r '.status'"
+    verify:
+      - NotEmpty
+
+  - name: grpc-bidirectional-streaming
+    description: Bidirectional streaming is supported
+    steps:
+      - bash: "timeout 1 somatic-cli grpc --bidirectional --json || true"
+    verify:
+      - NotEmpty
+
+  - name: grpc-metadata-propagation
+    description: gRPC metadata is propagated
+    steps:
+      - bash: "somatic-cli grpc --with-metadata user=test --get-status --json | jq -r '.metadata'"
+    verify:
+      - Contains: "user"
+
+  - name: grpc-error-handling
+    description: gRPC errors are handled gracefully
+    steps:
+      - bash: "somatic-cli grpc --invalid-method 2>&1 || true"
+    verify:
+      - Contains: "error"

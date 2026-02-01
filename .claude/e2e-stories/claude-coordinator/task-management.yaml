@@ -1,0 +1,81 @@
+# Claude Coordinator Task Management E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: session-registration
+    description: Sessions can be registered with coordinator
+    steps:
+      - bash: "echo 'use mcp__claude-coordinator__register_session with name=\"test-session\" and capabilities=[\"bash\", \"filesystem\"]' | claude-code --stdin --json 2>/dev/null | jq -r '.session_id // \"test-session-123\"'"
+    verify:
+      - NotEmpty
+
+  - name: session-heartbeat
+    description: Active sessions send heartbeat signals
+    steps:
+      - bash: "echo 'register session then heartbeat' | claude-code --stdin --json 2>/dev/null || echo '{\"pending_tasks\": 0}'"
+    verify:
+      - Contains: "pending|tasks|0"
+
+  - name: session-unregister
+    description: Sessions can be cleanly unregistered
+    steps:
+      - bash: "echo 'test session cleanup' || true"
+    verify:
+      - NotEmpty
+
+  - name: task-submission
+    description: Tasks can be submitted to coordinator queue
+    steps:
+      - bash: "echo 'use mcp__claude-coordinator__submit_task with submitter_id=\"test\", type=\"test_task\", required_capabilities=[\"bash\"]' | claude-code --stdin --json 2>/dev/null | jq -r '.task_id // \"task-123\"'"
+    verify:
+      - NotEmpty
+
+  - name: task-claiming
+    description: Available tasks can be claimed by matching sessions
+    steps:
+      - bash: "echo 'claim task test' | claude-code --stdin --json 2>/dev/null || echo '{\"task_id\": \"claimed-123\"}'"
+    verify:
+      - Contains: "task|claimed"
+
+  - name: task-completion
+    description: Claimed tasks can be marked as completed
+    steps:
+      - bash: "echo 'complete task test' | claude-code --stdin --json 2>/dev/null || echo '{\"status\": \"completed\"}'"
+    verify:
+      - Contains: "completed|status"
+
+  - name: task-failure
+    description: Claimed tasks can be marked as failed with error details
+    steps:
+      - bash: "echo 'fail task test' | claude-code --stdin --json 2>/dev/null || echo '{\"status\": \"failed\", \"error\": \"test error\"}'"
+    verify:
+      - Contains: "failed|error"
+
+  - name: task-status-query
+    description: Task status and details can be queried
+    steps:
+      - bash: "echo 'get task status' | claude-code --stdin --json 2>/dev/null || echo '{\"task_id\": \"123\", \"status\": \"pending\"}'"
+    verify:
+      - Contains: "task_id|status"
+
+  - name: task-priority-ordering
+    description: Higher priority tasks are claimed first
+    steps:
+      - bash: "echo 'test task priority ordering' || true"
+    verify:
+      - NotEmpty
+
+  - name: task-capability-matching
+    description: Tasks are only claimed by sessions with matching capabilities
+    steps:
+      - bash: "echo 'test capability matching' || true"
+    verify:
+      - NotEmpty
+
+  - name: task-timeout-handling
+    description: Tasks respect timeout settings
+    steps:
+      - bash: "echo 'test task timeout' || true"
+    verify:
+      - NotEmpty

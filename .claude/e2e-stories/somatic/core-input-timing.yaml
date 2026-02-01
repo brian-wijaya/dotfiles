@@ -1,0 +1,67 @@
+# Somatic Input Timing Analysis Server E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: timing-service-running
+    description: Input timing analysis server is active
+    steps:
+      - service_active: somatic-timing
+      - somatic_get_timing
+    verify:
+      - NotEmpty
+
+  - name: keystroke-timing-analysis
+    description: Keystroke timing is analyzed
+    steps:
+      - bash: "xdotool type --delay 100 'timing'"
+      - bash: "sleep 0.3"
+      - somatic_timing_get_history
+    verify:
+      - Contains: "inter_key_delay"
+
+  - name: typing-rate-calculation
+    description: Typing rate is calculated
+    steps:
+      - bash: "xdotool type --delay 50 'fast typing test'"
+      - bash: "sleep 0.3"
+      - bash: "somatic-cli timing --rate --json | jq -r '.keys_per_minute'"
+    verify:
+      - Greater: 0
+
+  - name: input-burst-detection
+    description: Input bursts are detected
+    steps:
+      - bash: "xdotool type --delay 10 'burst'"
+      - bash: "sleep 0.3"
+      - bash: "somatic-cli timing --bursts --json | jq 'length'"
+    verify:
+      - Greater: 0
+
+  - name: timing-anomaly-detection
+    description: Timing anomalies are detected
+    steps:
+      - somatic_inject_delay
+      - bash: "xdotool type 'test'"
+      - bash: "sleep 0.3"
+      - somatic_get_anomalies
+    verify:
+      - Contains: "timing_anomaly"
+
+  - name: rhythm-pattern-extraction
+    description: Typing rhythm patterns are extracted
+    steps:
+      - bash: "xdotool type 'pattern test pattern'"
+      - bash: "sleep 0.3"
+      - bash: "somatic-cli timing --patterns --json | jq -r '.rhythm_detected'"
+    verify:
+      - NotEmpty
+
+  - name: timing-histogram
+    description: Timing histogram is generated
+    steps:
+      - bash: "xdotool type --delay 100 'histogram'"
+      - bash: "sleep 0.3"
+      - bash: "somatic-cli timing --histogram --json | jq '.bins | length'"
+    verify:
+      - Greater: 0

@@ -1,0 +1,60 @@
+# Somatic Temporal Consistency/Truth Server E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: temporal-truth-service-running
+    description: Temporal consistency server is active
+    steps:
+      - service_active: somatic-temporal-truth
+      - somatic_get_status
+    verify:
+      - Contains: "temporal"
+
+  - name: event-ordering-validation
+    description: Event ordering is validated
+    steps:
+      - bash: "xdotool type 'abc'"
+      - bash: "sleep 0.3"
+      - bash: "somatic-cli temporal --validate-order --json | jq -r '.consistent'"
+    verify:
+      - Equals: "true"
+
+  - name: timestamp-monotonicity
+    description: Timestamps are monotonically increasing
+    steps:
+      - bash: "somatic-cli temporal --check-monotonic --json | jq -r '.monotonic'"
+    verify:
+      - Equals: "true"
+
+  - name: causality-tracking
+    description: Causal relationships are tracked
+    steps:
+      - bash: "xdotool type 'test'"
+      - bash: "sleep 0.3"
+      - bash: "somatic-cli temporal --causality --json | jq '.chains | length'"
+    verify:
+      - Greater: 0
+
+  - name: time-delta-calculation
+    description: Time deltas between events are calculated
+    steps:
+      - somatic_delta
+    verify:
+      - Contains: "delta_us"
+
+  - name: temporal-anomaly-detection
+    description: Temporal anomalies are detected
+    steps:
+      - somatic_inject_delay
+      - bash: "sleep 0.5"
+      - somatic_get_anomalies
+    verify:
+      - Contains: "temporal"
+
+  - name: clock-skew-detection
+    description: Clock skew is detected
+    steps:
+      - bash: "somatic-cli temporal --check-skew --json | jq -r '.skew_detected'"
+    verify:
+      - NotEmpty

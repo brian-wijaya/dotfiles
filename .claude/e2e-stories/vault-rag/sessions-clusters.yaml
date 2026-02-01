@@ -1,0 +1,76 @@
+# Vault-RAG Sessions and Clusters E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: save-session-basic
+    description: Can save a Claude session
+    steps:
+      - bash: "vault-rag-cli save-session --title 'Test Session' --messages 5 --json | jq -r '.status'"
+    verify:
+      - Contains: "success|saved|ok"
+
+  - name: get-recent-sessions
+    description: Can retrieve recent sessions
+    steps:
+      - bash: "vault-rag-cli get-recent-sessions --limit 5 --json | jq 'length'"
+    verify:
+      - Greater: 0
+
+  - name: session-metadata
+    description: Sessions include metadata
+    steps:
+      - bash: "vault-rag-cli get-recent-sessions --limit 1 --json | jq -r '.[0].timestamp'"
+    verify:
+      - NotEmpty
+
+  - name: search-sessions
+    description: Can search sessions by content
+    steps:
+      - bash: "vault-rag-cli search-sessions 'python' --limit 5 --json | jq 'length'"
+    verify:
+      - GreaterOrEqual: 0
+
+  - name: cluster-search-basic
+    description: Can search document clusters
+    steps:
+      - bash: "vault-rag-cli search-clusters 'programming' --limit 3 --json | jq 'length'"
+    verify:
+      - GreaterOrEqual: 0
+
+  - name: list-clusters
+    description: Can list all clusters
+    steps:
+      - bash: "vault-rag-cli list-clusters --json | jq 'length'"
+    verify:
+      - GreaterOrEqual: 0
+
+  - name: get-cluster-details
+    description: Can get cluster details by ID
+    steps:
+      - bash: "vault-rag-cli list-clusters --json | jq -r '.[0].cluster_id' > /tmp/cluster_id.txt"
+      - bash: "vault-rag-cli get-cluster $(cat /tmp/cluster_id.txt) --json | jq -r '.cluster_id'"
+    verify:
+      - NotEmpty
+
+  - name: cluster-document-count
+    description: Clusters report document count
+    steps:
+      - bash: "vault-rag-cli list-clusters --json | jq -r '.[0].document_count'"
+    verify:
+      - GreaterOrEqual: 0
+
+  - name: get-document-cluster
+    description: Can get cluster for a document
+    steps:
+      - bash: "vault-rag-cli list-documents --limit 1 --json | jq -r '.[0].document_id' > /tmp/doc_id.txt"
+      - bash: "vault-rag-cli get-document-cluster $(cat /tmp/doc_id.txt) --json | jq -r '.cluster_id'"
+    verify:
+      - NotEmpty
+
+  - name: session-message-count
+    description: Sessions track message count
+    steps:
+      - bash: "vault-rag-cli get-recent-sessions --limit 1 --json | jq -r '.[0].message_count'"
+    verify:
+      - Greater: 0

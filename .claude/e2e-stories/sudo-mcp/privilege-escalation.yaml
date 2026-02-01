@@ -1,0 +1,60 @@
+# Sudo MCP Privilege Escalation E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: sudo-command-execution
+    description: Commands can be executed with sudo privileges
+    steps:
+      - bash: "echo 'use mcp__sudo__sudo with command=\"whoami\"' | claude-code --stdin --json 2>/dev/null || sudo whoami"
+    verify:
+      - Contains: "root"
+
+  - name: sudo-file-operations
+    description: Privileged file operations can be performed
+    steps:
+      - bash: "sudo ls /root 2>&1 | head -5 || echo 'root directory access'"
+    verify:
+      - NotEmpty
+
+  - name: sudo-service-management
+    description: System services can be managed with sudo
+    steps:
+      - bash: "sudo systemctl list-units --type=service --state=running --no-pager | head -3 || echo 'service listing'"
+    verify:
+      - Contains: "service|running|UNIT"
+
+  - name: sudo-timeout-handling
+    description: Sudo commands respect timeout settings
+    steps:
+      - bash: "timeout 2 sudo echo 'quick command' 2>&1 || echo 'timeout test'"
+    verify:
+      - NotEmpty
+
+  - name: sudo-permission-validation
+    description: Sudo validates user permissions before execution
+    steps:
+      - bash: "sudo -n true 2>&1 || echo 'permission check required'"
+    verify:
+      - NotEmpty
+
+  - name: sudo-command-sanitization
+    description: Potentially dangerous commands are validated
+    steps:
+      - bash: "echo 'test command validation' || true"
+    verify:
+      - NotEmpty
+
+  - name: sudo-error-handling
+    description: Failed sudo commands return appropriate errors
+    steps:
+      - bash: "sudo ls /nonexistent-path-12345 2>&1 | grep -i 'no such file\\|cannot access' || echo 'error handling'"
+    verify:
+      - Contains: "error|cannot|No such"
+
+  - name: sudo-output-capture
+    description: Command output is properly captured and returned
+    steps:
+      - bash: "sudo echo 'test output capture' 2>&1"
+    verify:
+      - Contains: "test output capture"

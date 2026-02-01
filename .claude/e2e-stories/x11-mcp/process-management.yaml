@@ -1,0 +1,47 @@
+# X11 MCP Process Management E2E Tests
+
+vocabularies: [i3, services]
+
+stories:
+  - name: process-list
+    description: Can list running processes
+    steps:
+      - bash: "x11-process-list | jq 'length'"
+    verify:
+      - Greater: 0
+
+  - name: process-info
+    description: Process list includes PID and name
+    steps:
+      - bash: "x11-process-list | jq -r '.[0].pid'"
+    verify:
+      - Greater: 0
+
+  - name: process-start-simple
+    description: Can start a simple process
+    steps:
+      - bash: "x11-process-start sleep 1 && echo 'success'"
+    verify:
+      - Equals: "success"
+
+  - name: process-start-with-args
+    description: Can start process with arguments
+    steps:
+      - bash: "x11-process-start echo 'test argument' && echo 'success'"
+    verify:
+      - Equals: "success"
+
+  - name: process-stop
+    description: Can stop a running process
+    steps:
+      - bash: "sleep 60 & echo $! > /tmp/test-pid.txt"
+      - bash: "x11-process-stop $(cat /tmp/test-pid.txt) && echo 'success'"
+    verify:
+      - Equals: "success"
+
+  - name: process-find-by-name
+    description: Can find process by name
+    steps:
+      - bash: "x11-process-list | jq -r '.[] | select(.name | contains(\"bash\")) | .pid'"
+    verify:
+      - Greater: 0

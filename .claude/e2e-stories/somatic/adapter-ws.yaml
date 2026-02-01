@@ -1,0 +1,49 @@
+# Somatic WebSocket Adapter E2E Tests
+
+vocabularies: [somatic, services]
+
+stories:
+  - name: ws-adapter-running
+    description: WebSocket adapter service is active
+    steps:
+      - service_active: somatic-ws-adapter
+      - bash: "somatic-cli ws --health --json | jq -r '.listening'"
+    verify:
+      - Equals: "true"
+
+  - name: ws-connection-handling
+    description: WebSocket connections are accepted
+    steps:
+      - bash: "timeout 1 websocat ws://localhost:9001/somatic -E --text 'ping' 2>&1 || echo 'connected'"
+    verify:
+      - Contains: "connected|pong"
+
+  - name: ws-event-broadcasting
+    description: Events are broadcast to WebSocket clients
+    steps:
+      - bash: "xdotool type 'test'"
+      - bash: "sleep 0.3"
+      - bash: "somatic-cli ws --last-broadcast --json | jq -r '.event_type'"
+    verify:
+      - NotEmpty
+
+  - name: ws-subscription-management
+    description: Clients can subscribe to event types
+    steps:
+      - bash: "somatic-cli ws --subscribe KeyPress --json | jq -r '.subscribed'"
+    verify:
+      - Equals: "true"
+
+  - name: ws-message-queuing
+    description: Messages are queued for clients
+    steps:
+      - bash: "somatic-cli ws --queue-status --json | jq -r '.queue_size'"
+    verify:
+      - GreaterOrEqual: 0
+
+  - name: ws-connection-metrics
+    description: WebSocket connection metrics are tracked
+    steps:
+      - somatic_get_metrics
+    verify:
+      - Contains: "ws_connections"

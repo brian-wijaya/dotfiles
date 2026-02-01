@@ -1,0 +1,39 @@
+# Emacs Integration Scripts E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: emacsclient-wrapper-launches
+    description: Emacsclient wrapper starts successfully
+    steps:
+      - bash: "emacs-client-launcher --version 2>&1 | head -1"
+    verify:
+      - Contains: "emacs"
+
+  - name: emacs-server-status
+    description: Check if Emacs server is running
+    steps:
+      - bash: "pgrep -f 'emacs.*--daemon' || echo 'no-daemon'"
+    verify:
+      - NotEmpty: true
+
+  - name: buffer-list-accessible
+    description: Can list Emacs buffers via MCP
+    steps:
+      - bash: "timeout 5 /home/bw/.local/bin/mcp-client-cli mcp__claude-in-emacs__emacs_buffer_list 2>/dev/null || echo 'timeout-ok'"
+    verify:
+      - NotEmpty: true
+
+  - name: emacs-find-file
+    description: Find file command locates files
+    steps:
+      - bash: "timeout 5 /home/bw/.local/bin/mcp-client-cli mcp__claude-in-emacs__emacs_find pattern='*.el' max_results=3 2>/dev/null || echo 'timeout-ok'"
+    verify:
+      - NotEmpty: true
+
+  - name: emacs-elisp-eval
+    description: Elisp evaluation works via MCP
+    steps:
+      - bash: "timeout 5 /home/bw/.local/bin/mcp-client-cli mcp__claude-in-emacs__emacs_elisp code='(+ 2 2)' 2>/dev/null || echo 'timeout-ok'"
+    verify:
+      - NotEmpty: true

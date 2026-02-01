@@ -1,0 +1,46 @@
+# Claude in Emacs Navigation E2E Tests
+
+vocabularies: [emacs, services]
+
+stories:
+  - name: emacs-cursor-movement-forward
+    description: Can move cursor forward in buffer
+    steps:
+      - bash: "emacsclient -e '(with-current-buffer (get-buffer-create \"*nav-test*\") (erase-buffer) (insert \"line one\nline two\nline three\") (goto-char (point-min)) (forward-char 5) (point))'"
+    verify:
+      - Contains: "6"
+
+  - name: emacs-cursor-movement-line
+    description: Can navigate between lines
+    steps:
+      - bash: "emacsclient -e '(with-current-buffer (get-buffer-create \"*nav-test*\") (erase-buffer) (insert \"first\nsecond\nthird\") (goto-char (point-min)) (forward-line 1) (line-number-at-pos))'"
+    verify:
+      - Contains: "2"
+
+  - name: emacs-beginning-of-buffer
+    description: Can jump to beginning of buffer
+    steps:
+      - bash: "emacsclient -e '(with-current-buffer (get-buffer-create \"*nav-test*\") (insert \"content\") (goto-char (point-max)) (goto-char (point-min)) (point))'"
+    verify:
+      - Contains: "1"
+
+  - name: emacs-end-of-buffer
+    description: Can jump to end of buffer
+    steps:
+      - bash: "emacsclient -e '(with-current-buffer (get-buffer-create \"*nav-test*\") (erase-buffer) (insert \"test\") (goto-char (point-min)) (goto-char (point-max)) (>= (point) 4))'"
+    verify:
+      - Contains: "t"
+
+  - name: emacs-window-switching
+    description: Can switch between windows
+    steps:
+      - bash: "emacsclient -e '(progn (delete-other-windows) (split-window-horizontally) (length (window-list)))'"
+    verify:
+      - Contains: "2"
+
+  - name: emacs-find-functionality
+    description: Can search for text in buffer
+    steps:
+      - bash: "emacsclient -e '(with-current-buffer (get-buffer-create \"*search-test*\") (erase-buffer) (insert \"hello world test\") (goto-char (point-min)) (search-forward \"world\") (point))'"
+    verify:
+      - Contains: "12"

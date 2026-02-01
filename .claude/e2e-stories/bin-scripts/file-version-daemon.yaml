@@ -1,0 +1,61 @@
+# File Versioning Daemon E2E Tests
+
+vocabularies: [services]
+
+stories:
+  - name: daemon-service-running
+    description: File version daemon service is active
+    steps:
+      - service_active: file-version-daemon.service
+    verify:
+      - Equals: "active"
+
+  - name: version-capture-on-save
+    description: Daemon captures file versions on save
+    steps:
+      - bash: "echo 'version 1' > /tmp/fvd-test.txt"
+      - bash: "sleep 3"
+      - bash: "echo 'version 2' > /tmp/fvd-test-new.txt && mv /tmp/fvd-test-new.txt /tmp/fvd-test.txt"
+      - bash: "sleep 3"
+      - bash: "file-versions list /tmp/fvd-test.txt | wc -l"
+    verify:
+      - Greater: 1
+
+  - name: content-addressed-storage
+    description: Versions stored with content-based deduplication
+    steps:
+      - bash: "echo 'identical content' > /tmp/fvd-dup1.txt"
+      - bash: "sleep 3"
+      - bash: "echo 'identical content' > /tmp/fvd-dup2.txt"
+      - bash: "sleep 3"
+      - bash: "file-versions stats | grep 'Dedup ratio'"
+    verify:
+      - Contains: "%"
+
+  - name: cleanup-old-versions
+    description: Cleanup command removes old versions
+    steps:
+      - bash: "file-versions cleanup --before $(date -d '30 days ago' +%Y-%m-%d) --dry-run | grep -c 'Would delete'"
+    verify:
+      - GreaterOrEqual: 0
+
+  - name: version-recovery
+    description: Recovery restores previous file version
+    steps:
+      - bash: "echo 'original data' > /tmp/fvd-recover.txt"
+      - bash: "sleep 3"
+      - bash: "echo 'corrupted data' > /tmp/fvd-recover-new.txt && mv /tmp/fvd-recover-new.txt /tmp/fvd-recover.txt"
+      - bash: "sleep 3"
+      - bash: "HASH=$(file-versions list /tmp/fvd-recover.txt | awk 'NR==2 {print $1}') && file-versions restore /tmp/fvd-recover.txt $HASH"
+      - bash: "cat /tmp/fvd-recover.txt"
+    verify:
+      - Contains: "original"
+
+  - name: dedup-saves-space
+    description: Deduplication reduces storage usage
+    steps:
+      - bash: "for i in {1..5}; do echo 'same content' > /tmp/fvd-dedup-$i.txt && sleep 2; done"
+      - bash: "sleep 5"
+      - bash: "file-versions stats | grep 'Space saved'"
+    verify:
+      - Contains: "B"
