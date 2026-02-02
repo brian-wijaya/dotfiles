@@ -1,0 +1,103 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Theme_Install_List_Table::install_theme_info( <span class="arg-type">stdClass</span> <span class="arg-name">$theme</span> )</h1> <section><p>Prints the info for a theme (to be used in the theme installer modal).</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$theme</code><span class="type"><span class="stdClass">stdClass</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">A WordPress.org Theme API object.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="443" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function install_theme_info( $theme ) {
+	global $themes_allowedtags;
+
+	if ( empty( $theme ) ) {
+		return;
+	}
+
+	$name   = wp_kses( $theme-&gt;name, $themes_allowedtags );
+	$author = wp_kses( $theme-&gt;author, $themes_allowedtags );
+
+	$install_url = add_query_arg(
+		array(
+			'action' =&gt; 'install-theme',
+			'theme'  =&gt; $theme-&gt;slug,
+		),
+		self_admin_url( 'update.php' )
+	);
+
+	$update_url = add_query_arg(
+		array(
+			'action' =&gt; 'upgrade-theme',
+			'theme'  =&gt; $theme-&gt;slug,
+		),
+		self_admin_url( 'update.php' )
+	);
+
+	$status = $this-&gt;_get_theme_status( $theme );
+
+	?&gt;
+	&lt;div class="install-theme-info"&gt;
+	&lt;?php
+	switch ( $status ) {
+		case 'update_available':
+			printf(
+				'&lt;a class="theme-install button button-primary" href="%s" title="%s"&gt;%s&lt;/a&gt;',
+				esc_url( wp_nonce_url( $update_url, 'upgrade-theme_' . $theme-&gt;slug ) ),
+				/* translators: %s: Theme version. */
+				esc_attr( sprintf( __( 'Update to version %s' ), $theme-&gt;version ) ),
+				__( 'Update' )
+			);
+			break;
+		case 'newer_installed':
+		case 'latest_installed':
+			printf(
+				'&lt;span class="theme-install" title="%s"&gt;%s&lt;/span&gt;',
+				esc_attr__( 'This theme is already installed and is up to date' ),
+				_x( 'Installed', 'theme' )
+			);
+			break;
+		case 'install':
+		default:
+			printf(
+				'&lt;a class="theme-install button button-primary" href="%s"&gt;%s&lt;/a&gt;',
+				esc_url( wp_nonce_url( $install_url, 'install-theme_' . $theme-&gt;slug ) ),
+				__( 'Install' )
+			);
+			break;
+	}
+	?&gt;
+		&lt;h3 class="theme-name"&gt;&lt;?php echo $name; ?&gt;&lt;/h3&gt;
+		&lt;span class="theme-by"&gt;
+		&lt;?php
+			/* translators: %s: Theme author. */
+			printf( __( 'By %s' ), $author );
+		?&gt;
+		&lt;/span&gt;
+		&lt;?php if ( isset( $theme-&gt;screenshot_url ) ) : ?&gt;
+			&lt;img class="theme-screenshot" src="&lt;?php echo esc_url( $theme-&gt;screenshot_url . '?ver=' . $theme-&gt;version ); ?&gt;" alt="" /&gt;
+		&lt;?php endif; ?&gt;
+		&lt;div class="theme-details"&gt;
+			&lt;?php
+			wp_star_rating(
+				array(
+					'rating' =&gt; $theme-&gt;rating,
+					'type'   =&gt; 'percent',
+					'number' =&gt; $theme-&gt;num_ratings,
+				)
+			);
+			?&gt;
+			&lt;div class="theme-version"&gt;
+				&lt;strong&gt;&lt;?php _e( 'Version:' ); ?&gt; &lt;/strong&gt;
+				&lt;?php echo wp_kses( $theme-&gt;version, $themes_allowedtags ); ?&gt;
+			&lt;/div&gt;
+			&lt;div class="theme-description"&gt;
+				&lt;?php echo wp_kses( $theme-&gt;description, $themes_allowedtags ); ?&gt;
+			&lt;/div&gt;
+		&lt;/div&gt;
+		&lt;input class="theme-preview-url" type="hidden" value="&lt;?php echo esc_url( $theme-&gt;preview_url ); ?&gt;" /&gt;
+	&lt;/div&gt;
+	&lt;?php
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-theme-install-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-theme-install-list-table.php#L443">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-theme-install-list-table.php#L443-L533">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_theme_install_list_table/install_theme_info" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_theme_install_list_table/install_theme_info</a>
+  </p>
+</div>

@@ -1,0 +1,219 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_schedule_single_event( <span class="arg-type">int</span> <span class="arg-name">$timestamp</span>, <span class="arg-type">string</span> <span class="arg-name">$hook</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span>, <span class="arg-type">bool</span> <span class="arg-name">$wp_error</span> = <span class="arg-default">false</span> ): <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Schedules an event to run only once.</p> </section> <section><h2 id="description">Description</h2> <p>Schedules a hook which will be triggered by WordPress at the specified UTC time.<br>The action will trigger when someone visits your WordPress site if the scheduled time has passed.</p> <p>Note that scheduling an event to occur within 10 minutes of an existing event with the same action hook will be ignored unless you pass unique <code>$args</code> values for each scheduled event.</p> <p>Use <a href="wp_next_scheduled" rel="function">wp_next_scheduled()</a> to prevent duplicate events.</p> <p>Use <a href="wp_schedule_event" rel="function">wp_schedule_event()</a> to schedule a recurring event.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$timestamp</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Unix timestamp (UTC) for when to next run the event.</span></div></dd>
+<dt>
+<code>$hook</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Action hook to execute when the event is run.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array containing arguments to pass to the hook’s callback function. Each value in the array is passed to the callback as an individual parameter.<br> The array keys are ignored. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$wp_error</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to return a <a href="../classes/wp_error" rel="class">WP_Error</a> on failure. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True if event successfully scheduled. False or <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="39" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_schedule_single_event( $timestamp, $hook, $args = array(), $wp_error = false ) {
+	// Make sure timestamp is a positive integer.
+	if ( ! is_numeric( $timestamp ) || $timestamp &lt;= 0 ) {
+		if ( $wp_error ) {
+			return new WP_Error(
+				'invalid_timestamp',
+				__( 'Event timestamp must be a valid Unix timestamp.' )
+			);
+		}
+
+		return false;
+	}
+
+	$event = (object) array(
+		'hook'      =&gt; $hook,
+		'timestamp' =&gt; $timestamp,
+		'schedule'  =&gt; false,
+		'args'      =&gt; $args,
+	);
+
+	/**
+	 * Filter to override scheduling an event.
+	 *
+	 * Returning a non-null value will short-circuit adding the event to the
+	 * cron array, causing the function to return the filtered value instead.
+	 *
+	 * Both single events and recurring events are passed through this filter;
+	 * single events have `$event-&gt;schedule` as false, whereas recurring events
+	 * have this set to a recurrence from wp_get_schedules(). Recurring
+	 * events also have the integer recurrence interval set as `$event-&gt;interval`.
+	 *
+	 * For plugins replacing wp-cron, it is recommended you check for an
+	 * identical event within ten minutes and apply the <a href="../hooks/schedule_event">'schedule_event'</a>
+	 * filter to check if another plugin has disallowed the event before scheduling.
+	 *
+	 * Return true if the event was scheduled, false or a WP_Error if not.
+	 *
+	 * @since 5.1.0
+	 * @since 5.7.0 The `$wp_error` parameter was added, and a `WP_Error` object can now be returned.
+	 *
+	 * @param null|bool|WP_Error $result   The value to return instead. Default null to continue adding the event.
+	 * @param object             $event    {
+	 *     An object containing an event's data.
+	 *
+	 *     @type string       $hook      Action hook to execute when the event is run.
+	 *     @type int          $timestamp Unix timestamp (UTC) for when to next run the event.
+	 *     @type string|false $schedule  How often the event should subsequently recur.
+	 *     @type array        $args      Array containing each separate argument to pass to the hook's callback function.
+	 *     @type int          $interval  Optional. The interval time in seconds for the schedule. Only present for recurring events.
+	 * }
+	 * @param bool               $wp_error Whether to return a WP_Error on failure.
+	 */
+	$pre = apply_filters( 'pre_schedule_event', null, $event, $wp_error );
+
+	if ( null !== $pre ) {
+		if ( $wp_error &amp;&amp; false === $pre ) {
+			return new WP_Error(
+				'pre_schedule_event_false',
+				__( 'A plugin prevented the event from being scheduled.' )
+			);
+		}
+
+		if ( ! $wp_error &amp;&amp; is_wp_error( $pre ) ) {
+			return false;
+		}
+
+		return $pre;
+	}
+
+	/*
+	 * Check for a duplicated event.
+	 *
+	 * Don't schedule an event if there's already an identical event
+	 * within 10 minutes.
+	 *
+	 * When scheduling events within ten minutes of the current time,
+	 * all past identical events are considered duplicates.
+	 *
+	 * When scheduling an event with a past timestamp (ie, before the
+	 * current time) all events scheduled within the next ten minutes
+	 * are considered duplicates.
+	 */
+	$crons = _get_cron_array();
+
+	$key       = md5( serialize( $event-&gt;args ) );
+	$duplicate = false;
+
+	if ( $event-&gt;timestamp &lt; time() + 10 * MINUTE_IN_SECONDS ) {
+		$min_timestamp = 0;
+	} else {
+		$min_timestamp = $event-&gt;timestamp - 10 * MINUTE_IN_SECONDS;
+	}
+
+	if ( $event-&gt;timestamp &lt; time() ) {
+		$max_timestamp = time() + 10 * MINUTE_IN_SECONDS;
+	} else {
+		$max_timestamp = $event-&gt;timestamp + 10 * MINUTE_IN_SECONDS;
+	}
+
+	foreach ( $crons as $event_timestamp =&gt; $cron ) {
+		if ( $event_timestamp &lt; $min_timestamp ) {
+			continue;
+		}
+
+		if ( $event_timestamp &gt; $max_timestamp ) {
+			break;
+		}
+
+		if ( isset( $cron[ $event-&gt;hook ][ $key ] ) ) {
+			$duplicate = true;
+			break;
+		}
+	}
+
+	if ( $duplicate ) {
+		if ( $wp_error ) {
+			return new WP_Error(
+				'duplicate_event',
+				__( 'A duplicate event already exists.' )
+			);
+		}
+
+		return false;
+	}
+
+	/**
+	 * Modify an event before it is scheduled.
+	 *
+	 * @since 3.1.0
+	 *
+	 * @param object|false $event {
+	 *     An object containing an event's data, or boolean false to prevent the event from being scheduled.
+	 *
+	 *     @type string       $hook      Action hook to execute when the event is run.
+	 *     @type int          $timestamp Unix timestamp (UTC) for when to next run the event.
+	 *     @type string|false $schedule  How often the event should subsequently recur.
+	 *     @type array        $args      Array containing each separate argument to pass to the hook's callback function.
+	 *     @type int          $interval  Optional. The interval time in seconds for the schedule. Only present for recurring events.
+	 * }
+	 */
+	$event = apply_filters( 'schedule_event', $event );
+
+	// A plugin disallowed this event.
+	if ( ! $event ) {
+		if ( $wp_error ) {
+			return new WP_Error(
+				'schedule_event_false',
+				__( 'A plugin disallowed this event.' )
+			);
+		}
+
+		return false;
+	}
+
+	$crons[ $event-&gt;timestamp ][ $event-&gt;hook ][ $key ] = array(
+		'schedule' =&gt; $event-&gt;schedule,
+		'args'     =&gt; $event-&gt;args,
+	);
+	uksort( $crons, 'strnatcasecmp' );
+
+	return _set_cron_array( $crons, $wp_error );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/cron.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/cron.php#L39">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/cron.php#L39-L200">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_schedule_event"><span class="hook-func">apply_filters</span>( ‘pre_schedule_event’, <nobr><span class="arg-type">null|bool|WP_Error</span> <span class="arg-name">$result</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$event</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$wp_error</span></nobr> )</a></dt>
+<dd>
+<p>Filter to override scheduling an event.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/schedule_event"><span class="hook-func">apply_filters</span>( ‘schedule_event’, <nobr><span class="arg-type">object|false</span> <span class="arg-name">$event</span></nobr> )</a></dt>
+<dd>
+<p>Modify an event before it is scheduled.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.7.0/">5.7.0</a></td>
+<td><span class="since-description">The <code>$wp_error</code> parameter was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td><span class="since-description">Return value modified to boolean indicating success or failure, <a href="../hooks/pre_schedule_event">'pre_schedule_event'</a> filter added to short-circuit the function.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_schedule_single_event" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_schedule_single_event</a>
+  </p>
+</div>

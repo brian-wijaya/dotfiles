@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Generate single audio clip - called by web UI.
+
+Usage: python generate.py <text> -o <output> [-e exag] [-c cfg] [-t temp] [-v voice] [--turbo]
+"""
+
+import argparse
+from pathlib import Path
+
+def generate_single(text, output_path, exaggeration=0.3, cfg_weight=0.5, temperature=0.8, voice_path=None, turbo=False):
+    """Generate TTS for a single text."""
+    import torch
+
+    # Enable CUDA optimizations for RTX 3090 Ti
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
+
+    try:
+        if turbo:
+            from chatterbox.tts_turbo import ChatterboxTurboTTS as TTSModel
+            print("Loading Chatterbox TURBO model...")
+        else:
+            from chatterbox.tts import ChatterboxTTS as TTSModel
+            print("Loading Chatterbox model...")
+        import torchaudio as ta
+    except ImportError:
+        print("Error: chatterbox-tts not installed")
+        return 1
+
+    try:
+        from pydub import AudioSegment
+    except ImportError:
+        print("Error: pydub not installed")
+        return 1
+
+    import io
+
+    model = TTSModel.from_pretrained(device="cuda")
+    sample_rate = model.sr
+
+    print(f"Generating: {text[:50]}...")
+    try:
+        if voice_path:
+            wav = model.generate(text, audio_prompt_path=voice_path, exaggeration=exaggeration,
+                               cfg_weight=cfg_weight, temperature=temperature)
+        else:
+            wav = model.generate(text, exaggeration=exaggeration, cfg_weight=cfg_weight,
+                               temperature=temperature)
+
+        buf = io.BytesIO()
+        ta.save(buf, wav, sample_rate, format="wav")
+        buf.seek(0)
+        segment = AudioSegment.from_wav(buf)
+        segment.export(output_path, format="wav")
+        print("OK")
+        return 0
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
+
+def main():
+    parser = argparse.ArgumentParser(description='Generate single TTS audio')
+    parser.add_argument('text', help='Text to speak')
+    parser.add_argument('-o', '--output', required=True, help='Output WAV path')
+    parser.add_argument('-e', '--exaggeration', type=float, default=0.3, help='Exaggeration (0-1)')
+    parser.add_argument('-c', '--cfg-weight', type=float, default=0.5, help='CFG weight (0-1)')
+    parser.add_argument('-t', '--temperature', type=float, default=0.8, help='Temperature (0.1-1.2)')
+    parser.add_argument('-v', '--voice', help='Voice clone audio path')
+    parser.add_argument('--turbo', action='store_true', help='Use Turbo model (faster, less control)')
+    args = parser.parse_args()
+
+    return generate_single(args.text, args.output, args.exaggeration, args.cfg_weight,
+                          args.temperature, args.voice, args.turbo)
+
+if __name__ == '__main__':
+    exit(main())

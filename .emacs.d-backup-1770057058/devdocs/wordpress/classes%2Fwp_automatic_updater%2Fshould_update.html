@@ -1,0 +1,141 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Automatic_Updater::should_update( <span class="arg-type">string</span> <span class="arg-name">$type</span>, <span class="arg-type">object</span> <span class="arg-name">$item</span>, <span class="arg-type">string</span> <span class="arg-name">$context</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Tests to see if we can and should update a specific item.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The type of update being checked: <code>'core'</code>, <code>'theme'</code>, <code>'plugin'</code>, <code>'translation'</code>.</span></div></dd>
+<dt>
+<code>$item</code><span class="type"><span class="object">object</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The update offer.</span></div></dd>
+<dt>
+<code>$context</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The filesystem context (a path) against which filesystem access and status should be checked.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if the item should be updated, false otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="195" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function should_update( $type, $item, $context ) {
+	// Used to see if WP_Filesystem is set up to allow unattended updates.
+	$skin = new Automatic_Upgrader_Skin();
+
+	if ( $this-&gt;is_disabled() ) {
+		return false;
+	}
+
+	// Only relax the filesystem checks when the update doesn't include new files.
+	$allow_relaxed_file_ownership = false;
+	if ( 'core' === $type &amp;&amp; isset( $item-&gt;new_files ) &amp;&amp; ! $item-&gt;new_files ) {
+		$allow_relaxed_file_ownership = true;
+	}
+
+	// If we can't do an auto core update, we may still be able to email the user.
+	if ( ! $skin-&gt;request_filesystem_credentials( false, $context, $allow_relaxed_file_ownership )
+		|| $this-&gt;is_vcs_checkout( $context )
+	) {
+		if ( 'core' === $type ) {
+			$this-&gt;send_core_update_notification_email( $item );
+		}
+		return false;
+	}
+
+	// Next up, is this an item we can update?
+	if ( 'core' === $type ) {
+		$update = Core_Upgrader::should_update_to_version( $item-&gt;current );
+	} elseif ( 'plugin' === $type || 'theme' === $type ) {
+		$update = ! empty( $item-&gt;autoupdate );
+
+		if ( ! $update &amp;&amp; wp_is_auto_update_enabled_for_type( $type ) ) {
+			// Check if the site admin has enabled auto-updates by default for the specific item.
+			$auto_updates = (array) get_site_option( "auto_update_{$type}s", array() );
+			$update       = in_array( $item-&gt;{$type}, $auto_updates, true );
+		}
+	} else {
+		$update = ! empty( $item-&gt;autoupdate );
+	}
+
+	// If the `disable_autoupdate` flag is set, override any user-choice, but allow filters.
+	if ( ! empty( $item-&gt;disable_autoupdate ) ) {
+		$update = false;
+	}
+
+	/**
+	 * Filters whether to automatically update core, a plugin, a theme, or a language.
+	 *
+	 * The dynamic portion of the hook name, `$type`, refers to the type of update
+	 * being checked.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `auto_update_core`
+	 *  - `auto_update_plugin`
+	 *  - `auto_update_theme`
+	 *  - `auto_update_translation`
+	 *
+	 * Since WordPress 3.7, minor and development versions of core, and translations have
+	 * been auto-updated by default. New installs on WordPress 5.6 or higher will also
+	 * auto-update major versions by default. Starting in 5.6, older sites can opt-in to
+	 * major version auto-updates, and auto-updates for plugins and themes.
+	 *
+	 * See the <a href="../../hooks/allow_dev_auto_core_updates">'allow_dev_auto_core_updates'</a>, <a href="../../hooks/allow_minor_auto_core_updates">'allow_minor_auto_core_updates'</a>,
+	 * and <a href="../../hooks/allow_major_auto_core_updates">'allow_major_auto_core_updates'</a> filters for a more straightforward way to
+	 * adjust core updates.
+	 *
+	 * @since 3.7.0
+	 * @since 5.5.0 The `$update` parameter accepts the value of null.
+	 *
+	 * @param bool|null $update Whether to update. The value of null is internally used
+	 *                          to detect whether nothing has hooked into this filter.
+	 * @param object    $item   The update offer.
+	 */
+	$update = apply_filters( "auto_update_{$type}", $update, $item );
+
+	if ( ! $update ) {
+		if ( 'core' === $type ) {
+			$this-&gt;send_core_update_notification_email( $item );
+		}
+		return false;
+	}
+
+	// If it's a core update, are we actually compatible with its requirements?
+	if ( 'core' === $type ) {
+		global $wpdb;
+
+		$php_compat = version_compare( PHP_VERSION, $item-&gt;php_version, '&gt;=' );
+		if ( file_exists( WP_CONTENT_DIR . '/db.php' ) &amp;&amp; empty( $wpdb-&gt;is_mysql ) ) {
+			$mysql_compat = true;
+		} else {
+			$mysql_compat = version_compare( $wpdb-&gt;db_version(), $item-&gt;mysql_version, '&gt;=' );
+		}
+
+		if ( ! $php_compat || ! $mysql_compat ) {
+			return false;
+		}
+	}
+
+	// If updating a plugin or theme, ensure the minimum PHP version requirements are satisfied.
+	if ( in_array( $type, array( 'plugin', 'theme' ), true ) ) {
+		if ( ! empty( $item-&gt;requires_php ) &amp;&amp; version_compare( PHP_VERSION, $item-&gt;requires_php, '&lt;' ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-automatic-updater.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L195">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L195-L301">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/auto_update_type"><span class="hook-func">apply_filters</span>( “auto_update_{$type}”, <nobr><span class="arg-type">bool|null</span> <span class="arg-name">$update</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$item</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to automatically update core, a plugin, a theme, or a language.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_automatic_updater/should_update" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_automatic_updater/should_update</a>
+  </p>
+</div>

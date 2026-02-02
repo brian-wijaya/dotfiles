@@ -1,0 +1,92 @@
+<h1 class="wp-block-wporg-code-reference-title">is_object_in_term( <span class="arg-type">int</span> <span class="arg-name">$object_id</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span>, <span class="arg-type">int|string|int[]|string[]</span> <span class="arg-name">$terms</span> = <span class="arg-default">null</span> ): <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Determines if the given object is associated with any of the given terms.</p> </section> <section><h2 id="description">Description</h2> <p>The given terms are checked against the object’s terms’ term_ids, names and slugs.<br>Terms given as integers will only be checked against the object’s terms’ term_ids.<br>If no terms are given, determines if object is associated with any terms in the given taxonomy.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$object_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">ID of the object (post ID, link ID, …).</span></div></dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Single taxonomy name.</span></div></dd>
+<dt>
+<code>$terms</code><span class="type"><span class="int">int</span>|<span class="string">string</span>|<span class="int[]">int[]</span>|<span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Term ID, name, slug, or array of such to check against. </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span> <a href="../classes/wp_error" rel="class">WP_Error</a> on input error.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="4865" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function is_object_in_term( $object_id, $taxonomy, $terms = null ) {
+	$object_id = (int) $object_id;
+	if ( ! $object_id ) {
+		return new WP_Error( 'invalid_object', __( 'Invalid object ID.' ) );
+	}
+
+	$object_terms = get_object_term_cache( $object_id, $taxonomy );
+	if ( false === $object_terms ) {
+		$object_terms = wp_get_object_terms( $object_id, $taxonomy, array( 'update_term_meta_cache' =&gt; false ) );
+		if ( is_wp_error( $object_terms ) ) {
+			return $object_terms;
+		}
+
+		wp_cache_set( $object_id, wp_list_pluck( $object_terms, 'term_id' ), "{$taxonomy}_relationships" );
+	}
+
+	if ( is_wp_error( $object_terms ) ) {
+		return $object_terms;
+	}
+	if ( empty( $object_terms ) ) {
+		return false;
+	}
+	if ( empty( $terms ) ) {
+		return ( ! empty( $object_terms ) );
+	}
+
+	$terms = (array) $terms;
+
+	$ints = array_filter( $terms, 'is_int' );
+	if ( $ints ) {
+		$strs = array_diff( $terms, $ints );
+	} else {
+		$strs =&amp; $terms;
+	}
+
+	foreach ( $object_terms as $object_term ) {
+		// If term is an int, check against term_ids only.
+		if ( $ints &amp;&amp; in_array( $object_term-&gt;term_id, $ints, true ) ) {
+			return true;
+		}
+
+		if ( $strs ) {
+			// Only check numeric strings against term_id, to avoid false matches due to type juggling.
+			$numeric_strs = array_map( 'intval', array_filter( $strs, 'is_numeric' ) );
+			if ( in_array( $object_term-&gt;term_id, $numeric_strs, true ) ) {
+				return true;
+			}
+
+			if ( in_array( $object_term-&gt;name, $strs, true ) ) {
+				return true;
+			}
+			if ( in_array( $object_term-&gt;slug, $strs, true ) ) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L4865">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L4865-L4923">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/is_object_in_term" class="_attribution-link">https://developer.wordpress.org/reference/functions/is_object_in_term</a>
+  </p>
+</div>

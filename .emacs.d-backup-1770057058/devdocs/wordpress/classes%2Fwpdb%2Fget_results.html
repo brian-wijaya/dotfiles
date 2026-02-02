@@ -1,0 +1,86 @@
+<h1 class="wp-block-wporg-code-reference-title">wpdb::get_results( <span class="arg-type">string</span> <span class="arg-name">$query</span> = <span class="arg-default">null</span>, <span class="arg-type">string</span> <span class="arg-name">$output</span> = <span class="arg-default">OBJECT</span> ): <span class="return-type">array|object|null</span>
+</h1> <section><p>Retrieves an entire SQL result set from the database (i.e., many rows).</p> </section> <section><h2 id="description">Description</h2> <p>Executes a SQL query and returns the entire SQL result.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$query</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">SQL query.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$output</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Any of ARRAY_A | ARRAY_N | OBJECT | OBJECT_K constants.<br> With one of the first three, return an array of rows indexed from 0 by SQL result row number. Each row is an associative array (column =&gt; value, …), a numerically indexed array (0 =&gt; value, …), or an object ( -&gt;column = value ), respectively. With OBJECT_K, return an associative array of row objects keyed by the value of each row’s first column’s value. Duplicate keys are discarded.<br> </span></div>
+<p class="default">Default:<code>OBJECT</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|object|null</span> Database query results.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3134" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_results( $query = null, $output = OBJECT ) {
+	$this-&gt;func_call = "\$db-&gt;get_results(\"$query\", $output)";
+
+	if ( $query ) {
+		if ( $this-&gt;check_current_query &amp;&amp; $this-&gt;check_safe_collation( $query ) ) {
+			$this-&gt;check_current_query = false;
+		}
+
+		$this-&gt;query( $query );
+	} else {
+		return null;
+	}
+
+	$new_array = array();
+	if ( OBJECT === $output ) {
+		// Return an integer-keyed array of row objects.
+		return $this-&gt;last_result;
+	} elseif ( OBJECT_K === $output ) {
+		/*
+		 * Return an array of row objects with keys from column 1.
+		 * (Duplicates are discarded.)
+		 */
+		if ( $this-&gt;last_result ) {
+			foreach ( $this-&gt;last_result as $row ) {
+				$var_by_ref = get_object_vars( $row );
+				$key        = array_shift( $var_by_ref );
+				if ( ! isset( $new_array[ $key ] ) ) {
+					$new_array[ $key ] = $row;
+				}
+			}
+		}
+		return $new_array;
+	} elseif ( ARRAY_A === $output || ARRAY_N === $output ) {
+		// Return an integer-keyed array of...
+		if ( $this-&gt;last_result ) {
+			if ( ARRAY_N === $output ) {
+				foreach ( (array) $this-&gt;last_result as $row ) {
+					// ...integer-keyed row arrays.
+					$new_array[] = array_values( get_object_vars( $row ) );
+				}
+			} else {
+				foreach ( (array) $this-&gt;last_result as $row ) {
+					// ...column name-keyed row arrays.
+					$new_array[] = get_object_vars( $row );
+				}
+			}
+		}
+		return $new_array;
+	} elseif ( strtoupper( $output ) === OBJECT ) {
+		// Back compat for OBJECT being previously case-insensitive.
+		return $this-&gt;last_result;
+	}
+	return null;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wpdb.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wpdb.php#L3134">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wpdb.php#L3134-L3187">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/0.71/">0.71</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wpdb/get_results" class="_attribution-link">https://developer.wordpress.org/reference/classes/wpdb/get_results</a>
+  </p>
+</div>

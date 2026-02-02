@@ -1,0 +1,242 @@
+<header> <h1>TypeScript</h1></header> <aside class="on-this-page svelte-wtnkd6"><label class="svelte-wtnkd6"> <h3 class="svelte-wtnkd6">On this page</h3></label> <nav class="svelte-wtnkd6"><ul class="svelte-wtnkd6">
+<li class="svelte-wtnkd6"><a href="typescript" class="svelte-wtnkd6 active">TypeScript</a></li> <li class="svelte-wtnkd6"><a href="#script-lang-ts" class="svelte-wtnkd6">&lt;script lang=”ts”&gt;</a></li>
+<li class="svelte-wtnkd6"><a href="#Preprocessor-setup" class="svelte-wtnkd6">Preprocessor setup</a></li>
+<li class="svelte-wtnkd6"><a href="#tsconfig.json-settings" class="svelte-wtnkd6">tsconfig.json settings</a></li>
+<li class="svelte-wtnkd6"><a href="#Typing-$props" class="svelte-wtnkd6">Typing $props</a></li>
+<li class="svelte-wtnkd6"><a href="#Generic-$props" class="svelte-wtnkd6">Generic $props</a></li>
+<li class="svelte-wtnkd6"><a href="#Typing-wrapper-components" class="svelte-wtnkd6">Typing wrapper components</a></li>
+<li class="svelte-wtnkd6"><a href="#Typing-$state" class="svelte-wtnkd6">Typing $state</a></li>
+<li class="svelte-wtnkd6"><a href="#The-Component-type" class="svelte-wtnkd6">The Component type</a></li>
+<li class="svelte-wtnkd6"><a href="#Enhancing-built-in-DOM-types" class="svelte-wtnkd6">Enhancing built-in DOM types</a></li>
+</ul></nav></aside> <div class="text content"><div class="text svelte-zb31s9"> <p>You can use TypeScript within Svelte components. IDE extensions like the <a href="https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode">Svelte VS Code extension</a> will help you catch errors right in your editor, and <a href="https://www.npmjs.com/package/svelte-check"><code>svelte-check</code></a> does the same on the command line, which you can integrate into your CI.</p> <h2 id="script-lang-ts">
+<span>&lt;script lang="ts"&gt;</span>
+</h2>
+<p>To use TypeScript inside your Svelte components, add <code>lang="ts"</code> to your <code>script</code> tags:</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;script lang="ts"&gt;
+	let name: string = 'world';
+
+	function greet(name: string) {
+		alert(`Hello, ${name}!`);
+	}
+&lt;/script&gt;
+
+&lt;button onclick={(e: Event) =&gt; greet(e.target.innerText)}&gt;
+	{name as string}
+&lt;/button&gt;</pre>
+</div>
+<p>Doing so allows you to use TypeScript’s <em>type-only</em> features. That is, all features that just disappear when transpiling to JavaScript, such as type annotations or interface declarations. Features that require the TypeScript compiler to output actual code are not supported. This includes:</p> <ul> <li>using enums</li> <li>using <code>private</code>, <code>protected</code> or <code>public</code> modifiers in constructor functions together with initializers</li> <li>using features that are not yet part of the ECMAScript standard (i.e. not level 4 in the TC39 process) and therefore not implemented yet within Acorn, the parser we use for parsing JavaScript</li> </ul> <p>If you want to use one of these features, you need to setup up a <code>script</code> preprocessor.</p> <h2 id="Preprocessor-setup">
+<span>Preprocessor setup</span>
+</h2>
+<p>To use non-type-only TypeScript features within Svelte components, you need to add a preprocessor that will turn TypeScript into JavaScript.</p> <div class="code-block">
+<div class="controls">
+<span class="filename" data-ext=".js">svelte.config</span>
+</div>
+<pre data-language="typescript" class="shiki css-variables twoslash lsp" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+const config = {
+	// Note the additional `{ script: true }`
+	preprocess: vitePreprocess({ script: true })
+};
+
+export default config;</pre>
+</div>
+<h3 id="Preprocessor-setup-Using-SvelteKit-or-Vite">
+<span>Using SvelteKit or Vite</span>
+</h3>
+<p>The easiest way to get started is scaffolding a new SvelteKit project by typing <code>npx sv create</code>, following the prompts and choosing the TypeScript option.</p> <div class="code-block">
+<div class="controls">
+<span class="filename" data-ext=".js">svelte.config</span>
+</div>
+<pre data-language="typescript" class="shiki css-variables twoslash lsp" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+const config = {
+	preprocess: vitePreprocess()
+};
+
+export default config;</pre>
+</div>
+<p>If you don’t need or want all the features SvelteKit has to offer, you can scaffold a Svelte-flavoured Vite project instead by typing <code>npm create vite@latest</code> and selecting the <code>svelte-ts</code> option.</p> <p>In both cases, a <code>svelte.config.js</code> with <code>vitePreprocess</code> will be added. Vite/SvelteKit will read from this config file.</p> <h3 id="Preprocessor-setup-Other-build-tools">
+<span>Other build tools</span>
+</h3>
+<p>If you’re using tools like Rollup or Webpack instead, install their respective Svelte plugins. For Rollup that’s <a href="https://github.com/sveltejs/rollup-plugin-svelte">rollup-plugin-svelte</a> and for Webpack that’s <a href="https://github.com/sveltejs/svelte-loader">svelte-loader</a>. For both, you need to install <code>typescript</code> and <code>svelte-preprocess</code> and add the preprocessor to the plugin config (see the respective READMEs for more info). If you’re starting a new project, you can also use the <a href="https://github.com/sveltejs/template">rollup</a> or <a href="https://github.com/sveltejs/template-webpack">webpack</a> template to scaffold the setup from a script.</p> <blockquote class="note">
+<p> If you’re starting a new project, we recommend using SvelteKit or Vite instead</p> </blockquote>
+<h2 id="tsconfig.json-settings">
+<span>tsconfig.json settings</span>
+</h2>
+<p>When using TypeScript, make sure your <code>tsconfig.json</code> is setup correctly.</p> <ul> <li>Use a <a href="https://www.typescriptlang.org/tsconfig/#target"><code>target</code></a> of at least <code>ES2015</code> so classes are not compiled to functions</li> <li>Set <a href="https://www.typescriptlang.org/tsconfig/#verbatimModuleSyntax"><code>verbatimModuleSyntax</code></a> to <code>true</code> so that imports are left as-is</li> <li>Set <a href="https://www.typescriptlang.org/tsconfig/#isolatedModules"><code>isolatedModules</code></a> to <code>true</code> so that each file is looked at in isolation. TypeScript has a few features which require cross-file analysis and compilation, which the Svelte compiler and tooling like Vite don’t do.</li> </ul> <h2 id="Typing-$props">
+<span>Typing $props</span>
+</h2>
+<p>Type <code>$props</code> just like a regular object with certain properties.</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;script lang="ts"&gt;
+	import type { Snippet } from 'svelte';
+
+	interface Props {
+		requiredProperty: number;
+		optionalProperty?: boolean;
+		snippetWithStringArgument: Snippet&lt;[string]&gt;;
+		eventHandler: (arg: string) =&gt; void;
+		[key: string]: unknown;
+	}
+
+	let {
+		requiredProperty,
+		optionalProperty,
+		snippetWithStringArgument,
+		eventHandler,
+		...everythingElse
+	}: Props = $props();
+&lt;/script&gt;
+
+&lt;button onclick={() =&gt; eventHandler('clicked button')}&gt;
+	{@render snippetWithStringArgument('hello')}
+&lt;/button&gt;</pre>
+</div>
+<h2 id="Generic-$props">
+<span>Generic $props</span>
+</h2>
+<p>Components can declare a generic relationship between their properties. One example is a generic list component that receives a list of items and a callback property that receives an item from the list. To declare that the <code>items</code> property and the <code>select</code> callback operate on the same types, add the <code>generics</code> attribute to the <code>script</code> tag:</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;script lang="ts" generics="Item extends { text: string }"&gt;
+	interface Props {
+		items: Item[];
+		select(item: Item): void;
+	}
+
+	let { items, select }: Props = $props();
+&lt;/script&gt;
+
+{#each items as item}
+	&lt;button onclick={() =&gt; select(item)}&gt;
+		{item.text}
+	&lt;/button&gt;
+{/each}</pre>
+</div>
+<p>The content of <code>generics</code> is what you would put between the <code>&lt;...&gt;</code> tags of a generic function. In other words, you can use multiple generics, <code>extends</code> and fallback types.</p> <h2 id="Typing-wrapper-components">
+<span>Typing wrapper components</span>
+</h2>
+<p>In case you’re writing a component that wraps a native element, you may want to expose all the attributes of the underlying element to the user. In that case, use (or extend from) one of the interfaces provided by <code>svelte/elements</code>. Here’s an example for a <code>Button</code> component:</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;script lang="ts"&gt;
+	import type { HTMLButtonAttributes } from 'svelte/elements';
+
+	let { children, ...rest }: HTMLButtonAttributes = $props();
+&lt;/script&gt;
+
+&lt;button {...rest}&gt;
+	{@render children?.()}
+&lt;/button&gt;</pre>
+</div>
+<p>Not all elements have a dedicated type definition. For those without one, use <code>SvelteHTMLElements</code>:</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;script lang="ts"&gt;
+	import type { SvelteHTMLElements } from 'svelte/elements';
+
+	let { children, ...rest }: SvelteHTMLElements['div'] = $props();
+&lt;/script&gt;
+
+&lt;div {...rest}&gt;
+	{@render children?.()}
+&lt;/div&gt;</pre>
+</div>
+<h2 id="Typing-$state">
+<span>Typing $state</span>
+</h2>
+<p>You can type <code>$state</code> like any other variable.</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables twoslash lsp" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">let count: number = $state(0);</pre>
+</div>
+<p>If you don’t give <code>$state</code> an initial value, part of its types will be <code>undefined</code>.</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables twoslash lsp" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">// Error: Type 'number | undefined' is not assignable to type 'number'
+let count: number = $state();</pre>
+</div>
+<p>If you know that the variable <em>will</em> be defined before you first use it, use an <code>as</code> casting. This is especially useful in the context of classes:</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables twoslash lsp" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">class Counter {
+	count = $state() as number;
+	constructor(initial: number) {
+		this.count = initial;
+	}
+}</pre>
+</div>
+<h2 id="The-Component-type">
+<span>The Component type</span>
+</h2>
+<p>Svelte components are of type <code>Component</code>. You can use it and its related types to express a variety of constraints.</p> <p>Using it together with dynamic components to restrict what kinds of component can be passed to it:</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;script lang="ts"&gt;
+	import type { Component } from 'svelte';
+
+	interface Props {
+		// only components that have at most the "prop"
+		// property required can be passed
+		DynamicComponent: Component&lt;{ prop: string }&gt;;
+	}
+
+	let { DynamicComponent }: Props = $props();
+&lt;/script&gt;
+
+&lt;DynamicComponent prop="foo" /&gt;</pre>
+</div>
+<blockquote><details class="legacy"><summary>Legacy mode</summary><p> In Svelte 4, components were of type <code>SvelteComponent</code></p> </details></blockquote>
+<p>To extract the properties from a component, use <code>ComponentProps</code>.</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables twoslash lsp" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">import type { Component, ComponentProps } from 'svelte';
+import MyComponent from './MyComponent.svelte';
+
+function withProps&lt;TComponent extends Component&lt;any&gt;&gt;(
+	component: TComponent,
+	props: ComponentProps&lt;TComponent&gt;
+) {}
+
+// Errors if the second argument is not the correct props expected
+// by the component in the first argument.
+withProps(MyComponent, { foo: 'bar' });</pre>
+</div>
+<p>To declare that a variable expects the constructor or instance type of a component:</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;script lang="ts"&gt;
+	import MyComponent from './MyComponent.svelte';
+
+	let componentConstructor: typeof MyComponent = MyComponent;
+	let componentInstance: MyComponent;
+&lt;/script&gt;
+
+&lt;MyComponent bind:this={componentInstance} /&gt;</pre>
+</div>
+<h2 id="Enhancing-built-in-DOM-types">
+<span>Enhancing built-in DOM types</span>
+</h2>
+<p>Svelte provides a best effort of all the HTML DOM types that exist. Sometimes you may want to use experimental attributes or custom events coming from an action. In these cases, TypeScript will throw a type error, saying that it does not know these types. If it’s a non-experimental standard attribute/event, this may very well be a missing typing from our <a href="https://github.com/sveltejs/svelte/blob/main/packages/svelte/elements.d.ts">HTML typings</a>. In that case, you are welcome to open an issue and/or a PR fixing it.</p> <p>In case this is a custom or experimental attribute/event, you can enhance the typings by augmenting the <code>svelte/elements</code> module like this:</p> <div class="code-block">
+<div class="controls">
+<span class="filename" data-ext=".ts">additional-svelte-typings.d</span>
+</div>
+<pre data-language="typescript" class="shiki css-variables twoslash lsp" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">import { HTMLButtonAttributes } from 'svelte/elements';
+
+declare module 'svelte/elements' {
+	// add a new element
+	export interface SvelteHTMLElements {
+		'custom-button': HTMLButtonAttributes;
+	}
+
+	// add a new global attribute that is available on all html elements
+	export interface HTMLAttributes&lt;T&gt; {
+		globalattribute?: string;
+	}
+
+	// add a new attribute for button elements
+	export interface HTMLButtonAttributes {
+		veryexperimentalattribute?: string;
+	}
+}
+
+export {}; // ensure this is not an ambient module, else types will be overridden instead of augmented</pre>
+</div>
+<p>Then make sure that the <code>d.ts</code> file is referenced in your <code>tsconfig.json</code>. If it reads something like <code>"include": ["src/**/*"]</code> and your <code>d.ts</code> file is inside <code>src</code>, it should work. You may need to reload for the changes to take effect.</p> </div></div><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2016–2025 Rich Harris and contributors<br>Licensed under the MIT License.<br>
+    <a href="https://svelte.dev/docs/svelte/typescript" class="_attribution-link">https://svelte.dev/docs/svelte/typescript</a>
+  </p>
+</div>

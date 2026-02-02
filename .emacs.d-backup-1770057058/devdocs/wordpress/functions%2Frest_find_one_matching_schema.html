@@ -1,0 +1,101 @@
+<h1 class="wp-block-wporg-code-reference-title">rest_find_one_matching_schema( <span class="arg-type">mixed</span> <span class="arg-name">$value</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span>, <span class="arg-type">string</span> <span class="arg-name">$param</span>, <span class="arg-type">bool</span> <span class="arg-name">$stop_after_first_match</span> = <span class="arg-default">false</span> ): <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Finds the matching schema among the “oneOf” schemas.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$value</code><span class="type"><span class="mixed">mixed</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The value to validate.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The schema array to use.</span></div></dd>
+<dt>
+<code>$param</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The parameter name, used in error messages.</span></div></dd>
+<dt>
+<code>$stop_after_first_match</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether the process should stop after the first successful match.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span> The matching schema or <a href="../classes/wp_error" rel="class">WP_Error</a> instance if the number of matching schemas is not equal to one.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1961" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function rest_find_one_matching_schema( $value, $args, $param, $stop_after_first_match = false ) {
+	$matching_schemas = array();
+	$errors           = array();
+
+	foreach ( $args['oneOf'] as $index =&gt; $schema ) {
+		if ( ! isset( $schema['type'] ) &amp;&amp; isset( $args['type'] ) ) {
+			$schema['type'] = $args['type'];
+		}
+
+		$is_valid = rest_validate_value_from_schema( $value, $schema, $param );
+		if ( ! is_wp_error( $is_valid ) ) {
+			if ( $stop_after_first_match ) {
+				return $schema;
+			}
+
+			$matching_schemas[] = array(
+				'schema_object' =&gt; $schema,
+				'index'         =&gt; $index,
+			);
+		} else {
+			$errors[] = array(
+				'error_object' =&gt; $is_valid,
+				'schema'       =&gt; $schema,
+				'index'        =&gt; $index,
+			);
+		}
+	}
+
+	if ( ! $matching_schemas ) {
+		return rest_get_combining_operation_error( $value, $param, $errors );
+	}
+
+	if ( count( $matching_schemas ) &gt; 1 ) {
+		$schema_positions = array();
+		$schema_titles    = array();
+
+		foreach ( $matching_schemas as $schema ) {
+			$schema_positions[] = $schema['index'];
+
+			if ( isset( $schema['schema_object']['title'] ) ) {
+				$schema_titles[] = $schema['schema_object']['title'];
+			}
+		}
+
+		// If each schema has a title, include those titles in the error message.
+		if ( count( $schema_titles ) === count( $matching_schemas ) ) {
+			return new WP_Error(
+				'rest_one_of_multiple_matches',
+				/* translators: 1: Parameter, 2: Schema titles. */
+				wp_sprintf( __( '%1$s matches %2$l, but should match only one.' ), $param, $schema_titles ),
+				array( 'positions' =&gt; $schema_positions )
+			);
+		}
+
+		return new WP_Error(
+			'rest_one_of_multiple_matches',
+			/* translators: %s: Parameter. */
+			sprintf( __( '%s matches more than one of the expected formats.' ), $param ),
+			array( 'positions' =&gt; $schema_positions )
+		);
+	}
+
+	return $matching_schemas[0]['schema_object'];
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api.php#L1961">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api.php#L1961-L2024">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/rest_find_one_matching_schema" class="_attribution-link">https://developer.wordpress.org/reference/functions/rest_find_one_matching_schema</a>
+  </p>
+</div>

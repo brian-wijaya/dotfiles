@@ -1,0 +1,96 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_List_Table::get_column_info(): <span class="return-type">array</span>
+</h1> <section><p>Gets a list of all, hidden, and sortable columns, with filter applied.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> </section> <section><h2 id="more-information">More Information</h2> <p>This is used by WordPress to build and fetch the <tt>_column_headers</tt> property. Generally, this should not be used by developers. Instead, assign the <tt>_column_headers</tt> property directly from your <tt>prepare_items()</tt> method.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1303" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function get_column_info() {
+	// $_column_headers is already set / cached.
+	if (
+		isset( $this-&gt;_column_headers ) &amp;&amp;
+		is_array( $this-&gt;_column_headers )
+	) {
+		/*
+		 * Backward compatibility for `$_column_headers` format prior to WordPress 4.3.
+		 *
+		 * In WordPress 4.3 the primary column name was added as a fourth item in the
+		 * column headers property. This ensures the primary column name is included
+		 * in plugins setting the property directly in the three item format.
+		 */
+		if ( 4 === count( $this-&gt;_column_headers ) ) {
+			return $this-&gt;_column_headers;
+		}
+
+		$column_headers = array( array(), array(), array(), $this-&gt;get_primary_column_name() );
+		foreach ( $this-&gt;_column_headers as $key =&gt; $value ) {
+			$column_headers[ $key ] = $value;
+		}
+
+		$this-&gt;_column_headers = $column_headers;
+
+		return $this-&gt;_column_headers;
+	}
+
+	$columns = get_column_headers( $this-&gt;screen );
+	$hidden  = get_hidden_columns( $this-&gt;screen );
+
+	$sortable_columns = $this-&gt;get_sortable_columns();
+	/**
+	 * Filters the list table sortable columns for a specific screen.
+	 *
+	 * The dynamic portion of the hook name, `$this-&gt;screen-&gt;id`, refers
+	 * to the ID of the current screen.
+	 *
+	 * @since 3.1.0
+	 *
+	 * @param array $sortable_columns An array of sortable columns.
+	 */
+	$_sortable = apply_filters( "manage_{$this-&gt;screen-&gt;id}_sortable_columns", $sortable_columns );
+
+	$sortable = array();
+	foreach ( $_sortable as $id =&gt; $data ) {
+		if ( empty( $data ) ) {
+			continue;
+		}
+
+		$data = (array) $data;
+		// Descending initial sorting.
+		if ( ! isset( $data[1] ) ) {
+			$data[1] = false;
+		}
+		// Current sorting translatable string.
+		if ( ! isset( $data[2] ) ) {
+			$data[2] = '';
+		}
+		// Initial view sorted column and asc/desc order, default: false.
+		if ( ! isset( $data[3] ) ) {
+			$data[3] = false;
+		}
+		// Initial order for the initial sorted column, default: false.
+		if ( ! isset( $data[4] ) ) {
+			$data[4] = false;
+		}
+
+		$sortable[ $id ] = $data;
+	}
+
+	$primary               = $this-&gt;get_primary_column_name();
+	$this-&gt;_column_headers = array( $columns, $hidden, $sortable, $primary );
+
+	return $this-&gt;_column_headers;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-list-table.php#L1303">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-list-table.php#L1303-L1377">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/manage_this-screen-id_sortable_columns"><span class="hook-func">apply_filters</span>( “manage_{$this-&gt;screen-&gt;id}_sortable_columns”, <nobr><span class="arg-type">array</span> <span class="arg-name">$sortable_columns</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list table sortable columns for a specific screen.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_list_table/get_column_info" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_list_table/get_column_info</a>
+  </p>
+</div>

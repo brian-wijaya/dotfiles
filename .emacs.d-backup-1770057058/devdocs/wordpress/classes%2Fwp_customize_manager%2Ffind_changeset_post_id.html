@@ -1,0 +1,51 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Manager::find_changeset_post_id( <span class="arg-type">string</span> <span class="arg-name">$uuid</span> ): <span class="return-type">int|null</span>
+</h1> <section><p>Finds the changeset post ID for a given changeset UUID.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$uuid</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Changeset UUID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|null</span> Returns post ID on success and null on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="990" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function find_changeset_post_id( $uuid ) {
+	$cache_group       = 'customize_changeset_post';
+	$changeset_post_id = wp_cache_get( $uuid, $cache_group );
+	if ( $changeset_post_id &amp;&amp; 'customize_changeset' === get_post_type( $changeset_post_id ) ) {
+		return $changeset_post_id;
+	}
+
+	$changeset_post_query = new WP_Query(
+		array(
+			'post_type'              =&gt; 'customize_changeset',
+			'post_status'            =&gt; get_post_stati(),
+			'name'                   =&gt; $uuid,
+			'posts_per_page'         =&gt; 1,
+			'no_found_rows'          =&gt; true,
+			'cache_results'          =&gt; true,
+			'update_post_meta_cache' =&gt; false,
+			'update_post_term_cache' =&gt; false,
+			'lazy_load_term_meta'    =&gt; false,
+		)
+	);
+	if ( ! empty( $changeset_post_query-&gt;posts ) ) {
+		// Note: 'fields'=&gt;'ids' is not being used in order to cache the post object as it will be needed.
+		$changeset_post_id = $changeset_post_query-&gt;posts[0]-&gt;ID;
+		wp_cache_set( $uuid, $changeset_post_id, $cache_group );
+		return $changeset_post_id;
+	}
+
+	return null;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-manager.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-manager.php#L990">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-manager.php#L990-L1018">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_manager/find_changeset_post_id" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_manager/find_changeset_post_id</a>
+  </p>
+</div>

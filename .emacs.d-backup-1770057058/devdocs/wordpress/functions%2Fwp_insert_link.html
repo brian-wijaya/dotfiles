@@ -1,0 +1,157 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_insert_link( <span class="arg-type">array</span> <span class="arg-name">$linkdata</span>, <span class="arg-type">bool</span> <span class="arg-name">$wp_error</span> = <span class="arg-default">false</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Inserts a link into the database, or updates an existing link.</p> </section> <section><h2 id="description">Description</h2> <p>Runs all the necessary sanitizing, provides default values if arguments are missing, and finally saves the link.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$linkdata</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Elements that make up the link to insert.<br> <ul class="param-hash">
+<li>
+<code>link_id</code> <span class="type">int</span><div class="desc">Optional. The ID of the existing link if updating.</div>
+</li> <li>
+<code>link_url</code> <span class="type">string</span><div class="desc">The URL the link points to.</div>
+</li> <li>
+<code>link_name</code> <span class="type">string</span><div class="desc">The title of the link.</div>
+</li> <li>
+<code>link_image</code> <span class="type">string</span><div class="desc">Optional. A URL of an image.</div>
+</li> <li>
+<code>link_target</code> <span class="type">string</span><div class="desc">Optional. The target element for the anchor tag.</div>
+</li> <li>
+<code>link_description</code> <span class="type">string</span><div class="desc">Optional. A short description of the link.</div>
+</li> <li>
+<code>link_visible</code> <span class="type">string</span><div class="desc">Optional. <code>'Y'</code> means visible, anything else means not.</div>
+</li> <li>
+<code>link_owner</code> <span class="type">int</span><div class="desc">Optional. A user ID.</div>
+</li> <li>
+<code>link_rating</code> <span class="type">int</span><div class="desc">Optional. A rating for the link.</div>
+</li> <li>
+<code>link_rel</code> <span class="type">string</span><div class="desc">Optional. A relationship of the link to you.</div>
+</li> <li>
+<code>link_notes</code> <span class="type">string</span><div class="desc">Optional. An extended description of or notes on the link.</div>
+</li> <li>
+<code>link_rss</code> <span class="type">string</span><div class="desc">Optional. A URL of an associated RSS feed.</div>
+</li> <li>
+<code>link_category</code> <span class="type">int</span><div class="desc">Optional. The term ID of the link category.<br> If empty, uses default link category.</div>
+</li> </ul> </span></div></dd>
+<dt>
+<code>$wp_error</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to return a <a href="../classes/wp_error" rel="class">WP_Error</a> object on failure. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Value 0 or <a href="../classes/wp_error" rel="class">WP_Error</a> on failure. The link ID on success.</section> <section><h2 id="more-information">More Information</h2> <ul class="wp-block-list"> <li>Specifying the <em>link_id</em> value for $linkdata array will update any link that exists with that ID. If that ID does not exist, the ID will be disregarded and a new link will be created.</li> <li>You can specify as much as you’d like within the $linkdata array. Only <em>link_name</em> and <em>link_url</em> must be specified for the link to be successfully saved.</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="174" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_insert_link( $linkdata, $wp_error = false ) {
+	global $wpdb;
+
+	$defaults = array(
+		'link_id'     =&gt; 0,
+		'link_name'   =&gt; '',
+		'link_url'    =&gt; '',
+		'link_rating' =&gt; 0,
+	);
+
+	$parsed_args = wp_parse_args( $linkdata, $defaults );
+	$parsed_args = wp_unslash( sanitize_bookmark( $parsed_args, 'db' ) );
+
+	$link_id   = $parsed_args['link_id'];
+	$link_name = $parsed_args['link_name'];
+	$link_url  = $parsed_args['link_url'];
+
+	$update = false;
+	if ( ! empty( $link_id ) ) {
+		$update = true;
+	}
+
+	if ( '' === trim( $link_name ) ) {
+		if ( '' !== trim( $link_url ) ) {
+			$link_name = $link_url;
+		} else {
+			return 0;
+		}
+	}
+
+	if ( '' === trim( $link_url ) ) {
+		return 0;
+	}
+
+	$link_rating      = ( ! empty( $parsed_args['link_rating'] ) ) ? $parsed_args['link_rating'] : 0;
+	$link_image       = ( ! empty( $parsed_args['link_image'] ) ) ? $parsed_args['link_image'] : '';
+	$link_target      = ( ! empty( $parsed_args['link_target'] ) ) ? $parsed_args['link_target'] : '';
+	$link_visible     = ( ! empty( $parsed_args['link_visible'] ) ) ? $parsed_args['link_visible'] : 'Y';
+	$link_owner       = ( ! empty( $parsed_args['link_owner'] ) ) ? $parsed_args['link_owner'] : get_current_user_id();
+	$link_notes       = ( ! empty( $parsed_args['link_notes'] ) ) ? $parsed_args['link_notes'] : '';
+	$link_description = ( ! empty( $parsed_args['link_description'] ) ) ? $parsed_args['link_description'] : '';
+	$link_rss         = ( ! empty( $parsed_args['link_rss'] ) ) ? $parsed_args['link_rss'] : '';
+	$link_rel         = ( ! empty( $parsed_args['link_rel'] ) ) ? $parsed_args['link_rel'] : '';
+	$link_category    = ( ! empty( $parsed_args['link_category'] ) ) ? $parsed_args['link_category'] : array();
+
+	// Make sure we set a valid category.
+	if ( ! is_array( $link_category ) || 0 === count( $link_category ) ) {
+		$link_category = array( get_option( 'default_link_category' ) );
+	}
+
+	if ( $update ) {
+		if ( false === $wpdb-&gt;update( $wpdb-&gt;links, compact( 'link_url', 'link_name', 'link_image', 'link_target', 'link_description', 'link_visible', 'link_owner', 'link_rating', 'link_rel', 'link_notes', 'link_rss' ), compact( 'link_id' ) ) ) {
+			if ( $wp_error ) {
+				return new WP_Error( 'db_update_error', __( 'Could not update link in the database.' ), $wpdb-&gt;last_error );
+			} else {
+				return 0;
+			}
+		}
+	} else {
+		if ( false === $wpdb-&gt;insert( $wpdb-&gt;links, compact( 'link_url', 'link_name', 'link_image', 'link_target', 'link_description', 'link_visible', 'link_owner', 'link_rating', 'link_rel', 'link_notes', 'link_rss' ) ) ) {
+			if ( $wp_error ) {
+				return new WP_Error( 'db_insert_error', __( 'Could not insert link into the database.' ), $wpdb-&gt;last_error );
+			} else {
+				return 0;
+			}
+		}
+		$link_id = (int) $wpdb-&gt;insert_id;
+	}
+
+	wp_set_link_cats( $link_id, $link_category );
+
+	if ( $update ) {
+		/**
+		 * Fires after a link was updated in the database.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param int $link_id ID of the link that was updated.
+		 */
+		do_action( 'edit_link', $link_id );
+	} else {
+		/**
+		 * Fires after a link was added to the database.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param int $link_id ID of the link that was added.
+		 */
+		do_action( 'add_link', $link_id );
+	}
+	clean_bookmark_cache( $link_id );
+
+	return $link_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/bookmark.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/bookmark.php#L174">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/bookmark.php#L174-L267">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/add_link"><span class="hook-func">do_action</span>( ‘add_link’, <nobr><span class="arg-type">int</span> <span class="arg-name">$link_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a link was added to the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/edit_link"><span class="hook-func">do_action</span>( ‘edit_link’, <nobr><span class="arg-type">int</span> <span class="arg-name">$link_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a link was updated in the database.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_insert_link" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_insert_link</a>
+  </p>
+</div>

@@ -1,0 +1,113 @@
+<h1 class="wp-block-wporg-code-reference-title">_WP_Editors::print_default_editor_scripts()</h1> <section><p>Print (output) all editor scripts and default settings.</p> </section> <section><h2 id="description">Description</h2> <p>For use when the editor is going to be initialized after page load.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="934" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function print_default_editor_scripts() {
+	$user_can_richedit = user_can_richedit();
+
+	if ( $user_can_richedit ) {
+		$settings = self::default_settings();
+
+		$settings['toolbar1']    = 'bold,italic,bullist,numlist,link';
+		$settings['wpautop']     = false;
+		$settings['indent']      = true;
+		$settings['elementpath'] = false;
+
+		if ( is_rtl() ) {
+			$settings['directionality'] = 'rtl';
+		}
+
+		/*
+		 * In production all plugins are loaded (they are in wp-editor.js.gz).
+		 * The 'wpview', 'wpdialogs', and 'media' TinyMCE plugins are not initialized by default.
+		 * Can be added from js by using the 'wp-before-tinymce-init' event.
+		 */
+		$settings['plugins'] = implode(
+			',',
+			array(
+				'charmap',
+				'colorpicker',
+				'hr',
+				'lists',
+				'paste',
+				'tabfocus',
+				'textcolor',
+				'fullscreen',
+				'wordpress',
+				'wpautoresize',
+				'wpeditimage',
+				'wpemoji',
+				'wpgallery',
+				'wplink',
+				'wptextpattern',
+			)
+		);
+
+		$settings = self::_parse_init( $settings );
+	} else {
+		$settings = '{}';
+	}
+
+	?&gt;
+	&lt;script type="text/javascript"&gt;
+	window.wp = window.wp || {};
+	window.wp.editor = window.wp.editor || {};
+	window.wp.editor.getDefaultSettings = function() {
+		return {
+			tinymce: &lt;?php echo $settings; ?&gt;,
+			quicktags: {
+				buttons: 'strong,em,link,ul,ol,li,code'
+			}
+		};
+	};
+
+	&lt;?php
+
+	if ( $user_can_richedit ) {
+		$suffix  = SCRIPT_DEBUG ? '' : '.min';
+		$baseurl = self::get_baseurl();
+
+		?&gt;
+		var tinyMCEPreInit = {
+			baseURL: "&lt;?php echo $baseurl; ?&gt;",
+			suffix: "&lt;?php echo $suffix; ?&gt;",
+			mceInit: {},
+			qtInit: {},
+			load_ext: function(url,lang){var sl=tinymce.ScriptLoader;sl.markDone(url+'/langs/'+lang+'.js');sl.markDone(url+'/langs/'+lang+'_dlg.js');}
+		};
+		&lt;?php
+	}
+	?&gt;
+	&lt;/script&gt;
+	&lt;?php
+
+	if ( $user_can_richedit ) {
+		self::print_tinymce_scripts();
+	}
+
+	/**
+	 * Fires when the editor scripts are loaded for later initialization,
+	 * after all scripts and settings are printed.
+	 *
+	 * @since 4.8.0
+	 */
+	do_action( 'print_default_editor_scripts' );
+
+	self::wp_link_dialog();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-editor.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-editor.php#L934">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-editor.php#L934-L1026">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/print_default_editor_scripts"><span class="hook-func">do_action</span>( ‘print_default_editor_scripts’ )</a></dt>
+<dd>
+<p>Fires when the editor scripts are loaded for later initialization, after all scripts and settings are printed.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.8.0/">4.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/_wp_editors/print_default_editor_scripts" class="_attribution-link">https://developer.wordpress.org/reference/classes/_wp_editors/print_default_editor_scripts</a>
+  </p>
+</div>

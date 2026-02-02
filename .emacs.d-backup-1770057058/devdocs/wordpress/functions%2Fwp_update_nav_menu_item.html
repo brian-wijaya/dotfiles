@@ -1,0 +1,267 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_update_nav_menu_item( <span class="arg-type">int</span> <span class="arg-name">$menu_id</span>, <span class="arg-type">int</span> <span class="arg-name">$menu_item_db_id</span>, <span class="arg-type">array</span> <span class="arg-name">$menu_item_data</span> = <span class="arg-default">array()</span>, <span class="arg-type">bool</span> <span class="arg-name">$fire_after_hooks</span> = <span class="arg-default">true</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Saves the properties of a menu item or create a new one.</p> </section> <section><h2 id="description">Description</h2> <p>The menu-item-title, menu-item-description and menu-item-attr-title are expected to be pre-slashed since they are passed directly to APIs that expect slashed data.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$menu_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The ID of the menu. If 0, makes the menu item a draft orphan.</span></div></dd>
+<dt>
+<code>$menu_item_db_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The ID of the menu item. If 0, creates a new menu item.</span></div></dd>
+<dt>
+<code>$menu_item_data</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The menu item’s data.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$fire_after_hooks</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to fire the after insert hooks. </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> The menu item’s database ID or <a href="../classes/wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="421" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_update_nav_menu_item( $menu_id = 0, $menu_item_db_id = 0, $menu_item_data = array(), $fire_after_hooks = true ) {
+	$menu_id         = (int) $menu_id;
+	$menu_item_db_id = (int) $menu_item_db_id;
+
+	// Make sure that we don't convert non-nav_menu_item objects into nav_menu_item objects.
+	if ( ! empty( $menu_item_db_id ) &amp;&amp; ! is_nav_menu_item( $menu_item_db_id ) ) {
+		return new WP_Error( 'update_nav_menu_item_failed', __( 'The given object ID is not that of a menu item.' ) );
+	}
+
+	$menu = wp_get_nav_menu_object( $menu_id );
+
+	if ( ! $menu &amp;&amp; 0 !== $menu_id ) {
+		return new WP_Error( 'invalid_menu_id', __( 'Invalid menu ID.' ) );
+	}
+
+	if ( is_wp_error( $menu ) ) {
+		return $menu;
+	}
+
+	$defaults = array(
+		'menu-item-db-id'         =&gt; $menu_item_db_id,
+		'menu-item-object-id'     =&gt; 0,
+		'menu-item-object'        =&gt; '',
+		'menu-item-parent-id'     =&gt; 0,
+		'menu-item-position'      =&gt; 0,
+		'menu-item-type'          =&gt; 'custom',
+		'menu-item-title'         =&gt; '',
+		'menu-item-url'           =&gt; '',
+		'menu-item-description'   =&gt; '',
+		'menu-item-attr-title'    =&gt; '',
+		'menu-item-target'        =&gt; '',
+		'menu-item-classes'       =&gt; '',
+		'menu-item-xfn'           =&gt; '',
+		'menu-item-status'        =&gt; '',
+		'menu-item-post-date'     =&gt; '',
+		'menu-item-post-date-gmt' =&gt; '',
+	);
+
+	$args = wp_parse_args( $menu_item_data, $defaults );
+
+	if ( 0 === $menu_id ) {
+		$args['menu-item-position'] = 1;
+	} elseif ( 0 === (int) $args['menu-item-position'] ) {
+		$menu_items = array();
+
+		if ( 0 !== $menu_id ) {
+			$menu_items = (array) wp_get_nav_menu_items( $menu_id, array( 'post_status' =&gt; 'publish,draft' ) );
+		}
+
+		$last_item = array_pop( $menu_items );
+
+		if ( $last_item &amp;&amp; isset( $last_item-&gt;menu_order ) ) {
+			$args['menu-item-position'] = 1 + $last_item-&gt;menu_order;
+		} else {
+			$args['menu-item-position'] = count( $menu_items );
+		}
+	}
+
+	$original_parent = 0 &lt; $menu_item_db_id ? get_post_field( 'post_parent', $menu_item_db_id ) : 0;
+
+	if ( 'custom' === $args['menu-item-type'] ) {
+		// If custom menu item, trim the URL.
+		$args['menu-item-url'] = trim( $args['menu-item-url'] );
+	} else {
+		/*
+		 * If non-custom menu item, then:
+		 * - use the original object's URL.
+		 * - blank default title to sync with the original object's title.
+		 */
+
+		$args['menu-item-url'] = '';
+
+		$original_title = '';
+
+		if ( 'taxonomy' === $args['menu-item-type'] ) {
+			$original_object = get_term( $args['menu-item-object-id'], $args['menu-item-object'] );
+
+			if ( $original_object instanceof WP_Term ) {
+				$original_parent = get_term_field( 'parent', $args['menu-item-object-id'], $args['menu-item-object'], 'raw' );
+				$original_title  = get_term_field( 'name', $args['menu-item-object-id'], $args['menu-item-object'], 'raw' );
+			}
+		} elseif ( 'post_type' === $args['menu-item-type'] ) {
+			$original_object = get_post( $args['menu-item-object-id'] );
+
+			if ( $original_object instanceof WP_Post ) {
+				$original_parent = (int) $original_object-&gt;post_parent;
+				$original_title  = $original_object-&gt;post_title;
+			}
+		} elseif ( 'post_type_archive' === $args['menu-item-type'] ) {
+			$original_object = get_post_type_object( $args['menu-item-object'] );
+
+			if ( $original_object instanceof WP_Post_Type ) {
+				$original_title = $original_object-&gt;labels-&gt;archives;
+			}
+		}
+
+		if ( wp_unslash( $args['menu-item-title'] ) === wp_specialchars_decode( $original_title ) ) {
+			$args['menu-item-title'] = '';
+		}
+
+		// Hack to get wp to create a post object when too many properties are empty.
+		if ( '' === $args['menu-item-title'] &amp;&amp; '' === $args['menu-item-description'] ) {
+			$args['menu-item-description'] = ' ';
+		}
+	}
+
+	// Populate the menu item object.
+	$post = array(
+		'menu_order'   =&gt; $args['menu-item-position'],
+		'ping_status'  =&gt; 0,
+		'post_content' =&gt; $args['menu-item-description'],
+		'post_excerpt' =&gt; $args['menu-item-attr-title'],
+		'post_parent'  =&gt; $original_parent,
+		'post_title'   =&gt; $args['menu-item-title'],
+		'post_type'    =&gt; 'nav_menu_item',
+	);
+
+	$post_date = wp_resolve_post_date( $args['menu-item-post-date'], $args['menu-item-post-date-gmt'] );
+	if ( $post_date ) {
+		$post['post_date'] = $post_date;
+	}
+
+	$update = 0 !== $menu_item_db_id;
+
+	// New menu item. Default is draft status.
+	if ( ! $update ) {
+		$post['ID']          = 0;
+		$post['post_status'] = 'publish' === $args['menu-item-status'] ? 'publish' : 'draft';
+		$menu_item_db_id     = wp_insert_post( $post, true, $fire_after_hooks );
+		if ( ! $menu_item_db_id || is_wp_error( $menu_item_db_id ) ) {
+			return $menu_item_db_id;
+		}
+
+		/**
+		 * Fires immediately after a new navigation menu item has been added.
+		 *
+		 * @since 4.4.0
+		 *
+		 * @see wp_update_nav_menu_item()
+		 *
+		 * @param int   $menu_id         ID of the updated menu.
+		 * @param int   $menu_item_db_id ID of the new menu item.
+		 * @param array $args            An array of arguments used to update/add the menu item.
+		 */
+		do_action( 'wp_add_nav_menu_item', $menu_id, $menu_item_db_id, $args );
+	}
+
+	/*
+	 * Associate the menu item with the menu term.
+	 * Only set the menu term if it isn't set to avoid unnecessary wp_get_object_terms().
+	 */
+	if ( $menu_id &amp;&amp; ( ! $update || ! is_object_in_term( $menu_item_db_id, 'nav_menu', (int) $menu-&gt;term_id ) ) ) {
+		$update_terms = wp_set_object_terms( $menu_item_db_id, array( $menu-&gt;term_id ), 'nav_menu' );
+		if ( is_wp_error( $update_terms ) ) {
+			return $update_terms;
+		}
+	}
+
+	if ( 'custom' === $args['menu-item-type'] ) {
+		$args['menu-item-object-id'] = $menu_item_db_id;
+		$args['menu-item-object']    = 'custom';
+	}
+
+	$menu_item_db_id = (int) $menu_item_db_id;
+
+	// Reset invalid `menu_item_parent`.
+	if ( (int) $args['menu-item-parent-id'] === $menu_item_db_id ) {
+		$args['menu-item-parent-id'] = 0;
+	}
+
+	update_post_meta( $menu_item_db_id, '_menu_item_type', sanitize_key( $args['menu-item-type'] ) );
+	update_post_meta( $menu_item_db_id, '_menu_item_menu_item_parent', (string) ( (int) $args['menu-item-parent-id'] ) );
+	update_post_meta( $menu_item_db_id, '_menu_item_object_id', (string) ( (int) $args['menu-item-object-id'] ) );
+	update_post_meta( $menu_item_db_id, '_menu_item_object', sanitize_key( $args['menu-item-object'] ) );
+	update_post_meta( $menu_item_db_id, '_menu_item_target', sanitize_key( $args['menu-item-target'] ) );
+
+	$args['menu-item-classes'] = array_map( 'sanitize_html_class', explode( ' ', $args['menu-item-classes'] ) );
+	$args['menu-item-xfn']     = implode( ' ', array_map( 'sanitize_html_class', explode( ' ', $args['menu-item-xfn'] ) ) );
+	update_post_meta( $menu_item_db_id, '_menu_item_classes', $args['menu-item-classes'] );
+	update_post_meta( $menu_item_db_id, '_menu_item_xfn', $args['menu-item-xfn'] );
+	update_post_meta( $menu_item_db_id, '_menu_item_url', sanitize_url( $args['menu-item-url'] ) );
+
+	if ( 0 === $menu_id ) {
+		update_post_meta( $menu_item_db_id, '_menu_item_orphaned', (string) time() );
+	} elseif ( get_post_meta( $menu_item_db_id, '_menu_item_orphaned' ) ) {
+		delete_post_meta( $menu_item_db_id, '_menu_item_orphaned' );
+	}
+
+	// Update existing menu item. Default is publish status.
+	if ( $update ) {
+		$post['ID']          = $menu_item_db_id;
+		$post['post_status'] = ( 'draft' === $args['menu-item-status'] ) ? 'draft' : 'publish';
+
+		$update_post = wp_update_post( $post, true );
+		if ( is_wp_error( $update_post ) ) {
+			return $update_post;
+		}
+	}
+
+	/**
+	 * Fires after a navigation menu item has been updated.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @see wp_update_nav_menu_item()
+	 *
+	 * @param int   $menu_id         ID of the updated menu.
+	 * @param int   $menu_item_db_id ID of the updated menu item.
+	 * @param array $args            An array of arguments used to update a menu item.
+	 */
+	do_action( 'wp_update_nav_menu_item', $menu_id, $menu_item_db_id, $args );
+
+	return $menu_item_db_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/nav-menu.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/nav-menu.php#L421">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/nav-menu.php#L421-L634">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_add_nav_menu_item"><span class="hook-func">do_action</span>( ‘wp_add_nav_menu_item’, <nobr><span class="arg-type">int</span> <span class="arg-name">$menu_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$menu_item_db_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a new navigation menu item has been added.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_update_nav_menu_item"><span class="hook-func">do_action</span>( ‘wp_update_nav_menu_item’, <nobr><span class="arg-type">int</span> <span class="arg-name">$menu_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$menu_item_db_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a navigation menu item has been updated.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Added the <code>$fire_after_hooks</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_update_nav_menu_item" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_update_nav_menu_item</a>
+  </p>
+</div>

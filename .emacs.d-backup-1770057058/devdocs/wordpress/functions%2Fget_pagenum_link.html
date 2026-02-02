@@ -1,0 +1,110 @@
+<h1 class="wp-block-wporg-code-reference-title">get_pagenum_link( <span class="arg-type">int</span> <span class="arg-name">$pagenum</span> = <span class="arg-default">1</span>, <span class="arg-type">bool</span> <span class="arg-name">$escape</span> = <span class="arg-default">true</span> ): <span class="return-type">string</span>
+</h1> <section><p>Retrieves the link for a page number.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$pagenum</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Page number. </span></div>
+<p class="default">Default:<code>1</code></p>
+</dd>
+<dt>
+<code>$escape</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to escape the URL for display, with <a href="esc_url" rel="function">esc_url()</a> .<br> If set to false, prepares the URL with <a href="sanitize_url" rel="function">sanitize_url()</a> . </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The link URL for the given page number.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2424" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_pagenum_link( $pagenum = 1, $escape = true ) {
+	global $wp_rewrite;
+
+	$pagenum = (int) $pagenum;
+
+	$request = remove_query_arg( 'paged' );
+
+	$home_root = parse_url( home_url() );
+	$home_root = ( isset( $home_root['path'] ) ) ? $home_root['path'] : '';
+	$home_root = preg_quote( $home_root, '|' );
+
+	$request = preg_replace( '|^' . $home_root . '|i', '', $request );
+	$request = preg_replace( '|^/+|', '', $request );
+
+	if ( ! $wp_rewrite-&gt;using_permalinks() || is_admin() ) {
+		$base = trailingslashit( get_bloginfo( 'url' ) );
+
+		if ( $pagenum &gt; 1 ) {
+			$result = add_query_arg( 'paged', $pagenum, $base . $request );
+		} else {
+			$result = $base . $request;
+		}
+	} else {
+		$qs_regex = '|\?.*?$|';
+		preg_match( $qs_regex, $request, $qs_match );
+
+		$parts   = array();
+		$parts[] = untrailingslashit( get_bloginfo( 'url' ) );
+
+		if ( ! empty( $qs_match[0] ) ) {
+			$query_string = $qs_match[0];
+			$request      = preg_replace( $qs_regex, '', $request );
+		} else {
+			$query_string = '';
+		}
+
+		$request = preg_replace( "|$wp_rewrite-&gt;pagination_base/\d+/?$|", '', $request );
+		$request = preg_replace( '|^' . preg_quote( $wp_rewrite-&gt;index, '|' ) . '|i', '', $request );
+		$request = ltrim( $request, '/' );
+
+		if ( $wp_rewrite-&gt;using_index_permalinks() &amp;&amp; ( $pagenum &gt; 1 || '' !== $request ) ) {
+			$parts[] = $wp_rewrite-&gt;index;
+		}
+
+		$parts[] = untrailingslashit( $request );
+
+		if ( $pagenum &gt; 1 ) {
+			$parts[] = $wp_rewrite-&gt;pagination_base;
+			$parts[] = $pagenum;
+		}
+
+		$result = user_trailingslashit( implode( '/', array_filter( $parts ) ), 'paged' );
+		if ( ! empty( $query_string ) ) {
+			$result .= $query_string;
+		}
+	}
+
+	/**
+	 * Filters the page number link for the current request.
+	 *
+	 * @since 2.5.0
+	 * @since 5.2.0 Added the `$pagenum` argument.
+	 *
+	 * @param string $result  The page number link.
+	 * @param int    $pagenum The page number.
+	 */
+	$result = apply_filters( 'get_pagenum_link', $result, $pagenum );
+
+	if ( $escape ) {
+		return esc_url( $result );
+	} else {
+		return sanitize_url( $result );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/link-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/link-template.php#L2424">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/link-template.php#L2424-L2497">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_pagenum_link"><span class="hook-func">apply_filters</span>( ‘get_pagenum_link’, <nobr><span class="arg-type">string</span> <span class="arg-name">$result</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$pagenum</span></nobr> )</a></dt>
+<dd>
+<p>Filters the page number link for the current request.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_pagenum_link" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_pagenum_link</a>
+  </p>
+</div>

@@ -1,0 +1,82 @@
+<h1 class="wp-block-wporg-code-reference-title">wpdb::get_col_charset( <span class="arg-type">string</span> <span class="arg-name">$table</span>, <span class="arg-type">string</span> <span class="arg-name">$column</span> ): <span class="return-type">string|false|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Retrieves the character set for the given column.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$table</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Table name.</span></div></dd>
+<dt>
+<code>$column</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Column name.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false|<a href="../wp_error" rel="class">WP_Error</a></span> Column character set as a string. False if the column has no character set. <a href="../wp_error" rel="class">WP_Error</a> object if there was an error.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3296" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_col_charset( $table, $column ) {
+	$tablekey  = strtolower( $table );
+	$columnkey = strtolower( $column );
+
+	/**
+	 * Filters the column charset value before the DB is checked.
+	 *
+	 * Passing a non-null value to the filter will short-circuit
+	 * checking the DB for the charset, returning that value instead.
+	 *
+	 * @since 4.2.0
+	 *
+	 * @param string|null|false|WP_Error $charset The character set to use. Default null.
+	 * @param string                     $table   The name of the table being checked.
+	 * @param string                     $column  The name of the column being checked.
+	 */
+	$charset = apply_filters( 'pre_get_col_charset', null, $table, $column );
+	if ( null !== $charset ) {
+		return $charset;
+	}
+
+	// Skip this entirely if this isn't a MySQL database.
+	if ( empty( $this-&gt;is_mysql ) ) {
+		return false;
+	}
+
+	if ( empty( $this-&gt;table_charset[ $tablekey ] ) ) {
+		// This primes column information for us.
+		$table_charset = $this-&gt;get_table_charset( $table );
+		if ( is_wp_error( $table_charset ) ) {
+			return $table_charset;
+		}
+	}
+
+	// If still no column information, return the table charset.
+	if ( empty( $this-&gt;col_meta[ $tablekey ] ) ) {
+		return $this-&gt;table_charset[ $tablekey ];
+	}
+
+	// If this column doesn't exist, return the table charset.
+	if ( empty( $this-&gt;col_meta[ $tablekey ][ $columnkey ] ) ) {
+		return $this-&gt;table_charset[ $tablekey ];
+	}
+
+	// Return false when it's not a string column.
+	if ( empty( $this-&gt;col_meta[ $tablekey ][ $columnkey ]-&gt;Collation ) ) {
+		return false;
+	}
+
+	list( $charset ) = explode( '_', $this-&gt;col_meta[ $tablekey ][ $columnkey ]-&gt;Collation );
+	return $charset;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wpdb.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wpdb.php#L3296">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wpdb.php#L3296-L3347">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/pre_get_col_charset"><span class="hook-func">apply_filters</span>( ‘pre_get_col_charset’, <nobr><span class="arg-type">string|null|false|WP_Error</span> <span class="arg-name">$charset</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$table</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$column</span></nobr> )</a></dt>
+<dd>
+<p>Filters the column charset value before the DB is checked.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wpdb/get_col_charset" class="_attribution-link">https://developer.wordpress.org/reference/classes/wpdb/get_col_charset</a>
+  </p>
+</div>

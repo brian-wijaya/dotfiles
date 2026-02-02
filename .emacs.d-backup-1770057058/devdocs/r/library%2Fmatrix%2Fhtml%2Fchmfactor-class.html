@@ -1,0 +1,116 @@
+<div class="container">
+<main>  <h2>
+<code>CHMfactor-class</code> Sparse Cholesky Factorizations</h2> <h3>Description</h3> <p><code>CHMfactor</code> is the virtual class of sparse Cholesky factorizations of <code class="reqn">n \times n</code> real, symmetric matrices <code class="reqn">A</code>, having the general form </p> <p style="text-align: center;"><code class="reqn">P_1 A P_1' = L_1 D L_1' \overset{D_{jj} \ge 0}{=} L L'</code> </p> <p>or (equivalently) </p> <p style="text-align: center;"><code class="reqn">A = P_1' L_1 D L_1' P_1 \overset{D_{jj} \ge 0}{=} P_1' L L' P_1</code> </p> <p>where <code class="reqn">P_1</code> is a permutation matrix, <code class="reqn">L_1</code> is a unit lower triangular matrix, <code class="reqn">D</code> is a diagonal matrix, and <code class="reqn">L = L_1 \sqrt{D}</code>. The second equalities hold only for positive semidefinite <code class="reqn">A</code>, for which the diagonal entries of <code class="reqn">D</code> are non-negative and <code class="reqn">\sqrt{D}</code> is well-defined. </p> <p>The implementation of class <code>CHMfactor</code> is based on CHOLMOD's C-level <code>cholmod_factor_struct</code>. Virtual subclasses <code>CHMsimpl</code> and <code>CHMsuper</code> separate the simplicial and supernodal variants. These have nonvirtual subclasses <code>[dn]CHMsimpl</code> and <code>[dn]CHMsuper</code>, where prefix ‘<span class="samp">⁠d⁠</span>’ and prefix ‘<span class="samp">⁠n⁠</span>’ are reserved for numeric and symbolic factorizations, respectively. </p> <h3>Usage</h3> <pre data-language="r"><code class="language-R">isLDL(x)
+</code></pre> <h3>Arguments</h3> <table> <tr>
+<td><code id="x">x</code></td> <td> <p>an object inheriting from virtual class <code>CHMfactor</code>, almost always the result of a call to generic function <code><a href="cholesky-methods">Cholesky</a></code>.</p> </td>
+</tr> </table> <h3>Value</h3> <p><code>isLDL(x)</code> returns <code>TRUE</code> or <code>FALSE</code>: <code>TRUE</code> if <code>x</code> stores the lower triangular entries of <code class="reqn">L_1-I+D</code>, <code>FALSE</code> if <code>x</code> stores the lower triangular entries of <code class="reqn">L</code>. </p> <h3>Slots</h3> <p>Of <code>CHMfactor</code>: </p> <dl> <dt>
+<code>Dim</code>, <code>Dimnames</code>
+</dt>
+<dd>
+<p>inherited from virtual class <code><a href="matrixfactorization-class">MatrixFactorization</a></code>.</p> </dd> <dt><code>colcount</code></dt>
+<dd>
+<p>an integer vector of length <code>Dim[1]</code> giving an <em>estimate</em> of the number of nonzero entries in each column of the lower triangular Cholesky factor. If symbolic analysis was performed prior to factorization, then the estimate is exact.</p> </dd> <dt><code>perm</code></dt>
+<dd>
+<p>a 0-based integer vector of length <code>Dim[1]</code> specifying the permutation applied to the rows and columns of the factorized matrix. <code>perm</code> of length 0 is valid and equivalent to the identity permutation, implying no pivoting.</p> </dd> <dt><code>type</code></dt>
+<dd>
+<p>an integer vector of length 6 specifying details of the factorization. The elements correspond to members <code>ordering</code>, <code>is_ll</code>, <code>is_super</code>, <code>is_monotonic</code>, <code>maxcsize</code>, and <code>maxesize</code> of the original <code>cholmod_factor_struct</code>. Simplicial and supernodal factorizations are distinguished by <code>is_super</code>. Simplicial factorizations do not use <code>maxcsize</code> or <code>maxesize</code>. Supernodal factorizations do not use <code>is_ll</code> or <code>is_monotonic</code>.</p> </dd> </dl> <p>Of <code>CHMsimpl</code> (all unused by <code>nCHMsimpl</code>): </p> <dl> <dt><code>nz</code></dt>
+<dd>
+<p>an integer vector of length <code>Dim[1]</code> giving the number of nonzero entries in each column of the lower triangular Cholesky factor. There is at least one nonzero entry in each column, because the diagonal elements of the factor are stored explicitly.</p> </dd> <dt><code>p</code></dt>
+<dd>
+<p>an integer vector of length <code>Dim[1]+1</code>. Row indices of nonzero entries in column <code>j</code> of the lower triangular Cholesky factor are obtained as <code>i[p[j]+seq_len(nz[j])]+1</code>.</p> </dd> <dt><code>i</code></dt>
+<dd>
+<p>an integer vector of length greater than or equal to <code>sum(nz)</code> containing the row indices of nonzero entries in the lower triangular Cholesky factor. These are grouped by column and sorted within columns, but the columns themselves need not be ordered monotonically. Columns may be overallocated, i.e., the number of elements of <code>i</code> reserved for column <code>j</code> may exceed <code>nz[j]</code>.</p> </dd> <dt>
+<code>prv</code>, <code>nxt</code>
+</dt>
+<dd>
+<p>integer vectors of length <code>Dim[1]+2</code> indicating the order in which the columns of the lower triangular Cholesky factor are stored in <code>i</code> and <code>x</code>. Starting from <code>j &lt;- Dim[1]+2</code>, the recursion <code>j &lt;- nxt[j+1]+1</code> traverses the columns in forward order and terminates when <code>nxt[j+1] = -1</code>. Starting from <code>j &lt;- Dim[1]+1</code>, the recursion <code>j &lt;- prv[j+1]+1</code> traverses the columns in backward order and terminates when <code>prv[j+1] = -1</code>.</p> </dd> </dl> <p>Of <code>dCHMsimpl</code>: </p> <dl> <dt><code>x</code></dt>
+<dd>
+<p>a numeric vector parallel to <code>i</code> containing the corresponding nonzero entries of the lower triangular Cholesky factor <code class="reqn">L</code> <em>or</em> (if and only if <code>type[2]</code> is 0) of the lower triangular matrix <code class="reqn">L_1-I+D</code>.</p> </dd> </dl> <p>Of <code>CHMsuper</code>: </p> <dl> <dt>
+<code>super</code>, <code>pi</code>, <code>px</code>
+</dt>
+<dd>
+<p>integer vectors of length <code>nsuper+1</code>, where <code>nsuper</code> is the number of supernodes. <code>super[j]+1</code> is the index of the leftmost column of supernode <code>j</code>. The row indices of supernode <code>j</code> are obtained as <code>s[pi[j]+seq_len(pi[j+1]-pi[j])]+1</code>. The numeric entries of supernode <code>j</code> are obtained as <code>x[px[j]+seq_len(px[j+1]-px[j])]+1</code> (if slot <code>x</code> is available).</p> </dd> <dt><code>s</code></dt>
+<dd>
+<p>an integer vector of length greater than or equal to <code>Dim[1]</code> containing the row indices of the supernodes. <code>s</code> may contain duplicates, but not within a supernode, where the row indices must be increasing.</p> </dd> </dl> <p>Of <code>dCHMsuper</code>: </p> <dl> <dt><code>x</code></dt>
+<dd>
+<p>a numeric vector of length less than or equal to <code>prod(Dim)</code> containing the numeric entries of the supernodes.</p> </dd> </dl> <h3>Extends</h3> <p>Class <code><a href="matrixfactorization-class">MatrixFactorization</a></code>, directly. </p> <h3>Instantiation</h3> <p>Objects can be generated directly by calls of the form <code>new("dCHMsimpl", ...)</code>, etc., but <code>dCHMsimpl</code> and <code>dCHMsuper</code> are more typically obtained as the value of <code><a href="cholesky-methods">Cholesky</a>(x, ...)</code> for <code>x</code> inheriting from <code><a href="sparsematrix-class">sparseMatrix</a></code> (often <code><a href="dscmatrix-class">dsCMatrix</a></code>). </p> <p>There is currently no API outside of calls to <code><a href="../../methods/html/new">new</a></code> for generating <code>nCHMsimpl</code> and <code>nCHMsuper</code>. These classes are vestigial and may be formally deprecated in a future version of <span class="pkg">Matrix</span>. </p> <h3>Methods</h3> <dl> <dt><code>coerce</code></dt>
+<dd>
+<p><code>signature(from = "CHMsimpl", to = "dtCMatrix")</code>: returns a <code><a href="dtcmatrix-class">dtCMatrix</a></code> representing the lower triangular Cholesky factor <code class="reqn">L</code> <em>or</em> the lower triangular matrix <code class="reqn">L_1-I+D</code>, the latter if and only if <code>from@type[2]</code> is 0.</p> </dd> <dt><code>coerce</code></dt>
+<dd>
+<p><code>signature(from = "CHMsuper", to = "dgCMatrix")</code>: returns a <code><a href="dgcmatrix-class">dgCMatrix</a></code> representing the lower triangular Cholesky factor <code class="reqn">L</code>. Note that, for supernodes spanning two or more columns, the supernodal algorithm by design stores non-structural zeros above the main diagonal, hence <code><a href="dgcmatrix-class">dgCMatrix</a></code> is indeed more appropriate than <code><a href="dtcmatrix-class">dtCMatrix</a></code> as a coercion target.</p> </dd> <dt><code>determinant</code></dt>
+<dd>
+<p><code>signature(from = "CHMfactor", logarithm = "logical")</code>: behaves according to an optional argument <code>sqrt</code>. If <code>sqrt = FALSE</code>, then this method computes the determinant of the factorized matrix <code class="reqn">A</code> or its logarithm. If <code>sqrt = TRUE</code>, then this method computes the determinant of the factor <code class="reqn">L = L_1 sqrt(D)</code> or its logarithm, giving <code>NaN</code> for the modulus when <code class="reqn">D</code> has negative diagonal elements. For backwards compatibility, the default value of <code>sqrt</code> is <code>TRUE</code>, but that can be expected change in a future version of <span class="pkg">Matrix</span>, hence defensive code will always set <code>sqrt</code> (to <code>TRUE</code>, if the code must remain backwards compatible with <span class="pkg">Matrix</span> <code>&lt; 1.6-0</code>). Calls to this method not setting <code>sqrt</code> may warn about the pending change. The warnings can be disabled with <code><a href="../../base/html/options">options</a>(Matrix.warnSqrtDefault = 0)</code>.</p> </dd> <dt><code>diag</code></dt>
+<dd>
+<p><code>signature(x = "CHMfactor")</code>: returns a numeric vector of length <code class="reqn">n</code> containing the diagonal elements of <code class="reqn">D</code>, which (<em>if</em> they are all non-negative) are the squared diagonal elements of <code class="reqn">L</code>.</p> </dd> <dt><code>expand</code></dt>
+<dd>
+<p><code>signature(x = "CHMfactor")</code>: see <code><a href="expand-methods">expand-methods</a></code>.</p> </dd> <dt><code>expand1</code></dt>
+<dd>
+<p><code>signature(x = "CHMsimpl")</code>: see <code><a href="expand-methods">expand1-methods</a></code>.</p> </dd> <dt><code>expand1</code></dt>
+<dd>
+<p><code>signature(x = "CHMsuper")</code>: see <code><a href="expand-methods">expand1-methods</a></code>.</p> </dd> <dt><code>expand2</code></dt>
+<dd>
+<p><code>signature(x = "CHMsimpl")</code>: see <code><a href="expand-methods">expand2-methods</a></code>.</p> </dd> <dt><code>expand2</code></dt>
+<dd>
+<p><code>signature(x = "CHMsuper")</code>: see <code><a href="expand-methods">expand2-methods</a></code>.</p> </dd> <dt><code>image</code></dt>
+<dd>
+<p><code>signature(x = "CHMfactor")</code>: see <code><a href="image-methods">image-methods</a></code>.</p> </dd> <dt><code>nnzero</code></dt>
+<dd>
+<p><code>signature(x = "CHMfactor")</code>: see <code><a href="nnzero-methods">nnzero-methods</a></code>.</p> </dd> <dt><code>solve</code></dt>
+<dd>
+<p><code>signature(a = "CHMfactor", b = .)</code>: see <code><a href="solve-methods">solve-methods</a></code>.</p> </dd> <dt><code>update</code></dt>
+<dd>
+<p><code>signature(object = "CHMfactor")</code>: returns a copy of <code>object</code> with the same nonzero pattern but with numeric entries updated according to additional arguments <code>parent</code> and <code>mult</code>, where <code>parent</code> is (coercible to) a <code><a href="dscmatrix-class">dsCMatrix</a></code> or a <code><a href="dgcmatrix-class">dgCMatrix</a></code> and <code>mult</code> is a numeric vector of positive length. <br> The numeric entries are updated with those of the Cholesky factor of <code>F(parent) + mult[1] * I</code>, i.e., <code>F(parent)</code> plus <code>mult[1]</code> times the identity matrix, where <code>F = <a href="../../base/html/identity">identity</a></code> for symmetric <code>parent</code> and <code>F = <a href="matmult-methods">tcrossprod</a></code> for other <code>parent</code>. The nonzero pattern of <code>F(parent)</code> must match that of <code>S</code> if <code>object = Cholesky(S, ...)</code>.</p> </dd> <dt><code>updown</code></dt>
+<dd>
+<p><code>signature(update = ., C = ., object = "CHMfactor")</code>: see <code><a href="updown-methods">updown-methods</a></code>.</p> </dd> </dl> <h3>References</h3> <p>The CHOLMOD source code; see <a href="https://github.com/DrTimothyAldenDavis/SuiteSparse">https://github.com/DrTimothyAldenDavis/SuiteSparse</a>, notably the header file ‘<span class="file">CHOLMOD/Include/cholmod.h</span>’ defining <code>cholmod_factor_struct</code>. </p> <p>Chen, Y., Davis, T. A., Hager, W. W., &amp; Rajamanickam, S. (2008). Algorithm 887: CHOLMOD, supernodal sparse Cholesky factorization and update/downdate. <em>ACM Transactions on Mathematical Software</em>, <em>35</em>(3), Article 22, 1-14. <a href="https://doi.org/10.1145/1391989.1391995">doi:10.1145/1391989.1391995</a> </p> <p>Amestoy, P. R., Davis, T. A., &amp; Duff, I. S. (2004). Algorithm 837: AMD, an approximate minimum degree ordering algorithm. <em>ACM Transactions on Mathematical Software</em>, <em>17</em>(4), 886-905. <a href="https://doi.org/10.1145/1024074.1024081">doi:10.1145/1024074.1024081</a> </p> <p>Golub, G. H., &amp; Van Loan, C. F. (2013). <em>Matrix computations</em> (4th ed.). Johns Hopkins University Press. <a href="https://doi.org/10.56021/9781421407944">doi:10.56021/9781421407944</a> </p> <h3>See Also</h3> <p>Class <code><a href="dscmatrix-class">dsCMatrix</a></code>. </p> <p>Generic functions <code><a href="cholesky-methods">Cholesky</a></code>, <code><a href="updown-methods">updown</a></code>, <code><a href="expand-methods">expand1</a></code> and <code><a href="expand-methods">expand2</a></code>. </p> <h3>Examples</h3> <pre data-language="r"><code class="language-R">
+showClass("dCHMsimpl")
+showClass("dCHMsuper")
+set.seed(2)
+
+m &lt;- 1000L
+n &lt;- 200L
+M &lt;- rsparsematrix(m, n, 0.01)
+A &lt;- crossprod(M)
+
+## With dimnames, to see that they are propagated :
+dimnames(A) &lt;- dn &lt;- rep.int(list(paste0("x", seq_len(n))), 2L)
+
+(ch.A &lt;- Cholesky(A)) # pivoted, by default
+str(e.ch.A &lt;- expand2(ch.A, LDL =  TRUE), max.level = 2L)
+str(E.ch.A &lt;- expand2(ch.A, LDL = FALSE), max.level = 2L)
+
+ae1 &lt;- function(a, b, ...) all.equal(as(a, "matrix"), as(b, "matrix"), ...)
+ae2 &lt;- function(a, b, ...) ae1(unname(a), unname(b), ...)
+
+## A ~ P1' L1 D L1' P1 ~ P1' L L' P1 in floating point
+stopifnot(exprs = {
+    identical(names(e.ch.A), c("P1.", "L1", "D", "L1.", "P1"))
+    identical(names(E.ch.A), c("P1.", "L" ,      "L." , "P1"))
+    identical(e.ch.A[["P1"]],
+              new("pMatrix", Dim = c(n, n), Dimnames = c(list(NULL), dn[2L]),
+                  margin = 2L, perm = invertPerm(ch.A@perm, 0L, 1L)))
+    identical(e.ch.A[["P1."]], t(e.ch.A[["P1"]]))
+    identical(e.ch.A[["L1."]], t(e.ch.A[["L1"]]))
+    identical(E.ch.A[["L." ]], t(E.ch.A[["L" ]]))
+    identical(e.ch.A[["D"]], Diagonal(x = diag(ch.A)))
+    all.equal(E.ch.A[["L"]], with(e.ch.A, L1 %*% sqrt(D)))
+    ae1(A, with(e.ch.A, P1. %*% L1 %*% D %*% L1. %*% P1))
+    ae1(A, with(E.ch.A, P1. %*% L  %*%         L.  %*% P1))
+    ae2(A[ch.A@perm + 1L, ch.A@perm + 1L], with(e.ch.A, L1 %*% D %*% L1.))
+    ae2(A[ch.A@perm + 1L, ch.A@perm + 1L], with(E.ch.A, L  %*%         L. ))
+})
+
+## Factorization handled as factorized matrix
+## (in some cases only optionally, depending on arguments)
+b &lt;- rnorm(n)
+stopifnot(identical(det(A), det(ch.A, sqrt = FALSE)),
+          identical(solve(A, b), solve(ch.A, b, system = "A")))
+
+u1 &lt;- update(ch.A,   A , mult = sqrt(2))
+u2 &lt;- update(ch.A, t(M), mult = sqrt(2)) # updating with crossprod(M), not M
+stopifnot(all.equal(u1, u2, tolerance = 1e-14))
+</code></pre> </main> </div><div class="_attribution">
+  <p class="_attribution-p">
+    Copyright (&copy;) 1999–2012 R Foundation for Statistical Computing.<br>Licensed under the <a href="https://www.gnu.org/copyleft/gpl.html">GNU General Public License</a>.<br>
+    
+  </p>
+</div>

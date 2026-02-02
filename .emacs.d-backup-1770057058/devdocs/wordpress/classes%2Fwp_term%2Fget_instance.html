@@ -1,0 +1,102 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Term::get_instance( <span class="arg-type">int</span> <span class="arg-name">$term_id</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span> = <span class="arg-default">null</span> ): <span class="return-type"><a href="../wp_term" rel="class">WP_Term</a>|<a href="../wp_error" rel="class">WP_Error</a>|false</span>
+</h1> <section><p>Retrieve <a href="../wp_term" rel="class">WP_Term</a> instance.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$term_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Term ID.</span></div></dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Limit matched terms to those matching <code>$taxonomy</code>. Only used for disambiguating potentially shared terms.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_term" rel="class">WP_Term</a>|<a href="../wp_error" rel="class">WP_Error</a>|false</span> Term object, if found. <a href="../wp_error" rel="class">WP_Error</a> if <code>$term_id</code> is shared between taxonomies and there’s insufficient data to distinguish which term is intended.<br> False for other failures.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="116" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function get_instance( $term_id, $taxonomy = null ) {
+	global $wpdb;
+
+	$term_id = (int) $term_id;
+	if ( ! $term_id ) {
+		return false;
+	}
+
+	$_term = wp_cache_get( $term_id, 'terms' );
+
+	// If there isn't a cached version, hit the database.
+	if ( ! $_term || ( $taxonomy &amp;&amp; $taxonomy !== $_term-&gt;taxonomy ) ) {
+		// Any term found in the cache is not a match, so don't use it.
+		$_term = false;
+
+		// Grab all matching terms, in case any are shared between taxonomies.
+		$terms = $wpdb-&gt;get_results( $wpdb-&gt;prepare( "SELECT t.*, tt.* FROM $wpdb-&gt;terms AS t INNER JOIN $wpdb-&gt;term_taxonomy AS tt ON t.term_id = tt.term_id WHERE t.term_id = %d", $term_id ) );
+		if ( ! $terms ) {
+			return false;
+		}
+
+		// If a taxonomy was specified, find a match.
+		if ( $taxonomy ) {
+			foreach ( $terms as $match ) {
+				if ( $taxonomy === $match-&gt;taxonomy ) {
+					$_term = $match;
+					break;
+				}
+			}
+
+			// If only one match was found, it's the one we want.
+		} elseif ( 1 === count( $terms ) ) {
+			$_term = reset( $terms );
+
+			// Otherwise, the term must be shared between taxonomies.
+		} else {
+			// If the term is shared only with invalid taxonomies, return the one valid term.
+			foreach ( $terms as $t ) {
+				if ( ! taxonomy_exists( $t-&gt;taxonomy ) ) {
+					continue;
+				}
+
+				// Only hit if we've already identified a term in a valid taxonomy.
+				if ( $_term ) {
+					return new WP_Error( 'ambiguous_term_id', __( 'Term ID is shared between multiple taxonomies' ), $term_id );
+				}
+
+				$_term = $t;
+			}
+		}
+
+		if ( ! $_term ) {
+			return false;
+		}
+
+		// Don't return terms from invalid taxonomies.
+		if ( ! taxonomy_exists( $_term-&gt;taxonomy ) ) {
+			return new WP_Error( 'invalid_taxonomy', __( 'Invalid taxonomy.' ) );
+		}
+
+		$_term = sanitize_term( $_term, $_term-&gt;taxonomy, 'raw' );
+
+		// Don't cache terms that are shared between taxonomies.
+		if ( 1 === count( $terms ) ) {
+			wp_cache_add( $term_id, $_term, 'terms' );
+		}
+	}
+
+	$term_obj = new WP_Term( $_term );
+	$term_obj-&gt;filter( $term_obj-&gt;filter );
+
+	return $term_obj;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-term.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-term.php#L116">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-term.php#L116-L188">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_term/get_instance" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_term/get_instance</a>
+  </p>
+</div>

@@ -1,0 +1,119 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_date( <span class="arg-type">string</span> <span class="arg-name">$format</span>, <span class="arg-type">int</span> <span class="arg-name">$timestamp</span> = <span class="arg-default">null</span>, <span class="arg-type">DateTimeZone</span> <span class="arg-name">$timezone</span> = <span class="arg-default">null</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Retrieves the date, in localized format.</p> </section> <section><h2 id="description">Description</h2> <p>This is a newer function, intended to replace <code>date_i18n()</code> without legacy quirks in it.</p> <p>Note that, unlike <code>date_i18n()</code>, this function accepts a true Unix timestamp, not summed with timezone offset.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$format</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">PHP date format.</span></div></dd>
+<dt>
+<code>$timestamp</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Unix timestamp. Defaults to current time.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$timezone</code><span class="type"><span class="DateTimeZone">DateTimeZone</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Timezone to output result in. Defaults to timezone from site settings.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> The date, translated if locale specifies it. False on invalid timestamp input.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="239" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_date( $format, $timestamp = null, $timezone = null ) {
+	global $wp_locale;
+
+	if ( null === $timestamp ) {
+		$timestamp = time();
+	} elseif ( ! is_numeric( $timestamp ) ) {
+		return false;
+	}
+
+	if ( ! $timezone ) {
+		$timezone = wp_timezone();
+	}
+
+	$datetime = date_create( '@' . $timestamp );
+	$datetime-&gt;setTimezone( $timezone );
+
+	if ( empty( $wp_locale-&gt;month ) || empty( $wp_locale-&gt;weekday ) ) {
+		$date = $datetime-&gt;format( $format );
+	} else {
+		// We need to unpack shorthand `r` format because it has parts that might be localized.
+		$format = preg_replace( '/(?&lt;!\\\\)r/', DATE_RFC2822, $format );
+
+		$new_format    = '';
+		$format_length = strlen( $format );
+		$month         = $wp_locale-&gt;get_month( $datetime-&gt;format( 'm' ) );
+		$weekday       = $wp_locale-&gt;get_weekday( $datetime-&gt;format( 'w' ) );
+
+		for ( $i = 0; $i &lt; $format_length; $i++ ) {
+			switch ( $format[ $i ] ) {
+				case 'D':
+					$new_format .= addcslashes( $wp_locale-&gt;get_weekday_abbrev( $weekday ), '\\A..Za..z' );
+					break;
+				case 'F':
+					$new_format .= addcslashes( $month, '\\A..Za..z' );
+					break;
+				case 'l':
+					$new_format .= addcslashes( $weekday, '\\A..Za..z' );
+					break;
+				case 'M':
+					$new_format .= addcslashes( $wp_locale-&gt;get_month_abbrev( $month ), '\\A..Za..z' );
+					break;
+				case 'a':
+					$new_format .= addcslashes( $wp_locale-&gt;get_meridiem( $datetime-&gt;format( 'a' ) ), '\\A..Za..z' );
+					break;
+				case 'A':
+					$new_format .= addcslashes( $wp_locale-&gt;get_meridiem( $datetime-&gt;format( 'A' ) ), '\\A..Za..z' );
+					break;
+				case '\\':
+					$new_format .= $format[ $i ];
+
+					// If character follows a slash, we add it without translating.
+					if ( $i &lt; $format_length ) {
+						$new_format .= $format[ ++$i ];
+					}
+					break;
+				default:
+					$new_format .= $format[ $i ];
+					break;
+			}
+		}
+
+		$date = $datetime-&gt;format( $new_format );
+		$date = wp_maybe_decline_date( $date, $format );
+	}
+
+	/**
+	 * Filters the date formatted based on the locale.
+	 *
+	 * @since 5.3.0
+	 *
+	 * @param string       $date      Formatted date string.
+	 * @param string       $format    Format to display the date.
+	 * @param int          $timestamp Unix timestamp.
+	 * @param DateTimeZone $timezone  Timezone.
+	 */
+	$date = apply_filters( 'wp_date', $date, $format, $timestamp, $timezone );
+
+	return $date;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L239">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L239-L317">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_date"><span class="hook-func">apply_filters</span>( ‘wp_date’, <nobr><span class="arg-type">string</span> <span class="arg-name">$date</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$format</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$timestamp</span></nobr>, <nobr><span class="arg-type">DateTimeZone</span> <span class="arg-name">$timezone</span></nobr> )</a></dt>
+<dd>
+<p>Filters the date formatted based on the locale.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_date" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_date</a>
+  </p>
+</div>

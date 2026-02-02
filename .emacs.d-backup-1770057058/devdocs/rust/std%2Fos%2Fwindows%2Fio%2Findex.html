@@ -1,0 +1,82 @@
+<h1 class="main-heading">Module io </h1>
+<span class="item-info"><div class="stab portability">Available on <strong>Windows</strong> only.</div></span><p>Windows-specific extensions to general I/O primitives.</p> <p>Just like raw pointers, raw Windows handles and sockets point to resources with dynamic lifetimes, and they can dangle if they outlive their resources or be forged if they’re created from invalid values.</p> <p>This module provides three types for representing raw handles and sockets with different ownership properties: raw, borrowed, and owned, which are analogous to types used for representing pointers. These types reflect concepts of <a href="../../../io/index#io-safety" title="mod std::io">I/O safety</a> on Windows.</p> <div>
+<table>
+<thead><tr>
+<th>Type</th>
+<th>Analogous to</th>
+</tr></thead>
+<tbody> <tr>
+<td><a href="type.rawhandle" title="type std::os::windows::io::RawHandle"><code>RawHandle</code></a></td>
+<td><code>*const _</code></td>
+</tr> <tr>
+<td><a href="type.rawsocket" title="type std::os::windows::io::RawSocket"><code>RawSocket</code></a></td>
+<td><code>*const _</code></td>
+</tr> <tr>
+<td></td>
+<td></td>
+</tr> <tr>
+<td><a href="struct.borrowedhandle" title="struct std::os::windows::io::BorrowedHandle"><code>BorrowedHandle&lt;'a&gt;</code></a></td>
+<td><code>&amp;'a _</code></td>
+</tr> <tr>
+<td><a href="struct.borrowedsocket" title="struct std::os::windows::io::BorrowedSocket"><code>BorrowedSocket&lt;'a&gt;</code></a></td>
+<td><code>&amp;'a _</code></td>
+</tr> <tr>
+<td></td>
+<td></td>
+</tr> <tr>
+<td><a href="struct.ownedhandle" title="struct std::os::windows::io::OwnedHandle"><code>OwnedHandle</code></a></td>
+<td><code>Box&lt;_&gt;</code></td>
+</tr> <tr>
+<td><a href="struct.ownedsocket" title="struct std::os::windows::io::OwnedSocket"><code>OwnedSocket</code></a></td>
+<td><code>Box&lt;_&gt;</code></td>
+</tr> </tbody>
+</table> </div> <p>Like raw pointers, <code>RawHandle</code> and <code>RawSocket</code> values are primitive values. And in new code, they should be considered unsafe to do I/O on (analogous to dereferencing them). Rust did not always provide this guidance, so existing code in the Rust ecosystem often doesn’t mark <code>RawHandle</code> and <code>RawSocket</code> usage as unsafe. Libraries are encouraged to migrate, either by adding <code>unsafe</code> to APIs that dereference <code>RawHandle</code> and <code>RawSocket</code> values, or by using to <code>BorrowedHandle</code>, <code>BorrowedSocket</code>, <code>OwnedHandle</code>, or <code>OwnedSocket</code>.</p> <p>Like references, <code>BorrowedHandle</code> and <code>BorrowedSocket</code> values are tied to a lifetime, to ensure that they don’t outlive the resource they point to. These are safe to use. <code>BorrowedHandle</code> and <code>BorrowedSocket</code> values may be used in APIs which provide safe access to any system call except for <code>CloseHandle</code>, <code>closesocket</code>, or any other call that would end the dynamic lifetime of the resource without ending the lifetime of the handle or socket.</p> <p><code>BorrowedHandle</code> and <code>BorrowedSocket</code> values may be used in APIs which provide safe access to <code>DuplicateHandle</code> and <code>WSADuplicateSocketW</code> and related functions, so types implementing <code>AsHandle</code>, <code>AsSocket</code>, <code>From&lt;OwnedHandle&gt;</code>, or <code>From&lt;OwnedSocket&gt;</code> should not assume they always have exclusive access to the underlying object.</p> <p>Like boxes, <code>OwnedHandle</code> and <code>OwnedSocket</code> values conceptually own the resource they point to, and free (close) it when they are dropped.</p> <p>See the <a href="../../../io/index#io-safety" title="mod std::io"><code>io</code> module docs</a> for a general explanation of I/O safety.</p> <h3 id="structs" class="section-header">Structs</h3>
+<dl class="item-table">
+<dt><a class="struct" href="struct.borrowedhandle" title="struct std::os::windows::io::BorrowedHandle">Borrowed<wbr>Handle</wbr></a></dt>
+<dd>A borrowed handle.</dd>
+<dt><a class="struct" href="struct.borrowedsocket" title="struct std::os::windows::io::BorrowedSocket">Borrowed<wbr>Socket</wbr></a></dt>
+<dd>A borrowed socket.</dd>
+<dt><a class="struct" href="struct.handleorinvalid" title="struct std::os::windows::io::HandleOrInvalid">Handle<wbr>OrInvalid</wbr></a></dt>
+<dd>FFI type for handles in return values or out parameters, where <code>INVALID_HANDLE_VALUE</code> is used as a sentry value to indicate errors, such as in the return value of <code>CreateFileW</code>. This uses <code>repr(transparent)</code> and has the representation of a host handle, so that it can be used in such FFI declarations.</dd>
+<dt><a class="struct" href="struct.handleornull" title="struct std::os::windows::io::HandleOrNull">Handle<wbr>OrNull</wbr></a></dt>
+<dd>FFI type for handles in return values or out parameters, where <code>NULL</code> is used as a sentry value to indicate errors, such as in the return value of <code>CreateThread</code>. This uses <code>repr(transparent)</code> and has the representation of a host handle, so that it can be used in such FFI declarations.</dd>
+<dt><a class="struct" href="struct.invalidhandleerror" title="struct std::os::windows::io::InvalidHandleError">Invalid<wbr>Handle<wbr>Error</wbr></wbr></a></dt>
+<dd>This is the error type used by <a href="struct.handleorinvalid" title="struct std::os::windows::io::HandleOrInvalid"><code>HandleOrInvalid</code></a> when attempting to convert into a handle, to indicate that the value is <code>INVALID_HANDLE_VALUE</code>.</dd>
+<dt><a class="struct" href="struct.nullhandleerror" title="struct std::os::windows::io::NullHandleError">Null<wbr>Handle<wbr>Error</wbr></wbr></a></dt>
+<dd>This is the error type used by <a href="struct.handleornull" title="struct std::os::windows::io::HandleOrNull"><code>HandleOrNull</code></a> when attempting to convert into a handle, to indicate that the value is null.</dd>
+<dt><a class="struct" href="struct.ownedhandle" title="struct std::os::windows::io::OwnedHandle">Owned<wbr>Handle</wbr></a></dt>
+<dd>An owned handle.</dd>
+<dt><a class="struct" href="struct.ownedsocket" title="struct std::os::windows::io::OwnedSocket">Owned<wbr>Socket</wbr></a></dt>
+<dd>An owned socket.</dd>
+</dl>
+<h3 id="traits" class="section-header">Traits</h3>
+<dl class="item-table">
+<dt><a class="trait" href="trait.ashandle" title="trait std::os::windows::io::AsHandle">AsHandle</a></dt>
+<dd>A trait to borrow the handle from an underlying object.</dd>
+<dt><a class="trait" href="trait.asrawhandle" title="trait std::os::windows::io::AsRawHandle">AsRaw<wbr>Handle</wbr></a></dt>
+<dd>Extracts raw handles.</dd>
+<dt><a class="trait" href="trait.asrawsocket" title="trait std::os::windows::io::AsRawSocket">AsRaw<wbr>Socket</wbr></a></dt>
+<dd>Extracts raw sockets.</dd>
+<dt><a class="trait" href="trait.assocket" title="trait std::os::windows::io::AsSocket">AsSocket</a></dt>
+<dd>A trait to borrow the socket from an underlying object.</dd>
+<dt><a class="trait" href="trait.fromrawhandle" title="trait std::os::windows::io::FromRawHandle">From<wbr>RawHandle</wbr></a></dt>
+<dd>Constructs I/O objects from raw handles.</dd>
+<dt><a class="trait" href="trait.fromrawsocket" title="trait std::os::windows::io::FromRawSocket">From<wbr>RawSocket</wbr></a></dt>
+<dd>Creates I/O objects from raw sockets.</dd>
+<dt><a class="trait" href="trait.intorawhandle" title="trait std::os::windows::io::IntoRawHandle">Into<wbr>RawHandle</wbr></a></dt>
+<dd>A trait to express the ability to consume an object and acquire ownership of its raw <code>HANDLE</code>.</dd>
+<dt><a class="trait" href="trait.intorawsocket" title="trait std::os::windows::io::IntoRawSocket">Into<wbr>RawSocket</wbr></a></dt>
+<dd>A trait to express the ability to consume an object and acquire ownership of its raw <code>SOCKET</code>.</dd>
+</dl>
+<h3 id="types" class="section-header">Type Aliases</h3>
+<dl class="item-table">
+<dt><a class="type" href="type.rawhandle" title="type std::os::windows::io::RawHandle">RawHandle</a></dt>
+<dd>Raw HANDLEs.</dd>
+<dt><a class="type" href="type.rawsocket" title="type std::os::windows::io::RawSocket">RawSocket</a></dt>
+<dd>Raw SOCKETs.</dd>
+</dl><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2010 The Rust Project Developers<br>Licensed under the Apache License, Version 2.0 or the MIT license, at your option.<br>
+    <a href="https://doc.rust-lang.org/std/os/windows/io/index.html" class="_attribution-link">https://doc.rust-lang.org/std/os/windows/io/index.html</a>
+  </p>
+</div>

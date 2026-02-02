@@ -1,0 +1,92 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Community_Events::format_event_data_time( <span class="arg-type">array</span> <span class="arg-name">$response_body</span> ): <span class="return-type">array</span>
+</h1> <section><p>Adds formatted date and time items for each event in an API response.</p> </section> <section><h2 id="description">Description</h2> <p>This has to be called after the data is pulled from the cache, because the cached events are shared by all users. If it was called before storing the cache, then all users would see the events in the localized data/time of the user who triggered the cache refresh, rather than their own.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$response_body</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The response which contains the events.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The response with dates and times formatted.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="383" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function format_event_data_time( $response_body ) {
+	_deprecated_function(
+		__METHOD__,
+		'5.5.2',
+		'This is no longer used by core, and only kept for backward compatibility.'
+	);
+
+	if ( isset( $response_body['events'] ) ) {
+		foreach ( $response_body['events'] as $key =&gt; $event ) {
+			$timestamp = strtotime( $event['date'] );
+
+			/*
+			 * The `date_format` option is not used because it's important
+			 * in this context to keep the day of the week in the formatted date,
+			 * so that users can tell at a glance if the event is on a day they
+			 * are available, without having to open the link.
+			 */
+			/* translators: Date format for upcoming events on the dashboard. Include the day of the week. See https://www.php.net/manual/datetime.format.php */
+			$formatted_date = date_i18n( __( 'l, M j, Y' ), $timestamp );
+			$formatted_time = date_i18n( get_option( 'time_format' ), $timestamp );
+
+			if ( isset( $event['end_date'] ) ) {
+				$end_timestamp      = strtotime( $event['end_date'] );
+				$formatted_end_date = date_i18n( __( 'l, M j, Y' ), $end_timestamp );
+
+				if ( 'meetup' !== $event['type'] &amp;&amp; $formatted_end_date !== $formatted_date ) {
+					/* translators: Upcoming events month format. See https://www.php.net/manual/datetime.format.php */
+					$start_month = date_i18n( _x( 'F', 'upcoming events month format' ), $timestamp );
+					$end_month   = date_i18n( _x( 'F', 'upcoming events month format' ), $end_timestamp );
+
+					if ( $start_month === $end_month ) {
+						$formatted_date = sprintf(
+							/* translators: Date string for upcoming events. 1: Month, 2: Starting day, 3: Ending day, 4: Year. */
+							__( '%1$s %2$d–%3$d, %4$d' ),
+							$start_month,
+							/* translators: Upcoming events day format. See https://www.php.net/manual/datetime.format.php */
+							date_i18n( _x( 'j', 'upcoming events day format' ), $timestamp ),
+							date_i18n( _x( 'j', 'upcoming events day format' ), $end_timestamp ),
+							/* translators: Upcoming events year format. See https://www.php.net/manual/datetime.format.php */
+							date_i18n( _x( 'Y', 'upcoming events year format' ), $timestamp )
+						);
+					} else {
+						$formatted_date = sprintf(
+							/* translators: Date string for upcoming events. 1: Starting month, 2: Starting day, 3: Ending month, 4: Ending day, 5: Year. */
+							__( '%1$s %2$d – %3$s %4$d, %5$d' ),
+							$start_month,
+							date_i18n( _x( 'j', 'upcoming events day format' ), $timestamp ),
+							$end_month,
+							date_i18n( _x( 'j', 'upcoming events day format' ), $end_timestamp ),
+							date_i18n( _x( 'Y', 'upcoming events year format' ), $timestamp )
+						);
+					}
+
+					$formatted_date = wp_maybe_decline_date( $formatted_date, 'F j, Y' );
+				}
+			}
+
+			$response_body['events'][ $key ]['formatted_date'] = $formatted_date;
+			$response_body['events'][ $key ]['formatted_time'] = $formatted_time;
+		}
+	}
+
+	return $response_body;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-community-events.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-community-events.php#L383">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-community-events.php#L383-L446">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td><span class="since-description">No longer used in core.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.8.0/">4.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_community_events/format_event_data_time" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_community_events/format_event_data_time</a>
+  </p>
+</div>

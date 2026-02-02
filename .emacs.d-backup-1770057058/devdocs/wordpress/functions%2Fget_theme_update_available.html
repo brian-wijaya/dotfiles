@@ -1,0 +1,107 @@
+<h1 class="wp-block-wporg-code-reference-title">get_theme_update_available( <span class="arg-type">WP_Theme</span> <span class="arg-name">$theme</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Retrieves the update link if there is a theme update available.</p> </section> <section><h2 id="description">Description</h2> <p>Will return a link if there is an update available.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$theme</code><span class="type"><span class="WP_Theme"><a href="../classes/wp_theme" rel="class">WP_Theme</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description"><a href="../classes/wp_theme" rel="class">WP_Theme</a> object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> HTML for the update link, or false if invalid info was passed.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="193" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_theme_update_available( $theme ) {
+	static $themes_update = null;
+
+	if ( ! current_user_can( 'update_themes' ) ) {
+		return false;
+	}
+
+	if ( ! isset( $themes_update ) ) {
+		$themes_update = get_site_transient( 'update_themes' );
+	}
+
+	if ( ! ( $theme instanceof WP_Theme ) ) {
+		return false;
+	}
+
+	$stylesheet = $theme-&gt;get_stylesheet();
+
+	$html = '';
+
+	if ( isset( $themes_update-&gt;response[ $stylesheet ] ) ) {
+		$update      = $themes_update-&gt;response[ $stylesheet ];
+		$theme_name  = $theme-&gt;display( 'Name' );
+		$details_url = add_query_arg(
+			array(
+				'TB_iframe' =&gt; 'true',
+				'width'     =&gt; 1024,
+				'height'    =&gt; 800,
+			),
+			$update['url']
+		); // Theme browser inside WP? Replace this. Also, theme preview JS will override this on the available list.
+		$update_url  = wp_nonce_url( admin_url( 'update.php?action=upgrade-theme&amp;amp;theme=' . urlencode( $stylesheet ) ), 'upgrade-theme_' . $stylesheet );
+
+		if ( ! is_multisite() ) {
+			if ( ! current_user_can( 'update_themes' ) ) {
+				$html = sprintf(
+					/* translators: 1: Theme name, 2: Theme details URL, 3: Additional link attributes, 4: Version number. */
+					'&lt;p&gt;&lt;strong&gt;' . __( 'There is a new version of %1$s available. &lt;a href="%2$s" %3$s&gt;View version %4$s details&lt;/a&gt;.' ) . '&lt;/strong&gt;&lt;/p&gt;',
+					$theme_name,
+					esc_url( $details_url ),
+					sprintf(
+						'class="thickbox open-plugin-details-modal" aria-label="%s"',
+						/* translators: 1: Theme name, 2: Version number. */
+						esc_attr( sprintf( __( 'View %1$s version %2$s details' ), $theme_name, $update['new_version'] ) )
+					),
+					$update['new_version']
+				);
+			} elseif ( empty( $update['package'] ) ) {
+				$html = sprintf(
+					/* translators: 1: Theme name, 2: Theme details URL, 3: Additional link attributes, 4: Version number. */
+					'&lt;p&gt;&lt;strong&gt;' . __( 'There is a new version of %1$s available. &lt;a href="%2$s" %3$s&gt;View version %4$s details&lt;/a&gt;. &lt;em&gt;Automatic update is unavailable for this theme.&lt;/em&gt;' ) . '&lt;/strong&gt;&lt;/p&gt;',
+					$theme_name,
+					esc_url( $details_url ),
+					sprintf(
+						'class="thickbox open-plugin-details-modal" aria-label="%s"',
+						/* translators: 1: Theme name, 2: Version number. */
+						esc_attr( sprintf( __( 'View %1$s version %2$s details' ), $theme_name, $update['new_version'] ) )
+					),
+					$update['new_version']
+				);
+			} else {
+				$html = sprintf(
+					/* translators: 1: Theme name, 2: Theme details URL, 3: Additional link attributes, 4: Version number, 5: Update URL, 6: Additional link attributes. */
+					'&lt;p&gt;&lt;strong&gt;' . __( 'There is a new version of %1$s available. &lt;a href="%2$s" %3$s&gt;View version %4$s details&lt;/a&gt; or &lt;a href="%5$s" %6$s&gt;update now&lt;/a&gt;.' ) . '&lt;/strong&gt;&lt;/p&gt;',
+					$theme_name,
+					esc_url( $details_url ),
+					sprintf(
+						'class="thickbox open-plugin-details-modal" aria-label="%s"',
+						/* translators: 1: Theme name, 2: Version number. */
+						esc_attr( sprintf( __( 'View %1$s version %2$s details' ), $theme_name, $update['new_version'] ) )
+					),
+					$update['new_version'],
+					$update_url,
+					sprintf(
+						'aria-label="%s" id="update-theme" data-slug="%s"',
+						/* translators: %s: Theme name. */
+						esc_attr( sprintf( _x( 'Update %s now', 'theme' ), $theme_name ) ),
+						$stylesheet
+					)
+				);
+			}
+		}
+	}
+
+	return $html;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/theme.php#L193">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/theme.php#L193-L277">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.8.0/">3.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_theme_update_available" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_theme_update_available</a>
+  </p>
+</div>

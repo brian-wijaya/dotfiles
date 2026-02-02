@@ -1,0 +1,94 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Menu_Items_Controller::update_item( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Updates a single nav menu item.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="203" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function update_item( $request ) {
+	$valid_check = $this-&gt;get_nav_menu_item( $request['id'] );
+	if ( is_wp_error( $valid_check ) ) {
+		return $valid_check;
+	}
+	$post_before       = get_post( $request['id'] );
+	$prepared_nav_item = $this-&gt;prepare_item_for_database( $request );
+
+	if ( is_wp_error( $prepared_nav_item ) ) {
+		return $prepared_nav_item;
+	}
+
+	$prepared_nav_item = (array) $prepared_nav_item;
+
+	$nav_menu_item_id = wp_update_nav_menu_item( $prepared_nav_item['menu-id'], $prepared_nav_item['menu-item-db-id'], wp_slash( $prepared_nav_item ), false );
+
+	if ( is_wp_error( $nav_menu_item_id ) ) {
+		if ( 'db_update_error' === $nav_menu_item_id-&gt;get_error_code() ) {
+			$nav_menu_item_id-&gt;add_data( array( 'status' =&gt; 500 ) );
+		} else {
+			$nav_menu_item_id-&gt;add_data( array( 'status' =&gt; 400 ) );
+		}
+
+		return $nav_menu_item_id;
+	}
+
+	$nav_menu_item = $this-&gt;get_nav_menu_item( $nav_menu_item_id );
+	if ( is_wp_error( $nav_menu_item ) ) {
+		$nav_menu_item-&gt;add_data( array( 'status' =&gt; 404 ) );
+
+		return $nav_menu_item;
+	}
+
+	/** This action is documented in wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php */
+	do_action( 'rest_insert_nav_menu_item', $nav_menu_item, $request, false );
+
+	$schema = $this-&gt;get_item_schema();
+
+	if ( ! empty( $schema['properties']['meta'] ) &amp;&amp; isset( $request['meta'] ) ) {
+		$meta_update = $this-&gt;meta-&gt;update_value( $request['meta'], $nav_menu_item-&gt;ID );
+
+		if ( is_wp_error( $meta_update ) ) {
+			return $meta_update;
+		}
+	}
+
+	$post          = get_post( $nav_menu_item_id );
+	$nav_menu_item = $this-&gt;get_nav_menu_item( $nav_menu_item_id );
+	$fields_update = $this-&gt;update_additional_fields_for_object( $nav_menu_item, $request );
+
+	if ( is_wp_error( $fields_update ) ) {
+		return $fields_update;
+	}
+
+	$request-&gt;set_param( 'context', 'edit' );
+
+	/** This action is documented in wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php */
+	do_action( 'rest_after_insert_nav_menu_item', $nav_menu_item, $request, false );
+
+	wp_after_insert_post( $post, true, $post_before );
+
+	$response = $this-&gt;prepare_item_for_response( get_post( $nav_menu_item_id ), $request );
+
+	return rest_ensure_response( $response );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php#L203">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php#L203-L267">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_after_insert_nav_menu_item"><span class="hook-func">do_action</span>( ‘rest_after_insert_nav_menu_item’, <nobr><span class="arg-type">object</span> <span class="arg-name">$nav_menu_item</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$creating</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a single menu item is completely created or updated via the REST API.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_insert_nav_menu_item"><span class="hook-func">do_action</span>( ‘rest_insert_nav_menu_item’, <nobr><span class="arg-type">object</span> <span class="arg-name">$nav_menu_item</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$creating</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a single menu item is created or updated via the REST API.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_menu_items_controller/update_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_menu_items_controller/update_item</a>
+  </p>
+</div>

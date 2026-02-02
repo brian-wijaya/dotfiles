@@ -1,0 +1,69 @@
+<h1 class="wp-block-wporg-code-reference-title">_fix_attachment_links( <span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span> ): <span class="return-type">void|int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Replaces hrefs of attachment anchors with up-to-date permalinks.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID or post object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">void|int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Void if nothing fixed. 0 or <a href="../classes/wp_error" rel="class">WP_Error</a> on update failure. The post ID on update success.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1145" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _fix_attachment_links( $post ) {
+	$post    = get_post( $post, ARRAY_A );
+	$content = $post['post_content'];
+
+	// Don't run if no pretty permalinks or post is not published, scheduled, or privately published.
+	if ( ! get_option( 'permalink_structure' ) || ! in_array( $post['post_status'], array( 'publish', 'future', 'private' ), true ) ) {
+		return;
+	}
+
+	// Short if there aren't any links or no '?attachment_id=' strings (strpos cannot be zero).
+	if ( ! strpos( $content, '?attachment_id=' ) || ! preg_match_all( '/&lt;a ([^&gt;]+)&gt;[\s\S]+?&lt;\/a&gt;/', $content, $link_matches ) ) {
+		return;
+	}
+
+	$site_url = get_bloginfo( 'url' );
+	$site_url = substr( $site_url, (int) strpos( $site_url, '://' ) ); // Remove the http(s).
+	$replace  = '';
+
+	foreach ( $link_matches[1] as $key =&gt; $value ) {
+		if ( ! strpos( $value, '?attachment_id=' ) || ! strpos( $value, 'wp-att-' )
+			|| ! preg_match( '/href=(["\'])[^"\']*\?attachment_id=(\d+)[^"\']*\\1/', $value, $url_match )
+			|| ! preg_match( '/rel=["\'][^"\']*wp-att-(\d+)/', $value, $rel_match ) ) {
+				continue;
+		}
+
+		$quote  = $url_match[1]; // The quote (single or double).
+		$url_id = (int) $url_match[2];
+		$rel_id = (int) $rel_match[1];
+
+		if ( ! $url_id || ! $rel_id || $url_id != $rel_id || ! str_contains( $url_match[0], $site_url ) ) {
+			continue;
+		}
+
+		$link    = $link_matches[0][ $key ];
+		$replace = str_replace( $url_match[0], 'href=' . $quote . get_attachment_link( $url_id ) . $quote, $link );
+
+		$content = str_replace( $link, $replace, $content );
+	}
+
+	if ( $replace ) {
+		$post['post_content'] = $content;
+		// Escape data pulled from DB.
+		$post = add_magic_quotes( $post );
+
+		return wp_update_post( $post );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/post.php#L1145">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/post.php#L1145-L1191">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_fix_attachment_links" class="_attribution-link">https://developer.wordpress.org/reference/functions/_fix_attachment_links</a>
+  </p>
+</div>

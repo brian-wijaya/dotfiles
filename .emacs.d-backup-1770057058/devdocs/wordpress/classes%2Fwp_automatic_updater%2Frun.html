@@ -1,0 +1,169 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Automatic_Updater::run()</h1> <section><p>Kicks off the background update process, looping through all pending updates.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="642" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function run() {
+	if ( $this-&gt;is_disabled() ) {
+		return;
+	}
+
+	if ( ! is_main_network() || ! is_main_site() ) {
+		return;
+	}
+
+	if ( ! WP_Upgrader::create_lock( 'auto_updater' ) ) {
+		return;
+	}
+
+	$is_debug = WP_DEBUG &amp;&amp; WP_DEBUG_LOG;
+
+	if ( $is_debug ) {
+		error_log( 'Automatic updates starting...' );
+	}
+
+	// Don't automatically run these things, as we'll handle it ourselves.
+	remove_action( 'upgrader_process_complete', array( 'Language_Pack_Upgrader', 'async_upgrade' ), 20 );
+	remove_action( 'upgrader_process_complete', 'wp_version_check' );
+	remove_action( 'upgrader_process_complete', 'wp_update_plugins' );
+	remove_action( 'upgrader_process_complete', 'wp_update_themes' );
+
+	// Next, plugins.
+	wp_update_plugins(); // Check for plugin updates.
+	$plugin_updates = get_site_transient( 'update_plugins' );
+	if ( $plugin_updates &amp;&amp; ! empty( $plugin_updates-&gt;response ) ) {
+		if ( $is_debug ) {
+			error_log( '  Automatic plugin updates starting...' );
+		}
+
+		foreach ( $plugin_updates-&gt;response as $plugin ) {
+			$this-&gt;update( 'plugin', $plugin );
+		}
+
+		// Force refresh of plugin update information.
+		wp_clean_plugins_cache();
+
+		if ( $is_debug ) {
+			error_log( '  Automatic plugin updates complete.' );
+		}
+	}
+
+	// Next, those themes we all love.
+	wp_update_themes();  // Check for theme updates.
+	$theme_updates = get_site_transient( 'update_themes' );
+	if ( $theme_updates &amp;&amp; ! empty( $theme_updates-&gt;response ) ) {
+		if ( $is_debug ) {
+			error_log( '  Automatic theme updates starting...' );
+		}
+
+		foreach ( $theme_updates-&gt;response as $theme ) {
+			$this-&gt;update( 'theme', (object) $theme );
+		}
+		// Force refresh of theme update information.
+		wp_clean_themes_cache();
+
+		if ( $is_debug ) {
+			error_log( '  Automatic theme updates complete.' );
+		}
+	}
+
+	if ( $is_debug ) {
+		error_log( 'Automatic updates complete.' );
+	}
+
+	// Next, process any core update.
+	wp_version_check(); // Check for core updates.
+	$core_update = find_core_auto_update();
+
+	if ( $core_update ) {
+		$this-&gt;update( 'core', $core_update );
+	}
+
+	/*
+	 * Clean up, and check for any pending translations.
+	 * (Core_Upgrader checks for core updates.)
+	 */
+	$theme_stats = array();
+	if ( isset( $this-&gt;update_results['theme'] ) ) {
+		foreach ( $this-&gt;update_results['theme'] as $upgrade ) {
+			$theme_stats[ $upgrade-&gt;item-&gt;theme ] = ( true === $upgrade-&gt;result );
+		}
+	}
+	wp_update_themes( $theme_stats ); // Check for theme updates.
+
+	$plugin_stats = array();
+	if ( isset( $this-&gt;update_results['plugin'] ) ) {
+		foreach ( $this-&gt;update_results['plugin'] as $upgrade ) {
+			$plugin_stats[ $upgrade-&gt;item-&gt;plugin ] = ( true === $upgrade-&gt;result );
+		}
+	}
+	wp_update_plugins( $plugin_stats ); // Check for plugin updates.
+
+	// Finally, process any new translations.
+	$language_updates = wp_get_translation_updates();
+	if ( $language_updates ) {
+		foreach ( $language_updates as $update ) {
+			$this-&gt;update( 'translation', $update );
+		}
+
+		// Clear existing caches.
+		wp_clean_update_cache();
+
+		wp_version_check();  // Check for core updates.
+		wp_update_themes();  // Check for theme updates.
+		wp_update_plugins(); // Check for plugin updates.
+	}
+
+	// Send debugging email to admin for all development installations.
+	if ( ! empty( $this-&gt;update_results ) ) {
+		$development_version = str_contains( wp_get_wp_version(), '-' );
+
+		/**
+		 * Filters whether to send a debugging email for each automatic background update.
+		 *
+		 * @since 3.7.0
+		 *
+		 * @param bool $development_version By default, emails are sent if the
+		 *                                  install is a development version.
+		 *                                  Return false to avoid the email.
+		 */
+		if ( apply_filters( 'automatic_updates_send_debug_email', $development_version ) ) {
+			$this-&gt;send_debug_email();
+		}
+
+		if ( ! empty( $this-&gt;update_results['core'] ) ) {
+			$this-&gt;after_core_update( $this-&gt;update_results['core'][0] );
+		} elseif ( ! empty( $this-&gt;update_results['plugin'] ) || ! empty( $this-&gt;update_results['theme'] ) ) {
+			$this-&gt;after_plugin_theme_update( $this-&gt;update_results );
+		}
+
+		/**
+		 * Fires after all automatic updates have run.
+		 *
+		 * @since 3.8.0
+		 *
+		 * @param array $update_results The results of all attempted updates.
+		 */
+		do_action( 'automatic_updates_complete', $this-&gt;update_results );
+	}
+
+	WP_Upgrader::release_lock( 'auto_updater' );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-automatic-updater.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L642">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L642-L787">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/automatic_updates_complete"><span class="hook-func">do_action</span>( ‘automatic_updates_complete’, <nobr><span class="arg-type">array</span> <span class="arg-name">$update_results</span></nobr> )</a></dt>
+<dd>
+<p>Fires after all automatic updates have run.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/automatic_updates_send_debug_email"><span class="hook-func">apply_filters</span>( ‘automatic_updates_send_debug_email’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$development_version</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to send a debugging email for each automatic background update.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_automatic_updater/run" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_automatic_updater/run</a>
+  </p>
+</div>

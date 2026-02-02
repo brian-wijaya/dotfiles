@@ -1,0 +1,95 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_URL_Details_Controller::get_meta_with_content_elements( <span class="arg-type">string</span> <span class="arg-name">$html</span> ): <span class="return-type">array</span>
+</h1> <section><p>Gets all the meta tag elements that have a ‘content’ attribute.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$html</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The string of HTML to be parsed.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> A multidimensional indexed array on success, else empty array.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">string[]</span><div class="desc">Meta elements with a content attribute.</div>
+</li> <li>
+<code>1</code> <span class="type">string[]</span><div class="desc">Content attribute’s opening quotation mark.</div>
+</li> <li>
+<code>2</code> <span class="type">string[]</span><div class="desc">Content attribute’s value for each meta element.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="535" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function get_meta_with_content_elements( $html ) {
+	/*
+	 * Parse all meta elements with a content attribute.
+	 *
+	 * Why first search for the content attribute rather than directly searching for name=description element?
+	 * tl;dr The content attribute's value will be truncated when it contains a &gt; symbol.
+	 *
+	 * The content attribute's value (i.e. the description to get) can have HTML in it and be well-formed as
+	 * it's a string to the browser. Imagine what happens when attempting to match for the name=description
+	 * first. Hmm, if a &gt; or /&gt; symbol is in the content attribute's value, then it terminates the match
+	 * as the element's closing symbol. But wait, it's in the content attribute and is not the end of the
+	 * element. This is a limitation of using regex. It can't determine "wait a minute this is inside of quotation".
+	 * If this happens, what gets matched is not the entire element or all of the content.
+	 *
+	 * Why not search for the name=description and then content="(.*)"?
+	 * The attribute order could be opposite. Plus, additional attributes may exist including being between
+	 * the name and content attributes.
+	 *
+	 * Why not lookahead?
+	 * Lookahead is not constrained to stay within the element. The first &lt;meta it finds may not include
+	 * the name or content, but rather could be from a different element downstream.
+	 */
+	$pattern = '#&lt;meta\s' .
+
+			/*
+			 * Allows for additional attributes before the content attribute.
+			 * Searches for anything other than &gt; symbol.
+			 */
+			'[^&gt;]*' .
+
+			/*
+			* Find the content attribute. When found, capture its value (.*).
+			*
+			* Allows for (a) single or double quotes and (b) whitespace in the value.
+			*
+			* Why capture the opening quotation mark, i.e. (["\']), and then backreference,
+			* i.e \1, for the closing quotation mark?
+			* To ensure the closing quotation mark matches the opening one. Why? Attribute values
+			* can contain quotation marks, such as an apostrophe in the content.
+			*/
+			'content=(["\']??)(.*)\1' .
+
+			/*
+			* Allows for additional attributes after the content attribute.
+			* Searches for anything other than &gt; symbol.
+			*/
+			'[^&gt;]*' .
+
+			/*
+			* \/?&gt; searches for the closing &gt; symbol, which can be in either /&gt; or &gt; format.
+			* # ends the pattern.
+			*/
+			'\/?&gt;#' .
+
+			/*
+			* These are the options:
+			* - i : case-insensitive
+			* - s : allows newline characters for the . match (needed for multiline elements)
+			* - U means non-greedy matching
+			*/
+			'isU';
+
+	preg_match_all( $pattern, $html, $elements );
+
+	return $elements;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php#L535">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php#L535-L600">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_url_details_controller/get_meta_with_content_elements" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_url_details_controller/get_meta_with_content_elements</a>
+  </p>
+</div>

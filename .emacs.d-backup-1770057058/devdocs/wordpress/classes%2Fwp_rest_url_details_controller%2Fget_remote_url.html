@@ -1,0 +1,79 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_URL_Details_Controller::get_remote_url( <span class="arg-type">string</span> <span class="arg-name">$url</span> ): <span class="return-type">string|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Retrieves the document title from a remote URL.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The website URL whose HTML to access.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|<a href="../wp_error" rel="class">WP_Error</a></span> The HTTP response from the remote URL on success.<br> <a href="../wp_error" rel="class">WP_Error</a> if no response or no content.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="224" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function get_remote_url( $url ) {
+
+	/*
+	 * Provide a modified UA string to workaround web properties which block WordPress "Pingbacks".
+	 * Why? The UA string used for pingback requests contains `WordPress/` which is very similar
+	 * to that used as the default UA string by the WP HTTP API. Therefore requests from this
+	 * REST endpoint are being unintentionally blocked as they are misidentified as pingback requests.
+	 * By slightly modifying the UA string, but still retaining the "WordPress" identification (via "WP")
+	 * we are able to work around this issue.
+	 * Example UA string: `WP-URLDetails/5.9-alpha-51389 (+http://localhost:8888)`.
+	*/
+	$modified_user_agent = 'WP-URLDetails/' . get_bloginfo( 'version' ) . ' (+' . get_bloginfo( 'url' ) . ')';
+
+	$args = array(
+		'limit_response_size' =&gt; 150 * KB_IN_BYTES,
+		'user-agent'          =&gt; $modified_user_agent,
+	);
+
+	/**
+	 * Filters the HTTP request args for URL data retrieval.
+	 *
+	 * Can be used to adjust response size limit and other WP_Http::request() args.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param array  $args Arguments used for the HTTP request.
+	 * @param string $url  The attempted URL.
+	 */
+	$args = apply_filters( 'rest_url_details_http_request_args', $args, $url );
+
+	$response = wp_safe_remote_get( $url, $args );
+
+	if ( WP_Http::OK !== wp_remote_retrieve_response_code( $response ) ) {
+		// Not saving the error response to cache since the error might be temporary.
+		return new WP_Error(
+			'no_response',
+			__( 'URL not found. Response returned a non-200 status code for this URL.' ),
+			array( 'status' =&gt; WP_Http::NOT_FOUND )
+		);
+	}
+
+	$remote_body = wp_remote_retrieve_body( $response );
+
+	if ( empty( $remote_body ) ) {
+		return new WP_Error(
+			'no_content',
+			__( 'Unable to retrieve body from response at this URL.' ),
+			array( 'status' =&gt; WP_Http::NOT_FOUND )
+		);
+	}
+
+	return $remote_body;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php#L224">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php#L224-L276">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_url_details_http_request_args"><span class="hook-func">apply_filters</span>( ‘rest_url_details_http_request_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters the HTTP request args for URL data retrieval.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_url_details_controller/get_remote_url" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_url_details_controller/get_remote_url</a>
+  </p>
+</div>

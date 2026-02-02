@@ -1,0 +1,109 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_popular_importers(): <span class="return-type">array</span>
+</h1> <section><p>Returns a list from WordPress.org of popular importer plugins.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Importers with metadata for each.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="138" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_popular_importers() {
+	$locale            = get_user_locale();
+	$cache_key         = 'popular_importers_' . md5( $locale . wp_get_wp_version() );
+	$popular_importers = get_site_transient( $cache_key );
+
+	if ( ! $popular_importers ) {
+		$url     = add_query_arg(
+			array(
+				'locale'  =&gt; $locale,
+				'version' =&gt; wp_get_wp_version(),
+			),
+			'https://api.wordpress.org/core/importers/1.1/'
+		);
+		$options = array( 'user-agent' =&gt; 'WordPress/' . wp_get_wp_version() . '; ' . home_url( '/' ) );
+
+		if ( wp_http_supports( array( 'ssl' ) ) ) {
+			$url = set_url_scheme( $url, 'https' );
+		}
+
+		$response          = wp_remote_get( $url, $options );
+		$popular_importers = json_decode( wp_remote_retrieve_body( $response ), true );
+
+		if ( is_array( $popular_importers ) ) {
+			set_site_transient( $cache_key, $popular_importers, 2 * DAY_IN_SECONDS );
+		} else {
+			$popular_importers = false;
+		}
+	}
+
+	if ( is_array( $popular_importers ) ) {
+		// If the data was received as translated, return it as-is.
+		if ( $popular_importers['translated'] ) {
+			return $popular_importers['importers'];
+		}
+
+		foreach ( $popular_importers['importers'] as &amp;$importer ) {
+			// phpcs:ignore WordPress.WP.I18n.LowLevelTranslationFunction,WordPress.WP.I18n.NonSingularStringLiteralText
+			$importer['description'] = translate( $importer['description'] );
+			if ( 'WordPress' !== $importer['name'] ) {
+				// phpcs:ignore WordPress.WP.I18n.LowLevelTranslationFunction,WordPress.WP.I18n.NonSingularStringLiteralText
+				$importer['name'] = translate( $importer['name'] );
+			}
+		}
+		return $popular_importers['importers'];
+	}
+
+	return array(
+		// slug =&gt; name, description, plugin slug, and register_importer() slug.
+		'blogger'     =&gt; array(
+			'name'        =&gt; __( 'Blogger' ),
+			'description' =&gt; __( 'Import posts, comments, and users from a Blogger blog.' ),
+			'plugin-slug' =&gt; 'blogger-importer',
+			'importer-id' =&gt; 'blogger',
+		),
+		'wpcat2tag'   =&gt; array(
+			'name'        =&gt; __( 'Categories and Tags Converter' ),
+			'description' =&gt; __( 'Convert existing categories to tags or tags to categories, selectively.' ),
+			'plugin-slug' =&gt; 'wpcat2tag-importer',
+			'importer-id' =&gt; 'wp-cat2tag',
+		),
+		'livejournal' =&gt; array(
+			'name'        =&gt; __( 'LiveJournal' ),
+			'description' =&gt; __( 'Import posts from LiveJournal using their API.' ),
+			'plugin-slug' =&gt; 'livejournal-importer',
+			'importer-id' =&gt; 'livejournal',
+		),
+		'movabletype' =&gt; array(
+			'name'        =&gt; __( 'Movable Type and TypePad' ),
+			'description' =&gt; __( 'Import posts and comments from a Movable Type or TypePad blog.' ),
+			'plugin-slug' =&gt; 'movabletype-importer',
+			'importer-id' =&gt; 'mt',
+		),
+		'rss'         =&gt; array(
+			'name'        =&gt; __( 'RSS' ),
+			'description' =&gt; __( 'Import posts from an RSS feed.' ),
+			'plugin-slug' =&gt; 'rss-importer',
+			'importer-id' =&gt; 'rss',
+		),
+		'tumblr'      =&gt; array(
+			'name'        =&gt; __( 'Tumblr' ),
+			'description' =&gt; __( 'Import posts &amp;amp; media from Tumblr using their API.' ),
+			'plugin-slug' =&gt; 'tumblr-importer',
+			'importer-id' =&gt; 'tumblr',
+		),
+		'wordpress'   =&gt; array(
+			'name'        =&gt; 'WordPress',
+			'description' =&gt; __( 'Import posts, pages, comments, custom fields, categories, and tags from a WordPress export file.' ),
+			'plugin-slug' =&gt; 'wordpress-importer',
+			'importer-id' =&gt; 'wordpress',
+		),
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/import.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/import.php#L138">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/import.php#L138-L229">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.5.0/">3.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_popular_importers" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_popular_importers</a>
+  </p>
+</div>

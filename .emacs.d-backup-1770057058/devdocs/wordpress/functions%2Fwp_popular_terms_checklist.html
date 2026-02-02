@@ -1,0 +1,92 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_popular_terms_checklist( <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span>, <span class="arg-type">int</span> <span class="arg-name">$default_term</span>, <span class="arg-type">int</span> <span class="arg-name">$number</span> = <span class="arg-default">10</span>, <span class="arg-type">bool</span> <span class="arg-name">$display</span> = <span class="arg-default">true</span> ): <span class="return-type">int[]</span>
+</h1> <section><p>Retrieves a list of the most popular terms from the specified taxonomy.</p> </section> <section><h2 id="description">Description</h2> <p>If the <code>$display</code> argument is true then the elements for a list of checkbox <code>&lt;input&gt;</code> elements labelled with the names of the selected terms is output.<br>If the <code>$post_ID</code> global is not empty then the terms associated with that post will be marked as checked.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Taxonomy to retrieve terms from.</span></div></dd>
+<dt>
+<code>$default_term</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Not used.</span></div></dd>
+<dt>
+<code>$number</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Number of terms to retrieve. </span></div>
+<p class="default">Default:<code>10</code></p>
+</dd>
+<dt>
+<code>$display</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to display the list as well. </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int[]</span> Array of popular term IDs.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="211" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_popular_terms_checklist( $taxonomy, $default_term = 0, $number = 10, $display = true ) {
+	$post = get_post();
+
+	if ( $post &amp;&amp; $post-&gt;ID ) {
+		$checked_terms = wp_get_object_terms( $post-&gt;ID, $taxonomy, array( 'fields' =&gt; 'ids' ) );
+	} else {
+		$checked_terms = array();
+	}
+
+	$terms = get_terms(
+		array(
+			'taxonomy'     =&gt; $taxonomy,
+			'orderby'      =&gt; 'count',
+			'order'        =&gt; 'DESC',
+			'number'       =&gt; $number,
+			'hierarchical' =&gt; false,
+		)
+	);
+
+	$tax = get_taxonomy( $taxonomy );
+
+	$popular_ids = array();
+
+	foreach ( (array) $terms as $term ) {
+		$popular_ids[] = $term-&gt;term_id;
+
+		if ( ! $display ) { // Hack for Ajax use.
+			continue;
+		}
+
+		$id      = "popular-$taxonomy-$term-&gt;term_id";
+		$checked = in_array( $term-&gt;term_id, $checked_terms, true ) ? 'checked="checked"' : '';
+		?&gt;
+
+		&lt;li id="&lt;?php echo $id; ?&gt;" class="popular-category"&gt;
+			&lt;label class="selectit"&gt;
+				&lt;input id="in-&lt;?php echo $id; ?&gt;" type="checkbox" &lt;?php echo $checked; ?&gt; value="&lt;?php echo (int) $term-&gt;term_id; ?&gt;" &lt;?php disabled( ! current_user_can( $tax-&gt;cap-&gt;assign_terms ) ); ?&gt; /&gt;
+				&lt;?php
+				/** This filter is documented in wp-includes/category-template.php */
+				echo esc_html( apply_filters( 'the_category', $term-&gt;name, '', '' ) );
+				?&gt;
+			&lt;/label&gt;
+		&lt;/li&gt;
+
+		&lt;?php
+	}
+	return $popular_ids;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/template.php#L211">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/template.php#L211-L258">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/the_category"><span class="hook-func">apply_filters</span>( ‘the_category’, <nobr><span class="arg-type">string</span> <span class="arg-name">$thelist</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$separator</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$parents</span></nobr> )</a></dt>
+<dd>
+<p>Filters the category or list of categories.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_popular_terms_checklist" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_popular_terms_checklist</a>
+  </p>
+</div>

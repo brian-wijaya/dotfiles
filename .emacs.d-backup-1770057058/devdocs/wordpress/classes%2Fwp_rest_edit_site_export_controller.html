@@ -1,0 +1,120 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_REST_Edit_Site_Export_Controller {}</h1> <section><p>Controller which provides REST endpoint for exporting current templates and template parts.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_rest_controller">WP_REST_Controller</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_rest_edit_site_export_controller/__construct">WP_REST_Edit_Site_Export_Controller::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_edit_site_export_controller/export">WP_REST_Edit_Site_Export_Controller::export</a></td>
+<td>Output a ZIP file with an export of the current templates and template parts from the site editor, and close the connection.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_edit_site_export_controller/permissions_check">WP_REST_Edit_Site_Export_Controller::permissions_check</a></td>
+<td>Checks whether a given request has permission to export.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_edit_site_export_controller/register_routes">WP_REST_Edit_Site_Export_Controller::register_routes</a></td>
+<td>Registers the site export route.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_REST_Edit_Site_Export_Controller extends WP_REST_Controller {
+
+	/**
+	 * Constructor.
+	 *
+	 * @since 5.9.0
+	 */
+	public function __construct() {
+		$this-&gt;namespace = 'wp-block-editor/v1';
+		$this-&gt;rest_base = 'export';
+	}
+
+	/**
+	 * Registers the site export route.
+	 *
+	 * @since 5.9.0
+	 */
+	public function register_routes() {
+		register_rest_route(
+			$this-&gt;namespace,
+			'/' . $this-&gt;rest_base,
+			array(
+				array(
+					'methods'             =&gt; WP_REST_Server::READABLE,
+					'callback'            =&gt; array( $this, 'export' ),
+					'permission_callback' =&gt; array( $this, 'permissions_check' ),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Checks whether a given request has permission to export.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @return true|WP_Error True if the request has access, or WP_Error object.
+	 */
+	public function permissions_check() {
+		if ( current_user_can( 'edit_theme_options' ) ) {
+			return true;
+		}
+
+		return new WP_Error(
+			'rest_cannot_export_templates',
+			__( 'Sorry, you are not allowed to export templates and template parts.' ),
+			array( 'status' =&gt; rest_authorization_required_code() )
+		);
+	}
+
+	/**
+	 * Output a ZIP file with an export of the current templates
+	 * and template parts from the site editor, and close the connection.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @return void|WP_Error
+	 */
+	public function export() {
+		// Generate the export file.
+		$filename = wp_generate_block_templates_export_file();
+
+		if ( is_wp_error( $filename ) ) {
+			$filename-&gt;add_data( array( 'status' =&gt; 500 ) );
+
+			return $filename;
+		}
+
+		$theme_name = basename( get_stylesheet() );
+		header( 'Content-Type: application/zip' );
+		header( 'Content-Disposition: attachment; filename=' . $theme_name . '.zip' );
+		header( 'Content-Length: ' . filesize( $filename ) );
+		flush();
+		readfile( $filename );
+		unlink( $filename );
+		exit;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-edit-site-export-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-edit-site-export-controller.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-edit-site-export-controller.php#L17-L94">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_edit_site_export_controller" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_edit_site_export_controller</a>
+  </p>
+</div>

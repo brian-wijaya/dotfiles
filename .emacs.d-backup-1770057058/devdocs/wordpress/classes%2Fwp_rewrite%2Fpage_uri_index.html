@@ -1,0 +1,51 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Rewrite::page_uri_index(): <span class="return-type">array</span>
+</h1> <section><p>Retrieves all pages and attachments for pages URIs.</p> </section> <section><h2 id="description">Description</h2> <p>The attachments are for those that have pages as parents and will be retrieved.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Array of page URIs as first element and attachment URIs as second element.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="427" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function page_uri_index() {
+	global $wpdb;
+
+	// Get pages in order of hierarchy, i.e. children after parents.
+	$pages = $wpdb-&gt;get_results( "SELECT ID, post_name, post_parent FROM $wpdb-&gt;posts WHERE post_type = 'page' AND post_status != 'auto-draft'" );
+	$posts = get_page_hierarchy( $pages );
+
+	// If we have no pages get out quick.
+	if ( ! $posts ) {
+		return array( array(), array() );
+	}
+
+	// Now reverse it, because we need parents after children for rewrite rules to work properly.
+	$posts = array_reverse( $posts, true );
+
+	$page_uris            = array();
+	$page_attachment_uris = array();
+
+	foreach ( $posts as $id =&gt; $post ) {
+		// URL =&gt; page name.
+		$uri         = get_page_uri( $id );
+		$attachments = $wpdb-&gt;get_results( $wpdb-&gt;prepare( "SELECT ID, post_name, post_parent FROM $wpdb-&gt;posts WHERE post_type = 'attachment' AND post_parent = %d", $id ) );
+		if ( ! empty( $attachments ) ) {
+			foreach ( $attachments as $attachment ) {
+				$attach_uri                          = get_page_uri( $attachment-&gt;ID );
+				$page_attachment_uris[ $attach_uri ] = $attachment-&gt;ID;
+			}
+		}
+
+		$page_uris[ $uri ] = $id;
+	}
+
+	return array( $page_uris, $page_attachment_uris );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-rewrite.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-rewrite.php#L427">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-rewrite.php#L427-L460">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rewrite/page_uri_index" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rewrite/page_uri_index</a>
+  </p>
+</div>

@@ -1,0 +1,105 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Privacy_Policy_Content::get_suggested_policy_text(): <span class="return-type">array</span>
+</h1> <section><p>Checks for updated, added or removed privacy policy information from plugins.</p> </section> <section><h2 id="description">Description</h2> <p>Caches the current info in post_meta of the policy page.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The privacy policy text/information added by core and plugins.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="215" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function get_suggested_policy_text() {
+	$policy_page_id = (int) get_option( 'wp_page_for_privacy_policy' );
+	$checked        = array();
+	$time           = time();
+	$update_cache   = false;
+	$new            = self::$policy_content;
+	$old            = array();
+
+	if ( $policy_page_id ) {
+		$old = (array) get_post_meta( $policy_page_id, '_wp_suggested_privacy_policy_content' );
+	}
+
+	// Check for no-changes and updates.
+	foreach ( $new as $new_key =&gt; $new_data ) {
+		foreach ( $old as $old_key =&gt; $old_data ) {
+			$found = false;
+
+			if ( $new_data['policy_text'] === $old_data['policy_text'] ) {
+				// Use the new plugin name in case it was changed, translated, etc.
+				if ( $old_data['plugin_name'] !== $new_data['plugin_name'] ) {
+					$old_data['plugin_name'] = $new_data['plugin_name'];
+					$update_cache            = true;
+				}
+
+				// A plugin was re-activated.
+				if ( ! empty( $old_data['removed'] ) ) {
+					unset( $old_data['removed'] );
+					$old_data['added'] = $time;
+					$update_cache      = true;
+				}
+
+				$checked[] = $old_data;
+				$found     = true;
+			} elseif ( $new_data['plugin_name'] === $old_data['plugin_name'] ) {
+				// The info for the policy was updated.
+				$checked[]    = array(
+					'plugin_name' =&gt; $new_data['plugin_name'],
+					'policy_text' =&gt; $new_data['policy_text'],
+					'updated'     =&gt; $time,
+				);
+				$found        = true;
+				$update_cache = true;
+			}
+
+			if ( $found ) {
+				unset( $new[ $new_key ], $old[ $old_key ] );
+				continue 2;
+			}
+		}
+	}
+
+	if ( ! empty( $new ) ) {
+		// A plugin was activated.
+		foreach ( $new as $new_data ) {
+			if ( ! empty( $new_data['plugin_name'] ) &amp;&amp; ! empty( $new_data['policy_text'] ) ) {
+				$new_data['added'] = $time;
+				$checked[]         = $new_data;
+			}
+		}
+		$update_cache = true;
+	}
+
+	if ( ! empty( $old ) ) {
+		// A plugin was deactivated.
+		foreach ( $old as $old_data ) {
+			if ( ! empty( $old_data['plugin_name'] ) &amp;&amp; ! empty( $old_data['policy_text'] ) ) {
+				$data = array(
+					'plugin_name' =&gt; $old_data['plugin_name'],
+					'policy_text' =&gt; $old_data['policy_text'],
+					'removed'     =&gt; $time,
+				);
+
+				$checked[] = $data;
+			}
+		}
+		$update_cache = true;
+	}
+
+	if ( $update_cache &amp;&amp; $policy_page_id ) {
+		delete_post_meta( $policy_page_id, '_wp_suggested_privacy_policy_content' );
+		// Update the cache.
+		foreach ( $checked as $data ) {
+			add_post_meta( $policy_page_id, '_wp_suggested_privacy_policy_content', $data );
+		}
+	}
+
+	return $checked;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-privacy-policy-content.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-privacy-policy-content.php#L215">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-privacy-policy-content.php#L215-L302">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.6/">4.9.6</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_privacy_policy_content/get_suggested_policy_text" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_privacy_policy_content/get_suggested_policy_text</a>
+  </p>
+</div>

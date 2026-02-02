@@ -1,0 +1,92 @@
+<h1 class="wp-block-wporg-code-reference-title">rest_preload_api_request( <span class="arg-type">array</span> <span class="arg-name">$memo</span>, <span class="arg-type">string</span> <span class="arg-name">$path</span> ): <span class="return-type">array</span>
+</h1> <section><p>Append result of internal request to REST API for purpose of preloading data to be attached to a page.</p> </section> <section><h2 id="description">Description</h2> <p>Expected to be called in the context of <code>array_reduce</code>.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$memo</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Reduce accumulator.</span></div></dd>
+<dt>
+<code>$path</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">REST API path to preload.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Modified reduce accumulator.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2918" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function rest_preload_api_request( $memo, $path ) {
+	/*
+	 * array_reduce() doesn't support passing an array in PHP 5.2,
+	 * so we need to make sure we start with one.
+	 */
+	if ( ! is_array( $memo ) ) {
+		$memo = array();
+	}
+
+	if ( empty( $path ) ) {
+		return $memo;
+	}
+
+	$method = 'GET';
+	if ( is_array( $path ) &amp;&amp; 2 === count( $path ) ) {
+		$method = end( $path );
+		$path   = reset( $path );
+
+		if ( ! in_array( $method, array( 'GET', 'OPTIONS' ), true ) ) {
+			$method = 'GET';
+		}
+	}
+
+	$path = untrailingslashit( $path );
+	if ( empty( $path ) ) {
+		$path = '/';
+	}
+
+	$path_parts = parse_url( $path );
+	if ( false === $path_parts ) {
+		return $memo;
+	}
+
+	$request = new WP_REST_Request( $method, $path_parts['path'] );
+	if ( ! empty( $path_parts['query'] ) ) {
+		parse_str( $path_parts['query'], $query_params );
+		$request-&gt;set_query_params( $query_params );
+	}
+
+	$response = rest_do_request( $request );
+	if ( 200 === $response-&gt;status ) {
+		$server = rest_get_server();
+		/** This filter is documented in wp-includes/rest-api/class-wp-rest-server.php */
+		$response = apply_filters( 'rest_post_dispatch', rest_ensure_response( $response ), $server, $request );
+		$embed    = $request-&gt;has_param( '_embed' ) ? rest_parse_embed_param( $request['_embed'] ) : false;
+		$data     = (array) $server-&gt;response_to_data( $response, $embed );
+
+		if ( 'OPTIONS' === $method ) {
+			$memo[ $method ][ $path ] = array(
+				'body'    =&gt; $data,
+				'headers' =&gt; $response-&gt;headers,
+			);
+		} else {
+			$memo[ $path ] = array(
+				'body'    =&gt; $data,
+				'headers' =&gt; $response-&gt;headers,
+			);
+		}
+	}
+
+	return $memo;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api.php#L2918">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api.php#L2918-L2979">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/rest_post_dispatch"><span class="hook-func">apply_filters</span>( ‘rest_post_dispatch’, <nobr><span class="arg-type">WP_HTTP_Response</span> <span class="arg-name">$result</span></nobr>, <nobr><span class="arg-type">WP_REST_Server</span> <span class="arg-name">$server</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Filters the REST API response.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/rest_preload_api_request" class="_attribution-link">https://developer.wordpress.org/reference/functions/rest_preload_api_request</a>
+  </p>
+</div>

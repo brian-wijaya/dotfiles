@@ -1,0 +1,59 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Session_Tokens::create( <span class="arg-type">int</span> <span class="arg-name">$expiration</span> ): <span class="return-type">string</span>
+</h1> <section><p>Generates a session token and attaches session information to it.</p> </section> <section><h2 id="description">Description</h2> <p>A session token is a long, random string. It is used in a cookie to link that cookie to an expiration time and to ensure the cookie becomes invalidated when the user logs out.</p> <p>This function generates a token and stores it with the associated expiration time (and potentially other session information via the <a href="../../hooks/attach_session_information">‘attach_session_information’</a> filter).</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$expiration</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Session expiration timestamp.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Session token.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="123" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">final public function create( $expiration ) {
+	/**
+	 * Filters the information attached to the newly created session.
+	 *
+	 * Can be used to attach further information to a session.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param array $session Array of extra data.
+	 * @param int   $user_id User ID.
+	 */
+	$session               = apply_filters( 'attach_session_information', array(), $this-&gt;user_id );
+	$session['expiration'] = $expiration;
+
+	// IP address.
+	if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+		$session['ip'] = $_SERVER['REMOTE_ADDR'];
+	}
+
+	// User-agent.
+	if ( ! empty( $_SERVER['HTTP_USER_AGENT'] ) ) {
+		$session['ua'] = wp_unslash( $_SERVER['HTTP_USER_AGENT'] );
+	}
+
+	// Timestamp.
+	$session['login'] = time();
+
+	$token = wp_generate_password( 43, false, false );
+
+	$this-&gt;update( $token, $session );
+
+	return $token;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-session-tokens.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-session-tokens.php#L123">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-session-tokens.php#L123-L155">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/attach_session_information"><span class="hook-func">apply_filters</span>( ‘attach_session_information’, <nobr><span class="arg-type">array</span> <span class="arg-name">$session</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$user_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the information attached to the newly created session.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.0.0/">4.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_session_tokens/create" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_session_tokens/create</a>
+  </p>
+</div>

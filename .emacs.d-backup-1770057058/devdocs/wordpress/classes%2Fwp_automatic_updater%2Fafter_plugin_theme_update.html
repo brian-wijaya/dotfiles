@@ -1,0 +1,90 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Automatic_Updater::after_plugin_theme_update( <span class="arg-type">array</span> <span class="arg-name">$update_results</span> )</h1> <section><p>Checks whether an email should be sent after attempting plugin or theme updates.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$update_results</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The results of update tasks.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1152" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function after_plugin_theme_update( $update_results ) {
+	$successful_updates = array();
+	$failed_updates     = array();
+
+	if ( ! empty( $update_results['plugin'] ) ) {
+		/**
+		 * Filters whether to send an email following an automatic background plugin update.
+		 *
+		 * @since 5.5.0
+		 * @since 5.5.1 Added the `$update_results` parameter.
+		 *
+		 * @param bool  $enabled        True if plugin update notifications are enabled, false otherwise.
+		 * @param array $update_results The results of plugins update tasks.
+		 */
+		$notifications_enabled = apply_filters( 'auto_plugin_update_send_email', true, $update_results['plugin'] );
+
+		if ( $notifications_enabled ) {
+			foreach ( $update_results['plugin'] as $update_result ) {
+				if ( true === $update_result-&gt;result ) {
+					$successful_updates['plugin'][] = $update_result;
+				} else {
+					$failed_updates['plugin'][] = $update_result;
+				}
+			}
+		}
+	}
+
+	if ( ! empty( $update_results['theme'] ) ) {
+		/**
+		 * Filters whether to send an email following an automatic background theme update.
+		 *
+		 * @since 5.5.0
+		 * @since 5.5.1 Added the `$update_results` parameter.
+		 *
+		 * @param bool  $enabled        True if theme update notifications are enabled, false otherwise.
+		 * @param array $update_results The results of theme update tasks.
+		 */
+		$notifications_enabled = apply_filters( 'auto_theme_update_send_email', true, $update_results['theme'] );
+
+		if ( $notifications_enabled ) {
+			foreach ( $update_results['theme'] as $update_result ) {
+				if ( true === $update_result-&gt;result ) {
+					$successful_updates['theme'][] = $update_result;
+				} else {
+					$failed_updates['theme'][] = $update_result;
+				}
+			}
+		}
+	}
+
+	if ( empty( $successful_updates ) &amp;&amp; empty( $failed_updates ) ) {
+		return;
+	}
+
+	if ( empty( $failed_updates ) ) {
+		$this-&gt;send_plugin_theme_email( 'success', $successful_updates, $failed_updates );
+	} elseif ( empty( $successful_updates ) ) {
+		$this-&gt;send_plugin_theme_email( 'fail', $successful_updates, $failed_updates );
+	} else {
+		$this-&gt;send_plugin_theme_email( 'mixed', $successful_updates, $failed_updates );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-automatic-updater.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L1152">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L1152-L1213">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/auto_plugin_update_send_email"><span class="hook-func">apply_filters</span>( ‘auto_plugin_update_send_email’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$enabled</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$update_results</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to send an email following an automatic background plugin update.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/auto_theme_update_send_email"><span class="hook-func">apply_filters</span>( ‘auto_theme_update_send_email’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$enabled</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$update_results</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to send an email following an automatic background theme update.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_automatic_updater/after_plugin_theme_update" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_automatic_updater/after_plugin_theme_update</a>
+  </p>
+</div>

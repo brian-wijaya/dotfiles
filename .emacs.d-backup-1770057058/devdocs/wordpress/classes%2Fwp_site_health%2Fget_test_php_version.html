@@ -1,0 +1,120 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Site_Health::get_test_php_version(): <span class="return-type">array</span>
+</h1> <section><p>Tests if the supplied PHP version is supported.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The test results.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="726" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_test_php_version() {
+	$response = wp_check_php_version();
+
+	$result = array(
+		'label'       =&gt; sprintf(
+			/* translators: %s: The recommended PHP version. */
+			__( 'Your site is running a recommended version of PHP (%s)' ),
+			PHP_VERSION
+		),
+		'status'      =&gt; 'good',
+		'badge'       =&gt; array(
+			'label' =&gt; __( 'Performance' ),
+			'color' =&gt; 'blue',
+		),
+		'description' =&gt; sprintf(
+			'&lt;p&gt;%s&lt;/p&gt;',
+			sprintf(
+				/* translators: %s: The minimum recommended PHP version. */
+				__( 'PHP is one of the programming languages used to build WordPress. Newer versions of PHP receive regular security updates and may increase your site&amp;#8217;s performance. The minimum recommended version of PHP is %s.' ),
+				$response ? $response['recommended_version'] : ''
+			)
+		),
+		'actions'     =&gt; sprintf(
+			'&lt;p&gt;&lt;a href="%s" target="_blank"&gt;%s&lt;span class="screen-reader-text"&gt; %s&lt;/span&gt;&lt;span aria-hidden="true" class="dashicons dashicons-external"&gt;&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;',
+			esc_url( wp_get_update_php_url() ),
+			__( 'Learn more about updating PHP' ),
+			/* translators: Hidden accessibility text. */
+			__( '(opens in a new tab)' )
+		),
+		'test'        =&gt; 'php_version',
+	);
+
+	// PHP is up to date.
+	if ( ! $response || version_compare( PHP_VERSION, $response['recommended_version'], '&gt;=' ) ) {
+		return $result;
+	}
+
+	// The PHP version is older than the recommended version, but still receiving active support.
+	if ( $response['is_supported'] ) {
+		$result['label'] = sprintf(
+			/* translators: %s: The server PHP version. */
+			__( 'Your site is running on an older version of PHP (%s)' ),
+			PHP_VERSION
+		);
+		$result['status'] = 'recommended';
+
+		return $result;
+	}
+
+	/*
+	 * The PHP version is still receiving security fixes, but is lower than
+	 * the expected minimum version that will be required by WordPress in the near future.
+	 */
+	if ( $response['is_secure'] &amp;&amp; $response['is_lower_than_future_minimum'] ) {
+		// The `is_secure` array key name doesn't actually imply this is a secure version of PHP. It only means it receives security updates.
+
+		$result['label'] = sprintf(
+			/* translators: %s: The server PHP version. */
+			__( 'Your site is running on an outdated version of PHP (%s), which soon will not be supported by WordPress.' ),
+			PHP_VERSION
+		);
+
+		$result['status']         = 'critical';
+		$result['badge']['label'] = __( 'Requirements' );
+
+		return $result;
+	}
+
+	// The PHP version is only receiving security fixes.
+	if ( $response['is_secure'] ) {
+		$result['label'] = sprintf(
+			/* translators: %s: The server PHP version. */
+			__( 'Your site is running on an older version of PHP (%s), which should be updated' ),
+			PHP_VERSION
+		);
+		$result['status'] = 'recommended';
+
+		return $result;
+	}
+
+	// No more security updates for the PHP version, and lower than the expected minimum version required by WordPress.
+	if ( $response['is_lower_than_future_minimum'] ) {
+		$message = sprintf(
+			/* translators: %s: The server PHP version. */
+			__( 'Your site is running on an outdated version of PHP (%s), which does not receive security updates and soon will not be supported by WordPress.' ),
+			PHP_VERSION
+		);
+	} else {
+		// No more security updates for the PHP version, must be updated.
+		$message = sprintf(
+			/* translators: %s: The server PHP version. */
+			__( 'Your site is running on an outdated version of PHP (%s), which does not receive security updates. It should be updated.' ),
+			PHP_VERSION
+		);
+	}
+
+	$result['label']  = $message;
+	$result['status'] = 'critical';
+
+	$result['badge']['label'] = __( 'Security' );
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-site-health.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-site-health.php#L726">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-site-health.php#L726-L828">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_site_health/get_test_php_version" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_site_health/get_test_php_version</a>
+  </p>
+</div>

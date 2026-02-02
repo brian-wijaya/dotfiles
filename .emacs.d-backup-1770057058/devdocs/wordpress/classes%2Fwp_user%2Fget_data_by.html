@@ -1,0 +1,100 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_User::get_data_by( <span class="arg-type">string</span> <span class="arg-name">$field</span>, <span class="arg-type">string|int</span> <span class="arg-name">$value</span> ): <span class="return-type">object|false</span>
+</h1> <section><p>Returns only the main user fields.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$field</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The field to query against: Accepts <code>'id'</code>, <code>'ID'</code>, <code>'slug'</code>, <code>'email'</code> or <code>'login'</code>.</span></div></dd>
+<dt>
+<code>$value</code><span class="type"><span class="string">string</span>|<span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The field value.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">object|false</span> Raw user object.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="198" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function get_data_by( $field, $value ) {
+	global $wpdb;
+
+	// 'ID' is an alias of 'id'.
+	if ( 'ID' === $field ) {
+		$field = 'id';
+	}
+
+	if ( 'id' === $field ) {
+		// Make sure the value is numeric to avoid casting objects, for example, to int 1.
+		if ( ! is_numeric( $value ) ) {
+			return false;
+		}
+		$value = (int) $value;
+		if ( $value &lt; 1 ) {
+			return false;
+		}
+	} else {
+		$value = trim( $value );
+	}
+
+	if ( ! $value ) {
+		return false;
+	}
+
+	switch ( $field ) {
+		case 'id':
+			$user_id  = $value;
+			$db_field = 'ID';
+			break;
+		case 'slug':
+			$user_id  = wp_cache_get( $value, 'userslugs' );
+			$db_field = 'user_nicename';
+			break;
+		case 'email':
+			$user_id  = wp_cache_get( $value, 'useremail' );
+			$db_field = 'user_email';
+			break;
+		case 'login':
+			$value    = sanitize_user( $value );
+			$user_id  = wp_cache_get( $value, 'userlogins' );
+			$db_field = 'user_login';
+			break;
+		default:
+			return false;
+	}
+
+	if ( false !== $user_id ) {
+		$user = wp_cache_get( $user_id, 'users' );
+		if ( $user ) {
+			return $user;
+		}
+	}
+
+	$user = $wpdb-&gt;get_row(
+		$wpdb-&gt;prepare(
+			"SELECT * FROM $wpdb-&gt;users WHERE $db_field = %s LIMIT 1",
+			$value
+		)
+	);
+	if ( ! $user ) {
+		return false;
+	}
+
+	update_user_caches( $user );
+
+	return $user;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-user.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-user.php#L198">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-user.php#L198-L265">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Added <code>'ID'</code> as an alias of <code>'id'</code> for the <code>$field</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_user/get_data_by" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_user/get_data_by</a>
+  </p>
+</div>

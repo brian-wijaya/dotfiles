@@ -1,0 +1,126 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_media_insert_url_form( <span class="arg-type">string</span> <span class="arg-name">$default_view</span> = <span class="arg-default">‘image’</span> ): <span class="return-type">string</span>
+</h1> <section><p>Creates the form for external url.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$default_view</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>'image'</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> HTML content of the form.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2925" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_media_insert_url_form( $default_view = 'image' ) {
+	/** This filter is documented in wp-admin/includes/media.php */
+	if ( ! apply_filters( 'disable_captions', '' ) ) {
+		$caption = '
+		&lt;tr class="image-only"&gt;
+			&lt;th scope="row" class="label"&gt;
+				&lt;label for="caption"&gt;&lt;span class="alignleft"&gt;' . __( 'Image Caption' ) . '&lt;/span&gt;&lt;/label&gt;
+			&lt;/th&gt;
+			&lt;td class="field"&gt;&lt;textarea id="caption" name="caption"&gt;&lt;/textarea&gt;&lt;/td&gt;
+		&lt;/tr&gt;';
+	} else {
+		$caption = '';
+	}
+
+	$default_align = get_option( 'image_default_align' );
+
+	if ( empty( $default_align ) ) {
+		$default_align = 'none';
+	}
+
+	if ( 'image' === $default_view ) {
+		$view        = 'image-only';
+		$table_class = '';
+	} else {
+		$view        = 'not-image';
+		$table_class = $view;
+	}
+
+	return '
+	&lt;p class="media-types"&gt;&lt;label&gt;&lt;input type="radio" name="media_type" value="image" id="image-only"' . checked( 'image-only', $view, false ) . ' /&gt; ' . __( 'Image' ) . '&lt;/label&gt; &amp;nbsp; &amp;nbsp; &lt;label&gt;&lt;input type="radio" name="media_type" value="generic" id="not-image"' . checked( 'not-image', $view, false ) . ' /&gt; ' . __( 'Audio, Video, or Other File' ) . '&lt;/label&gt;&lt;/p&gt;
+	&lt;p class="media-types media-types-required-info"&gt;' .
+		wp_required_field_message() .
+	'&lt;/p&gt;
+	&lt;table class="describe ' . $table_class . '"&gt;&lt;tbody&gt;
+		&lt;tr&gt;
+			&lt;th scope="row" class="label" style="width:130px;"&gt;
+				&lt;label for="src"&gt;&lt;span class="alignleft"&gt;' . __( 'URL' ) . '&lt;/span&gt; ' . wp_required_field_indicator() . '&lt;/label&gt;
+				&lt;span class="alignright" id="status_img"&gt;&lt;/span&gt;
+			&lt;/th&gt;
+			&lt;td class="field"&gt;&lt;input id="src" name="src" value="" type="text" required onblur="addExtImage.getImageData()" /&gt;&lt;/td&gt;
+		&lt;/tr&gt;
+
+		&lt;tr&gt;
+			&lt;th scope="row" class="label"&gt;
+				&lt;label for="title"&gt;&lt;span class="alignleft"&gt;' . __( 'Title' ) . '&lt;/span&gt; ' . wp_required_field_indicator() . '&lt;/label&gt;
+			&lt;/th&gt;
+			&lt;td class="field"&gt;&lt;input id="title" name="title" value="" type="text" required /&gt;&lt;/td&gt;
+		&lt;/tr&gt;
+
+		&lt;tr class="not-image"&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;&lt;p class="help"&gt;' . __( 'Link text, e.g. &amp;#8220;Ransom Demands (PDF)&amp;#8221;' ) . '&lt;/p&gt;&lt;/td&gt;&lt;/tr&gt;
+
+		&lt;tr class="image-only"&gt;
+			&lt;th scope="row" class="label"&gt;
+				&lt;label for="alt"&gt;&lt;span class="alignleft"&gt;' . __( 'Alternative Text' ) . '&lt;/span&gt; ' . wp_required_field_indicator() . '&lt;/label&gt;
+			&lt;/th&gt;
+			&lt;td class="field"&gt;&lt;input id="alt" name="alt" value="" type="text" required /&gt;
+			&lt;p class="help"&gt;' . __( 'Alt text for the image, e.g. &amp;#8220;The Mona Lisa&amp;#8221;' ) . '&lt;/p&gt;&lt;/td&gt;
+		&lt;/tr&gt;
+		' . $caption . '
+		&lt;tr class="align image-only"&gt;
+			&lt;th scope="row" class="label"&gt;&lt;p&gt;&lt;label for="align"&gt;' . __( 'Alignment' ) . '&lt;/label&gt;&lt;/p&gt;&lt;/th&gt;
+			&lt;td class="field"&gt;
+				&lt;input name="align" id="align-none" value="none" onclick="addExtImage.align=\'align\'+this.value" type="radio"' . ( 'none' === $default_align ? ' checked="checked"' : '' ) . ' /&gt;
+				&lt;label for="align-none" class="align image-align-none-label"&gt;' . __( 'None' ) . '&lt;/label&gt;
+				&lt;input name="align" id="align-left" value="left" onclick="addExtImage.align=\'align\'+this.value" type="radio"' . ( 'left' === $default_align ? ' checked="checked"' : '' ) . ' /&gt;
+				&lt;label for="align-left" class="align image-align-left-label"&gt;' . __( 'Left' ) . '&lt;/label&gt;
+				&lt;input name="align" id="align-center" value="center" onclick="addExtImage.align=\'align\'+this.value" type="radio"' . ( 'center' === $default_align ? ' checked="checked"' : '' ) . ' /&gt;
+				&lt;label for="align-center" class="align image-align-center-label"&gt;' . __( 'Center' ) . '&lt;/label&gt;
+				&lt;input name="align" id="align-right" value="right" onclick="addExtImage.align=\'align\'+this.value" type="radio"' . ( 'right' === $default_align ? ' checked="checked"' : '' ) . ' /&gt;
+				&lt;label for="align-right" class="align image-align-right-label"&gt;' . __( 'Right' ) . '&lt;/label&gt;
+			&lt;/td&gt;
+		&lt;/tr&gt;
+
+		&lt;tr class="image-only"&gt;
+			&lt;th scope="row" class="label"&gt;
+				&lt;label for="url"&gt;&lt;span class="alignleft"&gt;' . __( 'Link Image To:' ) . '&lt;/span&gt;&lt;/label&gt;
+			&lt;/th&gt;
+			&lt;td class="field"&gt;&lt;input id="url" name="url" value="" type="text" /&gt;&lt;br /&gt;
+
+			&lt;button type="button" class="button" value="" onclick="document.forms[0].url.value=null"&gt;' . __( 'None' ) . '&lt;/button&gt;
+			&lt;button type="button" class="button" value="" onclick="document.forms[0].url.value=document.forms[0].src.value"&gt;' . __( 'Link to image' ) . '&lt;/button&gt;
+			&lt;p class="help"&gt;' . __( 'Enter a link URL or click above for presets.' ) . '&lt;/p&gt;&lt;/td&gt;
+		&lt;/tr&gt;
+		&lt;tr class="image-only"&gt;
+			&lt;td&gt;&lt;/td&gt;
+			&lt;td&gt;
+				&lt;input type="button" class="button" id="go_button" style="color:#bbb;" onclick="addExtImage.insert()" value="' . esc_attr__( 'Insert into Post' ) . '" /&gt;
+			&lt;/td&gt;
+		&lt;/tr&gt;
+		&lt;tr class="not-image"&gt;
+			&lt;td&gt;&lt;/td&gt;
+			&lt;td&gt;
+				' . get_submit_button( __( 'Insert into Post' ), '', 'insertonlybutton', false ) . '
+			&lt;/td&gt;
+		&lt;/tr&gt;
+	&lt;/tbody&gt;&lt;/table&gt;';
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L2925">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L2925-L3021">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/disable_captions"><span class="hook-func">apply_filters</span>( ‘disable_captions’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$bool</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to disable captions.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_media_insert_url_form" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_media_insert_url_form</a>
+  </p>
+</div>

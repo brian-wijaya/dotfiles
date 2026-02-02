@@ -1,0 +1,57 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_scheduled_delete()</h1> <section><p>Permanently deletes comments or posts of any type that have held a status of ‘trash’ for the number of days defined in EMPTY_TRASH_DAYS.</p> </section> <section><h2 id="description">Description</h2> <p>The default value of <code>EMPTY_TRASH_DAYS</code> is 30 (days).</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="6829" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_scheduled_delete() {
+	global $wpdb;
+
+	$delete_timestamp = time() - ( DAY_IN_SECONDS * EMPTY_TRASH_DAYS );
+
+	$posts_to_delete = $wpdb-&gt;get_results( $wpdb-&gt;prepare( "SELECT post_id FROM $wpdb-&gt;postmeta WHERE meta_key = '_wp_trash_meta_time' AND meta_value &lt; %d", $delete_timestamp ), ARRAY_A );
+
+	foreach ( (array) $posts_to_delete as $post ) {
+		$post_id = (int) $post['post_id'];
+		if ( ! $post_id ) {
+			continue;
+		}
+
+		$del_post = get_post( $post_id );
+
+		if ( ! $del_post || 'trash' !== $del_post-&gt;post_status ) {
+			delete_post_meta( $post_id, '_wp_trash_meta_status' );
+			delete_post_meta( $post_id, '_wp_trash_meta_time' );
+		} else {
+			wp_delete_post( $post_id );
+		}
+	}
+
+	$comments_to_delete = $wpdb-&gt;get_results( $wpdb-&gt;prepare( "SELECT comment_id FROM $wpdb-&gt;commentmeta WHERE meta_key = '_wp_trash_meta_time' AND meta_value &lt; %d", $delete_timestamp ), ARRAY_A );
+
+	foreach ( (array) $comments_to_delete as $comment ) {
+		$comment_id = (int) $comment['comment_id'];
+		if ( ! $comment_id ) {
+			continue;
+		}
+
+		$del_comment = get_comment( $comment_id );
+
+		if ( ! $del_comment || 'trash' !== $del_comment-&gt;comment_approved ) {
+			delete_comment_meta( $comment_id, '_wp_trash_meta_time' );
+			delete_comment_meta( $comment_id, '_wp_trash_meta_status' );
+		} else {
+			wp_delete_comment( $del_comment );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L6829">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L6829-L6869">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.9.0/">2.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_scheduled_delete" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_scheduled_delete</a>
+  </p>
+</div>

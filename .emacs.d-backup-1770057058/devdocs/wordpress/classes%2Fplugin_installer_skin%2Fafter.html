@@ -1,0 +1,110 @@
+<h1 class="wp-block-wporg-code-reference-title">Plugin_Installer_Skin::after()</h1> <section><p>Performs an action following a plugin install.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="94" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function after() {
+	// Check if the plugin can be overwritten and output the HTML.
+	if ( $this-&gt;do_overwrite() ) {
+		return;
+	}
+
+	$plugin_file = $this-&gt;upgrader-&gt;plugin_info();
+
+	$install_actions = array();
+
+	$from = isset( $_GET['from'] ) ? wp_unslash( $_GET['from'] ) : 'plugins';
+
+	if ( 'import' === $from ) {
+		$install_actions['activate_plugin'] = sprintf(
+			'&lt;a class="button button-primary" href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+			wp_nonce_url( 'plugins.php?action=activate&amp;amp;from=import&amp;amp;plugin=' . urlencode( $plugin_file ), 'activate-plugin_' . $plugin_file ),
+			__( 'Activate Plugin &amp;amp; Run Importer' )
+		);
+	} elseif ( 'press-this' === $from ) {
+		$install_actions['activate_plugin'] = sprintf(
+			'&lt;a class="button button-primary" href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+			wp_nonce_url( 'plugins.php?action=activate&amp;amp;from=press-this&amp;amp;plugin=' . urlencode( $plugin_file ), 'activate-plugin_' . $plugin_file ),
+			__( 'Activate Plugin &amp;amp; Go to Press This' )
+		);
+	} else {
+		$install_actions['activate_plugin'] = sprintf(
+			'&lt;a class="button button-primary" href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+			wp_nonce_url( 'plugins.php?action=activate&amp;amp;plugin=' . urlencode( $plugin_file ), 'activate-plugin_' . $plugin_file ),
+			__( 'Activate Plugin' )
+		);
+	}
+
+	if ( is_multisite() &amp;&amp; current_user_can( 'manage_network_plugins' ) ) {
+		$install_actions['network_activate'] = sprintf(
+			'&lt;a class="button button-primary" href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+			wp_nonce_url( 'plugins.php?action=activate&amp;amp;networkwide=1&amp;amp;plugin=' . urlencode( $plugin_file ), 'activate-plugin_' . $plugin_file ),
+			_x( 'Network Activate', 'plugin' )
+		);
+		unset( $install_actions['activate_plugin'] );
+	}
+
+	if ( 'import' === $from ) {
+		$install_actions['importers_page'] = sprintf(
+			'&lt;a href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+			admin_url( 'import.php' ),
+			__( 'Go to Importers' )
+		);
+	} elseif ( 'web' === $this-&gt;type ) {
+		$install_actions['plugins_page'] = sprintf(
+			'&lt;a href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+			self_admin_url( 'plugin-install.php' ),
+			__( 'Go to Plugin Installer' )
+		);
+	} elseif ( 'upload' === $this-&gt;type &amp;&amp; 'plugins' === $from ) {
+		$install_actions['plugins_page'] = sprintf(
+			'&lt;a href="%s"&gt;%s&lt;/a&gt;',
+			self_admin_url( 'plugin-install.php' ),
+			__( 'Go to Plugin Installer' )
+		);
+	} else {
+		$install_actions['plugins_page'] = sprintf(
+			'&lt;a href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+			self_admin_url( 'plugins.php' ),
+			__( 'Go to Plugins page' )
+		);
+	}
+
+	if ( ! $this-&gt;result || is_wp_error( $this-&gt;result ) ) {
+		unset( $install_actions['activate_plugin'], $install_actions['network_activate'] );
+	} elseif ( ! current_user_can( 'activate_plugin', $plugin_file ) || is_plugin_active( $plugin_file ) ) {
+		unset( $install_actions['activate_plugin'] );
+	}
+
+	/**
+	 * Filters the list of action links available following a single plugin installation.
+	 *
+	 * @since 2.7.0
+	 *
+	 * @param string[] $install_actions Array of plugin action links.
+	 * @param object   $api             Object containing WordPress.org API plugin data. Empty
+	 *                                  for non-API installs, such as when a plugin is installed
+	 *                                  via upload.
+	 * @param string   $plugin_file     Path to the plugin file relative to the plugins directory.
+	 */
+	$install_actions = apply_filters( 'install_plugin_complete_actions', $install_actions, $this-&gt;api, $plugin_file );
+
+	if ( ! empty( $install_actions ) ) {
+		$this-&gt;feedback( implode( ' ', (array) $install_actions ) );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-plugin-installer-skin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-plugin-installer-skin.php#L94">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-plugin-installer-skin.php#L94-L183">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/install_plugin_complete_actions"><span class="hook-func">apply_filters</span>( ‘install_plugin_complete_actions’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$install_actions</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$api</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$plugin_file</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of action links available following a single plugin installation.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/plugin_installer_skin/after" class="_attribution-link">https://developer.wordpress.org/reference/classes/plugin_installer_skin/after</a>
+  </p>
+</div>

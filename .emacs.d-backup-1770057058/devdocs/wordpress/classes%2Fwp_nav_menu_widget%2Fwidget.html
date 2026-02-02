@@ -1,0 +1,106 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Nav_Menu_Widget::widget( <span class="arg-type">array</span> <span class="arg-name">$args</span>, <span class="arg-type">array</span> <span class="arg-name">$instance</span> )</h1> <section><p>Outputs the content for the current Navigation Menu widget instance.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Display arguments including <code>'before_title'</code>, <code>'after_title'</code>, <code>'before_widget'</code>, and <code>'after_widget'</code>.</span></div></dd>
+<dt>
+<code>$instance</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Settings for the current Navigation Menu widget instance.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="42" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function widget( $args, $instance ) {
+	// Get menu.
+	$nav_menu = ! empty( $instance['nav_menu'] ) ? wp_get_nav_menu_object( $instance['nav_menu'] ) : false;
+
+	if ( ! $nav_menu ) {
+		return;
+	}
+
+	$default_title = __( 'Menu' );
+	$title         = ! empty( $instance['title'] ) ? $instance['title'] : '';
+
+	/** This filter is documented in wp-includes/widgets/class-wp-widget-pages.php */
+	$title = apply_filters( 'widget_title', $title, $instance, $this-&gt;id_base );
+
+	echo $args['before_widget'];
+
+	if ( $title ) {
+		echo $args['before_title'] . $title . $args['after_title'];
+	}
+
+	$format = current_theme_supports( 'html5', 'navigation-widgets' ) ? 'html5' : 'xhtml';
+
+	/**
+	 * Filters the HTML format of widgets with navigation links.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param string $format The type of markup to use in widgets with navigation links.
+	 *                       Accepts 'html5', 'xhtml'.
+	 */
+	$format = apply_filters( 'navigation_widgets_format', $format );
+
+	if ( 'html5' === $format ) {
+		// The title may be filtered: Strip out HTML and make sure the aria-label is never empty.
+		$title      = trim( strip_tags( $title ) );
+		$aria_label = $title ? $title : $default_title;
+
+		$nav_menu_args = array(
+			'fallback_cb'          =&gt; '',
+			'menu'                 =&gt; $nav_menu,
+			'container'            =&gt; 'nav',
+			'container_aria_label' =&gt; $aria_label,
+			'items_wrap'           =&gt; '&lt;ul id="%1$s" class="%2$s"&gt;%3$s&lt;/ul&gt;',
+		);
+	} else {
+		$nav_menu_args = array(
+			'fallback_cb' =&gt; '',
+			'menu'        =&gt; $nav_menu,
+		);
+	}
+
+	/**
+	 * Filters the arguments for the Navigation Menu widget.
+	 *
+	 * @since 4.2.0
+	 * @since 4.4.0 Added the `$instance` parameter.
+	 *
+	 * @param array   $nav_menu_args {
+	 *     An array of arguments passed to wp_nav_menu() to retrieve a navigation menu.
+	 *
+	 *     @type callable|bool $fallback_cb Callback to fire if the menu doesn't exist. Default empty.
+	 *     @type mixed         $menu        Menu ID, slug, or name.
+	 * }
+	 * @param WP_Term $nav_menu      Nav menu object for the current menu.
+	 * @param array   $args          Display arguments for the current widget.
+	 * @param array   $instance      Array of settings for the current widget.
+	 */
+	wp_nav_menu( apply_filters( 'widget_nav_menu_args', $nav_menu_args, $nav_menu, $args, $instance ) );
+
+	echo $args['after_widget'];
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/widgets/class-wp-nav-menu-widget.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/widgets/class-wp-nav-menu-widget.php#L42">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/widgets/class-wp-nav-menu-widget.php#L42-L112">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/navigation_widgets_format"><span class="hook-func">apply_filters</span>( ‘navigation_widgets_format’, <nobr><span class="arg-type">string</span> <span class="arg-name">$format</span></nobr> )</a></dt>
+<dd>
+<p>Filters the HTML format of widgets with navigation links.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/widget_nav_menu_args"><span class="hook-func">apply_filters</span>( ‘widget_nav_menu_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$nav_menu_args</span></nobr>, <nobr><span class="arg-type">WP_Term</span> <span class="arg-name">$nav_menu</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$instance</span></nobr> )</a></dt>
+<dd>
+<p>Filters the arguments for the Navigation Menu widget.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/widget_title"><span class="hook-func">apply_filters</span>( ‘widget_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$title</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$instance</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$id_base</span></nobr> )</a></dt>
+<dd>
+<p>Filters the widget title.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_nav_menu_widget/widget" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_nav_menu_widget/widget</a>
+  </p>
+</div>

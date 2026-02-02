@@ -1,0 +1,115 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_restore_image( <span class="arg-type">int</span> <span class="arg-name">$post_id</span> ): <span class="return-type">stdClass</span>
+</h1> <section><p>Restores the metadata for a given attachment.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Attachment post ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">stdClass</span> Image restoration message object.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="801" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_restore_image( $post_id ) {
+	$meta             = wp_get_attachment_metadata( $post_id );
+	$file             = get_attached_file( $post_id );
+	$backup_sizes     = get_post_meta( $post_id, '_wp_attachment_backup_sizes', true );
+	$old_backup_sizes = $backup_sizes;
+	$restored         = false;
+	$msg              = new stdClass();
+
+	if ( ! is_array( $backup_sizes ) ) {
+		$msg-&gt;error = __( 'Cannot load image metadata.' );
+		return $msg;
+	}
+
+	$parts         = pathinfo( $file );
+	$suffix        = time() . rand( 100, 999 );
+	$default_sizes = get_intermediate_image_sizes();
+
+	if ( isset( $backup_sizes['full-orig'] ) &amp;&amp; is_array( $backup_sizes['full-orig'] ) ) {
+		$data = $backup_sizes['full-orig'];
+
+		if ( $parts['basename'] !== $data['file'] ) {
+			if ( defined( 'IMAGE_EDIT_OVERWRITE' ) &amp;&amp; IMAGE_EDIT_OVERWRITE ) {
+				// Delete only if it's an edited image.
+				if ( preg_match( '/-e[0-9]{13}\./', $parts['basename'] ) ) {
+					wp_delete_file( $file );
+				}
+			} elseif ( isset( $meta['width'], $meta['height'] ) ) {
+				$backup_sizes[ "full-$suffix" ] = array(
+					'width'    =&gt; $meta['width'],
+					'height'   =&gt; $meta['height'],
+					'filesize' =&gt; $meta['filesize'],
+					'file'     =&gt; $parts['basename'],
+				);
+			}
+		}
+
+		$restored_file = path_join( $parts['dirname'], $data['file'] );
+		$restored      = update_attached_file( $post_id, $restored_file );
+
+		$meta['file']   = _wp_relative_upload_path( $restored_file );
+		$meta['width']  = $data['width'];
+		$meta['height'] = $data['height'];
+		if ( isset( $data['filesize'] ) ) {
+			/*
+			 * Restore the original filesize if it was backed up.
+			 *
+			 * See https://core.trac.wordpress.org/ticket/59684.
+			 */
+			$meta['filesize'] = $data['filesize'];
+		}
+	}
+
+	foreach ( $default_sizes as $default_size ) {
+		if ( isset( $backup_sizes[ "$default_size-orig" ] ) ) {
+			$data = $backup_sizes[ "$default_size-orig" ];
+
+			if ( isset( $meta['sizes'][ $default_size ] ) &amp;&amp; $meta['sizes'][ $default_size ]['file'] !== $data['file'] ) {
+				if ( defined( 'IMAGE_EDIT_OVERWRITE' ) &amp;&amp; IMAGE_EDIT_OVERWRITE ) {
+					// Delete only if it's an edited image.
+					if ( preg_match( '/-e[0-9]{13}-/', $meta['sizes'][ $default_size ]['file'] ) ) {
+						$delete_file = path_join( $parts['dirname'], $meta['sizes'][ $default_size ]['file'] );
+						wp_delete_file( $delete_file );
+					}
+				} else {
+					$backup_sizes[ "$default_size-{$suffix}" ] = $meta['sizes'][ $default_size ];
+				}
+			}
+
+			$meta['sizes'][ $default_size ] = $data;
+		} else {
+			unset( $meta['sizes'][ $default_size ] );
+		}
+	}
+
+	if ( ! wp_update_attachment_metadata( $post_id, $meta )
+		|| ( $old_backup_sizes !== $backup_sizes &amp;&amp; ! update_post_meta( $post_id, '_wp_attachment_backup_sizes', $backup_sizes ) )
+	) {
+		$msg-&gt;error = __( 'Cannot save image metadata.' );
+		return $msg;
+	}
+
+	if ( ! $restored ) {
+		$msg-&gt;error = __( 'Image metadata is inconsistent.' );
+	} else {
+		$msg-&gt;msg = __( 'Image restored successfully.' );
+
+		if ( defined( 'IMAGE_EDIT_OVERWRITE' ) &amp;&amp; IMAGE_EDIT_OVERWRITE ) {
+			delete_post_meta( $post_id, '_wp_attachment_backup_sizes' );
+		}
+	}
+
+	return $msg;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/image-edit.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/image-edit.php#L801">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/image-edit.php#L801-L893">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.9.0/">2.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_restore_image" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_restore_image</a>
+  </p>
+</div>

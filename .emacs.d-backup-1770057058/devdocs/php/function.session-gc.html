@@ -1,0 +1,37 @@
+<div id="function.session-gc" class="refentry"> <div class="refnamediv"> <h1 class="refname">session_gc</h1> <p class="verinfo">(PHP 7 &gt;= 7.1.0, PHP 8)</p>
+<p class="refpurpose"><span class="refname">session_gc</span> — <span class="dc-title">Perform session data garbage collection</span></p> </div> <div class="refsect1 description" id="refsect1-function.session-gc-description"> <h3 class="title">Description</h3> <pre class="methodsynopsis dc-description" data-language="php">session_gc(): int|false</pre> <p class="simpara"> By default, PHP uses <a href="https://www.php.net/manual/en/session.configuration.php#ini.session.gc-probability" class="link">session.gc_probability</a> to run the session garbage collector probabilistically on each request. There are some limitations with this approach: </p> <ul class="simplelist"> <li>Low traffic sites may not have their session data deleted within the preferred duration.</li> <li>High traffic sites may have the garbage collector run too frequently, performing unnecessary extra work.</li> <li>Garbage collection is performed on the user's request, and the user may experience a delay.</li> </ul> <p class="simpara"> For production systems, it is recommended to disable the probability-based garbage collection by setting <a href="https://www.php.net/manual/en/session.configuration.php#ini.session.gc-probability" class="link">session.gc_probability</a> to <code class="literal">0</code> and explicitly trigger the garbage collector periodically, for example by using "cron" on UNIX-like systems to run a script that calls <span class="function"><strong>session_gc()</strong></span>. </p> <blockquote class="note"><p><strong class="note">Note</strong>: <span class="simpara"> When calling <span class="function"><strong>session_gc()</strong></span> from a command-line php script, the <a href="https://www.php.net/manual/en/session.configuration.php#ini.session.save-path" class="link">session.save_path</a> must be set to the same value as web requests, and the script must have access and delete permissions for the session files. This may be affected by the user the script runs as, and container or sandboxing features such as systemd's <code class="literal">PrivateTmp=</code> option. </span> </p></blockquote> </div> <div class="refsect1 parameters" id="refsect1-function.session-gc-parameters"> <h3 class="title">Parameters</h3> <p class="para">This function has no parameters.</p> </div> <div class="refsect1 returnvalues" id="refsect1-function.session-gc-returnvalues"> <h3 class="title">Return Values</h3> <p class="simpara"> <span class="function"><strong>session_gc()</strong></span> returns the number of deleted session entries on success, or <strong><code><a href="https://www.php.net/manual/en/reserved.constants.php#constant.false">false</a></code></strong> on failure. </p> <blockquote class="note"><p><strong class="note">Note</strong>: <span class="simpara"> Old session save handlers do not return the number of deleted session entries, but rather only a success/failure flag. If this is the case, <code class="literal">1</code> is returned regardless of how many session entries are actually deleted. </span> </p></blockquote> </div> <div class="refsect1 examples" id="refsect1-function.session-gc-examples"> <h3 class="title">Examples</h3> <div class="example" id="example-1"> <p><strong>Example #1 <span class="function"><strong>session_gc()</strong></span> example for task managers like cron</strong></p> <div class="example-contents"> <pre class="phpcode" data-language="php">&lt;?php
+// Note: This script should be executed by the same user of web server process.
+
+// Need active session to initialize session data storage access.
+session_start();
+
+// Executes GC immediately
+session_gc();
+
+// Clean up session ID created by session_start()
+session_destroy();
+?&gt;</pre> </div> </div> <div class="example" id="example-2"> <p><strong>Example #2 <span class="function"><strong>session_gc()</strong></span> example for user accessible script</strong></p> <div class="example-contents"> <pre class="phpcode" data-language="php">&lt;?php
+// Note: session_gc() is recommended to be used by a task manager script, but
+// it may be used as follows.
+
+// Used for last GC time check
+$gc_time = '/tmp/php_session_last_gc';
+$gc_period = 1800;
+
+session_start();
+// Execute GC only when GC period elapsed. 
+// i.e. Calling session_gc() every request is waste of resources. 
+if (file_exists($gc_time)) {
+    if (filemtime($gc_time) &lt; time() - $gc_period) {
+        session_gc();
+        touch($gc_time);
+    }
+} else {
+    touch($gc_time);
+}
+?&gt;</pre> </div> </div> </div> <div class="refsect1 seealso" id="refsect1-function.session-gc-seealso"> <h3 class="title">See Also</h3> <ul class="simplelist"> <li><span class="function"><a href="function.session-start" class="function" rel="rdfs-seeAlso">session_start()</a> - Start new or resume existing session</span></li> <li><span class="function"><a href="function.session-destroy" class="function" rel="rdfs-seeAlso">session_destroy()</a> - Destroys all data registered to a session</span></li> <li><a href="https://www.php.net/manual/en/session.configuration.php#ini.session.gc-probability" class="link">session.gc_probability</a></li> </ul> </div> </div><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 1997&ndash;2025 The PHP Documentation Group<br>Licensed under the Creative Commons Attribution License v3.0 or later.<br>
+    <a href="https://www.php.net/manual/en/function.session-gc.php" class="_attribution-link">https://www.php.net/manual/en/function.session-gc.php</a>
+  </p>
+</div>

@@ -1,0 +1,183 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Comment_Query::get_comments(): <span class="return-type">int|int[]|<a href="../wp_comment" rel="class">WP_Comment</a>[]</span>
+</h1> <section><p>Get a list of comments matching the query vars.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">int|int[]|<a href="../wp_comment" rel="class">WP_Comment</a>[]</span> List of comments or number of found comments if <code>$count</code> argument is true.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="378" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_comments() {
+	global $wpdb;
+
+	$this-&gt;parse_query();
+
+	// Parse meta query.
+	$this-&gt;meta_query = new WP_Meta_Query();
+	$this-&gt;meta_query-&gt;parse_query_vars( $this-&gt;query_vars );
+
+	/**
+	 * Fires before comments are retrieved.
+	 *
+	 * @since 3.1.0
+	 *
+	 * @param WP_Comment_Query $query Current instance of WP_Comment_Query (passed by reference).
+	 */
+	do_action_ref_array( 'pre_get_comments', array( &amp;$this ) );
+
+	// Reparse query vars, in case they were modified in a 'pre_get_comments' callback.
+	$this-&gt;meta_query-&gt;parse_query_vars( $this-&gt;query_vars );
+	if ( ! empty( $this-&gt;meta_query-&gt;queries ) ) {
+		$this-&gt;meta_query_clauses = $this-&gt;meta_query-&gt;get_sql( 'comment', $wpdb-&gt;comments, 'comment_ID', $this );
+	}
+
+	$comment_data = null;
+
+	/**
+	 * Filters the comments data before the query takes place.
+	 *
+	 * Return a non-null value to bypass WordPress' default comment queries.
+	 *
+	 * The expected return type from this filter depends on the value passed
+	 * in the request query vars:
+	 * - When `$this-&gt;query_vars['count']` is set, the filter should return
+	 *   the comment count as an integer.
+	 * - When `'ids' === $this-&gt;query_vars['fields']`, the filter should return
+	 *   an array of comment IDs.
+	 * - Otherwise the filter should return an array of WP_Comment objects.
+	 *
+	 * Note that if the filter returns an array of comment data, it will be assigned
+	 * to the `comments` property of the current WP_Comment_Query instance.
+	 *
+	 * Filtering functions that require pagination information are encouraged to set
+	 * the `found_comments` and `max_num_pages` properties of the WP_Comment_Query object,
+	 * passed to the filter by reference. If WP_Comment_Query does not perform a database
+	 * query, it will not have enough information to generate these values itself.
+	 *
+	 * @since 5.3.0
+	 * @since 5.6.0 The returned array of comment data is assigned to the `comments` property
+	 *              of the current WP_Comment_Query instance.
+	 *
+	 * @param array|int|null   $comment_data Return an array of comment data to short-circuit WP's comment query,
+	 *                                       the comment count as an integer if `$this-&gt;query_vars['count']` is set,
+	 *                                       or null to allow WP to run its normal queries.
+	 * @param WP_Comment_Query $query        The WP_Comment_Query instance, passed by reference.
+	 */
+	$comment_data = apply_filters_ref_array( 'comments_pre_query', array( $comment_data, &amp;$this ) );
+
+	if ( null !== $comment_data ) {
+		if ( is_array( $comment_data ) &amp;&amp; ! $this-&gt;query_vars['count'] ) {
+			$this-&gt;comments = $comment_data;
+		}
+
+		return $comment_data;
+	}
+
+	/*
+	 * Only use the args defined in the query_var_defaults to compute the key,
+	 * but ignore 'fields', 'update_comment_meta_cache', 'update_comment_post_cache' which does not affect query results.
+	 */
+	$_args = wp_array_slice_assoc( $this-&gt;query_vars, array_keys( $this-&gt;query_var_defaults ) );
+	unset( $_args['fields'], $_args['update_comment_meta_cache'], $_args['update_comment_post_cache'] );
+
+	$key          = md5( serialize( $_args ) );
+	$last_changed = wp_cache_get_last_changed( 'comment' );
+
+	$cache_key   = "get_comments:$key:$last_changed";
+	$cache_value = wp_cache_get( $cache_key, 'comment-queries' );
+	if ( false === $cache_value ) {
+		$comment_ids = $this-&gt;get_comment_ids();
+		if ( $comment_ids ) {
+			$this-&gt;set_found_comments();
+		}
+
+		$cache_value = array(
+			'comment_ids'    =&gt; $comment_ids,
+			'found_comments' =&gt; $this-&gt;found_comments,
+		);
+		wp_cache_add( $cache_key, $cache_value, 'comment-queries' );
+	} else {
+		$comment_ids          = $cache_value['comment_ids'];
+		$this-&gt;found_comments = $cache_value['found_comments'];
+	}
+
+	if ( $this-&gt;found_comments &amp;&amp; $this-&gt;query_vars['number'] ) {
+		$this-&gt;max_num_pages = (int) ceil( $this-&gt;found_comments / $this-&gt;query_vars['number'] );
+	}
+
+	// If querying for a count only, there's nothing more to do.
+	if ( $this-&gt;query_vars['count'] ) {
+		// $comment_ids is actually a count in this case.
+		return (int) $comment_ids;
+	}
+
+	$comment_ids = array_map( 'intval', $comment_ids );
+
+	if ( $this-&gt;query_vars['update_comment_meta_cache'] ) {
+		wp_lazyload_comment_meta( $comment_ids );
+	}
+
+	if ( 'ids' === $this-&gt;query_vars['fields'] ) {
+		$this-&gt;comments = $comment_ids;
+		return $this-&gt;comments;
+	}
+
+	_prime_comment_caches( $comment_ids, false );
+
+	// Fetch full comment objects from the primed cache.
+	$_comments = array();
+	foreach ( $comment_ids as $comment_id ) {
+		$_comment = get_comment( $comment_id );
+		if ( $_comment ) {
+			$_comments[] = $_comment;
+		}
+	}
+
+	// Prime comment post caches.
+	if ( $this-&gt;query_vars['update_comment_post_cache'] ) {
+		$comment_post_ids = array();
+		foreach ( $_comments as $_comment ) {
+			$comment_post_ids[] = $_comment-&gt;comment_post_ID;
+		}
+
+		_prime_post_caches( $comment_post_ids, false, false );
+	}
+
+	/**
+	 * Filters the comment query results.
+	 *
+	 * @since 3.1.0
+	 *
+	 * @param WP_Comment[]     $_comments An array of comments.
+	 * @param WP_Comment_Query $query     Current instance of WP_Comment_Query (passed by reference).
+	 */
+	$_comments = apply_filters_ref_array( 'the_comments', array( $_comments, &amp;$this ) );
+
+	// Convert to WP_Comment instances.
+	$comments = array_map( 'get_comment', $_comments );
+
+	if ( $this-&gt;query_vars['hierarchical'] ) {
+		$comments = $this-&gt;fill_descendants( $comments );
+	}
+
+	$this-&gt;comments = $comments;
+	return $this-&gt;comments;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-comment-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-comment-query.php#L378">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-comment-query.php#L378-L533">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/comments_pre_query"><span class="hook-func">apply_filters_ref_array</span>( ‘comments_pre_query’, <nobr><span class="arg-type">array|int|null</span> <span class="arg-name">$comment_data</span></nobr>, <nobr><span class="arg-type">WP_Comment_Query</span> <span class="arg-name">$query</span></nobr> )</a></dt>
+<dd>
+<p>Filters the comments data before the query takes place.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/pre_get_comments"><span class="hook-func">do_action_ref_array</span>( ‘pre_get_comments’, <nobr><span class="arg-type">WP_Comment_Query</span> <span class="arg-name">$query</span></nobr> )</a></dt>
+<dd>
+<p>Fires before comments are retrieved.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/the_comments"><span class="hook-func">apply_filters_ref_array</span>( ‘the_comments’, <nobr><span class="arg-type">WP_Comment[]</span> <span class="arg-name">$_comments</span></nobr>, <nobr><span class="arg-type">WP_Comment_Query</span> <span class="arg-name">$query</span></nobr> )</a></dt>
+<dd>
+<p>Filters the comment query results.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_comment_query/get_comments" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_comment_query/get_comments</a>
+  </p>
+</div>

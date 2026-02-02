@@ -1,0 +1,254 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_REST_Block_Renderer_Controller {}</h1> <section><p>Controller which provides REST endpoint for rendering a block.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_rest_controller">WP_REST_Controller</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_rest_block_renderer_controller/__construct">WP_REST_Block_Renderer_Controller::__construct</a></td>
+<td>Constructs the controller.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_renderer_controller/get_item">WP_REST_Block_Renderer_Controller::get_item</a></td>
+<td>Returns block output from block’s registered render_callback.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_renderer_controller/get_item_permissions_check">WP_REST_Block_Renderer_Controller::get_item_permissions_check</a></td>
+<td>Checks if a given request has access to read blocks.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_renderer_controller/get_item_schema">WP_REST_Block_Renderer_Controller::get_item_schema</a></td>
+<td>Retrieves block’s output schema, conforming to JSON Schema.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_renderer_controller/register_routes">WP_REST_Block_Renderer_Controller::register_routes</a></td>
+<td>Registers the necessary REST API routes, one for each dynamic block.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_REST_Block_Renderer_Controller extends WP_REST_Controller {
+
+	/**
+	 * Constructs the controller.
+	 *
+	 * @since 5.0.0
+	 */
+	public function __construct() {
+		$this-&gt;namespace = 'wp/v2';
+		$this-&gt;rest_base = 'block-renderer';
+	}
+
+	/**
+	 * Registers the necessary REST API routes, one for each dynamic block.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @see register_rest_route()
+	 */
+	public function register_routes() {
+		register_rest_route(
+			$this-&gt;namespace,
+			'/' . $this-&gt;rest_base . '/(?P&lt;name&gt;[a-z0-9-]+/[a-z0-9-]+)',
+			array(
+				'args'   =&gt; array(
+					'name' =&gt; array(
+						'description' =&gt; __( 'Unique registered name for the block.' ),
+						'type'        =&gt; 'string',
+					),
+				),
+				array(
+					'methods'             =&gt; array( WP_REST_Server::READABLE, WP_REST_Server::CREATABLE ),
+					'callback'            =&gt; array( $this, 'get_item' ),
+					'permission_callback' =&gt; array( $this, 'get_item_permissions_check' ),
+					'args'                =&gt; array(
+						'context'    =&gt; $this-&gt;get_context_param( array( 'default' =&gt; 'view' ) ),
+						'attributes' =&gt; array(
+							'description'       =&gt; __( 'Attributes for the block.' ),
+							'type'              =&gt; 'object',
+							'default'           =&gt; array(),
+							'validate_callback' =&gt; static function ( $value, $request ) {
+								$block = WP_Block_Type_Registry::get_instance()-&gt;get_registered( $request['name'] );
+
+								if ( ! $block ) {
+									// This will get rejected in ::get_item().
+									return true;
+								}
+
+								$schema = array(
+									'type'                 =&gt; 'object',
+									'properties'           =&gt; $block-&gt;get_attributes(),
+									'additionalProperties' =&gt; false,
+								);
+
+								return rest_validate_value_from_schema( $value, $schema );
+							},
+							'sanitize_callback' =&gt; static function ( $value, $request ) {
+								$block = WP_Block_Type_Registry::get_instance()-&gt;get_registered( $request['name'] );
+
+								if ( ! $block ) {
+									// This will get rejected in ::get_item().
+									return true;
+								}
+
+								$schema = array(
+									'type'                 =&gt; 'object',
+									'properties'           =&gt; $block-&gt;get_attributes(),
+									'additionalProperties' =&gt; false,
+								);
+
+								return rest_sanitize_value_from_schema( $value, $schema );
+							},
+						),
+						'post_id'    =&gt; array(
+							'description' =&gt; __( 'ID of the post context.' ),
+							'type'        =&gt; 'integer',
+						),
+					),
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+	}
+
+	/**
+	 * Checks if a given request has access to read blocks.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @global WP_Post $post Global post object.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error True if the request has read access, WP_Error object otherwise.
+	 */
+	public function get_item_permissions_check( $request ) {
+		global $post;
+
+		$post_id = isset( $request['post_id'] ) ? (int) $request['post_id'] : 0;
+
+		if ( $post_id &gt; 0 ) {
+			$post = get_post( $post_id );
+
+			if ( ! $post || ! current_user_can( 'edit_post', $post-&gt;ID ) ) {
+				return new WP_Error(
+					'block_cannot_read',
+					__( 'Sorry, you are not allowed to read blocks of this post.' ),
+					array(
+						'status' =&gt; rest_authorization_required_code(),
+					)
+				);
+			}
+		} else {
+			if ( ! current_user_can( 'edit_posts' ) ) {
+				return new WP_Error(
+					'block_cannot_read',
+					__( 'Sorry, you are not allowed to read blocks as this user.' ),
+					array(
+						'status' =&gt; rest_authorization_required_code(),
+					)
+				);
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Returns block output from block's registered render_callback.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @global WP_Post $post Global post object.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
+	 */
+	public function get_item( $request ) {
+		global $post;
+
+		$post_id = isset( $request['post_id'] ) ? (int) $request['post_id'] : 0;
+
+		if ( $post_id &gt; 0 ) {
+			$post = get_post( $post_id );
+
+			// Set up postdata since this will be needed if post_id was set.
+			setup_postdata( $post );
+		}
+
+		$registry   = WP_Block_Type_Registry::get_instance();
+		$registered = $registry-&gt;get_registered( $request['name'] );
+
+		if ( null === $registered || ! $registered-&gt;is_dynamic() ) {
+			return new WP_Error(
+				'block_invalid',
+				__( 'Invalid block.' ),
+				array(
+					'status' =&gt; 404,
+				)
+			);
+		}
+
+		$attributes = $request-&gt;get_param( 'attributes' );
+
+		// Create an array representation simulating the output of parse_blocks.
+		$block = array(
+			'blockName'    =&gt; $request['name'],
+			'attrs'        =&gt; $attributes,
+			'innerHTML'    =&gt; '',
+			'innerContent' =&gt; array(),
+		);
+
+		// Render using render_block to ensure all relevant filters are used.
+		$data = array(
+			'rendered' =&gt; render_block( $block ),
+		);
+
+		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Retrieves block's output schema, conforming to JSON Schema.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @return array Item schema data.
+	 */
+	public function get_item_schema() {
+		if ( $this-&gt;schema ) {
+			return $this-&gt;schema;
+		}
+
+		$this-&gt;schema = array(
+			'$schema'    =&gt; 'http://json-schema.org/schema#',
+			'title'      =&gt; 'rendered-block',
+			'type'       =&gt; 'object',
+			'properties' =&gt; array(
+				'rendered' =&gt; array(
+					'description' =&gt; __( 'The rendered block.' ),
+					'type'        =&gt; 'string',
+					'required'    =&gt; true,
+					'context'     =&gt; array( 'edit' ),
+				),
+			),
+		);
+
+		return $this-&gt;schema;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-block-renderer-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-renderer-controller.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-renderer-controller.php#L17-L224">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_block_renderer_controller" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_block_renderer_controller</a>
+  </p>
+</div>

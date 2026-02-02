@@ -1,0 +1,56 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_wp_remove_post_lock()</h1> <section><p>Handles removing a post lock via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2913" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_wp_remove_post_lock() {
+	if ( empty( $_POST['post_ID'] ) || empty( $_POST['active_post_lock'] ) ) {
+		wp_die( 0 );
+	}
+
+	$post_id = (int) $_POST['post_ID'];
+	$post    = get_post( $post_id );
+
+	if ( ! $post ) {
+		wp_die( 0 );
+	}
+
+	check_ajax_referer( 'update-post_' . $post_id );
+
+	if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		wp_die( -1 );
+	}
+
+	$active_lock = array_map( 'absint', explode( ':', $_POST['active_post_lock'] ) );
+
+	if ( get_current_user_id() !== $active_lock[1] ) {
+		wp_die( 0 );
+	}
+
+	/**
+	 * Filters the post lock window duration.
+	 *
+	 * @since 3.3.0
+	 *
+	 * @param int $interval The interval in seconds the post lock duration
+	 *                      should last, plus 5 seconds. Default 150.
+	 */
+	$new_lock = ( time() - apply_filters( 'wp_check_post_lock_window', 150 ) + 5 ) . ':' . $active_lock[1];
+	update_post_meta( $post_id, '_edit_lock', $new_lock, implode( ':', $active_lock ) );
+	wp_die( 1 );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L2913">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L2913-L2948">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_check_post_lock_window"><span class="hook-func">apply_filters</span>( ‘wp_check_post_lock_window’, <nobr><span class="arg-type">int</span> <span class="arg-name">$interval</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post lock window duration.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_wp_remove_post_lock" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_wp_remove_post_lock</a>
+  </p>
+</div>

@@ -1,0 +1,227 @@
+<h1 class="wp-block-wporg-code-reference-title">populate_network( <span class="arg-type">int</span> <span class="arg-name">$network_id</span> = <span class="arg-default">1</span>, <span class="arg-type">string</span> <span class="arg-name">$domain</span> = <span class="arg-default">”</span>, <span class="arg-type">string</span> <span class="arg-name">$email</span> = <span class="arg-default">”</span>, <span class="arg-type">string</span> <span class="arg-name">$site_name</span> = <span class="arg-default">”</span>, <span class="arg-type">string</span> <span class="arg-name">$path</span> = <span class="arg-default">‘/’</span>, <span class="arg-type">bool</span> <span class="arg-name">$subdomain_install</span> = <span class="arg-default">false</span> ): <span class="return-type">true|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Populate network settings.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$network_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">ID of network to populate.</span></div>
+<p class="default">Default:<code>1</code></p>
+</dd>
+<dt>
+<code>$domain</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The domain name for the network. Example: "example.com".</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$email</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Email address for the network administrator.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$site_name</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The name of the network.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$path</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The path to append to the network’s domain name. Default <code>'/'</code>.</span></div>
+<p class="default">Default:<code>'/'</code></p>
+</dd>
+<dt>
+<code>$subdomain_install</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether the network is a subdomain installation or a subdirectory installation.<br> Default false, meaning the network is a subdirectory installation.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True on success, or <a href="../classes/wp_error" rel="class">WP_Error</a> on warning (with the installation otherwise successful, so the error code must be checked) or failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="986" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function populate_network( $network_id = 1, $domain = '', $email = '', $site_name = '', $path = '/', $subdomain_install = false ) {
+	global $wpdb, $current_site, $wp_rewrite;
+
+	$network_id = (int) $network_id;
+
+	$errors = new WP_Error();
+	if ( '' === $domain ) {
+		$errors-&gt;add( 'empty_domain', __( 'You must provide a domain name.' ) );
+	}
+	if ( '' === $site_name ) {
+		$errors-&gt;add( 'empty_sitename', __( 'You must provide a name for your network of sites.' ) );
+	}
+
+	// Check for network collision.
+	$network_exists = false;
+	if ( is_multisite() ) {
+		if ( get_network( $network_id ) ) {
+			$errors-&gt;add( 'siteid_exists', __( 'The network already exists.' ) );
+		}
+	} else {
+		if ( $network_id === (int) $wpdb-&gt;get_var(
+			$wpdb-&gt;prepare( "SELECT id FROM $wpdb-&gt;site WHERE id = %d", $network_id )
+		) ) {
+			$errors-&gt;add( 'siteid_exists', __( 'The network already exists.' ) );
+		}
+	}
+
+	if ( ! is_email( $email ) ) {
+		$errors-&gt;add( 'invalid_email', __( 'You must provide a valid email address.' ) );
+	}
+
+	if ( $errors-&gt;has_errors() ) {
+		return $errors;
+	}
+
+	if ( 1 === $network_id ) {
+		$wpdb-&gt;insert(
+			$wpdb-&gt;site,
+			array(
+				'domain' =&gt; $domain,
+				'path'   =&gt; $path,
+			)
+		);
+		$network_id = $wpdb-&gt;insert_id;
+	} else {
+		$wpdb-&gt;insert(
+			$wpdb-&gt;site,
+			array(
+				'domain' =&gt; $domain,
+				'path'   =&gt; $path,
+				'id'     =&gt; $network_id,
+			)
+		);
+	}
+
+	populate_network_meta(
+		$network_id,
+		array(
+			'admin_email'       =&gt; $email,
+			'site_name'         =&gt; $site_name,
+			'subdomain_install' =&gt; $subdomain_install,
+		)
+	);
+
+	/*
+	 * When upgrading from single to multisite, assume the current site will
+	 * become the main site of the network. When using populate_network()
+	 * to create another network in an existing multisite environment, skip
+	 * these steps since the main site of the new network has not yet been
+	 * created.
+	 */
+	if ( ! is_multisite() ) {
+		$current_site            = new stdClass();
+		$current_site-&gt;domain    = $domain;
+		$current_site-&gt;path      = $path;
+		$current_site-&gt;site_name = ucfirst( $domain );
+		$wpdb-&gt;insert(
+			$wpdb-&gt;blogs,
+			array(
+				'site_id'    =&gt; $network_id,
+				'blog_id'    =&gt; 1,
+				'domain'     =&gt; $domain,
+				'path'       =&gt; $path,
+				'registered' =&gt; current_time( 'mysql' ),
+			)
+		);
+		$current_site-&gt;blog_id = $wpdb-&gt;insert_id;
+
+		$site_user_id = (int) $wpdb-&gt;get_var(
+			$wpdb-&gt;prepare(
+				"SELECT meta_value
+				FROM $wpdb-&gt;sitemeta
+				WHERE meta_key = %s AND site_id = %d",
+				'admin_user_id',
+				$network_id
+			)
+		);
+
+		update_user_meta( $site_user_id, 'source_domain', $domain );
+		update_user_meta( $site_user_id, 'primary_blog', $current_site-&gt;blog_id );
+
+		// Unable to use update_network_option() while populating the network.
+		$wpdb-&gt;insert(
+			$wpdb-&gt;sitemeta,
+			array(
+				'site_id'    =&gt; $network_id,
+				'meta_key'   =&gt; 'main_site',
+				'meta_value' =&gt; $current_site-&gt;blog_id,
+			)
+		);
+
+		if ( $subdomain_install ) {
+			$wp_rewrite-&gt;set_permalink_structure( '/%year%/%monthnum%/%day%/%postname%/' );
+		} else {
+			$wp_rewrite-&gt;set_permalink_structure( '/blog/%year%/%monthnum%/%day%/%postname%/' );
+		}
+
+		flush_rewrite_rules();
+
+		if ( ! $subdomain_install ) {
+			return true;
+		}
+
+		$vhost_ok = false;
+		$errstr   = '';
+		$hostname = substr( md5( time() ), 0, 6 ) . '.' . $domain; // Very random hostname!
+		$page     = wp_remote_get(
+			'http://' . $hostname,
+			array(
+				'timeout'     =&gt; 5,
+				'httpversion' =&gt; '1.1',
+			)
+		);
+		if ( is_wp_error( $page ) ) {
+			$errstr = $page-&gt;get_error_message();
+		} elseif ( 200 === wp_remote_retrieve_response_code( $page ) ) {
+				$vhost_ok = true;
+		}
+
+		if ( ! $vhost_ok ) {
+			$msg = '&lt;p&gt;&lt;strong&gt;' . __( 'Warning! Wildcard DNS may not be configured correctly!' ) . '&lt;/strong&gt;&lt;/p&gt;';
+
+			$msg .= '&lt;p&gt;' . sprintf(
+				/* translators: %s: Host name. */
+				__( 'The installer attempted to contact a random hostname (%s) on your domain.' ),
+				'&lt;code&gt;' . $hostname . '&lt;/code&gt;'
+			);
+			if ( ! empty( $errstr ) ) {
+				/* translators: %s: Error message. */
+				$msg .= ' ' . sprintf( __( 'This resulted in an error message: %s' ), '&lt;code&gt;' . $errstr . '&lt;/code&gt;' );
+			}
+			$msg .= '&lt;/p&gt;';
+
+			$msg .= '&lt;p&gt;' . sprintf(
+				/* translators: %s: Asterisk symbol (*). */
+				__( 'To use a subdomain configuration, you must have a wildcard entry in your DNS. This usually means adding a %s hostname record pointing at your web server in your DNS configuration tool.' ),
+				'&lt;code&gt;*&lt;/code&gt;'
+			) . '&lt;/p&gt;';
+
+			$msg .= '&lt;p&gt;' . __( 'You can still use your site but any subdomain you create may not be accessible. If you know your DNS is correct, ignore this message.' ) . '&lt;/p&gt;';
+
+			return new WP_Error( 'no_wildcard_dns', $msg );
+		}
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/schema.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/schema.php#L986">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/schema.php#L986-L1152">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/populate_network" class="_attribution-link">https://developer.wordpress.org/reference/functions/populate_network</a>
+  </p>
+</div>

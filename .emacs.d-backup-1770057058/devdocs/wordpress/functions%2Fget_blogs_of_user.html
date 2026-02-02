@@ -1,0 +1,158 @@
+<h1 class="wp-block-wporg-code-reference-title">get_blogs_of_user( <span class="arg-type">int</span> <span class="arg-name">$user_id</span>, <span class="arg-type">bool</span> <span class="arg-name">$all</span> = <span class="arg-default">false</span> ): <span class="return-type">object[]</span>
+</h1> <section><p>Gets the sites a user belongs to.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$user_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">User ID</span></div></dd>
+<dt>
+<code>$all</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to retrieve all sites, or only sites that are not marked as deleted, archived, or spam.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">object[]</span> A list of the user’s sites. An empty array if the user doesn’t exist or belongs to no sites.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="962" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_blogs_of_user( $user_id, $all = false ) {
+	global $wpdb;
+
+	$user_id = (int) $user_id;
+
+	// Logged out users can't have sites.
+	if ( empty( $user_id ) ) {
+		return array();
+	}
+
+	/**
+	 * Filters the list of a user's sites before it is populated.
+	 *
+	 * Returning a non-null value from the filter will effectively short circuit
+	 * get_blogs_of_user(), returning that value instead.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @param null|object[] $sites   An array of site objects of which the user is a member.
+	 * @param int           $user_id User ID.
+	 * @param bool          $all     Whether the returned array should contain all sites, including
+	 *                               those marked 'deleted', 'archived', or 'spam'. Default false.
+	 */
+	$sites = apply_filters( 'pre_get_blogs_of_user', null, $user_id, $all );
+
+	if ( null !== $sites ) {
+		return $sites;
+	}
+
+	$keys = get_user_meta( $user_id );
+	if ( empty( $keys ) ) {
+		return array();
+	}
+
+	if ( ! is_multisite() ) {
+		$site_id                        = get_current_blog_id();
+		$sites                          = array( $site_id =&gt; new stdClass() );
+		$sites[ $site_id ]-&gt;userblog_id = $site_id;
+		$sites[ $site_id ]-&gt;blogname    = get_option( 'blogname' );
+		$sites[ $site_id ]-&gt;domain      = '';
+		$sites[ $site_id ]-&gt;path        = '';
+		$sites[ $site_id ]-&gt;site_id     = 1;
+		$sites[ $site_id ]-&gt;siteurl     = get_option( 'siteurl' );
+		$sites[ $site_id ]-&gt;archived    = 0;
+		$sites[ $site_id ]-&gt;spam        = 0;
+		$sites[ $site_id ]-&gt;deleted     = 0;
+		return $sites;
+	}
+
+	$site_ids = array();
+
+	if ( isset( $keys[ $wpdb-&gt;base_prefix . 'capabilities' ] ) &amp;&amp; defined( 'MULTISITE' ) ) {
+		$site_ids[] = 1;
+		unset( $keys[ $wpdb-&gt;base_prefix . 'capabilities' ] );
+	}
+
+	$keys = array_keys( $keys );
+
+	foreach ( $keys as $key ) {
+		if ( ! str_ends_with( $key, 'capabilities' ) ) {
+			continue;
+		}
+		if ( $wpdb-&gt;base_prefix &amp;&amp; ! str_starts_with( $key, $wpdb-&gt;base_prefix ) ) {
+			continue;
+		}
+		$site_id = str_replace( array( $wpdb-&gt;base_prefix, '_capabilities' ), '', $key );
+		if ( ! is_numeric( $site_id ) ) {
+			continue;
+		}
+
+		$site_ids[] = (int) $site_id;
+	}
+
+	$sites = array();
+
+	if ( ! empty( $site_ids ) ) {
+		$args = array(
+			'number'   =&gt; '',
+			'site__in' =&gt; $site_ids,
+		);
+		if ( ! $all ) {
+			$args['archived'] = 0;
+			$args['spam']     = 0;
+			$args['deleted']  = 0;
+		}
+
+		$_sites = get_sites( $args );
+
+		foreach ( $_sites as $site ) {
+			$sites[ $site-&gt;id ] = (object) array(
+				'userblog_id' =&gt; $site-&gt;id,
+				'blogname'    =&gt; $site-&gt;blogname,
+				'domain'      =&gt; $site-&gt;domain,
+				'path'        =&gt; $site-&gt;path,
+				'site_id'     =&gt; $site-&gt;network_id,
+				'siteurl'     =&gt; $site-&gt;siteurl,
+				'archived'    =&gt; $site-&gt;archived,
+				'mature'      =&gt; $site-&gt;mature,
+				'spam'        =&gt; $site-&gt;spam,
+				'deleted'     =&gt; $site-&gt;deleted,
+			);
+		}
+	}
+
+	/**
+	 * Filters the list of sites a user belongs to.
+	 *
+	 * @since MU (3.0.0)
+	 *
+	 * @param object[] $sites   An array of site objects belonging to the user.
+	 * @param int      $user_id User ID.
+	 * @param bool     $all     Whether the returned sites array should contain all sites, including
+	 *                          those marked 'deleted', 'archived', or 'spam'. Default false.
+	 */
+	return apply_filters( 'get_blogs_of_user', $sites, $user_id, $all );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/user.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/user.php#L962">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/user.php#L962-L1077">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_blogs_of_user"><span class="hook-func">apply_filters</span>( ‘get_blogs_of_user’, <nobr><span class="arg-type">object[]</span> <span class="arg-name">$sites</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$user_id</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$all</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of sites a user belongs to.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_get_blogs_of_user"><span class="hook-func">apply_filters</span>( ‘pre_get_blogs_of_user’, <nobr><span class="arg-type">null|object[]</span> <span class="arg-name">$sites</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$user_id</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$all</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of a user’s sites before it is populated.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td><span class="since-description">Converted to use <code>get_sites()</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_blogs_of_user" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_blogs_of_user</a>
+  </p>
+</div>

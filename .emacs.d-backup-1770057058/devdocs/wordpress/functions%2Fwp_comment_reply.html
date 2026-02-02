@@ -1,0 +1,185 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_comment_reply( <span class="arg-type">int</span> <span class="arg-name">$position</span> = <span class="arg-default">1</span>, <span class="arg-type">bool</span> <span class="arg-name">$checkbox</span> = <span class="arg-default">false</span>, <span class="arg-type">string</span> <span class="arg-name">$mode</span> = <span class="arg-default">‘single’</span>, <span class="arg-type">bool</span> <span class="arg-name">$table_row</span> = <span class="arg-default">true</span> )</h1> <section><p>Outputs the in-line comment reply-to form in the Comments list table.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$position</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The value of the <code>'position'</code> input field. </span></div>
+<p class="default">Default:<code>1</code></p>
+</dd>
+<dt>
+<code>$checkbox</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The value of the <code>'checkbox'</code> input field. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$mode</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">If set to <code>'single'</code>, will use <a href="../classes/wp_post_comments_list_table" rel="class">WP_Post_Comments_List_Table</a>, otherwise <a href="../classes/wp_comments_list_table" rel="class">WP_Comments_List_Table</a>. Default <code>'single'</code>.</span></div>
+<p class="default">Default:<code>'single'</code></p>
+</dd>
+<dt>
+<code>$table_row</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to use a table instead of a div element. </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="413" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_comment_reply( $position = 1, $checkbox = false, $mode = 'single', $table_row = true ) {
+	global $wp_list_table;
+	/**
+	 * Filters the in-line comment reply-to form output in the Comments
+	 * list table.
+	 *
+	 * Returning a non-empty value here will short-circuit display
+	 * of the in-line comment-reply form in the Comments list table,
+	 * echoing the returned value instead.
+	 *
+	 * @since 2.7.0
+	 *
+	 * @see wp_comment_reply()
+	 *
+	 * @param string $content The reply-to form content.
+	 * @param array  $args    An array of default args.
+	 */
+	$content = apply_filters(
+		'wp_comment_reply',
+		'',
+		array(
+			'position' =&gt; $position,
+			'checkbox' =&gt; $checkbox,
+			'mode'     =&gt; $mode,
+		)
+	);
+
+	if ( ! empty( $content ) ) {
+		echo $content;
+		return;
+	}
+
+	if ( ! $wp_list_table ) {
+		if ( 'single' === $mode ) {
+			$wp_list_table = _get_list_table( 'WP_Post_Comments_List_Table' );
+		} else {
+			$wp_list_table = _get_list_table( 'WP_Comments_List_Table' );
+		}
+	}
+
+	?&gt;
+&lt;form method="get"&gt;
+	&lt;?php if ( $table_row ) : ?&gt;
+&lt;table style="display:none;"&gt;&lt;tbody id="com-reply"&gt;&lt;tr id="replyrow" class="inline-edit-row" style="display:none;"&gt;&lt;td colspan="&lt;?php echo $wp_list_table-&gt;get_column_count(); ?&gt;" class="colspanchange"&gt;
+&lt;?php else : ?&gt;
+&lt;div id="com-reply" style="display:none;"&gt;&lt;div id="replyrow" style="display:none;"&gt;
+&lt;?php endif; ?&gt;
+	&lt;fieldset class="comment-reply"&gt;
+	&lt;legend&gt;
+		&lt;span class="hidden" id="editlegend"&gt;&lt;?php _e( 'Edit Comment' ); ?&gt;&lt;/span&gt;
+		&lt;span class="hidden" id="replyhead"&gt;&lt;?php _e( 'Reply to Comment' ); ?&gt;&lt;/span&gt;
+		&lt;span class="hidden" id="addhead"&gt;&lt;?php _e( 'Add New Comment' ); ?&gt;&lt;/span&gt;
+	&lt;/legend&gt;
+
+	&lt;div id="replycontainer"&gt;
+	&lt;label for="replycontent" class="screen-reader-text"&gt;
+		&lt;?php
+		/* translators: Hidden accessibility text. */
+		_e( 'Comment' );
+		?&gt;
+	&lt;/label&gt;
+	&lt;?php
+	$quicktags_settings = array( 'buttons' =&gt; 'strong,em,link,block,del,ins,img,ul,ol,li,code,close' );
+	wp_editor(
+		'',
+		'replycontent',
+		array(
+			'media_buttons' =&gt; false,
+			'tinymce'       =&gt; false,
+			'quicktags'     =&gt; $quicktags_settings,
+		)
+	);
+	?&gt;
+	&lt;/div&gt;
+
+	&lt;div id="edithead" style="display:none;"&gt;
+		&lt;div class="inside"&gt;
+		&lt;label for="author-name"&gt;&lt;?php _e( 'Name' ); ?&gt;&lt;/label&gt;
+		&lt;input type="text" name="newcomment_author" size="50" value="" id="author-name" /&gt;
+		&lt;/div&gt;
+
+		&lt;div class="inside"&gt;
+		&lt;label for="author-email"&gt;&lt;?php _e( 'Email' ); ?&gt;&lt;/label&gt;
+		&lt;input type="text" name="newcomment_author_email" size="50" value="" id="author-email" /&gt;
+		&lt;/div&gt;
+
+		&lt;div class="inside"&gt;
+		&lt;label for="author-url"&gt;&lt;?php _e( 'URL' ); ?&gt;&lt;/label&gt;
+		&lt;input type="text" id="author-url" name="newcomment_author_url" class="code" size="103" value="" /&gt;
+		&lt;/div&gt;
+	&lt;/div&gt;
+
+	&lt;div id="replysubmit" class="submit"&gt;
+		&lt;p class="reply-submit-buttons"&gt;
+			&lt;button type="button" class="save button button-primary"&gt;
+				&lt;span id="addbtn" style="display: none;"&gt;&lt;?php _e( 'Add Comment' ); ?&gt;&lt;/span&gt;
+				&lt;span id="savebtn" style="display: none;"&gt;&lt;?php _e( 'Update Comment' ); ?&gt;&lt;/span&gt;
+				&lt;span id="replybtn" style="display: none;"&gt;&lt;?php _e( 'Submit Reply' ); ?&gt;&lt;/span&gt;
+			&lt;/button&gt;
+			&lt;button type="button" class="cancel button"&gt;&lt;?php _e( 'Cancel' ); ?&gt;&lt;/button&gt;
+			&lt;span class="waiting spinner"&gt;&lt;/span&gt;
+		&lt;/p&gt;
+		&lt;?php
+		wp_admin_notice(
+			'&lt;p class="error"&gt;&lt;/p&gt;',
+			array(
+				'type'               =&gt; 'error',
+				'additional_classes' =&gt; array( 'notice-alt', 'inline', 'hidden' ),
+				'paragraph_wrap'     =&gt; false,
+			)
+		);
+		?&gt;
+	&lt;/div&gt;
+
+	&lt;input type="hidden" name="action" id="action" value="" /&gt;
+	&lt;input type="hidden" name="comment_ID" id="comment_ID" value="" /&gt;
+	&lt;input type="hidden" name="comment_post_ID" id="comment_post_ID" value="" /&gt;
+	&lt;input type="hidden" name="status" id="status" value="" /&gt;
+	&lt;input type="hidden" name="position" id="position" value="&lt;?php echo $position; ?&gt;" /&gt;
+	&lt;input type="hidden" name="checkbox" id="checkbox" value="&lt;?php echo $checkbox ? 1 : 0; ?&gt;" /&gt;
+	&lt;input type="hidden" name="mode" id="mode" value="&lt;?php echo esc_attr( $mode ); ?&gt;" /&gt;
+	&lt;?php
+		wp_nonce_field( 'replyto-comment', '_ajax_nonce-replyto-comment', false );
+	if ( current_user_can( 'unfiltered_html' ) ) {
+		wp_nonce_field( 'unfiltered-html-comment', '_wp_unfiltered_html_comment', false );
+	}
+	?&gt;
+	&lt;/fieldset&gt;
+	&lt;?php if ( $table_row ) : ?&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
+	&lt;?php else : ?&gt;
+&lt;/div&gt;&lt;/div&gt;
+	&lt;?php endif; ?&gt;
+&lt;/form&gt;
+	&lt;?php
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/template.php#L413">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/template.php#L413-L548">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_comment_reply"><span class="hook-func">apply_filters</span>( ‘wp_comment_reply’, <nobr><span class="arg-type">string</span> <span class="arg-name">$content</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the in-line comment reply-to form output in the Comments list table.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_comment_reply" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_comment_reply</a>
+  </p>
+</div>

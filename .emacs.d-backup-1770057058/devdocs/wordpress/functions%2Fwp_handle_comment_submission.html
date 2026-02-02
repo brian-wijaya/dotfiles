@@ -1,0 +1,284 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_handle_comment_submission( <span class="arg-type">array</span> <span class="arg-name">$comment_data</span> ): <span class="return-type"><a href="../classes/wp_comment" rel="class">WP_Comment</a>|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Handles the submission of a comment, usually posted to wp-comments-post.php via a comment form.</p> </section> <section><h2 id="description">Description</h2> <p>This function expects unslashed data, as opposed to functions such as <code>wp_new_comment()</code> which expect slashed data.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$comment_data</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Comment data.<br> <ul class="param-hash">
+<li>
+<code>comment_post_ID</code> <span class="type">string|int</span><div class="desc">The ID of the post that relates to the comment.</div>
+</li> <li>
+<code>author</code> <span class="type">string</span><div class="desc">The name of the comment author.</div>
+</li> <li>
+<code>email</code> <span class="type">string</span><div class="desc">The comment author email address.</div>
+</li> <li>
+<code>url</code> <span class="type">string</span><div class="desc">The comment author URL.</div>
+</li> <li>
+<code>comment</code> <span class="type">string</span><div class="desc">The content of the comment.</div>
+</li> <li>
+<code>comment_parent</code> <span class="type">string|int</span><div class="desc">The ID of this comment’s parent, if any. Default 0.</div>
+</li> <li>
+<code>_wp_unfiltered_html_comment</code> <span class="type">string</span><div class="desc">The nonce value for allowing unfiltered HTML.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../classes/wp_comment" rel="class">WP_Comment</a>|<a href="../classes/wp_error" rel="class">WP_Error</a></span> A <a href="../classes/wp_comment" rel="class">WP_Comment</a> object on success, a <a href="../classes/wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3489" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_handle_comment_submission( $comment_data ) {
+	$comment_post_id      = 0;
+	$comment_author       = '';
+	$comment_author_email = '';
+	$comment_author_url   = '';
+	$comment_content      = '';
+	$comment_parent       = 0;
+	$user_id              = 0;
+
+	if ( isset( $comment_data['comment_post_ID'] ) ) {
+		$comment_post_id = (int) $comment_data['comment_post_ID'];
+	}
+	if ( isset( $comment_data['author'] ) &amp;&amp; is_string( $comment_data['author'] ) ) {
+		$comment_author = trim( strip_tags( $comment_data['author'] ) );
+	}
+	if ( isset( $comment_data['email'] ) &amp;&amp; is_string( $comment_data['email'] ) ) {
+		$comment_author_email = trim( $comment_data['email'] );
+	}
+	if ( isset( $comment_data['url'] ) &amp;&amp; is_string( $comment_data['url'] ) ) {
+		$comment_author_url = trim( $comment_data['url'] );
+	}
+	if ( isset( $comment_data['comment'] ) &amp;&amp; is_string( $comment_data['comment'] ) ) {
+		$comment_content = trim( $comment_data['comment'] );
+	}
+	if ( isset( $comment_data['comment_parent'] ) ) {
+		$comment_parent        = absint( $comment_data['comment_parent'] );
+		$comment_parent_object = get_comment( $comment_parent );
+
+		if (
+			0 !== $comment_parent &amp;&amp;
+			(
+				! $comment_parent_object instanceof WP_Comment ||
+				0 === (int) $comment_parent_object-&gt;comment_approved
+			)
+		) {
+			/**
+			 * Fires when a comment reply is attempted to an unapproved comment.
+			 *
+			 * @since 6.2.0
+			 *
+			 * @param int $comment_post_id Post ID.
+			 * @param int $comment_parent  Parent comment ID.
+			 */
+			do_action( 'comment_reply_to_unapproved_comment', $comment_post_id, $comment_parent );
+
+			return new WP_Error( 'comment_reply_to_unapproved_comment', __( 'Sorry, replies to unapproved comments are not allowed.' ), 403 );
+		}
+	}
+
+	$post = get_post( $comment_post_id );
+
+	if ( empty( $post-&gt;comment_status ) ) {
+
+		/**
+		 * Fires when a comment is attempted on a post that does not exist.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param int $comment_post_id Post ID.
+		 */
+		do_action( 'comment_id_not_found', $comment_post_id );
+
+		return new WP_Error( 'comment_id_not_found' );
+
+	}
+
+	// get_post_status() will get the parent status for attachments.
+	$status = get_post_status( $post );
+
+	if ( ( 'private' === $status ) &amp;&amp; ! current_user_can( 'read_post', $comment_post_id ) ) {
+		return new WP_Error( 'comment_id_not_found' );
+	}
+
+	$status_obj = get_post_status_object( $status );
+
+	if ( ! comments_open( $comment_post_id ) ) {
+
+		/**
+		 * Fires when a comment is attempted on a post that has comments closed.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param int $comment_post_id Post ID.
+		 */
+		do_action( 'comment_closed', $comment_post_id );
+
+		return new WP_Error( 'comment_closed', __( 'Sorry, comments are closed for this item.' ), 403 );
+
+	} elseif ( 'trash' === $status ) {
+
+		/**
+		 * Fires when a comment is attempted on a trashed post.
+		 *
+		 * @since 2.9.0
+		 *
+		 * @param int $comment_post_id Post ID.
+		 */
+		do_action( 'comment_on_trash', $comment_post_id );
+
+		return new WP_Error( 'comment_on_trash' );
+
+	} elseif ( ! $status_obj-&gt;public &amp;&amp; ! $status_obj-&gt;private ) {
+
+		/**
+		 * Fires when a comment is attempted on a post in draft mode.
+		 *
+		 * @since 1.5.1
+		 *
+		 * @param int $comment_post_id Post ID.
+		 */
+		do_action( 'comment_on_draft', $comment_post_id );
+
+		if ( current_user_can( 'read_post', $comment_post_id ) ) {
+			return new WP_Error( 'comment_on_draft', __( 'Sorry, comments are not allowed for this item.' ), 403 );
+		} else {
+			return new WP_Error( 'comment_on_draft' );
+		}
+	} elseif ( post_password_required( $comment_post_id ) ) {
+
+		/**
+		 * Fires when a comment is attempted on a password-protected post.
+		 *
+		 * @since 2.9.0
+		 *
+		 * @param int $comment_post_id Post ID.
+		 */
+		do_action( 'comment_on_password_protected', $comment_post_id );
+
+		return new WP_Error( 'comment_on_password_protected' );
+
+	} else {
+		/**
+		 * Fires before a comment is posted.
+		 *
+		 * @since 2.8.0
+		 *
+		 * @param int $comment_post_id Post ID.
+		 */
+		do_action( 'pre_comment_on_post', $comment_post_id );
+	}
+
+	// If the user is logged in.
+	$user = wp_get_current_user();
+	if ( $user-&gt;exists() ) {
+		if ( empty( $user-&gt;display_name ) ) {
+			$user-&gt;display_name = $user-&gt;user_login;
+		}
+
+		$comment_author       = $user-&gt;display_name;
+		$comment_author_email = $user-&gt;user_email;
+		$comment_author_url   = $user-&gt;user_url;
+		$user_id              = $user-&gt;ID;
+
+		if ( current_user_can( 'unfiltered_html' ) ) {
+			if ( ! isset( $comment_data['_wp_unfiltered_html_comment'] )
+				|| ! wp_verify_nonce( $comment_data['_wp_unfiltered_html_comment'], 'unfiltered-html-comment_' . $comment_post_id )
+			) {
+				kses_remove_filters(); // Start with a clean slate.
+				kses_init_filters();   // Set up the filters.
+				remove_filter( 'pre_comment_content', 'wp_filter_post_kses' );
+				add_filter( 'pre_comment_content', 'wp_filter_kses' );
+			}
+		}
+	} else {
+		if ( get_option( 'comment_registration' ) ) {
+			return new WP_Error( 'not_logged_in', __( 'Sorry, you must be logged in to comment.' ), 403 );
+		}
+	}
+
+	$comment_type = 'comment';
+
+	if ( get_option( 'require_name_email' ) &amp;&amp; ! $user-&gt;exists() ) {
+		if ( '' == $comment_author_email || '' == $comment_author ) {
+			return new WP_Error( 'require_name_email', __( '&lt;strong&gt;Error:&lt;/strong&gt; Please fill the required fields.' ), 200 );
+		} elseif ( ! is_email( $comment_author_email ) ) {
+			return new WP_Error( 'require_valid_email', __( '&lt;strong&gt;Error:&lt;/strong&gt; Please enter a valid email address.' ), 200 );
+		}
+	}
+
+	$commentdata = array(
+		'comment_post_ID' =&gt; $comment_post_id,
+	);
+
+	$commentdata += compact(
+		'comment_author',
+		'comment_author_email',
+		'comment_author_url',
+		'comment_content',
+		'comment_type',
+		'comment_parent',
+		'user_id'
+	);
+
+	/**
+	 * Filters whether an empty comment should be allowed.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param bool  $allow_empty_comment Whether to allow empty comments. Default false.
+	 * @param array $commentdata         Array of comment data to be sent to wp_insert_comment().
+	 */
+	$allow_empty_comment = apply_filters( 'allow_empty_comment', false, $commentdata );
+	if ( '' === $comment_content &amp;&amp; ! $allow_empty_comment ) {
+		return new WP_Error( 'require_valid_comment', __( '&lt;strong&gt;Error:&lt;/strong&gt; Please type your comment text.' ), 200 );
+	}
+
+	$check_max_lengths = wp_check_comment_data_max_lengths( $commentdata );
+	if ( is_wp_error( $check_max_lengths ) ) {
+		return $check_max_lengths;
+	}
+
+	$comment_id = wp_new_comment( wp_slash( $commentdata ), true );
+	if ( is_wp_error( $comment_id ) ) {
+		return $comment_id;
+	}
+
+	if ( ! $comment_id ) {
+		return new WP_Error( 'comment_save_error', __( '&lt;strong&gt;Error:&lt;/strong&gt; The comment could not be saved. Please try again later.' ), 500 );
+	}
+
+	return get_comment( $comment_id );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment.php#L3489">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment.php#L3489-L3710">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/allow_empty_comment"><span class="hook-func">apply_filters</span>( ‘allow_empty_comment’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$allow_empty_comment</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$commentdata</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether an empty comment should be allowed.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_closed"><span class="hook-func">do_action</span>( ‘comment_closed’, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_post_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires when a comment is attempted on a post that has comments closed.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_id_not_found"><span class="hook-func">do_action</span>( ‘comment_id_not_found’, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_post_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires when a comment is attempted on a post that does not exist.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_on_draft"><span class="hook-func">do_action</span>( ‘comment_on_draft’, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_post_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires when a comment is attempted on a post in draft mode.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_on_password_protected"><span class="hook-func">do_action</span>( ‘comment_on_password_protected’, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_post_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires when a comment is attempted on a password-protected post.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_on_trash"><span class="hook-func">do_action</span>( ‘comment_on_trash’, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_post_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires when a comment is attempted on a trashed post.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_reply_to_unapproved_comment"><span class="hook-func">do_action</span>( ‘comment_reply_to_unapproved_comment’, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_post_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_parent</span></nobr> )</a></dt>
+<dd>
+<p>Fires when a comment reply is attempted to an unapproved comment.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_comment_on_post"><span class="hook-func">do_action</span>( ‘pre_comment_on_post’, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_post_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires before a comment is posted.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_handle_comment_submission" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_handle_comment_submission</a>
+  </p>
+</div>

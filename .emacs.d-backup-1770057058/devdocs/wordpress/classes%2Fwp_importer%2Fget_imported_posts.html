@@ -1,0 +1,44 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Importer::get_imported_posts( <span class="arg-type">string</span> <span class="arg-name">$importer_name</span>, <span class="arg-type">string</span> <span class="arg-name">$blog_id</span> ): <span class="return-type">array</span>
+</h1> <section><p>Returns array with imported permalinks from WordPress database.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$importer_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$blog_id</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="21" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_imported_posts( $importer_name, $blog_id ) {
+	global $wpdb;
+
+	$hashtable = array();
+
+	$limit  = 100;
+	$offset = 0;
+
+	// Grab all posts in chunks.
+	do {
+		$meta_key = $importer_name . '_' . $blog_id . '_permalink';
+		$sql      = $wpdb-&gt;prepare( "SELECT post_id, meta_value FROM $wpdb-&gt;postmeta WHERE meta_key = %s LIMIT %d,%d", $meta_key, $offset, $limit );
+		$results  = $wpdb-&gt;get_results( $sql );
+
+		// Increment offset.
+		$offset = ( $limit + $offset );
+
+		if ( ! empty( $results ) ) {
+			foreach ( $results as $r ) {
+				// Set permalinks into array.
+				$hashtable[ $r-&gt;meta_value ] = (int) $r-&gt;post_id;
+			}
+		}
+	} while ( count( $results ) === $limit );
+
+	return $hashtable;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-importer.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-importer.php#L21">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-importer.php#L21-L47">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_importer/get_imported_posts" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_importer/get_imported_posts</a>
+  </p>
+</div>

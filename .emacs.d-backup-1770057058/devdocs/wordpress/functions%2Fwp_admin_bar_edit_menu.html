@@ -1,0 +1,156 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_admin_bar_edit_menu( <span class="arg-type">WP_Admin_Bar</span> <span class="arg-name">$wp_admin_bar</span> )</h1> <section><p>Provides an edit link for posts and terms.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$wp_admin_bar</code><span class="type"><span class="WP_Admin_Bar"><a href="../classes/wp_admin_bar" rel="class">WP_Admin_Bar</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The <a href="../classes/wp_admin_bar" rel="class">WP_Admin_Bar</a> instance.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="811" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_admin_bar_edit_menu( $wp_admin_bar ) {
+	global $tag, $wp_the_query, $user_id, $post_id;
+
+	if ( is_admin() ) {
+		$current_screen   = get_current_screen();
+		$post             = get_post();
+		$post_type_object = null;
+
+		if ( 'post' === $current_screen-&gt;base ) {
+			$post_type_object = get_post_type_object( $post-&gt;post_type );
+		} elseif ( 'edit' === $current_screen-&gt;base ) {
+			$post_type_object = get_post_type_object( $current_screen-&gt;post_type );
+		} elseif ( 'edit-comments' === $current_screen-&gt;base &amp;&amp; $post_id ) {
+			$post = get_post( $post_id );
+			if ( $post ) {
+				$post_type_object = get_post_type_object( $post-&gt;post_type );
+			}
+		}
+
+		if ( ( 'post' === $current_screen-&gt;base || 'edit-comments' === $current_screen-&gt;base )
+			&amp;&amp; 'add' !== $current_screen-&gt;action
+			&amp;&amp; ( $post_type_object )
+			&amp;&amp; current_user_can( 'read_post', $post-&gt;ID )
+			&amp;&amp; ( $post_type_object-&gt;public )
+			&amp;&amp; ( $post_type_object-&gt;show_in_admin_bar ) ) {
+			if ( 'draft' === $post-&gt;post_status ) {
+				$preview_link = get_preview_post_link( $post );
+				$wp_admin_bar-&gt;add_node(
+					array(
+						'id'    =&gt; 'preview',
+						'title' =&gt; $post_type_object-&gt;labels-&gt;view_item,
+						'href'  =&gt; esc_url( $preview_link ),
+						'meta'  =&gt; array( 'target' =&gt; 'wp-preview-' . $post-&gt;ID ),
+					)
+				);
+			} else {
+				$wp_admin_bar-&gt;add_node(
+					array(
+						'id'    =&gt; 'view',
+						'title' =&gt; $post_type_object-&gt;labels-&gt;view_item,
+						'href'  =&gt; get_permalink( $post-&gt;ID ),
+					)
+				);
+			}
+		} elseif ( 'edit' === $current_screen-&gt;base
+			&amp;&amp; ( $post_type_object )
+			&amp;&amp; ( $post_type_object-&gt;public )
+			&amp;&amp; ( $post_type_object-&gt;show_in_admin_bar )
+			&amp;&amp; ( get_post_type_archive_link( $post_type_object-&gt;name ) )
+			&amp;&amp; ! ( 'post' === $post_type_object-&gt;name &amp;&amp; 'posts' === get_option( 'show_on_front' ) ) ) {
+			$wp_admin_bar-&gt;add_node(
+				array(
+					'id'    =&gt; 'archive',
+					'title' =&gt; $post_type_object-&gt;labels-&gt;view_items,
+					'href'  =&gt; get_post_type_archive_link( $current_screen-&gt;post_type ),
+				)
+			);
+		} elseif ( 'term' === $current_screen-&gt;base &amp;&amp; isset( $tag ) &amp;&amp; is_object( $tag ) &amp;&amp; ! is_wp_error( $tag ) ) {
+			$tax = get_taxonomy( $tag-&gt;taxonomy );
+			if ( is_term_publicly_viewable( $tag ) ) {
+				$wp_admin_bar-&gt;add_node(
+					array(
+						'id'    =&gt; 'view',
+						'title' =&gt; $tax-&gt;labels-&gt;view_item,
+						'href'  =&gt; get_term_link( $tag ),
+					)
+				);
+			}
+		} elseif ( 'user-edit' === $current_screen-&gt;base &amp;&amp; isset( $user_id ) ) {
+			$user_object = get_userdata( $user_id );
+			$view_link   = get_author_posts_url( $user_object-&gt;ID );
+			if ( $user_object-&gt;exists() &amp;&amp; $view_link ) {
+				$wp_admin_bar-&gt;add_node(
+					array(
+						'id'    =&gt; 'view',
+						'title' =&gt; __( 'View User' ),
+						'href'  =&gt; $view_link,
+					)
+				);
+			}
+		}
+	} else {
+		$current_object = $wp_the_query-&gt;get_queried_object();
+
+		if ( empty( $current_object ) ) {
+			return;
+		}
+
+		if ( ! empty( $current_object-&gt;post_type ) ) {
+			$post_type_object = get_post_type_object( $current_object-&gt;post_type );
+			$edit_post_link   = get_edit_post_link( $current_object-&gt;ID );
+			if ( $post_type_object
+				&amp;&amp; $edit_post_link
+				&amp;&amp; current_user_can( 'edit_post', $current_object-&gt;ID )
+				&amp;&amp; $post_type_object-&gt;show_in_admin_bar ) {
+				$wp_admin_bar-&gt;add_node(
+					array(
+						'id'    =&gt; 'edit',
+						'title' =&gt; $post_type_object-&gt;labels-&gt;edit_item,
+						'href'  =&gt; $edit_post_link,
+					)
+				);
+			}
+		} elseif ( ! empty( $current_object-&gt;taxonomy ) ) {
+			$tax            = get_taxonomy( $current_object-&gt;taxonomy );
+			$edit_term_link = get_edit_term_link( $current_object-&gt;term_id, $current_object-&gt;taxonomy );
+			if ( $tax &amp;&amp; $edit_term_link &amp;&amp; current_user_can( 'edit_term', $current_object-&gt;term_id ) ) {
+				$wp_admin_bar-&gt;add_node(
+					array(
+						'id'    =&gt; 'edit',
+						'title' =&gt; $tax-&gt;labels-&gt;edit_item,
+						'href'  =&gt; $edit_term_link,
+					)
+				);
+			}
+		} elseif ( $current_object instanceof WP_User &amp;&amp; current_user_can( 'edit_user', $current_object-&gt;ID ) ) {
+			$edit_user_link = get_edit_user_link( $current_object-&gt;ID );
+			if ( $edit_user_link ) {
+				$wp_admin_bar-&gt;add_node(
+					array(
+						'id'    =&gt; 'edit',
+						'title' =&gt; __( 'Edit User' ),
+						'href'  =&gt; $edit_user_link,
+					)
+				);
+			}
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/admin-bar.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/admin-bar.php#L811">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/admin-bar.php#L811-L939">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">Added a "View Post" link on Comments screen for a single post.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_admin_bar_edit_menu" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_admin_bar_edit_menu</a>
+  </p>
+</div>

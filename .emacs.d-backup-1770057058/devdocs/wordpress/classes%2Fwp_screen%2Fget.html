@@ -1,0 +1,218 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Screen::get( <span class="arg-type">string|WP_Screen</span> <span class="arg-name">$hook_name</span> = <span class="arg-default">”</span> ): <span class="return-type"><a href="../wp_screen" rel="class">WP_Screen</a></span>
+</h1> <section><p>Fetches a screen object.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$hook_name</code><span class="type"><span class="string">string</span>|<span class="WP_Screen"><a href="../wp_screen" rel="class">WP_Screen</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The hook name (also known as the hook suffix) used to determine the screen.<br> Defaults to the current $hook_suffix global.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_screen" rel="class">WP_Screen</a></span> Screen object.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="210" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function get( $hook_name = '' ) {
+	if ( $hook_name instanceof WP_Screen ) {
+		return $hook_name;
+	}
+
+	$id              = '';
+	$post_type       = null;
+	$taxonomy        = null;
+	$in_admin        = false;
+	$action          = '';
+	$is_block_editor = false;
+
+	if ( $hook_name ) {
+		$id = $hook_name;
+	} elseif ( ! empty( $GLOBALS['hook_suffix'] ) ) {
+		$id = $GLOBALS['hook_suffix'];
+	}
+
+	// For those pesky meta boxes.
+	if ( $hook_name &amp;&amp; post_type_exists( $hook_name ) ) {
+		$post_type = $id;
+		$id        = 'post'; // Changes later. Ends up being $base.
+	} else {
+		if ( str_ends_with( $id, '.php' ) ) {
+			$id = substr( $id, 0, -4 );
+		}
+
+		if ( in_array( $id, array( 'post-new', 'link-add', 'media-new', 'user-new' ), true ) ) {
+			$id     = substr( $id, 0, -4 );
+			$action = 'add';
+		}
+	}
+
+	if ( ! $post_type &amp;&amp; $hook_name ) {
+		if ( str_ends_with( $id, '-network' ) ) {
+			$id       = substr( $id, 0, -8 );
+			$in_admin = 'network';
+		} elseif ( str_ends_with( $id, '-user' ) ) {
+			$id       = substr( $id, 0, -5 );
+			$in_admin = 'user';
+		}
+
+		$id = sanitize_key( $id );
+		if ( 'edit-comments' !== $id &amp;&amp; 'edit-tags' !== $id &amp;&amp; str_starts_with( $id, 'edit-' ) ) {
+			$maybe = substr( $id, 5 );
+			if ( taxonomy_exists( $maybe ) ) {
+				$id       = 'edit-tags';
+				$taxonomy = $maybe;
+			} elseif ( post_type_exists( $maybe ) ) {
+				$id        = 'edit';
+				$post_type = $maybe;
+			}
+		}
+
+		if ( ! $in_admin ) {
+			$in_admin = 'site';
+		}
+	} else {
+		if ( defined( 'WP_NETWORK_ADMIN' ) &amp;&amp; WP_NETWORK_ADMIN ) {
+			$in_admin = 'network';
+		} elseif ( defined( 'WP_USER_ADMIN' ) &amp;&amp; WP_USER_ADMIN ) {
+			$in_admin = 'user';
+		} else {
+			$in_admin = 'site';
+		}
+	}
+
+	if ( 'index' === $id ) {
+		$id = 'dashboard';
+	} elseif ( 'front' === $id ) {
+		$in_admin = false;
+	}
+
+	$base = $id;
+
+	// If this is the current screen, see if we can be more accurate for post types and taxonomies.
+	if ( ! $hook_name ) {
+		if ( isset( $_REQUEST['post_type'] ) ) {
+			$post_type = post_type_exists( $_REQUEST['post_type'] ) ? $_REQUEST['post_type'] : false;
+		}
+		if ( isset( $_REQUEST['taxonomy'] ) ) {
+			$taxonomy = taxonomy_exists( $_REQUEST['taxonomy'] ) ? $_REQUEST['taxonomy'] : false;
+		}
+
+		switch ( $base ) {
+			case 'post':
+				if ( isset( $_GET['post'] ) &amp;&amp; isset( $_POST['post_ID'] ) &amp;&amp; (int) $_GET['post'] !== (int) $_POST['post_ID'] ) {
+					wp_die( __( 'A post ID mismatch has been detected.' ), __( 'Sorry, you are not allowed to edit this item.' ), 400 );
+				} elseif ( isset( $_GET['post'] ) ) {
+					$post_id = (int) $_GET['post'];
+				} elseif ( isset( $_POST['post_ID'] ) ) {
+					$post_id = (int) $_POST['post_ID'];
+				} else {
+					$post_id = 0;
+				}
+
+				if ( $post_id ) {
+					$post = get_post( $post_id );
+					if ( $post ) {
+						$post_type = $post-&gt;post_type;
+
+						/** This filter is documented in wp-admin/post.php */
+						$replace_editor = apply_filters( 'replace_editor', false, $post );
+
+						if ( ! $replace_editor ) {
+							$is_block_editor = use_block_editor_for_post( $post );
+						}
+					}
+				}
+				break;
+			case 'edit-tags':
+			case 'term':
+				if ( null === $post_type &amp;&amp; is_object_in_taxonomy( 'post', $taxonomy ? $taxonomy : 'post_tag' ) ) {
+					$post_type = 'post';
+				}
+				break;
+			case 'upload':
+				$post_type = 'attachment';
+				break;
+		}
+	}
+
+	switch ( $base ) {
+		case 'post':
+			if ( null === $post_type ) {
+				$post_type = 'post';
+			}
+
+			// When creating a new post, use the default block editor support value for the post type.
+			if ( empty( $post_id ) ) {
+				$is_block_editor = use_block_editor_for_post_type( $post_type );
+			}
+
+			$id = $post_type;
+			break;
+		case 'edit':
+			if ( null === $post_type ) {
+				$post_type = 'post';
+			}
+			$id .= '-' . $post_type;
+			break;
+		case 'edit-tags':
+		case 'term':
+			if ( null === $taxonomy ) {
+				$taxonomy = 'post_tag';
+			}
+			// The edit-tags ID does not contain the post type. Look for it in the request.
+			if ( null === $post_type ) {
+				$post_type = 'post';
+				if ( isset( $_REQUEST['post_type'] ) &amp;&amp; post_type_exists( $_REQUEST['post_type'] ) ) {
+					$post_type = $_REQUEST['post_type'];
+				}
+			}
+
+			$id = 'edit-' . $taxonomy;
+			break;
+	}
+
+	if ( 'network' === $in_admin ) {
+		$id   .= '-network';
+		$base .= '-network';
+	} elseif ( 'user' === $in_admin ) {
+		$id   .= '-user';
+		$base .= '-user';
+	}
+
+	if ( isset( self::$_registry[ $id ] ) ) {
+		$screen = self::$_registry[ $id ];
+		if ( get_current_screen() === $screen ) {
+			return $screen;
+		}
+	} else {
+		$screen     = new self();
+		$screen-&gt;id = $id;
+	}
+
+	$screen-&gt;base            = $base;
+	$screen-&gt;action          = $action;
+	$screen-&gt;post_type       = (string) $post_type;
+	$screen-&gt;taxonomy        = (string) $taxonomy;
+	$screen-&gt;is_user         = ( 'user' === $in_admin );
+	$screen-&gt;is_network      = ( 'network' === $in_admin );
+	$screen-&gt;in_admin        = $in_admin;
+	$screen-&gt;is_block_editor = $is_block_editor;
+
+	self::$_registry[ $id ] = $screen;
+
+	return $screen;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-screen.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-screen.php#L210">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-screen.php#L210-L398">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/replace_editor"><span class="hook-func">apply_filters</span>( ‘replace_editor’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$replace</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Allows replacement of the editor.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_screen/get" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_screen/get</a>
+  </p>
+</div>

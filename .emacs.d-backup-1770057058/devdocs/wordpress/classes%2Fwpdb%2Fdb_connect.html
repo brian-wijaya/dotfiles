@@ -1,0 +1,126 @@
+<h1 class="wp-block-wporg-code-reference-title">wpdb::db_connect( <span class="arg-type">bool</span> <span class="arg-name">$allow_bail</span> = <span class="arg-default">true</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Connects to and selects database.</p> </section> <section><h2 id="description">Description</h2> <p>If <code>$allow_bail</code> is false, the lack of database connection will need to be handled manually.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$allow_bail</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Allows the function to bail. </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True with a successful connection, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1948" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function db_connect( $allow_bail = true ) {
+	$this-&gt;is_mysql = true;
+
+	$client_flags = defined( 'MYSQL_CLIENT_FLAGS' ) ? MYSQL_CLIENT_FLAGS : 0;
+
+	/*
+	 * Set the MySQLi error reporting off because WordPress handles its own.
+	 * This is due to the default value change from `MYSQLI_REPORT_OFF`
+	 * to `MYSQLI_REPORT_ERROR|MYSQLI_REPORT_STRICT` in PHP 8.1.
+	 */
+	mysqli_report( MYSQLI_REPORT_OFF );
+
+	$this-&gt;dbh = mysqli_init();
+
+	$host    = $this-&gt;dbhost;
+	$port    = null;
+	$socket  = null;
+	$is_ipv6 = false;
+
+	$host_data = $this-&gt;parse_db_host( $this-&gt;dbhost );
+	if ( $host_data ) {
+		list( $host, $port, $socket, $is_ipv6 ) = $host_data;
+	}
+
+	/*
+	 * If using the `mysqlnd` library, the IPv6 address needs to be enclosed
+	 * in square brackets, whereas it doesn't while using the `libmysqlclient` library.
+	 * @see https://bugs.php.net/bug.php?id=67563
+	 */
+	if ( $is_ipv6 &amp;&amp; extension_loaded( 'mysqlnd' ) ) {
+		$host = "[$host]";
+	}
+
+	if ( WP_DEBUG ) {
+		mysqli_real_connect( $this-&gt;dbh, $host, $this-&gt;dbuser, $this-&gt;dbpassword, null, $port, $socket, $client_flags );
+	} else {
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		@mysqli_real_connect( $this-&gt;dbh, $host, $this-&gt;dbuser, $this-&gt;dbpassword, null, $port, $socket, $client_flags );
+	}
+
+	if ( $this-&gt;dbh-&gt;connect_errno ) {
+		$this-&gt;dbh = null;
+	}
+
+	if ( ! $this-&gt;dbh &amp;&amp; $allow_bail ) {
+		wp_load_translations_early();
+
+		// Load custom DB error template, if present.
+		if ( file_exists( WP_CONTENT_DIR . '/db-error.php' ) ) {
+			require_once WP_CONTENT_DIR . '/db-error.php';
+			die();
+		}
+
+		$message = '&lt;h1&gt;' . __( 'Error establishing a database connection' ) . "&lt;/h1&gt;\n";
+
+		$message .= '&lt;p&gt;' . sprintf(
+			/* translators: 1: wp-config.php, 2: Database host. */
+			__( 'This either means that the username and password information in your %1$s file is incorrect or that contact with the database server at %2$s could not be established. This could mean your host&amp;#8217;s database server is down.' ),
+			'&lt;code&gt;wp-config.php&lt;/code&gt;',
+			'&lt;code&gt;' . htmlspecialchars( $this-&gt;dbhost, ENT_QUOTES ) . '&lt;/code&gt;'
+		) . "&lt;/p&gt;\n";
+
+		$message .= "&lt;ul&gt;\n";
+		$message .= '&lt;li&gt;' . __( 'Are you sure you have the correct username and password?' ) . "&lt;/li&gt;\n";
+		$message .= '&lt;li&gt;' . __( 'Are you sure you have typed the correct hostname?' ) . "&lt;/li&gt;\n";
+		$message .= '&lt;li&gt;' . __( 'Are you sure the database server is running?' ) . "&lt;/li&gt;\n";
+		$message .= "&lt;/ul&gt;\n";
+
+		$message .= '&lt;p&gt;' . sprintf(
+			/* translators: %s: Support forums URL. */
+			__( 'If you are unsure what these terms mean you should probably contact your host. If you still need help you can always visit the &lt;a href="%s"&gt;WordPress support forums&lt;/a&gt;.' ),
+			__( 'https://wordpress.org/support/forums/' )
+		) . "&lt;/p&gt;\n";
+
+		$this-&gt;bail( $message, 'db_connect_fail' );
+
+		return false;
+	} elseif ( $this-&gt;dbh ) {
+		if ( ! $this-&gt;has_connected ) {
+			$this-&gt;init_charset();
+		}
+
+		$this-&gt;has_connected = true;
+
+		$this-&gt;set_charset( $this-&gt;dbh );
+
+		$this-&gt;ready = true;
+		$this-&gt;set_sql_mode();
+		$this-&gt;select( $this-&gt;dbname, $this-&gt;dbh );
+
+		return true;
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wpdb.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wpdb.php#L1948">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wpdb.php#L1948-L2042">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.9.0/">3.9.0</a></td>
+<td><span class="since-description">$allow_bail parameter added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wpdb/db_connect" class="_attribution-link">https://developer.wordpress.org/reference/classes/wpdb/db_connect</a>
+  </p>
+</div>

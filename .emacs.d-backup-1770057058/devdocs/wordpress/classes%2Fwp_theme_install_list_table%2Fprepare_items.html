@@ -1,0 +1,154 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Theme_Install_List_Table::prepare_items()</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="35" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_items() {
+	require ABSPATH . 'wp-admin/includes/theme-install.php';
+
+	global $tabs, $tab, $paged, $type, $theme_field_defaults;
+
+	$tab = ! empty( $_REQUEST['tab'] ) ? sanitize_text_field( $_REQUEST['tab'] ) : '';
+
+	$search_terms  = array();
+	$search_string = '';
+	if ( ! empty( $_REQUEST['s'] ) ) {
+		$search_string = strtolower( wp_unslash( $_REQUEST['s'] ) );
+		$search_terms  = array_unique( array_filter( array_map( 'trim', explode( ',', $search_string ) ) ) );
+	}
+
+	if ( ! empty( $_REQUEST['features'] ) ) {
+		$this-&gt;features = $_REQUEST['features'];
+	}
+
+	$paged = $this-&gt;get_pagenum();
+
+	$per_page = 36;
+
+	// These are the tabs which are shown on the page,
+	$tabs              = array();
+	$tabs['dashboard'] = __( 'Search' );
+	if ( 'search' === $tab ) {
+		$tabs['search'] = __( 'Search Results' );
+	}
+	$tabs['upload']   = __( 'Upload' );
+	$tabs['featured'] = _x( 'Featured', 'themes' );
+	//$tabs['popular']  = _x( 'Popular', 'themes' );
+	$tabs['new']     = _x( 'Latest', 'themes' );
+	$tabs['updated'] = _x( 'Recently Updated', 'themes' );
+
+	$nonmenu_tabs = array( 'theme-information' ); // Valid actions to perform which do not have a Menu item.
+
+	/** This filter is documented in wp-admin/theme-install.php */
+	$tabs = apply_filters( 'install_themes_tabs', $tabs );
+
+	/**
+	 * Filters tabs not associated with a menu item on the Install Themes screen.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param string[] $nonmenu_tabs The tabs that don't have a menu item on
+	 *                               the Install Themes screen.
+	 */
+	$nonmenu_tabs = apply_filters( 'install_themes_nonmenu_tabs', $nonmenu_tabs );
+
+	// If a non-valid menu tab has been selected, And it's not a non-menu action.
+	if ( empty( $tab ) || ( ! isset( $tabs[ $tab ] ) &amp;&amp; ! in_array( $tab, (array) $nonmenu_tabs, true ) ) ) {
+		$tab = key( $tabs );
+	}
+
+	$args = array(
+		'page'     =&gt; $paged,
+		'per_page' =&gt; $per_page,
+		'fields'   =&gt; $theme_field_defaults,
+	);
+
+	switch ( $tab ) {
+		case 'search':
+			$type = isset( $_REQUEST['type'] ) ? wp_unslash( $_REQUEST['type'] ) : 'term';
+			switch ( $type ) {
+				case 'tag':
+					$args['tag'] = array_map( 'sanitize_key', $search_terms );
+					break;
+				case 'term':
+					$args['search'] = $search_string;
+					break;
+				case 'author':
+					$args['author'] = $search_string;
+					break;
+			}
+
+			if ( ! empty( $this-&gt;features ) ) {
+				$args['tag']      = $this-&gt;features;
+				$_REQUEST['s']    = implode( ',', $this-&gt;features );
+				$_REQUEST['type'] = 'tag';
+			}
+
+			add_action( 'install_themes_table_header', 'install_theme_search_form', 10, 0 );
+			break;
+
+		case 'featured':
+			// case 'popular':
+		case 'new':
+		case 'updated':
+			$args['browse'] = $tab;
+			break;
+
+		default:
+			$args = false;
+			break;
+	}
+
+	/**
+	 * Filters API request arguments for each Install Themes screen tab.
+	 *
+	 * The dynamic portion of the hook name, `$tab`, refers to the theme install
+	 * tab.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `install_themes_table_api_args_dashboard`
+	 *  - `install_themes_table_api_args_featured`
+	 *  - `install_themes_table_api_args_new`
+	 *  - `install_themes_table_api_args_search`
+	 *  - `install_themes_table_api_args_updated`
+	 *  - `install_themes_table_api_args_upload`
+	 *
+	 * @since 3.7.0
+	 *
+	 * @param array|false $args Theme install API arguments.
+	 */
+	$args = apply_filters( "install_themes_table_api_args_{$tab}", $args );
+
+	if ( ! $args ) {
+		return;
+	}
+
+	$api = themes_api( 'query_themes', $args );
+
+	if ( is_wp_error( $api ) ) {
+		wp_die( '&lt;p&gt;' . $api-&gt;get_error_message() . '&lt;/p&gt; &lt;p&gt;&lt;a href="#" onclick="document.location.reload(); return false;"&gt;' . __( 'Try Again' ) . '&lt;/a&gt;&lt;/p&gt;' );
+	}
+
+	$this-&gt;items = $api-&gt;themes;
+
+	$this-&gt;set_pagination_args(
+		array(
+			'total_items'     =&gt; $api-&gt;info['results'],
+			'per_page'        =&gt; $args['per_page'],
+			'infinite_scroll' =&gt; true,
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-theme-install-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-theme-install-list-table.php#L35">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-theme-install-list-table.php#L35-L171">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/install_themes_nonmenu_tabs"><span class="hook-func">apply_filters</span>( ‘install_themes_nonmenu_tabs’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$nonmenu_tabs</span></nobr> )</a></dt>
+<dd>
+<p>Filters tabs not associated with a menu item on the Install Themes screen.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/install_themes_table_api_args_tab"><span class="hook-func">apply_filters</span>( “install_themes_table_api_args_{$tab}”, <nobr><span class="arg-type">array|false</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters API request arguments for each Install Themes screen tab.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/install_themes_tabs"><span class="hook-func">apply_filters</span>( ‘install_themes_tabs’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$tabs</span></nobr> )</a></dt>
+<dd>
+<p>Filters the tabs shown on the Add Themes screen.</p> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_theme_install_list_table/prepare_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_theme_install_list_table/prepare_items</a>
+  </p>
+</div>

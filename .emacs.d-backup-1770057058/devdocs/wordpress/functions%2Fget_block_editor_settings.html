@@ -1,0 +1,226 @@
+<h1 class="wp-block-wporg-code-reference-title">get_block_editor_settings( <span class="arg-type">array</span> <span class="arg-name">$custom_settings</span>, <span class="arg-type">WP_Block_Editor_Context</span> <span class="arg-name">$block_editor_context</span> ): <span class="return-type">array</span>
+</h1> <section><p>Returns the contextualized block editor settings for a selected editor context.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$custom_settings</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Custom settings to use with the given editor type.</span></div></dd>
+<dt>
+<code>$block_editor_context</code><span class="type"><span class="WP_Block_Editor_Context"><a href="../classes/wp_block_editor_context" rel="class">WP_Block_Editor_Context</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The current block editor context.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The contextualized block editor settings.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="488" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_block_editor_settings( array $custom_settings, $block_editor_context ) {
+	$editor_settings = array_merge(
+		get_default_block_editor_settings(),
+		array(
+			'allowedBlockTypes' =&gt; get_allowed_block_types( $block_editor_context ),
+			'blockCategories'   =&gt; get_block_categories( $block_editor_context ),
+		),
+		$custom_settings
+	);
+
+	$global_styles = array();
+	$presets       = array(
+		array(
+			'css'            =&gt; 'variables',
+			'__unstableType' =&gt; 'presets',
+			'isGlobalStyles' =&gt; true,
+		),
+		array(
+			'css'            =&gt; 'presets',
+			'__unstableType' =&gt; 'presets',
+			'isGlobalStyles' =&gt; true,
+		),
+	);
+	foreach ( $presets as $preset_style ) {
+		$actual_css = wp_get_global_stylesheet( array( $preset_style['css'] ) );
+		if ( '' !== $actual_css ) {
+			$preset_style['css'] = $actual_css;
+			$global_styles[]     = $preset_style;
+		}
+	}
+
+	if ( wp_theme_has_theme_json() ) {
+		$block_classes = array(
+			'css'            =&gt; 'styles',
+			'__unstableType' =&gt; 'theme',
+			'isGlobalStyles' =&gt; true,
+		);
+		$actual_css    = wp_get_global_stylesheet( array( $block_classes['css'] ) );
+		if ( '' !== $actual_css ) {
+			$block_classes['css'] = $actual_css;
+			$global_styles[]      = $block_classes;
+		}
+
+		/*
+		 * Add the custom CSS as a separate stylesheet so any invalid CSS
+		 * entered by users does not break other global styles.
+		 */
+		$global_styles[] = array(
+			'css'            =&gt; wp_get_global_stylesheet( array( 'custom-css' ) ),
+			'__unstableType' =&gt; 'user',
+			'isGlobalStyles' =&gt; true,
+		);
+	} else {
+		// If there is no `theme.json` file, ensure base layout styles are still available.
+		$block_classes = array(
+			'css'            =&gt; 'base-layout-styles',
+			'__unstableType' =&gt; 'base-layout',
+			'isGlobalStyles' =&gt; true,
+		);
+		$actual_css    = wp_get_global_stylesheet( array( $block_classes['css'] ) );
+		if ( '' !== $actual_css ) {
+			$block_classes['css'] = $actual_css;
+			$global_styles[]      = $block_classes;
+		}
+	}
+
+	$editor_settings['styles'] = array_merge( $global_styles, get_block_editor_theme_styles() );
+
+	$editor_settings['__experimentalFeatures'] = wp_get_global_settings();
+	// These settings may need to be updated based on data coming from theme.json sources.
+	if ( isset( $editor_settings['__experimentalFeatures']['color']['palette'] ) ) {
+		$colors_by_origin          = $editor_settings['__experimentalFeatures']['color']['palette'];
+		$editor_settings['colors'] = isset( $colors_by_origin['custom'] ) ?
+			$colors_by_origin['custom'] : (
+				isset( $colors_by_origin['theme'] ) ?
+					$colors_by_origin['theme'] :
+					$colors_by_origin['default']
+			);
+	}
+	if ( isset( $editor_settings['__experimentalFeatures']['color']['gradients'] ) ) {
+		$gradients_by_origin          = $editor_settings['__experimentalFeatures']['color']['gradients'];
+		$editor_settings['gradients'] = isset( $gradients_by_origin['custom'] ) ?
+			$gradients_by_origin['custom'] : (
+				isset( $gradients_by_origin['theme'] ) ?
+					$gradients_by_origin['theme'] :
+					$gradients_by_origin['default']
+			);
+	}
+	if ( isset( $editor_settings['__experimentalFeatures']['typography']['fontSizes'] ) ) {
+		$font_sizes_by_origin         = $editor_settings['__experimentalFeatures']['typography']['fontSizes'];
+		$editor_settings['fontSizes'] = isset( $font_sizes_by_origin['custom'] ) ?
+			$font_sizes_by_origin['custom'] : (
+				isset( $font_sizes_by_origin['theme'] ) ?
+					$font_sizes_by_origin['theme'] :
+					$font_sizes_by_origin['default']
+			);
+	}
+	if ( isset( $editor_settings['__experimentalFeatures']['color']['custom'] ) ) {
+		$editor_settings['disableCustomColors'] = ! $editor_settings['__experimentalFeatures']['color']['custom'];
+		unset( $editor_settings['__experimentalFeatures']['color']['custom'] );
+	}
+	if ( isset( $editor_settings['__experimentalFeatures']['color']['customGradient'] ) ) {
+		$editor_settings['disableCustomGradients'] = ! $editor_settings['__experimentalFeatures']['color']['customGradient'];
+		unset( $editor_settings['__experimentalFeatures']['color']['customGradient'] );
+	}
+	if ( isset( $editor_settings['__experimentalFeatures']['typography']['customFontSize'] ) ) {
+		$editor_settings['disableCustomFontSizes'] = ! $editor_settings['__experimentalFeatures']['typography']['customFontSize'];
+		unset( $editor_settings['__experimentalFeatures']['typography']['customFontSize'] );
+	}
+	if ( isset( $editor_settings['__experimentalFeatures']['typography']['lineHeight'] ) ) {
+		$editor_settings['enableCustomLineHeight'] = $editor_settings['__experimentalFeatures']['typography']['lineHeight'];
+		unset( $editor_settings['__experimentalFeatures']['typography']['lineHeight'] );
+	}
+	if ( isset( $editor_settings['__experimentalFeatures']['spacing']['units'] ) ) {
+		$editor_settings['enableCustomUnits'] = $editor_settings['__experimentalFeatures']['spacing']['units'];
+		unset( $editor_settings['__experimentalFeatures']['spacing']['units'] );
+	}
+	if ( isset( $editor_settings['__experimentalFeatures']['spacing']['padding'] ) ) {
+		$editor_settings['enableCustomSpacing'] = $editor_settings['__experimentalFeatures']['spacing']['padding'];
+		unset( $editor_settings['__experimentalFeatures']['spacing']['padding'] );
+	}
+	if ( isset( $editor_settings['__experimentalFeatures']['spacing']['customSpacingSize'] ) ) {
+		$editor_settings['disableCustomSpacingSizes'] = ! $editor_settings['__experimentalFeatures']['spacing']['customSpacingSize'];
+		unset( $editor_settings['__experimentalFeatures']['spacing']['customSpacingSize'] );
+	}
+
+	if ( isset( $editor_settings['__experimentalFeatures']['spacing']['spacingSizes'] ) ) {
+		$spacing_sizes_by_origin         = $editor_settings['__experimentalFeatures']['spacing']['spacingSizes'];
+		$editor_settings['spacingSizes'] = isset( $spacing_sizes_by_origin['custom'] ) ?
+			$spacing_sizes_by_origin['custom'] : (
+				isset( $spacing_sizes_by_origin['theme'] ) ?
+					$spacing_sizes_by_origin['theme'] :
+					$spacing_sizes_by_origin['default']
+			);
+	}
+
+	$editor_settings['__unstableResolvedAssets']         = _wp_get_iframed_editor_assets();
+	$editor_settings['__unstableIsBlockBasedTheme']      = wp_is_block_theme();
+	$editor_settings['localAutosaveInterval']            = 15;
+	$editor_settings['disableLayoutStyles']              = current_theme_supports( 'disable-layout-styles' );
+	$editor_settings['__experimentalDiscussionSettings'] = array(
+		'commentOrder'         =&gt; get_option( 'comment_order' ),
+		'commentsPerPage'      =&gt; get_option( 'comments_per_page' ),
+		'defaultCommentsPage'  =&gt; get_option( 'default_comments_page' ),
+		'pageComments'         =&gt; get_option( 'page_comments' ),
+		'threadComments'       =&gt; get_option( 'thread_comments' ),
+		'threadCommentsDepth'  =&gt; get_option( 'thread_comments_depth' ),
+		'defaultCommentStatus' =&gt; get_option( 'default_comment_status' ),
+		'avatarURL'            =&gt; get_avatar_url(
+			'',
+			array(
+				'size'          =&gt; 96,
+				'force_default' =&gt; true,
+				'default'       =&gt; get_option( 'avatar_default' ),
+			)
+		),
+	);
+
+	$post_content_block_attributes = wp_get_post_content_block_attributes();
+
+	if ( isset( $post_content_block_attributes ) ) {
+		$editor_settings['postContentAttributes'] = $post_content_block_attributes;
+	}
+
+	$editor_settings['canUpdateBlockBindings'] = current_user_can( 'edit_block_binding', $block_editor_context );
+
+	/**
+	 * Filters the settings to pass to the block editor for all editor type.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param array                   $editor_settings      Default editor settings.
+	 * @param WP_Block_Editor_Context $block_editor_context The current block editor context.
+	 */
+	$editor_settings = apply_filters( 'block_editor_settings_all', $editor_settings, $block_editor_context );
+
+	if ( ! empty( $block_editor_context-&gt;post ) ) {
+		$post = $block_editor_context-&gt;post;
+
+		/**
+		 * Filters the settings to pass to the block editor.
+		 *
+		 * @since 5.0.0
+		 * @deprecated 5.8.0 Use the <a href="../hooks/block_editor_settings_all">'block_editor_settings_all'</a> filter instead.
+		 *
+		 * @param array   $editor_settings Default editor settings.
+		 * @param WP_Post $post            Post being edited.
+		 */
+		$editor_settings = apply_filters_deprecated( 'block_editor_settings', array( $editor_settings, $post ), '5.8.0', 'block_editor_settings_all' );
+	}
+
+	return $editor_settings;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/block-editor.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/block-editor.php#L488">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/block-editor.php#L488-L680">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/block_editor_settings"><span class="hook-func">apply_filters_deprecated</span>( ‘block_editor_settings’, <nobr><span class="arg-type">array</span> <span class="arg-name">$editor_settings</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters the settings to pass to the block editor.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/block_editor_settings_all"><span class="hook-func">apply_filters</span>( ‘block_editor_settings_all’, <nobr><span class="arg-type">array</span> <span class="arg-name">$editor_settings</span></nobr>, <nobr><span class="arg-type">WP_Block_Editor_Context</span> <span class="arg-name">$block_editor_context</span></nobr> )</a></dt>
+<dd>
+<p>Filters the settings to pass to the block editor for all editor type.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_block_editor_settings" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_block_editor_settings</a>
+  </p>
+</div>

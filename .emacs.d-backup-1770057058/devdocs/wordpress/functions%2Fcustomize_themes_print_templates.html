@@ -1,0 +1,291 @@
+<h1 class="wp-block-wporg-code-reference-title">customize_themes_print_templates()</h1> <section><p>Prints JS templates for the theme-browsing UI in the Customizer.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="826" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function customize_themes_print_templates() {
+	?&gt;
+	&lt;script type="text/html" id="tmpl-customize-themes-details-view"&gt;
+		&lt;div class="theme-backdrop"&gt;&lt;/div&gt;
+		&lt;div class="theme-wrap wp-clearfix" role="document"&gt;
+			&lt;div class="theme-header"&gt;
+				&lt;button type="button" class="left dashicons dashicons-no"&gt;&lt;span class="screen-reader-text"&gt;
+					&lt;?php
+					/* translators: Hidden accessibility text. */
+					_e( 'Show previous theme' );
+					?&gt;
+				&lt;/span&gt;&lt;/button&gt;
+				&lt;button type="button" class="right dashicons dashicons-no"&gt;&lt;span class="screen-reader-text"&gt;
+					&lt;?php
+					/* translators: Hidden accessibility text. */
+					_e( 'Show next theme' );
+					?&gt;
+				&lt;/span&gt;&lt;/button&gt;
+				&lt;button type="button" class="close dashicons dashicons-no"&gt;&lt;span class="screen-reader-text"&gt;
+					&lt;?php
+					/* translators: Hidden accessibility text. */
+					_e( 'Close details dialog' );
+					?&gt;
+				&lt;/span&gt;&lt;/button&gt;
+			&lt;/div&gt;
+			&lt;div class="theme-about wp-clearfix"&gt;
+				&lt;div class="theme-screenshots"&gt;
+				&lt;# if ( data.screenshot &amp;&amp; data.screenshot[0] ) { #&gt;
+					&lt;div class="screenshot"&gt;&lt;img src="{{ data.screenshot[0] }}?ver={{ data.version }}" alt="" /&gt;&lt;/div&gt;
+				&lt;# } else { #&gt;
+					&lt;div class="screenshot blank"&gt;&lt;/div&gt;
+				&lt;# } #&gt;
+				&lt;/div&gt;
+
+				&lt;div class="theme-info"&gt;
+					&lt;# if ( data.active ) { #&gt;
+						&lt;span class="current-label"&gt;&lt;?php _e( 'Active Theme' ); ?&gt;&lt;/span&gt;
+					&lt;# } #&gt;
+					&lt;h2 class="theme-name"&gt;{{{ data.name }}}&lt;span class="theme-version"&gt;
+						&lt;?php
+						/* translators: %s: Theme version. */
+						printf( __( 'Version: %s' ), '{{ data.version }}' );
+						?&gt;
+					&lt;/span&gt;&lt;/h2&gt;
+					&lt;h3 class="theme-author"&gt;
+						&lt;?php
+						/* translators: %s: Theme author link. */
+						printf( __( 'By %s' ), '{{{ data.authorAndUri }}}' );
+						?&gt;
+					&lt;/h3&gt;
+
+					&lt;# if ( data.stars &amp;&amp; 0 != data.num_ratings ) { #&gt;
+						&lt;div class="theme-rating"&gt;
+							{{{ data.stars }}}
+							&lt;a class="num-ratings" target="_blank" href="{{ data.reviews_url }}"&gt;
+								&lt;?php
+								printf(
+									'%1$s &lt;span class="screen-reader-text"&gt;%2$s&lt;/span&gt;',
+									/* translators: %s: Number of ratings. */
+									sprintf( __( '(%s ratings)' ), '{{ data.num_ratings }}' ),
+									/* translators: Hidden accessibility text. */
+									__( '(opens in a new tab)' )
+								);
+								?&gt;
+							&lt;/a&gt;
+						&lt;/div&gt;
+					&lt;# } #&gt;
+
+					&lt;# if ( data.hasUpdate ) { #&gt;
+						&lt;# if ( data.updateResponse.compatibleWP &amp;&amp; data.updateResponse.compatiblePHP ) { #&gt;
+							&lt;div class="notice notice-warning notice-alt notice-large" data-slug="{{ data.id }}"&gt;
+								&lt;h3 class="notice-title"&gt;&lt;?php _e( 'Update Available' ); ?&gt;&lt;/h3&gt;
+								{{{ data.update }}}
+							&lt;/div&gt;
+						&lt;# } else { #&gt;
+							&lt;div class="notice notice-error notice-alt notice-large" data-slug="{{ data.id }}"&gt;
+								&lt;h3 class="notice-title"&gt;&lt;?php _e( 'Update Incompatible' ); ?&gt;&lt;/h3&gt;
+								&lt;p&gt;
+									&lt;# if ( ! data.updateResponse.compatibleWP &amp;&amp; ! data.updateResponse.compatiblePHP ) { #&gt;
+										&lt;?php
+										printf(
+											/* translators: %s: Theme name. */
+											__( 'There is a new version of %s available, but it does not work with your versions of WordPress and PHP.' ),
+											'{{{ data.name }}}'
+										);
+										if ( current_user_can( 'update_core' ) &amp;&amp; current_user_can( 'update_php' ) ) {
+											printf(
+												/* translators: 1: URL to WordPress Updates screen, 2: URL to Update PHP page. */
+												' ' . __( '&lt;a href="%1$s"&gt;Please update WordPress&lt;/a&gt;, and then &lt;a href="%2$s"&gt;learn more about updating PHP&lt;/a&gt;.' ),
+												self_admin_url( 'update-core.php' ),
+												esc_url( wp_get_update_php_url() )
+											);
+											wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;' );
+										} elseif ( current_user_can( 'update_core' ) ) {
+											printf(
+												/* translators: %s: URL to WordPress Updates screen. */
+												' ' . __( '&lt;a href="%s"&gt;Please update WordPress&lt;/a&gt;.' ),
+												self_admin_url( 'update-core.php' )
+											);
+										} elseif ( current_user_can( 'update_php' ) ) {
+											printf(
+												/* translators: %s: URL to Update PHP page. */
+												' ' . __( '&lt;a href="%s"&gt;Learn more about updating PHP&lt;/a&gt;.' ),
+												esc_url( wp_get_update_php_url() )
+											);
+											wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;' );
+										}
+										?&gt;
+									&lt;# } else if ( ! data.updateResponse.compatibleWP ) { #&gt;
+										&lt;?php
+										printf(
+											/* translators: %s: Theme name. */
+											__( 'There is a new version of %s available, but it does not work with your version of WordPress.' ),
+											'{{{ data.name }}}'
+										);
+										if ( current_user_can( 'update_core' ) ) {
+											printf(
+												/* translators: %s: URL to WordPress Updates screen. */
+												' ' . __( '&lt;a href="%s"&gt;Please update WordPress&lt;/a&gt;.' ),
+												self_admin_url( 'update-core.php' )
+											);
+										}
+										?&gt;
+									&lt;# } else if ( ! data.updateResponse.compatiblePHP ) { #&gt;
+										&lt;?php
+										printf(
+											/* translators: %s: Theme name. */
+											__( 'There is a new version of %s available, but it does not work with your version of PHP.' ),
+											'{{{ data.name }}}'
+										);
+										if ( current_user_can( 'update_php' ) ) {
+											printf(
+												/* translators: %s: URL to Update PHP page. */
+												' ' . __( '&lt;a href="%s"&gt;Learn more about updating PHP&lt;/a&gt;.' ),
+												esc_url( wp_get_update_php_url() )
+											);
+											wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;' );
+										}
+										?&gt;
+									&lt;# } #&gt;
+								&lt;/p&gt;
+							&lt;/div&gt;
+						&lt;# } #&gt;
+					&lt;# } #&gt;
+
+					&lt;# if ( data.parent ) { #&gt;
+						&lt;p class="parent-theme"&gt;
+							&lt;?php
+							printf(
+								/* translators: %s: Theme name. */
+								__( 'This is a child theme of %s.' ),
+								'&lt;strong&gt;{{{ data.parent }}}&lt;/strong&gt;'
+							);
+							?&gt;
+						&lt;/p&gt;
+					&lt;# } #&gt;
+
+					&lt;# if ( ! data.compatibleWP || ! data.compatiblePHP ) { #&gt;
+						&lt;div class="notice notice-error notice-alt notice-large"&gt;&lt;p&gt;
+							&lt;# if ( ! data.compatibleWP &amp;&amp; ! data.compatiblePHP ) { #&gt;
+								&lt;?php
+								_e( 'This theme does not work with your versions of WordPress and PHP.' );
+								if ( current_user_can( 'update_core' ) &amp;&amp; current_user_can( 'update_php' ) ) {
+									printf(
+										/* translators: 1: URL to WordPress Updates screen, 2: URL to Update PHP page. */
+										' ' . __( '&lt;a href="%1$s"&gt;Please update WordPress&lt;/a&gt;, and then &lt;a href="%2$s"&gt;learn more about updating PHP&lt;/a&gt;.' ),
+										self_admin_url( 'update-core.php' ),
+										esc_url( wp_get_update_php_url() )
+									);
+									wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;' );
+								} elseif ( current_user_can( 'update_core' ) ) {
+									printf(
+										/* translators: %s: URL to WordPress Updates screen. */
+										' ' . __( '&lt;a href="%s"&gt;Please update WordPress&lt;/a&gt;.' ),
+										self_admin_url( 'update-core.php' )
+									);
+								} elseif ( current_user_can( 'update_php' ) ) {
+									printf(
+										/* translators: %s: URL to Update PHP page. */
+										' ' . __( '&lt;a href="%s"&gt;Learn more about updating PHP&lt;/a&gt;.' ),
+										esc_url( wp_get_update_php_url() )
+									);
+									wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;' );
+								}
+								?&gt;
+							&lt;# } else if ( ! data.compatibleWP ) { #&gt;
+								&lt;?php
+								_e( 'This theme does not work with your version of WordPress.' );
+								if ( current_user_can( 'update_core' ) ) {
+									printf(
+										/* translators: %s: URL to WordPress Updates screen. */
+										' ' . __( '&lt;a href="%s"&gt;Please update WordPress&lt;/a&gt;.' ),
+										self_admin_url( 'update-core.php' )
+									);
+								}
+								?&gt;
+							&lt;# } else if ( ! data.compatiblePHP ) { #&gt;
+								&lt;?php
+								_e( 'This theme does not work with your version of PHP.' );
+								if ( current_user_can( 'update_php' ) ) {
+									printf(
+										/* translators: %s: URL to Update PHP page. */
+										' ' . __( '&lt;a href="%s"&gt;Learn more about updating PHP&lt;/a&gt;.' ),
+										esc_url( wp_get_update_php_url() )
+									);
+									wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;' );
+								}
+								?&gt;
+							&lt;# } #&gt;
+						&lt;/p&gt;&lt;/div&gt;
+					&lt;# } else if ( ! data.active &amp;&amp; data.blockTheme ) { #&gt;
+						&lt;div class="notice notice-error notice-alt notice-large"&gt;&lt;p&gt;
+						&lt;?php
+							_e( 'This theme doesn\'t support Customizer.' );
+						?&gt;
+						&lt;# if ( data.actions.activate ) { #&gt;
+							&lt;?php
+							printf(
+								/* translators: %s: URL to the themes page (also it activates the theme). */
+								' ' . __( 'However, you can still &lt;a href="%s"&gt;activate this theme&lt;/a&gt;, and use the Site Editor to customize it.' ),
+								'{{{ data.actions.activate }}}'
+							);
+							?&gt;
+						&lt;# } #&gt;
+						&lt;/p&gt;&lt;/div&gt;
+					&lt;# } #&gt;
+
+					&lt;p class="theme-description"&gt;{{{ data.description }}}&lt;/p&gt;
+
+					&lt;# if ( data.tags ) { #&gt;
+						&lt;p class="theme-tags"&gt;&lt;span&gt;&lt;?php _e( 'Tags:' ); ?&gt;&lt;/span&gt; {{{ data.tags }}}&lt;/p&gt;
+					&lt;# } #&gt;
+				&lt;/div&gt;
+			&lt;/div&gt;
+
+			&lt;div class="theme-actions"&gt;
+				&lt;# if ( data.active ) { #&gt;
+					&lt;button type="button" class="button button-primary customize-theme"&gt;&lt;?php _e( 'Customize' ); ?&gt;&lt;/button&gt;
+				&lt;# } else if ( 'installed' === data.type ) { #&gt;
+					&lt;div class="theme-inactive-actions"&gt;
+					&lt;# if ( data.blockTheme ) { #&gt;
+						&lt;?php
+							/* translators: %s: Theme name. */
+							$aria_label = sprintf( _x( 'Activate %s', 'theme' ), '{{ data.name }}' );
+						?&gt;
+						&lt;# if ( data.compatibleWP &amp;&amp; data.compatiblePHP &amp;&amp; data.actions.activate ) { #&gt;
+							&lt;a href="{{{ data.actions.activate }}}" class="button button-primary activate" aria-label="&lt;?php echo esc_attr( $aria_label ); ?&gt;"&gt;&lt;?php _e( 'Activate' ); ?&gt;&lt;/a&gt;
+						&lt;# } #&gt;
+					&lt;# } else { #&gt;
+						&lt;# if ( data.compatibleWP &amp;&amp; data.compatiblePHP ) { #&gt;
+							&lt;button type="button" class="button button-primary preview-theme" data-slug="{{ data.id }}"&gt;&lt;?php _e( 'Live Preview' ); ?&gt;&lt;/button&gt;
+						&lt;# } else { #&gt;
+							&lt;button class="button button-primary disabled"&gt;&lt;?php _e( 'Live Preview' ); ?&gt;&lt;/button&gt;
+						&lt;# } #&gt;
+					&lt;# } #&gt;
+					&lt;/div&gt;
+					&lt;?php if ( current_user_can( 'delete_themes' ) ) { ?&gt;
+						&lt;# if ( data.actions &amp;&amp; data.actions['delete'] ) { #&gt;
+							&lt;a href="{{{ data.actions['delete'] }}}" data-slug="{{ data.id }}" class="button button-secondary delete-theme"&gt;&lt;?php _e( 'Delete' ); ?&gt;&lt;/a&gt;
+						&lt;# } #&gt;
+					&lt;?php } ?&gt;
+				&lt;# } else { #&gt;
+					&lt;# if ( data.compatibleWP &amp;&amp; data.compatiblePHP ) { #&gt;
+						&lt;button type="button" class="button theme-install" data-slug="{{ data.id }}"&gt;&lt;?php _e( 'Install' ); ?&gt;&lt;/button&gt;
+						&lt;button type="button" class="button button-primary theme-install preview" data-slug="{{ data.id }}"&gt;&lt;?php _e( 'Install &amp;amp; Preview' ); ?&gt;&lt;/button&gt;
+					&lt;# } else { #&gt;
+						&lt;button type="button" class="button disabled"&gt;&lt;?php _ex( 'Cannot Install', 'theme' ); ?&gt;&lt;/button&gt;
+						&lt;button type="button" class="button button-primary disabled"&gt;&lt;?php _e( 'Install &amp;amp; Preview' ); ?&gt;&lt;/button&gt;
+					&lt;# } #&gt;
+				&lt;# } #&gt;
+			&lt;/div&gt;
+		&lt;/div&gt;
+	&lt;/script&gt;
+	&lt;?php
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/theme.php#L826">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/theme.php#L826-L1100">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/customize_themes_print_templates" class="_attribution-link">https://developer.wordpress.org/reference/functions/customize_themes_print_templates</a>
+  </p>
+</div>

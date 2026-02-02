@@ -1,0 +1,115 @@
+<h1 class="wp-block-wporg-code-reference-title">register_block_style_handle( <span class="arg-type">array</span> <span class="arg-name">$metadata</span>, <span class="arg-type">string</span> <span class="arg-name">$field_name</span>, <span class="arg-type">int</span> <span class="arg-name">$index</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Finds a style handle for the block metadata field. It detects when a path to file was provided and registers the style under automatically generated handle name. It returns unprocessed style handle otherwise.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$metadata</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Block metadata.</span></div></dd>
+<dt>
+<code>$field_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Field name to pick from metadata.</span></div></dd>
+<dt>
+<code>$index</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Index of the style to register when multiple items passed.<br> Default 0.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> Style handle provided directly or created through style’s registration, or false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="281" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function register_block_style_handle( $metadata, $field_name, $index = 0 ) {
+	if ( empty( $metadata[ $field_name ] ) ) {
+		return false;
+	}
+
+	$style_handle = $metadata[ $field_name ];
+	if ( is_array( $style_handle ) ) {
+		if ( empty( $style_handle[ $index ] ) ) {
+			return false;
+		}
+		$style_handle = $style_handle[ $index ];
+	}
+
+	$style_handle_name = generate_block_asset_handle( $metadata['name'], $field_name, $index );
+	// If the style handle is already registered, skip re-registering.
+	if ( wp_style_is( $style_handle_name, 'registered' ) ) {
+		return $style_handle_name;
+	}
+
+	static $wpinc_path_norm = '';
+	if ( ! $wpinc_path_norm ) {
+		$wpinc_path_norm = wp_normalize_path( realpath( ABSPATH . WPINC ) );
+	}
+
+	$is_core_block = isset( $metadata['file'] ) &amp;&amp; str_starts_with( $metadata['file'], $wpinc_path_norm );
+	// Skip registering individual styles for each core block when a bundled version provided.
+	if ( $is_core_block &amp;&amp; ! wp_should_load_separate_core_block_assets() ) {
+		return false;
+	}
+
+	$style_path      = remove_block_asset_path_prefix( $style_handle );
+	$is_style_handle = $style_handle === $style_path;
+	// Allow only passing style handles for core blocks.
+	if ( $is_core_block &amp;&amp; ! $is_style_handle ) {
+		return false;
+	}
+	// Return the style handle unless it's the first item for every core block that requires special treatment.
+	if ( $is_style_handle &amp;&amp; ! ( $is_core_block &amp;&amp; 0 === $index ) ) {
+		return $style_handle;
+	}
+
+	// Check whether styles should have a ".min" suffix or not.
+	$suffix = SCRIPT_DEBUG ? '' : '.min';
+	if ( $is_core_block ) {
+		$style_path = ( 'editorStyle' === $field_name ) ? "editor{$suffix}.css" : "style{$suffix}.css";
+	}
+
+	$style_path_norm = wp_normalize_path( realpath( dirname( $metadata['file'] ) . '/' . $style_path ) );
+	$style_uri       = get_block_asset_url( $style_path_norm );
+
+	$version = ! $is_core_block &amp;&amp; isset( $metadata['version'] ) ? $metadata['version'] : false;
+	$result  = wp_register_style(
+		$style_handle_name,
+		$style_uri,
+		array(),
+		$version
+	);
+	if ( ! $result ) {
+		return false;
+	}
+
+	if ( $style_uri ) {
+		wp_style_add_data( $style_handle_name, 'path', $style_path_norm );
+
+		if ( $is_core_block ) {
+			$rtl_file = str_replace( "{$suffix}.css", "-rtl{$suffix}.css", $style_path_norm );
+		} else {
+			$rtl_file = str_replace( '.css', '-rtl.css', $style_path_norm );
+		}
+
+		if ( is_rtl() &amp;&amp; file_exists( $rtl_file ) ) {
+			wp_style_add_data( $style_handle_name, 'rtl', 'replace' );
+			wp_style_add_data( $style_handle_name, 'suffix', $suffix );
+			wp_style_add_data( $style_handle_name, 'path', $rtl_file );
+		}
+	}
+
+	return $style_handle_name;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/blocks.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/blocks.php#L281">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/blocks.php#L281-L359">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td><span class="since-description">Added <code>$index</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/register_block_style_handle" class="_attribution-link">https://developer.wordpress.org/reference/functions/register_block_style_handle</a>
+  </p>
+</div>

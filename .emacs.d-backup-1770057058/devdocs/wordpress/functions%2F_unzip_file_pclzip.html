@@ -1,0 +1,164 @@
+<h1 class="wp-block-wporg-code-reference-title">_unzip_file_pclzip( <span class="arg-type">string</span> <span class="arg-name">$file</span>, <span class="arg-type">string</span> <span class="arg-name">$to</span>, <span class="arg-type">string[]</span> <span class="arg-name">$needed_dirs</span> = <span class="arg-default">array()</span> ): <span class="return-type">true|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Attempts to unzip an archive using the PclZip library.</p> </section> <section><h2 id="description">Description</h2> <p>This function should not be called directly, use <code>unzip_file()</code> instead.</p> <p>Assumes that <a href="wp_filesystem" rel="function">WP_Filesystem()</a> has already been called and set up.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="unzip_file">unzip_file()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full path and filename of ZIP archive.</span></div></dd>
+<dt>
+<code>$to</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full path on the filesystem to extract archive to.</span></div></dd>
+<dt>
+<code>$needed_dirs</code><span class="type"><span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">A partial list of required folders needed to be created.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True on success, <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1856" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _unzip_file_pclzip( $file, $to, $needed_dirs = array() ) {
+	global $wp_filesystem;
+
+	mbstring_binary_safe_encoding();
+
+	require_once ABSPATH . 'wp-admin/includes/class-pclzip.php';
+
+	$archive = new PclZip( $file );
+
+	$archive_files = $archive-&gt;extract( PCLZIP_OPT_EXTRACT_AS_STRING );
+
+	reset_mbstring_encoding();
+
+	// Is the archive valid?
+	if ( ! is_array( $archive_files ) ) {
+		return new WP_Error( 'incompatible_archive', __( 'Incompatible Archive.' ), $archive-&gt;errorInfo( true ) );
+	}
+
+	if ( 0 === count( $archive_files ) ) {
+		return new WP_Error( 'empty_archive_pclzip', __( 'Empty archive.' ) );
+	}
+
+	$uncompressed_size = 0;
+
+	// Determine any children directories needed (From within the archive).
+	foreach ( $archive_files as $file ) {
+		if ( str_starts_with( $file['filename'], '__MACOSX/' ) ) { // Skip the OS X-created __MACOSX directory.
+			continue;
+		}
+
+		$uncompressed_size += $file['size'];
+
+		$needed_dirs[] = $to . untrailingslashit( $file['folder'] ? $file['filename'] : dirname( $file['filename'] ) );
+	}
+
+	// Enough space to unzip the file and copy its contents, with a 10% buffer.
+	$required_space = $uncompressed_size * 2.1;
+
+	/*
+	 * disk_free_space() could return false. Assume that any falsey value is an error.
+	 * A disk that has zero free bytes has bigger problems.
+	 * Require we have enough space to unzip the file and copy its contents, with a 10% buffer.
+	 */
+	if ( wp_doing_cron() ) {
+		$available_space = function_exists( 'disk_free_space' ) ? @disk_free_space( WP_CONTENT_DIR ) : false;
+
+		if ( $available_space &amp;&amp; ( $required_space &gt; $available_space ) ) {
+			return new WP_Error(
+				'disk_full_unzip_file',
+				__( 'Could not copy files. You may have run out of disk space.' ),
+				compact( 'uncompressed_size', 'available_space' )
+			);
+		}
+	}
+
+	$needed_dirs = array_unique( $needed_dirs );
+
+	foreach ( $needed_dirs as $dir ) {
+		// Check the parent folders of the folders all exist within the creation array.
+		if ( untrailingslashit( $to ) === $dir ) { // Skip over the working directory, we know this exists (or will exist).
+			continue;
+		}
+
+		if ( ! str_contains( $dir, $to ) ) { // If the directory is not within the working directory, skip it.
+			continue;
+		}
+
+		$parent_folder = dirname( $dir );
+
+		while ( ! empty( $parent_folder )
+			&amp;&amp; untrailingslashit( $to ) !== $parent_folder
+			&amp;&amp; ! in_array( $parent_folder, $needed_dirs, true )
+		) {
+			$needed_dirs[] = $parent_folder;
+			$parent_folder = dirname( $parent_folder );
+		}
+	}
+
+	asort( $needed_dirs );
+
+	// Create those directories if need be:
+	foreach ( $needed_dirs as $_dir ) {
+		// Only check to see if the dir exists upon creation failure. Less I/O this way.
+		if ( ! $wp_filesystem-&gt;mkdir( $_dir, FS_CHMOD_DIR ) &amp;&amp; ! $wp_filesystem-&gt;is_dir( $_dir ) ) {
+			return new WP_Error( 'mkdir_failed_pclzip', __( 'Could not create directory.' ), $_dir );
+		}
+	}
+
+	/** This filter is documented in src/wp-admin/includes/file.php */
+	$pre = apply_filters( 'pre_unzip_file', null, $file, $to, $needed_dirs, $required_space );
+
+	if ( null !== $pre ) {
+		return $pre;
+	}
+
+	// Extract the files from the zip.
+	foreach ( $archive_files as $file ) {
+		if ( $file['folder'] ) {
+			continue;
+		}
+
+		if ( str_starts_with( $file['filename'], '__MACOSX/' ) ) { // Don't extract the OS X-created __MACOSX directory files.
+			continue;
+		}
+
+		// Don't extract invalid files:
+		if ( 0 !== validate_file( $file['filename'] ) ) {
+			continue;
+		}
+
+		if ( ! $wp_filesystem-&gt;put_contents( $to . $file['filename'], $file['content'], FS_CHMOD_FILE ) ) {
+			return new WP_Error( 'copy_failed_pclzip', __( 'Could not copy file.' ), $file['filename'] );
+		}
+	}
+
+	/** This action is documented in src/wp-admin/includes/file.php */
+	$result = apply_filters( 'unzip_file', true, $file, $to, $needed_dirs, $required_space );
+
+	unset( $needed_dirs );
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/file.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/file.php#L1856">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/file.php#L1856-L1977">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_unzip_file"><span class="hook-func">apply_filters</span>( ‘pre_unzip_file’, <nobr><span class="arg-type">null|true|WP_Error</span> <span class="arg-name">$result</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$file</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$to</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$needed_dirs</span></nobr>, <nobr><span class="arg-type">float</span> <span class="arg-name">$required_space</span></nobr> )</a></dt>
+<dd>
+<p>Filters archive unzipping to override with a custom process.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/unzip_file"><span class="hook-func">apply_filters</span>( ‘unzip_file’, <nobr><span class="arg-type">true|WP_Error</span> <span class="arg-name">$result</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$file</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$to</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$needed_dirs</span></nobr>, <nobr><span class="arg-type">float</span> <span class="arg-name">$required_space</span></nobr> )</a></dt>
+<dd>
+<p>Filters the result of unzipping an archive.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_unzip_file_pclzip" class="_attribution-link">https://developer.wordpress.org/reference/functions/_unzip_file_pclzip</a>
+  </p>
+</div>

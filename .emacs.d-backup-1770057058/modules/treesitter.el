@@ -1,0 +1,25 @@
+;;; treesitter.el --- tree-sitter config -*- lexical-binding: t; -*-
+(setq treesit-language-source-alist
+      '((python "https://github.com/tree-sitter/tree-sitter-python")
+        (javascript "https://github.com/tree-sitter/tree-sitter-javascript")
+        (typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
+        (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
+        (json "https://github.com/tree-sitter/tree-sitter-json")
+        (css "https://github.com/tree-sitter/tree-sitter-css")
+        (rust "https://github.com/tree-sitter/tree-sitter-rust")
+        (go "https://github.com/tree-sitter/tree-sitter-go")
+        (toml "https://github.com/tree-sitter/tree-sitter-toml")))
+
+(when (treesit-available-p)
+  (add-to-list 'auto-mode-alist '("\\.rs\\'" . rust-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.go\\'" . go-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.ts\\'" . typescript-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.tsx\\'" . tsx-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.py\\'" . python-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.js\\'" . js-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.json\\'" . json-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.css\\'" . css-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.toml\\'" . toml-ts-mode))
+  ;; Spec 06: markdown tree-sitter support
+  (add-to-list 'auto-mode-alist '("\\.md\\'" . markdown-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.markdown\\'" . markdown-ts-mode)))

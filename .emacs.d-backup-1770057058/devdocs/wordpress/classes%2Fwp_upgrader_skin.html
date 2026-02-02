@@ -1,0 +1,370 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Upgrader_Skin {}</h1> <section><p>Generic Skin for the WordPress Upgrader classes. This skin is designed to be extended for specific purposes.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_upgrader_skin/__construct">WP_Upgrader_Skin::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/add_strings">WP_Upgrader_Skin::add_strings</a></td>
+<td>Sets up the strings used in the update process.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/after">WP_Upgrader_Skin::after</a></td>
+<td>Performs an action following an update.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/before">WP_Upgrader_Skin::before</a></td>
+<td>Performs an action before an update.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/bulk_footer">WP_Upgrader_Skin::bulk_footer</a></td>
+<td>Displays the footer following the bulk update process.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/bulk_header">WP_Upgrader_Skin::bulk_header</a></td>
+<td>Displays the header before the bulk update process.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/decrement_update_count">WP_Upgrader_Skin::decrement_update_count</a></td>
+<td>Outputs JavaScript that calls function to decrement the update counts.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/error">WP_Upgrader_Skin::error</a></td>
+<td>Displays an error message about the update.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/feedback">WP_Upgrader_Skin::feedback</a></td>
+<td>Displays a message about the update.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/footer">WP_Upgrader_Skin::footer</a></td>
+<td>Displays the footer following the update process.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/header">WP_Upgrader_Skin::header</a></td>
+<td>Displays the header before the update process.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/hide_process_failed">WP_Upgrader_Skin::hide_process_failed</a></td>
+<td>Hides the `process_failed` error message when updating by uploading a zip file.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/request_filesystem_credentials">WP_Upgrader_Skin::request_filesystem_credentials</a></td>
+<td>Displays a form to the user to request for their FTP/SSH details in order to connect to the filesystem.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/set_result">WP_Upgrader_Skin::set_result</a></td>
+<td>Sets the result of an upgrade.</td>
+</tr>
+<tr class="">
+<td><a href="wp_upgrader_skin/set_upgrader">WP_Upgrader_Skin::set_upgrader</a></td>
+<td>Sets the relationship between the skin being used and the upgrader.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Upgrader_Skin {
+
+	/**
+	 * Holds the upgrader data.
+	 *
+	 * @since 2.8.0
+	 * @var WP_Upgrader
+	 */
+	public $upgrader;
+
+	/**
+	 * Whether header is done.
+	 *
+	 * @since 2.8.0
+	 * @var bool
+	 */
+	public $done_header = false;
+
+	/**
+	 * Whether footer is done.
+	 *
+	 * @since 2.8.0
+	 * @var bool
+	 */
+	public $done_footer = false;
+
+	/**
+	 * Holds the result of an upgrade.
+	 *
+	 * @since 2.8.0
+	 * @var string|bool|WP_Error
+	 */
+	public $result = false;
+
+	/**
+	 * Holds the options of an upgrade.
+	 *
+	 * @since 2.8.0
+	 * @var array
+	 */
+	public $options = array();
+
+	/**
+	 * Constructor.
+	 *
+	 * Sets up the generic skin for the WordPress Upgrader classes.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param array $args Optional. The WordPress upgrader skin arguments to
+	 *                    override default options. Default empty array.
+	 */
+	public function __construct( $args = array() ) {
+		$defaults      = array(
+			'url'     =&gt; '',
+			'nonce'   =&gt; '',
+			'title'   =&gt; '',
+			'context' =&gt; false,
+		);
+		$this-&gt;options = wp_parse_args( $args, $defaults );
+	}
+
+	/**
+	 * Sets the relationship between the skin being used and the upgrader.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param WP_Upgrader $upgrader
+	 */
+	public function set_upgrader( &amp;$upgrader ) {
+		if ( is_object( $upgrader ) ) {
+			$this-&gt;upgrader =&amp; $upgrader;
+		}
+		$this-&gt;add_strings();
+	}
+
+	/**
+	 * Sets up the strings used in the update process.
+	 *
+	 * @since 3.0.0
+	 */
+	public function add_strings() {
+	}
+
+	/**
+	 * Sets the result of an upgrade.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param string|bool|WP_Error $result The result of an upgrade.
+	 */
+	public function set_result( $result ) {
+		$this-&gt;result = $result;
+	}
+
+	/**
+	 * Displays a form to the user to request for their FTP/SSH details in order
+	 * to connect to the filesystem.
+	 *
+	 * @since 2.8.0
+	 * @since 4.6.0 The `$context` parameter default changed from `false` to an empty string.
+	 *
+	 * @see request_filesystem_credentials()
+	 *
+	 * @param bool|WP_Error $error                        Optional. Whether the current request has failed to connect,
+	 *                                                    or an error object. Default false.
+	 * @param string        $context                      Optional. Full path to the directory that is tested
+	 *                                                    for being writable. Default empty.
+	 * @param bool          $allow_relaxed_file_ownership Optional. Whether to allow Group/World writable. Default false.
+	 * @return bool True on success, false on failure.
+	 */
+	public function request_filesystem_credentials( $error = false, $context = '', $allow_relaxed_file_ownership = false ) {
+		$url = $this-&gt;options['url'];
+		if ( ! $context ) {
+			$context = $this-&gt;options['context'];
+		}
+		if ( ! empty( $this-&gt;options['nonce'] ) ) {
+			$url = wp_nonce_url( $url, $this-&gt;options['nonce'] );
+		}
+
+		$extra_fields = array();
+
+		return request_filesystem_credentials( $url, '', $error, $context, $extra_fields, $allow_relaxed_file_ownership );
+	}
+
+	/**
+	 * Displays the header before the update process.
+	 *
+	 * @since 2.8.0
+	 */
+	public function header() {
+		if ( $this-&gt;done_header ) {
+			return;
+		}
+		$this-&gt;done_header = true;
+		echo '&lt;div class="wrap"&gt;';
+		echo '&lt;h1&gt;' . $this-&gt;options['title'] . '&lt;/h1&gt;';
+	}
+
+	/**
+	 * Displays the footer following the update process.
+	 *
+	 * @since 2.8.0
+	 */
+	public function footer() {
+		if ( $this-&gt;done_footer ) {
+			return;
+		}
+		$this-&gt;done_footer = true;
+		echo '&lt;/div&gt;';
+	}
+
+	/**
+	 * Displays an error message about the update.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param string|WP_Error $errors Errors.
+	 */
+	public function error( $errors ) {
+		if ( ! $this-&gt;done_header ) {
+			$this-&gt;header();
+		}
+		if ( is_string( $errors ) ) {
+			$this-&gt;feedback( $errors );
+		} elseif ( is_wp_error( $errors ) &amp;&amp; $errors-&gt;has_errors() ) {
+			foreach ( $errors-&gt;get_error_messages() as $message ) {
+				if ( $errors-&gt;get_error_data() &amp;&amp; is_string( $errors-&gt;get_error_data() ) ) {
+					$this-&gt;feedback( $message . ' ' . esc_html( strip_tags( $errors-&gt;get_error_data() ) ) );
+				} else {
+					$this-&gt;feedback( $message );
+				}
+			}
+		}
+	}
+
+	/**
+	 * Displays a message about the update.
+	 *
+	 * @since 2.8.0
+	 * @since 5.9.0 Renamed `$string` (a PHP reserved keyword) to `$feedback` for PHP 8 named parameter support.
+	 *
+	 * @param string $feedback Message data.
+	 * @param mixed  ...$args  Optional text replacements.
+	 */
+	public function feedback( $feedback, ...$args ) {
+		if ( isset( $this-&gt;upgrader-&gt;strings[ $feedback ] ) ) {
+			$feedback = $this-&gt;upgrader-&gt;strings[ $feedback ];
+		}
+
+		if ( str_contains( $feedback, '%' ) ) {
+			if ( $args ) {
+				$args     = array_map( 'strip_tags', $args );
+				$args     = array_map( 'esc_html', $args );
+				$feedback = vsprintf( $feedback, $args );
+			}
+		}
+		if ( empty( $feedback ) ) {
+			return;
+		}
+		show_message( $feedback );
+	}
+
+	/**
+	 * Performs an action before an update.
+	 *
+	 * @since 2.8.0
+	 */
+	public function before() {}
+
+	/**
+	 * Performs an action following an update.
+	 *
+	 * @since 2.8.0
+	 */
+	public function after() {}
+
+	/**
+	 * Outputs JavaScript that calls function to decrement the update counts.
+	 *
+	 * @since 3.9.0
+	 *
+	 * @param string $type Type of update count to decrement. Likely values include 'plugin',
+	 *                     'theme', 'translation', etc.
+	 */
+	protected function decrement_update_count( $type ) {
+		if ( ! $this-&gt;result || is_wp_error( $this-&gt;result ) || 'up_to_date' === $this-&gt;result ) {
+			return;
+		}
+
+		if ( defined( 'IFRAME_REQUEST' ) ) {
+			echo '&lt;script type="text/javascript"&gt;
+					if ( window.postMessage &amp;&amp; JSON ) {
+						window.parent.postMessage(
+							JSON.stringify( {
+								action: "decrementUpdateCount",
+								upgradeType: "' . $type . '"
+							} ),
+							window.location.protocol + "//" + window.location.hostname
+								+ ( "" !== window.location.port ? ":" + window.location.port : "" )
+						);
+					}
+				&lt;/script&gt;';
+		} else {
+			echo '&lt;script type="text/javascript"&gt;
+					(function( wp ) {
+						if ( wp &amp;&amp; wp.updates &amp;&amp; wp.updates.decrementCount ) {
+							wp.updates.decrementCount( "' . $type . '" );
+						}
+					})( window.wp );
+				&lt;/script&gt;';
+		}
+	}
+
+	/**
+	 * Displays the header before the bulk update process.
+	 *
+	 * @since 3.0.0
+	 */
+	public function bulk_header() {}
+
+	/**
+	 * Displays the footer following the bulk update process.
+	 *
+	 * @since 3.0.0
+	 */
+	public function bulk_footer() {}
+
+	/**
+	 * Hides the `process_failed` error message when updating by uploading a zip file.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param WP_Error $wp_error WP_Error object.
+	 * @return bool True if the error should be hidden, false otherwise.
+	 */
+	public function hide_process_failed( $wp_error ) {
+		return false;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-upgrader-skin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-upgrader-skin.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-upgrader-skin.php#L17-L296">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td><span class="since-description">Moved to its own file from wp-admin/includes/class-wp-upgrader-skins.php.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_upgrader_skin" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_upgrader_skin</a>
+  </p>
+</div>

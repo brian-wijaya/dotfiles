@@ -1,0 +1,236 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_delete_post( <span class="arg-type">int</span> <span class="arg-name">$post_id</span>, <span class="arg-type">bool</span> <span class="arg-name">$force_delete</span> = <span class="arg-default">false</span> ): <span class="return-type"><a href="../classes/wp_post" rel="class">WP_Post</a>|false|null</span>
+</h1> <section><p>Trashes or deletes a post or page.</p> </section> <section><h2 id="description">Description</h2> <p>When the post and page is permanently deleted, everything that is tied to it is deleted also. This includes comments, post meta fields, and terms associated with the post.</p> <p>The post or page is moved to Trash instead of permanently deleted unless Trash is disabled, item is already in the Trash, or $force_delete is true.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_delete_attachment">wp_delete_attachment()</a></li> <li><a href="wp_trash_post">wp_trash_post()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID. Default 0.</span></div></dd>
+<dt>
+<code>$force_delete</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to bypass Trash and force deletion.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../classes/wp_post" rel="class">WP_Post</a>|false|null</span> Post data on success, false or null on failure.</section> <section><h2 id="more-information">More Information</h2> <p><a href="wp_delete_post" rel="function">wp_delete_post()</a> automatically reverts to <a title="Function Reference/wp trash post" href="https://codex.wordpress.org/Function_Reference/wp_trash_post"><tt>wp_trash_post()</tt></a> if <tt>$force_delete</tt> is <i>false</i>, the <tt>post_type</tt> of <tt>$postid</tt> is <i>page</i> or <i>post</i>, <tt>$postid</tt> is not already in the trash <b>and</b> if <a title="Editing wp-config.php" href="https://wordpress.org/support/article/editing-wp-config-php/">that trash feature</a> enabled (which it it is by default).</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3656" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_delete_post( $post_id = 0, $force_delete = false ) {
+	global $wpdb;
+
+	$post = $wpdb-&gt;get_row( $wpdb-&gt;prepare( "SELECT * FROM $wpdb-&gt;posts WHERE ID = %d", $post_id ) );
+
+	if ( ! $post ) {
+		return $post;
+	}
+
+	$post = get_post( $post );
+
+	if ( ! $force_delete
+		&amp;&amp; ( 'post' === $post-&gt;post_type || 'page' === $post-&gt;post_type )
+		&amp;&amp; 'trash' !== get_post_status( $post_id ) &amp;&amp; EMPTY_TRASH_DAYS
+	) {
+		return wp_trash_post( $post_id );
+	}
+
+	if ( 'attachment' === $post-&gt;post_type ) {
+		return wp_delete_attachment( $post_id, $force_delete );
+	}
+
+	/**
+	 * Filters whether a post deletion should take place.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param WP_Post|false|null $delete       Whether to go forward with deletion.
+	 * @param WP_Post            $post         Post object.
+	 * @param bool               $force_delete Whether to bypass the Trash.
+	 */
+	$check = apply_filters( 'pre_delete_post', null, $post, $force_delete );
+	if ( null !== $check ) {
+		return $check;
+	}
+
+	/**
+	 * Fires before a post is deleted, at the start of wp_delete_post().
+	 *
+	 * @since 3.2.0
+	 * @since 5.5.0 Added the `$post` parameter.
+	 *
+	 * @see wp_delete_post()
+	 *
+	 * @param int     $post_id Post ID.
+	 * @param WP_Post $post    Post object.
+	 */
+	do_action( 'before_delete_post', $post_id, $post );
+
+	delete_post_meta( $post_id, '_wp_trash_meta_status' );
+	delete_post_meta( $post_id, '_wp_trash_meta_time' );
+
+	wp_delete_object_term_relationships( $post_id, get_object_taxonomies( $post-&gt;post_type ) );
+
+	$parent_data  = array( 'post_parent' =&gt; $post-&gt;post_parent );
+	$parent_where = array( 'post_parent' =&gt; $post_id );
+
+	if ( is_post_type_hierarchical( $post-&gt;post_type ) ) {
+		// Point children of this page to its parent, also clean the cache of affected children.
+		$children_query = $wpdb-&gt;prepare(
+			"SELECT * FROM $wpdb-&gt;posts WHERE post_parent = %d AND post_type = %s",
+			$post_id,
+			$post-&gt;post_type
+		);
+
+		$children = $wpdb-&gt;get_results( $children_query );
+
+		if ( $children ) {
+			$wpdb-&gt;update( $wpdb-&gt;posts, $parent_data, $parent_where + array( 'post_type' =&gt; $post-&gt;post_type ) );
+		}
+	}
+
+	// Do raw query. wp_get_post_revisions() is filtered.
+	$revision_ids = $wpdb-&gt;get_col(
+		$wpdb-&gt;prepare( "SELECT ID FROM $wpdb-&gt;posts WHERE post_parent = %d AND post_type = 'revision'", $post_id )
+	);
+
+	// Use wp_delete_post (via wp_delete_post_revision) again. Ensures any meta/misplaced data gets cleaned up.
+	foreach ( $revision_ids as $revision_id ) {
+		wp_delete_post_revision( $revision_id );
+	}
+
+	// Point all attachments to this post up one level.
+	$wpdb-&gt;update( $wpdb-&gt;posts, $parent_data, $parent_where + array( 'post_type' =&gt; 'attachment' ) );
+
+	wp_defer_comment_counting( true );
+
+	$comment_ids = $wpdb-&gt;get_col(
+		$wpdb-&gt;prepare( "SELECT comment_ID FROM $wpdb-&gt;comments WHERE comment_post_ID = %d ORDER BY comment_ID DESC", $post_id )
+	);
+
+	foreach ( $comment_ids as $comment_id ) {
+		wp_delete_comment( $comment_id, true );
+	}
+
+	wp_defer_comment_counting( false );
+
+	$post_meta_ids = $wpdb-&gt;get_col(
+		$wpdb-&gt;prepare( "SELECT meta_id FROM $wpdb-&gt;postmeta WHERE post_id = %d ", $post_id )
+	);
+
+	foreach ( $post_meta_ids as $mid ) {
+		delete_metadata_by_mid( 'post', $mid );
+	}
+
+	/**
+	 * Fires immediately before a post is deleted from the database.
+	 *
+	 * The dynamic portion of the hook name, `$post-&gt;post_type`, refers to
+	 * the post type slug.
+	 *
+	 * @since 6.6.0
+	 *
+	 * @param int     $post_id Post ID.
+	 * @param WP_Post $post    Post object.
+	 */
+	do_action( "delete_post_{$post-&gt;post_type}", $post_id, $post );
+
+	/**
+	 * Fires immediately before a post is deleted from the database.
+	 *
+	 * @since 1.2.0
+	 * @since 5.5.0 Added the `$post` parameter.
+	 *
+	 * @param int     $post_id Post ID.
+	 * @param WP_Post $post    Post object.
+	 */
+	do_action( 'delete_post', $post_id, $post );
+
+	$result = $wpdb-&gt;delete( $wpdb-&gt;posts, array( 'ID' =&gt; $post_id ) );
+	if ( ! $result ) {
+		return false;
+	}
+
+	/**
+	 * Fires immediately after a post is deleted from the database.
+	 *
+	 * The dynamic portion of the hook name, `$post-&gt;post_type`, refers to
+	 * the post type slug.
+	 *
+	 * @since 6.6.0
+	 *
+	 * @param int     $post_id Post ID.
+	 * @param WP_Post $post    Post object.
+	 */
+	do_action( "deleted_post_{$post-&gt;post_type}", $post_id, $post );
+
+	/**
+	 * Fires immediately after a post is deleted from the database.
+	 *
+	 * @since 2.2.0
+	 * @since 5.5.0 Added the `$post` parameter.
+	 *
+	 * @param int     $post_id Post ID.
+	 * @param WP_Post $post    Post object.
+	 */
+	do_action( 'deleted_post', $post_id, $post );
+
+	clean_post_cache( $post );
+
+	if ( is_post_type_hierarchical( $post-&gt;post_type ) &amp;&amp; $children ) {
+		foreach ( $children as $child ) {
+			clean_post_cache( $child );
+		}
+	}
+
+	wp_clear_scheduled_hook( 'publish_future_post', array( $post_id ) );
+
+	/**
+	 * Fires after a post is deleted, at the conclusion of wp_delete_post().
+	 *
+	 * @since 3.2.0
+	 * @since 5.5.0 Added the `$post` parameter.
+	 *
+	 * @see wp_delete_post()
+	 *
+	 * @param int     $post_id Post ID.
+	 * @param WP_Post $post    Post object.
+	 */
+	do_action( 'after_delete_post', $post_id, $post );
+
+	return $post;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L3656">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L3656-L3838">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/after_delete_post"><span class="hook-func">do_action</span>( ‘after_delete_post’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a post is deleted, at the conclusion of <a href="wp_delete_post" rel="function">wp_delete_post()</a> .</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/before_delete_post"><span class="hook-func">do_action</span>( ‘before_delete_post’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Fires before a post is deleted, at the start of <a href="wp_delete_post" rel="function">wp_delete_post()</a> .</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_post"><span class="hook-func">do_action</span>( ‘deleted_post’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a post is deleted from the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_post_post-post_type"><span class="hook-func">do_action</span>( “deleted_post_{$post-&gt;post_type}”, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a post is deleted from the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_post"><span class="hook-func">do_action</span>( ‘delete_post’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before a post is deleted from the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_post_post-post_type"><span class="hook-func">do_action</span>( “delete_post_{$post-&gt;post_type}”, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before a post is deleted from the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_delete_post"><span class="hook-func">apply_filters</span>( ‘pre_delete_post’, <nobr><span class="arg-type">WP_Post|false|null</span> <span class="arg-name">$delete</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$force_delete</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether a post deletion should take place.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.0.0/">1.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_delete_post" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_delete_post</a>
+  </p>
+</div>

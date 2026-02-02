@@ -1,0 +1,64 @@
+<h1 class="wp-block-wporg-code-reference-title">_register_remote_theme_patterns()</h1> <section><p>Registers patterns from Pattern Directory provided by a theme’s <code>theme.json</code> file.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="298" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _register_remote_theme_patterns() {
+	/** This filter is documented in wp-includes/block-patterns.php */
+	if ( ! apply_filters( 'should_load_remote_block_patterns', true ) ) {
+		return;
+	}
+
+	if ( ! wp_theme_has_theme_json() ) {
+		return;
+	}
+
+	$pattern_settings = wp_get_theme_directory_pattern_slugs();
+	if ( empty( $pattern_settings ) ) {
+		return;
+	}
+
+	$request         = new WP_REST_Request( 'GET', '/wp/v2/pattern-directory/patterns' );
+	$request['slug'] = $pattern_settings;
+	$response        = rest_do_request( $request );
+	if ( $response-&gt;is_error() ) {
+		return;
+	}
+	$patterns          = $response-&gt;get_data();
+	$patterns_registry = WP_Block_Patterns_Registry::get_instance();
+	foreach ( $patterns as $pattern ) {
+		$pattern['source']  = 'pattern-directory/theme';
+		$normalized_pattern = wp_normalize_remote_block_pattern( $pattern );
+		$pattern_name       = sanitize_title( $normalized_pattern['title'] );
+		// Some patterns might be already registered as core patterns with the `core` prefix.
+		$is_registered = $patterns_registry-&gt;is_registered( $pattern_name ) || $patterns_registry-&gt;is_registered( "core/$pattern_name" );
+		if ( ! $is_registered ) {
+			register_block_pattern( $pattern_name, $normalized_pattern );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/block-patterns.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/block-patterns.php#L298">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/block-patterns.php#L298-L331">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/should_load_remote_block_patterns"><span class="hook-func">apply_filters</span>( ‘should_load_remote_block_patterns’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$should_load_remote</span></nobr> )</a></dt>
+<dd>
+<p>Filter to disable remote block patterns.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description">Add <code>'pattern-directory/theme'</code> to the pattern’s <code>'source'</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.2.0/">6.2.0</a></td>
+<td><span class="since-description">Normalized the pattern from the API (snake_case) to the format expected by <code>register_block_pattern()</code> (camelCase).</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.0.0/">6.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_register_remote_theme_patterns" class="_attribution-link">https://developer.wordpress.org/reference/functions/_register_remote_theme_patterns</a>
+  </p>
+</div>

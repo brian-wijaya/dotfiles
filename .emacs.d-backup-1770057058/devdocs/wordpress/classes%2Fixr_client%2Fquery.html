@@ -1,0 +1,106 @@
+<h1 class="wp-block-wporg-code-reference-title">IXR_Client::query( <span class="arg-name">$args</span> ): <span class="return-type">bool</span>
+</h1>  <section><h2 id="return">Return</h2> <span class="return-type">bool</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="68" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function query( ...$args )
+{
+    $method = array_shift($args);
+    $request = new IXR_Request($method, $args);
+    $length = $request-&gt;getLength();
+    $xml = $request-&gt;getXml();
+    $r = "\r\n";
+    $request  = "POST {$this-&gt;path} HTTP/1.0$r";
+
+    // Merged from WP #8145 - allow custom headers
+    $this-&gt;headers['Host']          = $this-&gt;server;
+    $this-&gt;headers['Content-Type']  = 'text/xml';
+    $this-&gt;headers['User-Agent']    = $this-&gt;useragent;
+    $this-&gt;headers['Content-Length']= $length;
+
+    foreach( $this-&gt;headers as $header =&gt; $value ) {
+        $request .= "{$header}: {$value}{$r}";
+    }
+    $request .= $r;
+
+    $request .= $xml;
+
+    // Now send the request
+    if ($this-&gt;debug) {
+        echo '&lt;pre class="ixr_request"&gt;'.htmlspecialchars($request)."\n&lt;/pre&gt;\n\n";
+    }
+
+    if ($this-&gt;timeout) {
+        $fp = @fsockopen($this-&gt;server, $this-&gt;port, $errno, $errstr, $this-&gt;timeout);
+    } else {
+        $fp = @fsockopen($this-&gt;server, $this-&gt;port, $errno, $errstr);
+    }
+    if (!$fp) {
+        $this-&gt;error = new IXR_Error(-32300, 'transport error - could not open socket');
+        return false;
+    }
+    fputs($fp, $request);
+    $contents = '';
+    $debugContents = '';
+    $gotFirstLine = false;
+    $gettingHeaders = true;
+    while (!feof($fp)) {
+        $line = fgets($fp, 4096);
+        if (!$gotFirstLine) {
+            // Check line for '200'
+            if (strstr($line, '200') === false) {
+                $this-&gt;error = new IXR_Error(-32300, 'transport error - HTTP status code was not 200');
+                return false;
+            }
+            $gotFirstLine = true;
+        }
+        if (trim($line) == '') {
+            $gettingHeaders = false;
+        }
+        if (!$gettingHeaders) {
+        	// merged from WP #12559 - remove trim
+            $contents .= $line;
+        }
+        if ($this-&gt;debug) {
+        	$debugContents .= $line;
+        }
+    }
+    if ($this-&gt;debug) {
+        echo '&lt;pre class="ixr_response"&gt;'.htmlspecialchars($debugContents)."\n&lt;/pre&gt;\n\n";
+    }
+
+    // Now parse what we've got back
+    $this-&gt;message = new IXR_Message($contents);
+    if (!$this-&gt;message-&gt;parse()) {
+        // XML error
+        $this-&gt;error = new IXR_Error(-32700, 'parse error. not well formed');
+        return false;
+    }
+
+    // Is the message a fault?
+    if ($this-&gt;message-&gt;messageType == 'fault') {
+        $this-&gt;error = new IXR_Error($this-&gt;message-&gt;faultCode, $this-&gt;message-&gt;faultString);
+        return false;
+    }
+
+    // Message must be OK
+    return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ixr/class-ixr-client.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/IXR/class-IXR-client.php#L68">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/IXR/class-IXR-client.php#L68-L150">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">Formalized the existing <code>...$args</code> parameter by adding it to the function signature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/ixr_client/query" class="_attribution-link">https://developer.wordpress.org/reference/classes/ixr_client/query</a>
+  </p>
+</div>

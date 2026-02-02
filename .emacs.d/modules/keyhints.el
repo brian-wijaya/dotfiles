@@ -87,3 +87,18 @@
   (add-hook 'evil-normal-state-entry-hook #'bw/keyhints-update)
   (add-hook 'evil-insert-state-entry-hook #'bw/keyhints-update)
   (add-hook 'evil-visual-state-entry-hook #'bw/keyhints-update))
+
+;; Mode-specific hooks for robustness
+(with-eval-after-load 'magit
+  (add-hook 'magit-mode-hook #'bw/keyhints-update))
+(with-eval-after-load 'vterm
+  (add-hook 'vterm-mode-hook #'bw/keyhints-update))
+(add-hook 'dired-mode-hook #'bw/keyhints-update)
+
+;; Force update after which-key cache rebuild
+(with-eval-after-load 'which-key
+  (advice-add 'which-key--update :after #'bw/keyhints-update))
+
+;; Handle transient keymaps (magit popups, etc.)
+(with-eval-after-load 'transient
+  (add-hook 'transient-exit-hook #'bw/keyhints-update))

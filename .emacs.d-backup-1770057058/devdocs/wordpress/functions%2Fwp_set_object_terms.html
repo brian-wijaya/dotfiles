@@ -1,0 +1,207 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_set_object_terms( <span class="arg-type">int</span> <span class="arg-name">$object_id</span>, <span class="arg-type">string|int|array</span> <span class="arg-name">$terms</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span>, <span class="arg-type">bool</span> <span class="arg-name">$append</span> = <span class="arg-default">false</span> ): <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Creates term and taxonomy relationships.</p> </section> <section><h2 id="description">Description</h2> <p>Relates an object (post, link, etc.) to a term and taxonomy type. Creates the term and taxonomy relationship if it doesn’t already exist. Creates a term if it doesn’t exist (using the slug).</p> <p>A relationship means that the term is grouped in or belongs to the taxonomy.<br>A term has no meaning until it is given context by defining which taxonomy it exists under.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$object_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The object to relate to.</span></div></dd>
+<dt>
+<code>$terms</code><span class="type"><span class="string">string</span>|<span class="int">int</span>|<span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">A single term slug, single term ID, or array of either term slugs or IDs.<br> Will replace all existing related terms in this taxonomy. Passing an empty array will remove all related terms.</span></div></dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The context in which to relate the term to the object.</span></div></dd>
+<dt>
+<code>$append</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">If false will delete difference of terms. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Term taxonomy IDs of the affected terms or <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="more-information">More Information</h2> <p>For parameter <code>$terms</code>, integers are interpreted as tag IDs. Some functions may return term_ids as strings which will be interpreted as slugs consisting of numeric characters.</p> <p>For Return:</p> <ul class="wp-block-list"> <li>(array) An array of the terms ( as term_taxonomy_ids ! ) affected if successful</li> <li>(array) An empty array if the $terms argument was NULL or empty – successmessage for the removing of the term</li> <li>(<a href="../classes/wp_error" rel="class">WP_Error</a>) The WordPress Error object on invalid taxonomy (‘invalid_taxonomy’).</li> <li>(string) The first offending term if a term given in the $terms parameter is named incorrectly. (Invalid term ids are accepted and inserted).</li> </ul> <p>This function <b>does not check</b> if there is a relationship between the object (=post type) and the taxonomy (like post_tag, category or custom taxonomy). Because of that, any existing term will be paired with the object, whether or not there is a connection between the object and the taxonomy (of this particular term)!! ( <a class="external text" href="http://www.wp-entwickler.at/vorsicht-beim-setzen-von-terms-mit-wp-set-object-terms/" rel="nofollow">Further information in <b>german</b></a>)</p> <p>Perhaps the <a title="Function Reference/wp set post terms" href="wp_set_post_terms">wp_set_post_terms()</a> is a more useful function, since it checks the values​​, converting taxonomies separated by commas and validating hierarchical terms in integers.</p> <p>It may be confusing but the returned array consists of <b>term_taxonomy_ids</b> instead of term_ids.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2799" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_set_object_terms( $object_id, $terms, $taxonomy, $append = false ) {
+	global $wpdb;
+
+	$object_id = (int) $object_id;
+
+	if ( ! taxonomy_exists( $taxonomy ) ) {
+		return new WP_Error( 'invalid_taxonomy', __( 'Invalid taxonomy.' ) );
+	}
+
+	if ( empty( $terms ) ) {
+		$terms = array();
+	} elseif ( ! is_array( $terms ) ) {
+		$terms = array( $terms );
+	}
+
+	if ( ! $append ) {
+		$old_tt_ids = wp_get_object_terms(
+			$object_id,
+			$taxonomy,
+			array(
+				'fields'                 =&gt; 'tt_ids',
+				'orderby'                =&gt; 'none',
+				'update_term_meta_cache' =&gt; false,
+			)
+		);
+	} else {
+		$old_tt_ids = array();
+	}
+
+	$tt_ids     = array();
+	$new_tt_ids = array();
+
+	foreach ( (array) $terms as $term ) {
+		if ( '' === trim( $term ) ) {
+			continue;
+		}
+
+		$term_info = term_exists( $term, $taxonomy );
+
+		if ( ! $term_info ) {
+			// Skip if a non-existent term ID is passed.
+			if ( is_int( $term ) ) {
+				continue;
+			}
+
+			$term_info = wp_insert_term( $term, $taxonomy );
+		}
+
+		if ( is_wp_error( $term_info ) ) {
+			return $term_info;
+		}
+
+		$tt_id    = $term_info['term_taxonomy_id'];
+		$tt_ids[] = $tt_id;
+
+		if ( $wpdb-&gt;get_var( $wpdb-&gt;prepare( "SELECT term_taxonomy_id FROM $wpdb-&gt;term_relationships WHERE object_id = %d AND term_taxonomy_id = %d", $object_id, $tt_id ) ) ) {
+			continue;
+		}
+
+		/**
+		 * Fires immediately before an object-term relationship is added.
+		 *
+		 * @since 2.9.0
+		 * @since 4.7.0 Added the `$taxonomy` parameter.
+		 *
+		 * @param int    $object_id Object ID.
+		 * @param int    $tt_id     Term taxonomy ID.
+		 * @param string $taxonomy  Taxonomy slug.
+		 */
+		do_action( 'add_term_relationship', $object_id, $tt_id, $taxonomy );
+
+		$wpdb-&gt;insert(
+			$wpdb-&gt;term_relationships,
+			array(
+				'object_id'        =&gt; $object_id,
+				'term_taxonomy_id' =&gt; $tt_id,
+			)
+		);
+
+		/**
+		 * Fires immediately after an object-term relationship is added.
+		 *
+		 * @since 2.9.0
+		 * @since 4.7.0 Added the `$taxonomy` parameter.
+		 *
+		 * @param int    $object_id Object ID.
+		 * @param int    $tt_id     Term taxonomy ID.
+		 * @param string $taxonomy  Taxonomy slug.
+		 */
+		do_action( 'added_term_relationship', $object_id, $tt_id, $taxonomy );
+
+		$new_tt_ids[] = $tt_id;
+	}
+
+	if ( $new_tt_ids ) {
+		wp_update_term_count( $new_tt_ids, $taxonomy );
+	}
+
+	if ( ! $append ) {
+		$delete_tt_ids = array_diff( $old_tt_ids, $tt_ids );
+
+		if ( $delete_tt_ids ) {
+			$in_delete_tt_ids = "'" . implode( "', '", $delete_tt_ids ) . "'";
+			$delete_term_ids  = $wpdb-&gt;get_col( $wpdb-&gt;prepare( "SELECT tt.term_id FROM $wpdb-&gt;term_taxonomy AS tt WHERE tt.taxonomy = %s AND tt.term_taxonomy_id IN ($in_delete_tt_ids)", $taxonomy ) );
+			$delete_term_ids  = array_map( 'intval', $delete_term_ids );
+
+			$remove = wp_remove_object_terms( $object_id, $delete_term_ids, $taxonomy );
+			if ( is_wp_error( $remove ) ) {
+				return $remove;
+			}
+		}
+	}
+
+	$t = get_taxonomy( $taxonomy );
+
+	if ( ! $append &amp;&amp; isset( $t-&gt;sort ) &amp;&amp; $t-&gt;sort ) {
+		$values     = array();
+		$term_order = 0;
+
+		$final_tt_ids = wp_get_object_terms(
+			$object_id,
+			$taxonomy,
+			array(
+				'fields'                 =&gt; 'tt_ids',
+				'update_term_meta_cache' =&gt; false,
+			)
+		);
+
+		foreach ( $tt_ids as $tt_id ) {
+			if ( in_array( (int) $tt_id, $final_tt_ids, true ) ) {
+				$values[] = $wpdb-&gt;prepare( '(%d, %d, %d)', $object_id, $tt_id, ++$term_order );
+			}
+		}
+
+		if ( $values ) {
+			if ( false === $wpdb-&gt;query( "INSERT INTO $wpdb-&gt;term_relationships (object_id, term_taxonomy_id, term_order) VALUES " . implode( ',', $values ) . ' ON DUPLICATE KEY UPDATE term_order = VALUES(term_order)' ) ) {
+				return new WP_Error( 'db_insert_error', __( 'Could not insert term relationship into the database.' ), $wpdb-&gt;last_error );
+			}
+		}
+	}
+
+	wp_cache_delete( $object_id, $taxonomy . '_relationships' );
+	wp_cache_set_terms_last_changed();
+
+	/**
+	 * Fires after an object's terms have been set.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param int    $object_id  Object ID.
+	 * @param array  $terms      An array of object term IDs or slugs.
+	 * @param array  $tt_ids     An array of term taxonomy IDs.
+	 * @param string $taxonomy   Taxonomy slug.
+	 * @param bool   $append     Whether to append new terms to the old terms.
+	 * @param array  $old_tt_ids Old array of term taxonomy IDs.
+	 */
+	do_action( 'set_object_terms', $object_id, $terms, $tt_ids, $taxonomy, $append, $old_tt_ids );
+
+	return $tt_ids;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L2799">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L2799-L2958">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/added_term_relationship"><span class="hook-func">do_action</span>( ‘added_term_relationship’, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$tt_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after an object-term relationship is added.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/add_term_relationship"><span class="hook-func">do_action</span>( ‘add_term_relationship’, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$tt_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before an object-term relationship is added.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/set_object_terms"><span class="hook-func">do_action</span>( ‘set_object_terms’, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$terms</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$tt_ids</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$append</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$old_tt_ids</span></nobr> )</a></dt>
+<dd>
+<p>Fires after an object’s terms have been set.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_set_object_terms" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_set_object_terms</a>
+  </p>
+</div>

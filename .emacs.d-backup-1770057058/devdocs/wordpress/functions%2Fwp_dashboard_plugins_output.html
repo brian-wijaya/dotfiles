@@ -1,0 +1,106 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_dashboard_plugins_output( <span class="arg-type">string</span> <span class="arg-name">$rss</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> )</h1> <section><p>Display plugins text for the WordPress news widget.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$rss</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The RSS feed URL.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of arguments for this RSS feed.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1328" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_dashboard_plugins_output( $rss, $args = array() ) {
+	_deprecated_function( __FUNCTION__, '4.8.0' );
+
+	// Plugin feeds plus link to install them.
+	$popular = fetch_feed( $args['url']['popular'] );
+
+	if ( false === $plugin_slugs = get_transient( 'plugin_slugs' ) ) {
+		$plugin_slugs = array_keys( get_plugins() );
+		set_transient( 'plugin_slugs', $plugin_slugs, DAY_IN_SECONDS );
+	}
+
+	echo '&lt;ul&gt;';
+
+	foreach ( array( $popular ) as $feed ) {
+		if ( is_wp_error( $feed ) || ! $feed-&gt;get_item_quantity() )
+			continue;
+
+		$items = $feed-&gt;get_items(0, 5);
+
+		// Pick a random, non-installed plugin.
+		while ( true ) {
+			// Abort this foreach loop iteration if there's no plugins left of this type.
+			if ( 0 === count($items) )
+				continue 2;
+
+			$item_key = array_rand($items);
+			$item = $items[$item_key];
+
+			list($link, $frag) = explode( '#', $item-&gt;get_link() );
+
+			$link = esc_url($link);
+			if ( preg_match( '|/([^/]+?)/?$|', $link, $matches ) )
+				$slug = $matches[1];
+			else {
+				unset( $items[$item_key] );
+				continue;
+			}
+
+			// Is this random plugin's slug already installed? If so, try again.
+			reset( $plugin_slugs );
+			foreach ( $plugin_slugs as $plugin_slug ) {
+				if ( str_starts_with( $plugin_slug, $slug ) ) {
+					unset( $items[$item_key] );
+					continue 2;
+				}
+			}
+
+			// If we get to this point, then the random plugin isn't installed and we can stop the while().
+			break;
+		}
+
+		// Eliminate some common badly formed plugin descriptions.
+		while ( ( null !== $item_key = array_rand($items) ) &amp;&amp; str_contains( $items[$item_key]-&gt;get_description(), 'Plugin Name:' ) )
+			unset($items[$item_key]);
+
+		if ( !isset($items[$item_key]) )
+			continue;
+
+		$raw_title = $item-&gt;get_title();
+
+		$ilink = wp_nonce_url('plugin-install.php?tab=plugin-information&amp;plugin=' . $slug, 'install-plugin_' . $slug) . '&amp;amp;TB_iframe=true&amp;amp;width=600&amp;amp;height=800';
+		echo '&lt;li class="dashboard-news-plugin"&gt;&lt;span&gt;' . __( 'Popular Plugin' ) . ':&lt;/span&gt; ' . esc_html( $raw_title ) .
+			'&amp;nbsp;&lt;a href="' . $ilink . '" class="thickbox open-plugin-details-modal" aria-label="' .
+			/* translators: %s: Plugin name. */
+			esc_attr( sprintf( _x( 'Install %s', 'plugin' ), $raw_title ) ) . '"&gt;(' . __( 'Install' ) . ')&lt;/a&gt;&lt;/li&gt;';
+
+		$feed-&gt;__destruct();
+		unset( $feed );
+	}
+
+	echo '&lt;/ul&gt;';
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/deprecated.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/deprecated.php#L1328">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/deprecated.php#L1328-L1399">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.8.0/">4.8.0</a></td>
+<td>This function has been deprecated.</td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_dashboard_plugins_output" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_dashboard_plugins_output</a>
+  </p>
+</div>

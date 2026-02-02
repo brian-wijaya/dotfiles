@@ -1,0 +1,119 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Pattern_Directory_Controller::get_items( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Search and retrieve block patterns metadata</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="89" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_items( $request ) {
+	$valid_query_args = array(
+		'offset'   =&gt; true,
+		'order'    =&gt; true,
+		'orderby'  =&gt; true,
+		'page'     =&gt; true,
+		'per_page' =&gt; true,
+		'search'   =&gt; true,
+		'slug'     =&gt; true,
+	);
+	$query_args       = array_intersect_key( $request-&gt;get_params(), $valid_query_args );
+
+	$query_args['locale']             = get_user_locale();
+	$query_args['wp-version']         = wp_get_wp_version();
+	$query_args['pattern-categories'] = isset( $request['category'] ) ? $request['category'] : false;
+	$query_args['pattern-keywords']   = isset( $request['keyword'] ) ? $request['keyword'] : false;
+
+	$query_args = array_filter( $query_args );
+
+	$transient_key = $this-&gt;get_transient_key( $query_args );
+
+	/*
+	 * Use network-wide transient to improve performance. The locale is the only site
+	 * configuration that affects the response, and it's included in the transient key.
+	 */
+	$raw_patterns = get_site_transient( $transient_key );
+
+	if ( ! $raw_patterns ) {
+		$api_url = 'https://api.wordpress.org/patterns/1.0/?' . build_query( $query_args );
+		if ( wp_http_supports( array( 'ssl' ) ) ) {
+			$api_url = set_url_scheme( $api_url, 'https' );
+		}
+
+		/*
+		 * Default to a short TTL, to mitigate cache stampedes on high-traffic sites.
+		 * This assumes that most errors will be short-lived, e.g., packet loss that causes the
+		 * first request to fail, but a follow-up one will succeed. The value should be high
+		 * enough to avoid stampedes, but low enough to not interfere with users manually
+		 * re-trying a failed request.
+		 */
+		$cache_ttl      = 5;
+		$wporg_response = wp_remote_get( $api_url );
+		$raw_patterns   = json_decode( wp_remote_retrieve_body( $wporg_response ) );
+
+		if ( is_wp_error( $wporg_response ) ) {
+			$raw_patterns = $wporg_response;
+
+		} elseif ( ! is_array( $raw_patterns ) ) {
+			// HTTP request succeeded, but response data is invalid.
+			$raw_patterns = new WP_Error(
+				'pattern_api_failed',
+				sprintf(
+					/* translators: %s: Support forums URL. */
+					__( 'An unexpected error occurred. Something may be wrong with WordPress.org or this server&amp;#8217;s configuration. If you continue to have problems, please try the &lt;a href="%s"&gt;support forums&lt;/a&gt;.' ),
+					__( 'https://wordpress.org/support/forums/' )
+				),
+				array(
+					'response' =&gt; wp_remote_retrieve_body( $wporg_response ),
+				)
+			);
+
+		} else {
+			// Response has valid data.
+			$cache_ttl = HOUR_IN_SECONDS;
+		}
+
+		set_site_transient( $transient_key, $raw_patterns, $cache_ttl );
+	}
+
+	if ( is_wp_error( $raw_patterns ) ) {
+		$raw_patterns-&gt;add_data( array( 'status' =&gt; 500 ) );
+
+		return $raw_patterns;
+	}
+
+	$response = array();
+
+	if ( $raw_patterns ) {
+		foreach ( $raw_patterns as $pattern ) {
+			$response[] = $this-&gt;prepare_response_for_collection(
+				$this-&gt;prepare_item_for_response( $pattern, $request )
+			);
+		}
+	}
+
+	return new WP_REST_Response( $response );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-pattern-directory-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-pattern-directory-controller.php#L89">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-pattern-directory-controller.php#L89-L175">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.2.0/">6.2.0</a></td>
+<td><span class="since-description">Added <code>'per_page'</code>, <code>'page'</code>, <code>'offset'</code>, <code>'order'</code>, and <code>'orderby'</code> to request.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.0.0/">6.0.0</a></td>
+<td><span class="since-description">Added <code>'slug'</code> to request.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_pattern_directory_controller/get_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_pattern_directory_controller/get_items</a>
+  </p>
+</div>

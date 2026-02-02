@@ -1,0 +1,156 @@
+<h1 class="wp-block-wporg-code-reference-title">delete_metadata_by_mid( <span class="arg-type">string</span> <span class="arg-name">$meta_type</span>, <span class="arg-type">int</span> <span class="arg-name">$meta_id</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Deletes metadata by meta ID.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$meta_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Type of object metadata is for. Accepts <code>'post'</code>, <code>'comment'</code>, <code>'term'</code>, <code>'user'</code>, or any other object type with an associated meta table.</span></div></dd>
+<dt>
+<code>$meta_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">ID for a specific meta row.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on successful delete, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="985" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function delete_metadata_by_mid( $meta_type, $meta_id ) {
+	global $wpdb;
+
+	// Make sure everything is valid.
+	if ( ! $meta_type || ! is_numeric( $meta_id ) || floor( $meta_id ) != $meta_id ) {
+		return false;
+	}
+
+	$meta_id = (int) $meta_id;
+	if ( $meta_id &lt;= 0 ) {
+		return false;
+	}
+
+	$table = _get_meta_table( $meta_type );
+	if ( ! $table ) {
+		return false;
+	}
+
+	// Object and ID columns.
+	$column    = sanitize_key( $meta_type . '_id' );
+	$id_column = ( 'user' === $meta_type ) ? 'umeta_id' : 'meta_id';
+
+	/**
+	 * Short-circuits deleting metadata of a specific type by meta ID.
+	 *
+	 * The dynamic portion of the hook name, `$meta_type`, refers to the meta object type
+	 * (post, comment, term, user, or any other type with an associated meta table).
+	 * Returning a non-null value will effectively short-circuit the function.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `delete_post_metadata_by_mid`
+	 *  - `delete_comment_metadata_by_mid`
+	 *  - `delete_term_metadata_by_mid`
+	 *  - `delete_user_metadata_by_mid`
+	 *
+	 * @since 5.0.0
+	 *
+	 * @param null|bool $delete  Whether to allow metadata deletion of the given type.
+	 * @param int       $meta_id Meta ID.
+	 */
+	$check = apply_filters( "delete_{$meta_type}_metadata_by_mid", null, $meta_id );
+	if ( null !== $check ) {
+		return (bool) $check;
+	}
+
+	// Fetch the meta and go on if it's found.
+	$meta = get_metadata_by_mid( $meta_type, $meta_id );
+	if ( $meta ) {
+		$object_id = (int) $meta-&gt;{$column};
+
+		/** This action is documented in wp-includes/meta.php */
+		do_action( "delete_{$meta_type}_meta", (array) $meta_id, $object_id, $meta-&gt;meta_key, $meta-&gt;meta_value );
+
+		// Old-style action.
+		if ( 'post' === $meta_type || 'comment' === $meta_type ) {
+			/**
+			 * Fires immediately before deleting post or comment metadata of a specific type.
+			 *
+			 * The dynamic portion of the hook name, `$meta_type`, refers to the meta
+			 * object type (post or comment).
+			 *
+			 * Possible hook names include:
+			 *
+			 *  - `delete_postmeta`
+			 *  - `delete_commentmeta`
+			 *  - `delete_termmeta`
+			 *  - `delete_usermeta`
+			 *
+			 * @since 3.4.0
+			 *
+			 * @param int $meta_id ID of the metadata entry to delete.
+			 */
+			do_action( "delete_{$meta_type}meta", $meta_id );
+		}
+
+		// Run the query, will return true if deleted, false otherwise.
+		$result = (bool) $wpdb-&gt;delete( $table, array( $id_column =&gt; $meta_id ) );
+
+		// Clear the caches.
+		wp_cache_delete( $object_id, $meta_type . '_meta' );
+
+		/** This action is documented in wp-includes/meta.php */
+		do_action( "deleted_{$meta_type}_meta", (array) $meta_id, $object_id, $meta-&gt;meta_key, $meta-&gt;meta_value );
+
+		// Old-style action.
+		if ( 'post' === $meta_type || 'comment' === $meta_type ) {
+			/**
+			 * Fires immediately after deleting post or comment metadata of a specific type.
+			 *
+			 * The dynamic portion of the hook name, `$meta_type`, refers to the meta
+			 * object type (post or comment).
+			 *
+			 * Possible hook names include:
+			 *
+			 *  - `deleted_postmeta`
+			 *  - `deleted_commentmeta`
+			 *  - `deleted_termmeta`
+			 *  - `deleted_usermeta`
+			 *
+			 * @since 3.4.0
+			 *
+			 * @param int $meta_id Deleted metadata entry ID.
+			 */
+			do_action( "deleted_{$meta_type}meta", $meta_id );
+		}
+
+		return $result;
+
+	}
+
+	// Meta ID was not found.
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/meta.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/meta.php#L985">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/meta.php#L985-L1098">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_meta_typemeta"><span class="hook-func">do_action</span>( “deleted_{$meta_type}meta”, <nobr><span class="arg-type">int</span> <span class="arg-name">$meta_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after deleting post or comment metadata of a specific type.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_meta_type_meta"><span class="hook-func">do_action</span>( “deleted_{$meta_type}_meta”, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$meta_ids</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$meta_key</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$_meta_value</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after deleting metadata of a specific type.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_meta_typemeta"><span class="hook-func">do_action</span>( “delete_{$meta_type}meta”, <nobr><span class="arg-type">int</span> <span class="arg-name">$meta_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before deleting post or comment metadata of a specific type.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_meta_type_meta"><span class="hook-func">do_action</span>( “delete_{$meta_type}_meta”, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$meta_ids</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$meta_key</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$_meta_value</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before deleting metadata of a specific type.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_meta_type_metadata_by_mid"><span class="hook-func">apply_filters</span>( “delete_{$meta_type}_metadata_by_mid”, <nobr><span class="arg-type">null|bool</span> <span class="arg-name">$delete</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$meta_id</span></nobr> )</a></dt>
+<dd>
+<p>Short-circuits deleting metadata of a specific type by meta ID.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/delete_metadata_by_mid" class="_attribution-link">https://developer.wordpress.org/reference/functions/delete_metadata_by_mid</a>
+  </p>
+</div>

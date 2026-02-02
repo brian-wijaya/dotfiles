@@ -1,0 +1,55 @@
+<h1 class="wp-block-wporg-code-reference-title">mbstring_binary_safe_encoding( <span class="arg-type">bool</span> <span class="arg-name">$reset</span> = <span class="arg-default">false</span> )</h1> <section><p>Sets the mbstring internal encoding to a binary safe encoding when func_overload is enabled.</p> </section> <section><h2 id="description">Description</h2> <p>When mbstring.func_overload is in use for multi-byte encodings, the results from strlen() and similar functions respect the utf8 characters, causing binary data to return incorrect lengths.</p> <p>This function overrides the mbstring encoding to a binary-safe encoding, and resets it to the users expected encoding afterwards through the <code>reset_mbstring_encoding</code> function.</p> <p>It is safe to recursively call this function, however each <code>mbstring_binary_safe_encoding()</code> call must be followed up with an equal number of <code>reset_mbstring_encoding()</code> calls.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="reset_mbstring_encoding">reset_mbstring_encoding()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$reset</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to reset the encoding back to a previously-set encoding.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="7600" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function mbstring_binary_safe_encoding( $reset = false ) {
+	static $encodings  = array();
+	static $overloaded = null;
+
+	if ( is_null( $overloaded ) ) {
+		if ( function_exists( 'mb_internal_encoding' )
+			&amp;&amp; ( (int) ini_get( 'mbstring.func_overload' ) &amp; 2 ) // phpcs:ignore PHPCompatibility.IniDirectives.RemovedIniDirectives.mbstring_func_overloadDeprecated
+		) {
+			$overloaded = true;
+		} else {
+			$overloaded = false;
+		}
+	}
+
+	if ( false === $overloaded ) {
+		return;
+	}
+
+	if ( ! $reset ) {
+		$encoding = mb_internal_encoding();
+		array_push( $encodings, $encoding );
+		mb_internal_encoding( 'ISO-8859-1' );
+	}
+
+	if ( $reset &amp;&amp; $encodings ) {
+		$encoding = array_pop( $encodings );
+		mb_internal_encoding( $encoding );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L7600">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L7600-L7628">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/mbstring_binary_safe_encoding" class="_attribution-link">https://developer.wordpress.org/reference/functions/mbstring_binary_safe_encoding</a>
+  </p>
+</div>

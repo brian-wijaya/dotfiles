@@ -1,0 +1,74 @@
+<h1 class="wp-block-wporg-code-reference-title">clean_dirsize_cache( <span class="arg-type">string</span> <span class="arg-name">$path</span> )</h1> <section><p>Cleans directory size cache used by <a href="recurse_dirsize" rel="function">recurse_dirsize()</a> .</p> </section> <section><h2 id="description">Description</h2> <p>Removes the current directory and all parent directories from the <code>dirsize_cache</code> transient.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$path</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full path of a directory or file.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="8791" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function clean_dirsize_cache( $path ) {
+	if ( ! is_string( $path ) || empty( $path ) ) {
+		wp_trigger_error(
+			'',
+			sprintf(
+				/* translators: 1: Function name, 2: A variable type, like "boolean" or "integer". */
+				__( '%1$s only accepts a non-empty path string, received %2$s.' ),
+				'&lt;code&gt;clean_dirsize_cache()&lt;/code&gt;',
+				'&lt;code&gt;' . gettype( $path ) . '&lt;/code&gt;'
+			)
+		);
+		return;
+	}
+
+	$directory_cache = get_transient( 'dirsize_cache' );
+
+	if ( empty( $directory_cache ) ) {
+		return;
+	}
+
+	$expiration = ( wp_using_ext_object_cache() ) ? 0 : 10 * YEAR_IN_SECONDS;
+	if (
+		! str_contains( $path, '/' ) &amp;&amp;
+		! str_contains( $path, '\\' )
+	) {
+		unset( $directory_cache[ $path ] );
+		set_transient( 'dirsize_cache', $directory_cache, $expiration );
+		return;
+	}
+
+	$last_path = null;
+	$path      = untrailingslashit( $path );
+	unset( $directory_cache[ $path ] );
+
+	while (
+		$last_path !== $path &amp;&amp;
+		DIRECTORY_SEPARATOR !== $path &amp;&amp;
+		'.' !== $path &amp;&amp;
+		'..' !== $path
+	) {
+		$last_path = $path;
+		$path      = dirname( $path );
+		unset( $directory_cache[ $path ] );
+	}
+
+	set_transient( 'dirsize_cache', $directory_cache, $expiration );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L8791">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L8791-L8837">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Added input validation with a notice for invalid input.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/clean_dirsize_cache" class="_attribution-link">https://developer.wordpress.org/reference/functions/clean_dirsize_cache</a>
+  </p>
+</div>

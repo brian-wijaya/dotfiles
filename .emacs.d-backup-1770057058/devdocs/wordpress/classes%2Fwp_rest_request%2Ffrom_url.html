@@ -1,0 +1,62 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Request::from_url( <span class="arg-type">string</span> <span class="arg-name">$url</span> ): <span class="return-type"><a href="../wp_rest_request" rel="class">WP_REST_Request</a>|false</span>
+</h1> <section><p>Retrieves a <a href="../wp_rest_request" rel="class">WP_REST_Request</a> object from a full URL.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">URL with protocol, domain, path and query args.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_request" rel="class">WP_REST_Request</a>|false</span> <a href="../wp_rest_request" rel="class">WP_REST_Request</a> object on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1027" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function from_url( $url ) {
+	$bits         = parse_url( $url );
+	$query_params = array();
+
+	if ( ! empty( $bits['query'] ) ) {
+		wp_parse_str( $bits['query'], $query_params );
+	}
+
+	$api_root = rest_url();
+	if ( get_option( 'permalink_structure' ) &amp;&amp; str_starts_with( $url, $api_root ) ) {
+		// Pretty permalinks on, and URL is under the API root.
+		$api_url_part = substr( $url, strlen( untrailingslashit( $api_root ) ) );
+		$route        = parse_url( $api_url_part, PHP_URL_PATH );
+	} elseif ( ! empty( $query_params['rest_route'] ) ) {
+		// ?rest_route=... set directly.
+		$route = $query_params['rest_route'];
+		unset( $query_params['rest_route'] );
+	}
+
+	$request = false;
+	if ( ! empty( $route ) ) {
+		$request = new WP_REST_Request( 'GET', $route );
+		$request-&gt;set_query_params( $query_params );
+	}
+
+	/**
+	 * Filters the REST API request generated from a URL.
+	 *
+	 * @since 4.5.0
+	 *
+	 * @param WP_REST_Request|false $request Generated request object, or false if URL
+	 *                                       could not be parsed.
+	 * @param string                $url     URL the request was generated from.
+	 */
+	return apply_filters( 'rest_request_from_url', $request, $url );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/class-wp-rest-request.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/class-wp-rest-request.php#L1027">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/class-wp-rest-request.php#L1027-L1062">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_request_from_url"><span class="hook-func">apply_filters</span>( ‘rest_request_from_url’, <nobr><span class="arg-type">WP_REST_Request|false</span> <span class="arg-name">$request</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters the REST API request generated from a URL.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.5.0/">4.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_request/from_url" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_request/from_url</a>
+  </p>
+</div>

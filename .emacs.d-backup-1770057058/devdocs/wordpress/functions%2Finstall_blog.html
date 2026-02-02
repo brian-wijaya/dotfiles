@@ -1,0 +1,89 @@
+<h1 class="wp-block-wporg-code-reference-title">install_blog( <span class="arg-type">int</span> <span class="arg-name">$blog_id</span>, <span class="arg-type">string</span> <span class="arg-name">$blog_title</span> = <span class="arg-default">”</span> )</h1> <section><p>Install an empty blog.</p> </section> <section><h2 id="description">Description</h2> <p>Creates the new blog tables and options. If calling this function directly, be sure to use <a href="switch_to_blog" rel="function">switch_to_blog()</a> first, so that $<a href="../classes/wpdb" rel="class">wpdb</a> points to the new blog.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$blog_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The value returned by <a href="wp_insert_site" rel="function">wp_insert_site()</a> .</span></div></dd>
+<dt>
+<code>$blog_title</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The title of the new site.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="607" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function install_blog( $blog_id, $blog_title = '' ) {
+	global $wpdb, $wp_roles;
+
+	_deprecated_function( __FUNCTION__, '5.1.0' );
+
+	// Cast for security.
+	$blog_id = (int) $blog_id;
+
+	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+	$suppress = $wpdb-&gt;suppress_errors();
+	if ( $wpdb-&gt;get_results( "DESCRIBE {$wpdb-&gt;posts}" ) ) {
+		die( '&lt;h1&gt;' . __( 'Already Installed' ) . '&lt;/h1&gt;&lt;p&gt;' . __( 'You appear to have already installed WordPress. To reinstall please clear your old database tables first.' ) . '&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;' );
+	}
+	$wpdb-&gt;suppress_errors( $suppress );
+
+	$url = get_blogaddress_by_id( $blog_id );
+
+	// Set everything up.
+	make_db_current_silent( 'blog' );
+	populate_options();
+	populate_roles();
+
+	// populate_roles() clears previous role definitions so we start over.
+	$wp_roles = new WP_Roles();
+
+	$siteurl = $home = untrailingslashit( $url );
+
+	if ( ! is_subdomain_install() ) {
+
+		if ( 'https' === parse_url( get_site_option( 'siteurl' ), PHP_URL_SCHEME ) ) {
+			$siteurl = set_url_scheme( $siteurl, 'https' );
+		}
+		if ( 'https' === parse_url( get_home_url( get_network()-&gt;site_id ), PHP_URL_SCHEME ) ) {
+			$home = set_url_scheme( $home, 'https' );
+		}
+	}
+
+	update_option( 'siteurl', $siteurl );
+	update_option( 'home', $home );
+
+	if ( get_site_option( 'ms_files_rewriting' ) ) {
+		update_option( 'upload_path', UPLOADBLOGSDIR . "/$blog_id/files" );
+	} else {
+		update_option( 'upload_path', get_blog_option( get_network()-&gt;site_id, 'upload_path' ) );
+	}
+
+	update_option( 'blogname', wp_unslash( $blog_title ) );
+	update_option( 'admin_email', '' );
+
+	// Remove all permissions.
+	$table_prefix = $wpdb-&gt;get_blog_prefix();
+	delete_metadata( 'user', 0, $table_prefix . 'user_level', null, true );   // Delete all.
+	delete_metadata( 'user', 0, $table_prefix . 'capabilities', null, true ); // Delete all.
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-deprecated.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-deprecated.php#L607">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-deprecated.php#L607-L661">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>This function has been deprecated.</td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/install_blog" class="_attribution-link">https://developer.wordpress.org/reference/functions/install_blog</a>
+  </p>
+</div>

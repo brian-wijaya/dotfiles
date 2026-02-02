@@ -1,0 +1,180 @@
+<section id="ansible-utils-fact-diff-module-find-the-difference-between-currently-set-facts"> <h1>ansible.utils.fact_diff module – Find the difference between currently set facts</h1> <div class="admonition note"> <p class="admonition-title">Note</p> <p>This module is part of the <a class="reference external" href="https://galaxy.ansible.com/ui/repo/published/ansible/utils/">ansible.utils collection</a> (version 5.1.2).</p> <p>You might already have this collection installed if you are using the <code>ansible</code> package. It is not included in <code>ansible-core</code>. To check whether it is installed, run <code>ansible-galaxy collection list</code>.</p> <p>To install it, use: <code>ansible-galaxy collection install ansible.utils</code>.</p> <p>To use it in a playbook, specify: <code>ansible.utils.fact_diff</code>.</p> </div> <p class="ansible-version-added">New in ansible.utils 1.0.0</p>  <ul class="simple"> <li><a class="reference internal" href="#synopsis" id="id1">Synopsis</a></li> <li><a class="reference internal" href="#parameters" id="id2">Parameters</a></li> <li><a class="reference internal" href="#examples" id="id3">Examples</a></li> <li><a class="reference internal" href="#return-values" id="id4">Return Values</a></li> </ul>  <section id="synopsis"> <h2>Synopsis</h2> <ul class="simple"> <li>Compare two facts or variables and get a diff.</li> </ul> <div class="admonition note"> <p class="admonition-title">Note</p> <p>This module has a corresponding <a class="reference internal" href="../../../plugins/action#action-plugins"><span class="std std-ref">action plugin</span></a>.</p> </div> </section> <section id="parameters"> <h2>Parameters</h2> <table class="longtable ansible-option-table docutils align-default" style="width: 100%"> <thead> <tr>
+<th class="head"><p>Parameter</p></th> <th class="head"><p>Comments</p></th> </tr> </thead>  <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-utils-fact-diff-module-parameter-after"><strong>after</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">any</span> / <span class="ansible-option-required">required</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The second fact to be used in the comparison.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-utils-fact-diff-module-parameter-before"><strong>before</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">any</span> / <span class="ansible-option-required">required</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The first fact to be used in the comparison.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-utils-fact-diff-module-parameter-plugin"><strong>plugin</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">dictionary</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Configure and specify the diff plugin to use</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>{}</code></p> </div></td> </tr> <tr>
+<td>
+
+<div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-utils-fact-diff-module-parameter-plugin-name"><strong>name</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div>
+</td> <td>
+
+<div class="ansible-option-cell">
+<p>The diff plugin to use, in fully qualified collection name format.</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>"ansible.utils.native"</code></p> </div>
+</td> </tr> <tr>
+<td>
+
+<div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-utils-fact-diff-module-parameter-plugin-vars"><strong>vars</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">dictionary</span></p> </div>
+</td> <td>
+
+<div class="ansible-option-cell">
+<p>Parameters passed to the diff plugin.</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>{}</code></p> </div>
+</td> </tr> <tr>
+<td>
+
+
+<div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-utils-fact-diff-module-parameter-plugin-vars-skip-lines"><strong>skip_lines</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=string</span></p> </div>
+</td> <td>
+
+
+<div class="ansible-option-cell">
+<p>Skip lines matching these regular expressions.</p> <p>Matches will be removed prior to the diff.</p> <p>If the provided <em>before</em> and <em>after</em> are a string, they will be split.</p> <p>Each entry in each list will be cast to a string for the comparison</p> </div>
+</td> </tr>  </table> </section> <section id="examples"> <h2>Examples</h2> <pre data-language="yaml+jinja">- ansible.builtin.set_fact:
+    before:
+      a:
+        b:
+          c:
+            d:
+              - 0
+              - 1
+    after:
+      a:
+        b:
+          c:
+            d:
+              - 2
+              - 3
+
+- name: Show the difference in json format
+  ansible.utils.fact_diff:
+    before: "{{ before }}"
+    after: "{{ after }}"
+
+# TASK [ansible.utils.fact_diff] **************************************
+# --- before
+# +++ after
+# @@ -3,8 +3,8 @@
+#          "b": {
+#              "c": {
+#                  "d": [
+# -                    0,
+# -                    1
+# +                    2,
+# +                    3
+#                  ]
+#              }
+#          }
+#
+# changed: [localhost]
+
+- name: Show the difference in path format
+  ansible.utils.fact_diff:
+    before: "{{ before | ansible.utils.to_paths }}"
+    after: "{{ after | ansible.utils.to_paths }}"
+
+# TASK [ansible.utils.fact_diff] **************************************
+# --- before
+# +++ after
+# @@ -1,4 +1,4 @@
+#  {
+# -    "a.b.c.d[0]": 0,
+# -    "a.b.c.d[1]": 1
+# +    "a.b.c.d[0]": 2,
+# +    "a.b.c.d[1]": 3
+#  }
+#
+# changed: [localhost]
+
+- name: Show the difference in yaml format
+  ansible.utils.fact_diff:
+    before: "{{ before | to_nice_yaml }}"
+    after: "{{ after | to_nice_yaml }}"
+
+# TASK [ansible.utils.fact_diff] **************************************
+# --- before
+# +++ after
+# @@ -2,5 +2,5 @@
+#      b:
+#          c:
+#              d:
+# -            - 0
+# -            - 1
+# +            - 2
+# +            - 3
+
+# changed: [localhost]
+
+
+#### Show the difference between complex object using restconf
+#  ansible_connection: ansible.netcommon.httpapi
+#  ansible_httpapi_use_ssl: True
+#  ansible_httpapi_validate_certs: False
+#  ansible_network_os: ansible.netcommon.restconf
+
+- name: Get the current interface config prior to changes
+  ansible.netcommon.restconf_get:
+    content: config
+    path: /data/Cisco-NX-OS-device:System/intf-items/phys-items
+  register: pre
+
+- name: Update the description of eth1/100
+  ansible.utils.update_fact:
+    updates:
+      - path: "pre['response']['phys-items']['PhysIf-list'][{{ index }}]['descr']"
+        value: "Configured by ansible {{ 100 | random }}"
+  vars:
+    index: "{{ pre['response']['phys-items']['PhysIf-list'] | ansible.utils.index_of('eq', 'eth1/100', 'id') }}"
+  register: updated
+
+- name: Apply the configuration
+  ansible.netcommon.restconf_config:
+    path: 'data/Cisco-NX-OS-device:System/intf-items/'
+    content: "{{ updated.pre.response}}"
+    method: patch
+
+- name: Get the current interface config after changes
+  ansible.netcommon.restconf_get:
+    content: config
+    path: /data/Cisco-NX-OS-device:System/intf-items/phys-items
+  register: post
+
+- name: Show the difference
+  ansible.utils.fact_diff:
+    before: "{{ pre.response | ansible.utils.to_paths }}"
+    after: "{{ post.response | ansible.utils.to_paths }}"
+
+# TASK [ansible.utils.fact_diff] *********************************************
+# --- before
+# +++ after
+# @@ -3604,7 +3604,7 @@
+#      "phys-items['PhysIf-list'][37].bw": "0",
+#      "phys-items['PhysIf-list'][37].controllerId": "",
+#      "phys-items['PhysIf-list'][37].delay": "1",
+# -    "phys-items['PhysIf-list'][37].descr": "Configured by ansible 95",
+# +    "phys-items['PhysIf-list'][37].descr": "Configured by ansible 20",
+#      "phys-items['PhysIf-list'][37].dot1qEtherType": "0x8100",
+#      "phys-items['PhysIf-list'][37].duplex": "auto",
+#      "phys-items['PhysIf-list'][37].id": "eth1/100",
+
+# changed: [nxos101]
+</pre> </section> <section id="return-values"> <h2>Return Values</h2> <p>Common return values are documented <a class="reference internal" href="../../../reference_appendices/common_return_values#common-return-values"><span class="std std-ref">here</span></a>, the following are the fields unique to this module:</p> <table class="longtable ansible-option-table docutils align-default" style="width: 100%"> <thead> <tr>
+<th class="head"><p>Key</p></th> <th class="head"><p>Description</p></th> </tr> </thead>  <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-utils-fact-diff-module-return-diff-lines"><strong>diff_lines</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The <em>diff_text</em> split into lines.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> always</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-utils-fact-diff-module-return-diff-text"><strong>diff_text</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The diff in text format.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> always</p> </div></td> </tr>  </table> <section id="authors"> <h3>Authors</h3> <ul class="simple"> <li>Bradley Thornton (@cidrblock)</li> </ul> </section> <section id="collection-links"> <h3>Collection links</h3> <ul class="ansible-links"> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/ansible.utils/issues" rel="noopener external" target="_blank">Issue Tracker</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/ansible.utils" rel="noopener external" target="_blank">Repository (Sources)</a></span></li> </ul> </section> </section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2012&ndash;2018 Michael DeHaan<br>&copy; 2018&ndash;2025 Red Hat, Inc.<br>Licensed under the GNU General Public License version 3.<br>
+    <a href="https://docs.ansible.com/ansible/latest/collections/ansible/utils/fact_diff_module.html" class="_attribution-link">https://docs.ansible.com/ansible/latest/collections/ansible/utils/fact_diff_module.html</a>
+  </p>
+</div>

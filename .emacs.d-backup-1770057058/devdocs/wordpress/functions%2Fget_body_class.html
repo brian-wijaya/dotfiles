@@ -1,0 +1,256 @@
+<h1 class="wp-block-wporg-code-reference-title">get_body_class( <span class="arg-type">string|string[]</span> <span class="arg-name">$css_class</span> = <span class="arg-default">”</span> ): <span class="return-type">string[]</span>
+</h1> <section><p>Retrieves an array of the class names for the body element.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$css_class</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Space-separated string or array of class names to add to the class list. </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string[]</span> Array of class names.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="636" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_body_class( $css_class = '' ) {
+	global $wp_query;
+
+	$classes = array();
+
+	if ( is_rtl() ) {
+		$classes[] = 'rtl';
+	}
+
+	if ( is_front_page() ) {
+		$classes[] = 'home';
+	}
+	if ( is_home() ) {
+		$classes[] = 'blog';
+	}
+	if ( is_privacy_policy() ) {
+		$classes[] = 'privacy-policy';
+	}
+	if ( is_archive() ) {
+		$classes[] = 'archive';
+	}
+	if ( is_date() ) {
+		$classes[] = 'date';
+	}
+	if ( is_search() ) {
+		$classes[] = 'search';
+		$classes[] = $wp_query-&gt;posts ? 'search-results' : 'search-no-results';
+	}
+	if ( is_paged() ) {
+		$classes[] = 'paged';
+	}
+	if ( is_attachment() ) {
+		$classes[] = 'attachment';
+	}
+	if ( is_404() ) {
+		$classes[] = 'error404';
+	}
+
+	if ( is_singular() ) {
+		$post      = $wp_query-&gt;get_queried_object();
+		$post_id   = $post-&gt;ID;
+		$post_type = $post-&gt;post_type;
+
+		if ( is_page_template() ) {
+			$classes[] = "{$post_type}-template";
+
+			$template_slug  = get_page_template_slug( $post_id );
+			$template_parts = explode( '/', $template_slug );
+
+			foreach ( $template_parts as $part ) {
+				$classes[] = "{$post_type}-template-" . sanitize_html_class( str_replace( array( '.', '/' ), '-', basename( $part, '.php' ) ) );
+			}
+			$classes[] = "{$post_type}-template-" . sanitize_html_class( str_replace( '.', '-', $template_slug ) );
+		} else {
+			$classes[] = "{$post_type}-template-default";
+		}
+
+		if ( is_single() ) {
+			$classes[] = 'single';
+			if ( isset( $post-&gt;post_type ) ) {
+				$classes[] = 'single-' . sanitize_html_class( $post-&gt;post_type, $post_id );
+				$classes[] = 'postid-' . $post_id;
+
+				// Post Format.
+				if ( post_type_supports( $post-&gt;post_type, 'post-formats' ) ) {
+					$post_format = get_post_format( $post-&gt;ID );
+
+					if ( $post_format &amp;&amp; ! is_wp_error( $post_format ) ) {
+						$classes[] = 'single-format-' . sanitize_html_class( $post_format );
+					} else {
+						$classes[] = 'single-format-standard';
+					}
+				}
+			}
+		}
+
+		if ( is_attachment() ) {
+			$mime_type   = get_post_mime_type( $post_id );
+			$mime_prefix = array( 'application/', 'image/', 'text/', 'audio/', 'video/', 'music/' );
+			$classes[]   = 'attachmentid-' . $post_id;
+			$classes[]   = 'attachment-' . str_replace( $mime_prefix, '', $mime_type );
+		} elseif ( is_page() ) {
+			$classes[] = 'page';
+			$classes[] = 'page-id-' . $post_id;
+
+			if ( get_pages(
+				array(
+					'parent' =&gt; $post_id,
+					'number' =&gt; 1,
+				)
+			) ) {
+				$classes[] = 'page-parent';
+			}
+
+			if ( $post-&gt;post_parent ) {
+				$classes[] = 'page-child';
+				$classes[] = 'parent-pageid-' . $post-&gt;post_parent;
+			}
+		}
+	} elseif ( is_archive() ) {
+		if ( is_post_type_archive() ) {
+			$classes[] = 'post-type-archive';
+			$post_type = get_query_var( 'post_type' );
+			if ( is_array( $post_type ) ) {
+				$post_type = reset( $post_type );
+			}
+			$classes[] = 'post-type-archive-' . sanitize_html_class( $post_type );
+		} elseif ( is_author() ) {
+			$author    = $wp_query-&gt;get_queried_object();
+			$classes[] = 'author';
+			if ( isset( $author-&gt;user_nicename ) ) {
+				$classes[] = 'author-' . sanitize_html_class( $author-&gt;user_nicename, $author-&gt;ID );
+				$classes[] = 'author-' . $author-&gt;ID;
+			}
+		} elseif ( is_category() ) {
+			$cat       = $wp_query-&gt;get_queried_object();
+			$classes[] = 'category';
+			if ( isset( $cat-&gt;term_id ) ) {
+				$cat_class = sanitize_html_class( $cat-&gt;slug, $cat-&gt;term_id );
+				if ( is_numeric( $cat_class ) || ! trim( $cat_class, '-' ) ) {
+					$cat_class = $cat-&gt;term_id;
+				}
+
+				$classes[] = 'category-' . $cat_class;
+				$classes[] = 'category-' . $cat-&gt;term_id;
+			}
+		} elseif ( is_tag() ) {
+			$tag       = $wp_query-&gt;get_queried_object();
+			$classes[] = 'tag';
+			if ( isset( $tag-&gt;term_id ) ) {
+				$tag_class = sanitize_html_class( $tag-&gt;slug, $tag-&gt;term_id );
+				if ( is_numeric( $tag_class ) || ! trim( $tag_class, '-' ) ) {
+					$tag_class = $tag-&gt;term_id;
+				}
+
+				$classes[] = 'tag-' . $tag_class;
+				$classes[] = 'tag-' . $tag-&gt;term_id;
+			}
+		} elseif ( is_tax() ) {
+			$term = $wp_query-&gt;get_queried_object();
+			if ( isset( $term-&gt;term_id ) ) {
+				$term_class = sanitize_html_class( $term-&gt;slug, $term-&gt;term_id );
+				if ( is_numeric( $term_class ) || ! trim( $term_class, '-' ) ) {
+					$term_class = $term-&gt;term_id;
+				}
+
+				$classes[] = 'tax-' . sanitize_html_class( $term-&gt;taxonomy );
+				$classes[] = 'term-' . $term_class;
+				$classes[] = 'term-' . $term-&gt;term_id;
+			}
+		}
+	}
+
+	if ( is_user_logged_in() ) {
+		$classes[] = 'logged-in';
+	}
+
+	if ( is_admin_bar_showing() ) {
+		$classes[] = 'admin-bar';
+		$classes[] = 'no-customize-support';
+	}
+
+	if ( current_theme_supports( 'custom-background' )
+		&amp;&amp; ( get_background_color() !== get_theme_support( 'custom-background', 'default-color' ) || get_background_image() ) ) {
+		$classes[] = 'custom-background';
+	}
+
+	if ( has_custom_logo() ) {
+		$classes[] = 'wp-custom-logo';
+	}
+
+	if ( current_theme_supports( 'responsive-embeds' ) ) {
+		$classes[] = 'wp-embed-responsive';
+	}
+
+	$page = $wp_query-&gt;get( 'page' );
+
+	if ( ! $page || $page &lt; 2 ) {
+		$page = $wp_query-&gt;get( 'paged' );
+	}
+
+	if ( $page &amp;&amp; $page &gt; 1 &amp;&amp; ! is_404() ) {
+		$classes[] = 'paged-' . $page;
+
+		if ( is_single() ) {
+			$classes[] = 'single-paged-' . $page;
+		} elseif ( is_page() ) {
+			$classes[] = 'page-paged-' . $page;
+		} elseif ( is_category() ) {
+			$classes[] = 'category-paged-' . $page;
+		} elseif ( is_tag() ) {
+			$classes[] = 'tag-paged-' . $page;
+		} elseif ( is_date() ) {
+			$classes[] = 'date-paged-' . $page;
+		} elseif ( is_author() ) {
+			$classes[] = 'author-paged-' . $page;
+		} elseif ( is_search() ) {
+			$classes[] = 'search-paged-' . $page;
+		} elseif ( is_post_type_archive() ) {
+			$classes[] = 'post-type-paged-' . $page;
+		}
+	}
+
+	if ( ! empty( $css_class ) ) {
+		if ( ! is_array( $css_class ) ) {
+			$css_class = preg_split( '#\s+#', $css_class );
+		}
+		$classes = array_merge( $classes, $css_class );
+	} else {
+		// Ensure that we always coerce class to being an array.
+		$css_class = array();
+	}
+
+	$classes = array_map( 'esc_attr', $classes );
+
+	/**
+	 * Filters the list of CSS body class names for the current post or page.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param string[] $classes   An array of body class names.
+	 * @param string[] $css_class An array of additional class names added to the body.
+	 */
+	$classes = apply_filters( 'body_class', $classes, $css_class );
+
+	return array_unique( $classes );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post-template.php#L636">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post-template.php#L636-L862">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/body_class"><span class="hook-func">apply_filters</span>( ‘body_class’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$classes</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$css_class</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of CSS body class names for the current post or page.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_body_class" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_body_class</a>
+  </p>
+</div>

@@ -1,0 +1,115 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_staticize_emoji( <span class="arg-type">string</span> <span class="arg-name">$text</span> ): <span class="return-type">string</span>
+</h1> <section><p>Converts emoji to a static img element.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$text</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The content to encode.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The encoded content.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="5982" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_staticize_emoji( $text ) {
+	if ( ! str_contains( $text, '&amp;#x' ) ) {
+		if ( ( function_exists( 'mb_check_encoding' ) &amp;&amp; mb_check_encoding( $text, 'ASCII' ) ) || ! preg_match( '/[^\x00-\x7F]/', $text ) ) {
+			// The text doesn't contain anything that might be emoji, so we can return early.
+			return $text;
+		} else {
+			$encoded_text = wp_encode_emoji( $text );
+			if ( $encoded_text === $text ) {
+				return $encoded_text;
+			}
+
+			$text = $encoded_text;
+		}
+	}
+
+	$emoji = _wp_emoji_list( 'entities' );
+
+	// Quickly narrow down the list of emoji that might be in the text and need replacing.
+	$possible_emoji = array();
+	foreach ( $emoji as $emojum ) {
+		if ( str_contains( $text, $emojum ) ) {
+			$possible_emoji[ $emojum ] = html_entity_decode( $emojum );
+		}
+	}
+
+	if ( ! $possible_emoji ) {
+		return $text;
+	}
+
+	/** This filter is documented in wp-includes/formatting.php */
+	$cdn_url = apply_filters( 'emoji_url', 'https://s.w.org/images/core/emoji/15.0.3/72x72/' );
+
+	/** This filter is documented in wp-includes/formatting.php */
+	$ext = apply_filters( 'emoji_ext', '.png' );
+
+	$output = '';
+	/*
+	 * HTML loop taken from smiley function, which was taken from texturize function.
+	 * It'll never be consolidated.
+	 *
+	 * First, capture the tags as well as in between.
+	 */
+	$textarr = preg_split( '/(&lt;.*&gt;)/U', $text, -1, PREG_SPLIT_DELIM_CAPTURE );
+	$stop    = count( $textarr );
+
+	// Ignore processing of specific tags.
+	$tags_to_ignore       = 'code|pre|style|script|textarea';
+	$ignore_block_element = '';
+
+	for ( $i = 0; $i &lt; $stop; $i++ ) {
+		$content = $textarr[ $i ];
+
+		// If we're in an ignore block, wait until we find its closing tag.
+		if ( '' === $ignore_block_element &amp;&amp; preg_match( '/^&lt;(' . $tags_to_ignore . ')&gt;/', $content, $matches ) ) {
+			$ignore_block_element = $matches[1];
+		}
+
+		// If it's not a tag and not in ignore block.
+		if ( '' === $ignore_block_element &amp;&amp; strlen( $content ) &gt; 0 &amp;&amp; '&lt;' !== $content[0] &amp;&amp; str_contains( $content, '&amp;#x' ) ) {
+			foreach ( $possible_emoji as $emojum =&gt; $emoji_char ) {
+				if ( ! str_contains( $content, $emojum ) ) {
+					continue;
+				}
+
+				$file = str_replace( ';&amp;#x', '-', $emojum );
+				$file = str_replace( array( '&amp;#x', ';' ), '', $file );
+
+				$entity = sprintf( '&lt;img src="%s" alt="%s" class="wp-smiley" style="height: 1em; max-height: 1em;" /&gt;', $cdn_url . $file . $ext, $emoji_char );
+
+				$content = str_replace( $emojum, $entity, $content );
+			}
+		}
+
+		// Did we exit ignore block?
+		if ( '' !== $ignore_block_element &amp;&amp; '&lt;/' . $ignore_block_element . '&gt;' === $content ) {
+			$ignore_block_element = '';
+		}
+
+		$output .= $content;
+	}
+
+	// Finally, remove any stray U+FE0F characters.
+	$output = str_replace( '&amp;#xfe0f;', '', $output );
+
+	return $output;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/formatting.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/formatting.php#L5982">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/formatting.php#L5982-L6067">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/emoji_ext"><span class="hook-func">apply_filters</span>( ’emoji_ext’, <nobr><span class="arg-type">string</span> <span class="arg-name">$extension</span></nobr> )</a></dt>
+<dd>
+<p>Filters the extension of the emoji png files.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/emoji_url"><span class="hook-func">apply_filters</span>( ’emoji_url’, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters the URL where emoji png images are hosted.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_staticize_emoji" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_staticize_emoji</a>
+  </p>
+</div>

@@ -1,0 +1,147 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Posts_List_Table::get_views(): <span class="return-type">array</span>
+</h1>  <section><h2 id="return">Return</h2> <span class="return-type">array</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="289" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function get_views() {
+	global $locked_post_status, $avail_post_stati;
+
+	$post_type = $this-&gt;screen-&gt;post_type;
+
+	if ( ! empty( $locked_post_status ) ) {
+		return array();
+	}
+
+	$status_links = array();
+	$num_posts    = wp_count_posts( $post_type, 'readable' );
+	$total_posts  = array_sum( (array) $num_posts );
+	$class        = '';
+
+	$current_user_id = get_current_user_id();
+	$all_args        = array( 'post_type' =&gt; $post_type );
+	$mine            = '';
+
+	// Subtract post types that are not included in the admin all list.
+	foreach ( get_post_stati( array( 'show_in_admin_all_list' =&gt; false ) ) as $state ) {
+		$total_posts -= $num_posts-&gt;$state;
+	}
+
+	if ( $this-&gt;user_posts_count &amp;&amp; $this-&gt;user_posts_count !== $total_posts ) {
+		if ( isset( $_GET['author'] ) &amp;&amp; ( $current_user_id === (int) $_GET['author'] ) ) {
+			$class = 'current';
+		}
+
+		$mine_args = array(
+			'post_type' =&gt; $post_type,
+			'author'    =&gt; $current_user_id,
+		);
+
+		$mine_inner_html = sprintf(
+			/* translators: %s: Number of posts. */
+			_nx(
+				'Mine &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+				'Mine &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+				$this-&gt;user_posts_count,
+				'posts'
+			),
+			number_format_i18n( $this-&gt;user_posts_count )
+		);
+
+		$mine = array(
+			'url'     =&gt; esc_url( add_query_arg( $mine_args, 'edit.php' ) ),
+			'label'   =&gt; $mine_inner_html,
+			'current' =&gt; isset( $_GET['author'] ) &amp;&amp; ( $current_user_id === (int) $_GET['author'] ),
+		);
+
+		$all_args['all_posts'] = 1;
+		$class                 = '';
+	}
+
+	$all_inner_html = sprintf(
+		/* translators: %s: Number of posts. */
+		_nx(
+			'All &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'All &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			$total_posts,
+			'posts'
+		),
+		number_format_i18n( $total_posts )
+	);
+
+	$status_links['all'] = array(
+		'url'     =&gt; esc_url( add_query_arg( $all_args, 'edit.php' ) ),
+		'label'   =&gt; $all_inner_html,
+		'current' =&gt; empty( $class ) &amp;&amp; ( $this-&gt;is_base_request() || isset( $_REQUEST['all_posts'] ) ),
+	);
+
+	if ( $mine ) {
+		$status_links['mine'] = $mine;
+	}
+
+	foreach ( get_post_stati( array( 'show_in_admin_status_list' =&gt; true ), 'objects' ) as $status ) {
+		$class = '';
+
+		$status_name = $status-&gt;name;
+
+		if ( ! in_array( $status_name, $avail_post_stati, true ) || empty( $num_posts-&gt;$status_name ) ) {
+			continue;
+		}
+
+		if ( isset( $_REQUEST['post_status'] ) &amp;&amp; $status_name === $_REQUEST['post_status'] ) {
+			$class = 'current';
+		}
+
+		$status_args = array(
+			'post_status' =&gt; $status_name,
+			'post_type'   =&gt; $post_type,
+		);
+
+		$status_label = sprintf(
+			translate_nooped_plural( $status-&gt;label_count, $num_posts-&gt;$status_name ),
+			number_format_i18n( $num_posts-&gt;$status_name )
+		);
+
+		$status_links[ $status_name ] = array(
+			'url'     =&gt; esc_url( add_query_arg( $status_args, 'edit.php' ) ),
+			'label'   =&gt; $status_label,
+			'current' =&gt; isset( $_REQUEST['post_status'] ) &amp;&amp; $status_name === $_REQUEST['post_status'],
+		);
+	}
+
+	if ( ! empty( $this-&gt;sticky_posts_count ) ) {
+		$class = ! empty( $_REQUEST['show_sticky'] ) ? 'current' : '';
+
+		$sticky_args = array(
+			'post_type'   =&gt; $post_type,
+			'show_sticky' =&gt; 1,
+		);
+
+		$sticky_inner_html = sprintf(
+			/* translators: %s: Number of posts. */
+			_nx(
+				'Sticky &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+				'Sticky &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+				$this-&gt;sticky_posts_count,
+				'posts'
+			),
+			number_format_i18n( $this-&gt;sticky_posts_count )
+		);
+
+		$sticky_link = array(
+			'sticky' =&gt; array(
+				'url'     =&gt; esc_url( add_query_arg( $sticky_args, 'edit.php' ) ),
+				'label'   =&gt; $sticky_inner_html,
+				'current' =&gt; ! empty( $_REQUEST['show_sticky'] ),
+			),
+		);
+
+		// Sticky comes after Publish, or if not listed, after All.
+		$split        = 1 + array_search( ( isset( $status_links['publish'] ) ? 'publish' : 'all' ), array_keys( $status_links ), true );
+		$status_links = array_merge( array_slice( $status_links, 0, $split ), $sticky_link, array_slice( $status_links, $split ) );
+	}
+
+	return $this-&gt;get_views_links( $status_links );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-posts-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-posts-list-table.php#L289">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-posts-list-table.php#L289-L427">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_posts_list_table/get_views" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_posts_list_table/get_views</a>
+  </p>
+</div>

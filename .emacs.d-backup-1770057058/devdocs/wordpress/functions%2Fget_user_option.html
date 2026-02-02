@@ -1,0 +1,75 @@
+<h1 class="wp-block-wporg-code-reference-title">get_user_option( <span class="arg-type">string</span> <span class="arg-name">$option</span>, <span class="arg-type">int</span> <span class="arg-name">$user</span>, <span class="arg-type">string</span> <span class="arg-name">$deprecated</span> = <span class="arg-default">”</span> ): <span class="return-type">mixed</span>
+</h1> <section><p>Retrieves user option that can be either per Site or per Network.</p> </section> <section><h2 id="description">Description</h2> <p>If the user ID is not given, then the current user will be used instead. If the user ID is given, then the user data will be retrieved. The filter for the result, will also pass the original option name and finally the user data object as the third parameter.</p> <p>The option will first check for the per site name and then the per Network name.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$option</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">User option name.</span></div></dd>
+<dt>
+<code>$user</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">User ID.</span></div></dd>
+<dt>
+<code>$deprecated</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Use <a href="get_option" rel="function">get_option()</a> to check for an option in the options table.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed</span> User option value on success, false on failure.</section> <section><h2 id="more-information">More Information</h2> <h5 class="wp-block-heading">Usage:</h5> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">get_user_option( $option, $user );</code></pre> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="681" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_user_option( $option, $user = 0, $deprecated = '' ) {
+	global $wpdb;
+
+	if ( ! empty( $deprecated ) ) {
+		_deprecated_argument( __FUNCTION__, '3.0.0' );
+	}
+
+	if ( empty( $user ) ) {
+		$user = get_current_user_id();
+	}
+
+	$user = get_userdata( $user );
+	if ( ! $user ) {
+		return false;
+	}
+
+	$prefix = $wpdb-&gt;get_blog_prefix();
+	if ( $user-&gt;has_prop( $prefix . $option ) ) { // Blog-specific.
+		$result = $user-&gt;get( $prefix . $option );
+	} elseif ( $user-&gt;has_prop( $option ) ) { // User-specific and cross-blog.
+		$result = $user-&gt;get( $option );
+	} else {
+		$result = false;
+	}
+
+	/**
+	 * Filters a specific user option value.
+	 *
+	 * The dynamic portion of the hook name, `$option`, refers to the user option name.
+	 *
+	 * @since 2.5.0
+	 *
+	 * @param mixed   $result Value for the user's option.
+	 * @param string  $option Name of the option being retrieved.
+	 * @param WP_User $user   WP_User object of the user whose option is being retrieved.
+	 */
+	return apply_filters( "get_user_option_{$option}", $result, $option, $user );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/user.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/user.php#L681">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/user.php#L681-L718">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_user_option_option"><span class="hook-func">apply_filters</span>( “get_user_option_{$option}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$result</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$option</span></nobr>, <nobr><span class="arg-type">WP_User</span> <span class="arg-name">$user</span></nobr> )</a></dt>
+<dd>
+<p>Filters a specific user option value.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_user_option" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_user_option</a>
+  </p>
+</div>

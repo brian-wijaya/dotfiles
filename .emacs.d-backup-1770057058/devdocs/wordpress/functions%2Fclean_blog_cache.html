@@ -1,0 +1,90 @@
+<h1 class="wp-block-wporg-code-reference-title">clean_blog_cache( <span class="arg-type">WP_Site|int</span> <span class="arg-name">$blog</span> )</h1> <section><p>Clean the blog cache</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$blog</code><span class="type"><span class="WP_Site"><a href="../classes/wp_site" rel="class">WP_Site</a></span>|<span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The site object or ID to be cleared from cache.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="959" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function clean_blog_cache( $blog ) {
+	global $_wp_suspend_cache_invalidation;
+
+	if ( ! empty( $_wp_suspend_cache_invalidation ) ) {
+		return;
+	}
+
+	if ( empty( $blog ) ) {
+		return;
+	}
+
+	$blog_id = $blog;
+	$blog    = get_site( $blog_id );
+	if ( ! $blog ) {
+		if ( ! is_numeric( $blog_id ) ) {
+			return;
+		}
+
+		// Make sure a WP_Site object exists even when the site has been deleted.
+		$blog = new WP_Site(
+			(object) array(
+				'blog_id' =&gt; $blog_id,
+				'domain'  =&gt; null,
+				'path'    =&gt; null,
+			)
+		);
+	}
+
+	$blog_id         = $blog-&gt;blog_id;
+	$domain_path_key = md5( $blog-&gt;domain . $blog-&gt;path );
+
+	wp_cache_delete( $blog_id, 'sites' );
+	wp_cache_delete( $blog_id, 'site-details' );
+	wp_cache_delete( $blog_id, 'blog-details' );
+	wp_cache_delete( $blog_id . 'short', 'blog-details' );
+	wp_cache_delete( $domain_path_key, 'blog-lookup' );
+	wp_cache_delete( $domain_path_key, 'blog-id-cache' );
+	wp_cache_delete( $blog_id, 'blog_meta' );
+
+	/**
+	 * Fires immediately after a site has been removed from the object cache.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @param string  $id              Site ID as a numeric string.
+	 * @param WP_Site $blog            Site object.
+	 * @param string  $domain_path_key md5 hash of domain and path.
+	 */
+	do_action( 'clean_site_cache', $blog_id, $blog, $domain_path_key );
+
+	wp_cache_set_sites_last_changed();
+
+	/**
+	 * Fires after the blog details cache is cleared.
+	 *
+	 * @since 3.4.0
+	 * @deprecated 4.9.0 Use <a href="../hooks/clean_site_cache">'clean_site_cache'</a> instead.
+	 *
+	 * @param int $blog_id Blog ID.
+	 */
+	do_action_deprecated( 'refresh_blog_details', array( $blog_id ), '4.9.0', 'clean_site_cache' );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-site.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-site.php#L959">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-site.php#L959-L1020">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/clean_site_cache"><span class="hook-func">do_action</span>( ‘clean_site_cache’, <nobr><span class="arg-type">string</span> <span class="arg-name">$id</span></nobr>, <nobr><span class="arg-type">WP_Site</span> <span class="arg-name">$blog</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$domain_path_key</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a site has been removed from the object cache.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/refresh_blog_details"><span class="hook-func">do_action_deprecated</span>( ‘refresh_blog_details’, <nobr><span class="arg-type">int</span> <span class="arg-name">$blog_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the blog details cache is cleared.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.5.0/">3.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/clean_blog_cache" class="_attribution-link">https://developer.wordpress.org/reference/functions/clean_blog_cache</a>
+  </p>
+</div>

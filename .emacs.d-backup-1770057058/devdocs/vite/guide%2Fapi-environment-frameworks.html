@@ -1,0 +1,303 @@
+<div style="display:none;" hidden="true" aria-hidden="true">Are you an LLM? You can read better optimized documentation at /guide/api-environment-frameworks.md for this page in Markdown format</div>
+<h1 id="environment-api-for-frameworks" tabindex="-1">Environment API for Frameworks </h1>
+<div class="info custom-block">
+<strong class="custom-block-title">Release Candidate</strong><p>The Environment API is generally in the release candidate phase. We'll maintain stability in the APIs between major releases to allow the ecosystem to experiment and build upon them. However, note that <a href="../changes/index#considering">some specific APIs</a> are still considered experimental.</p>
+<p>We plan to stabilize these new APIs (with potential breaking changes) in a future major release once downstream projects have had time to experiment with the new features and validate them.</p>
+<p>Resources:</p>
+<ul>
+<li>
+<a href="https://github.com/vitejs/vite/discussions/16358" target="_blank" rel="noreferrer">Feedback discussion</a> where we are gathering feedback about the new APIs.</li>
+<li>
+<a href="https://github.com/vitejs/vite/pull/16471" target="_blank" rel="noreferrer">Environment API PR</a> where the new API were implemented and reviewed.</li>
+</ul>
+<p>Please share your feedback with us.</p>
+</div>
+<h2 id="devenvironment-communication-levels" tabindex="-1">DevEnvironment Communication Levels </h2>
+<p>Since environments may run in different runtimes, communication against the environment may have constraints depending on the runtime. To allow frameworks to write runtime agnostic code easily, the Environment API provides three kinds of communication levels.</p>
+<h3 id="runnabledevenvironment" tabindex="-1">
+<code>RunnableDevEnvironment</code> </h3>
+<p><code>RunnableDevEnvironment</code> is an environment that can communicate arbitrary values. The implicit <code>ssr</code> environment and other non-client environments use a <code>RunnableDevEnvironment</code> by default during dev. While this requires the runtime to be the same with the one the Vite server is running in, this works similarly with <code>ssrLoadModule</code> and allows frameworks to migrate and enable HMR for their SSR dev story. You can guard any runnable environment with an <code>isRunnableDevEnvironment</code> function.</p>
+<div class="language-ts">
+<pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr" data-language="javascript">export class RunnableDevEnvironment extends DevEnvironment {
+  public readonly runner: ModuleRunner
+}
+
+class ModuleRunner {
+  /**
+   * URL to execute.
+   * Accepts file path, server path, or id relative to the root.
+   * Returns an instantiated module (same as in ssrLoadModule)
+   */
+  public async import(url: string): Promise&lt;Record&lt;string, any&gt;&gt;
+  /**
+   * Other ModuleRunner methods...
+   */
+}
+
+if (isRunnableDevEnvironment(server.environments.ssr)) {
+  await server.environments.ssr.runner.import('/entry-point.js')
+}</pre>
+</div>
+<div class="warning custom-block">
+<strong class="custom-block-title custom-block-title-default">WARNING</strong><p>The <code>runner</code> is evaluated lazily only when it's accessed for the first time. Beware that Vite enables source map support when the <code>runner</code> is created by calling <code>process.setSourceMapsEnabled</code> or by overriding <code>Error.prepareStackTrace</code> if it's not available.</p>
+</div>
+<p>Given a Vite server configured in middleware mode as described by the <a href="ssr#setting-up-the-dev-server">SSR setup guide</a>, let's implement the SSR middleware using the environment API. Remember that it doesn't have to be called <code>ssr</code>, so we'll name it <code>server</code> in this example. Error handling is omitted.</p>
+<div class="language-js">
+<pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr" data-language="javascript">import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createServer } from 'vite'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+const viteServer = await createServer({
+  server: { middlewareMode: true },
+  appType: 'custom',
+  environments: {
+    server: {
+      // by default, modules are run in the same process as the vite server
+    },
+  },
+})
+
+// You might need to cast this to RunnableDevEnvironment in TypeScript or
+// use isRunnableDevEnvironment to guard the access to the runner
+const serverEnvironment = viteServer.environments.server
+
+app.use('*', async (req, res, next) =&gt; {
+  const url = req.originalUrl
+
+  // 1. Read index.html
+  const indexHtmlPath = path.resolve(__dirname, 'index.html')
+  let template = fs.readFileSync(indexHtmlPath, 'utf-8')
+
+  // 2. Apply Vite HTML transforms. This injects the Vite HMR client,
+  //    and also applies HTML transforms from Vite plugins, e.g. global
+  //    preambles from @vitejs/plugin-react
+  template = await viteServer.transformIndexHtml(url, template)
+
+  // 3. Load the server entry. import(url) automatically transforms
+  //    ESM source code to be usable in Node.js! There is no bundling
+  //    required, and provides full HMR support.
+  const { render } = await serverEnvironment.runner.import(
+    '/src/entry-server.js',
+  )
+
+  // 4. render the app HTML. This assumes entry-server.js's exported
+  //     `render` function calls appropriate framework SSR APIs,
+  //    e.g. ReactDOMServer.renderToString()
+  const appHtml = await render(url)
+
+  // 5. Inject the app-rendered HTML into the template.
+  const html = template.replace(`&lt;!--ssr-outlet--&gt;`, appHtml)
+
+  // 6. Send the rendered HTML back.
+  res.status(200).set({ 'Content-Type': 'text/html' }).end(html)
+})</pre>
+</div>
+<p>When using environments that support HMR (such as <code>RunnableDevEnvironment</code>), you should add <code>import.meta.hot.accept()</code> in your server entry file for optimal behavior. Without this, server file changes will invalidate the entire server module graph:</p>
+<div class="language-js">
+<pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr" data-language="javascript">// src/entry-server.js
+export function render(...) { ... }
+
+if (import.meta.hot) {
+  import.meta.hot.accept()
+}</pre>
+</div>
+<h3 id="fetchabledevenvironment" tabindex="-1">
+<code>FetchableDevEnvironment</code> </h3>
+<div class="info custom-block">
+<strong class="custom-block-title custom-block-title-default">INFO</strong><p>We are looking for feedback on <a href="https://github.com/vitejs/vite/discussions/18191" target="_blank" rel="noreferrer">the <code>FetchableDevEnvironment</code> proposal</a>.</p>
+</div>
+<p><code>FetchableDevEnvironment</code> is an environment that can communicate with its runtime via the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/fetch" target="_blank" rel="noreferrer">Fetch API</a> interface. Since the <code>RunnableDevEnvironment</code> is only possible to implement in a limited set of runtimes, we recommend to use the <code>FetchableDevEnvironment</code> instead of the <code>RunnableDevEnvironment</code>.</p>
+<p>This environment provides a standardized way of handling requests via the <code>handleRequest</code> method:</p>
+<div class="language-ts">
+<pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr" data-language="javascript">import {
+  createServer,
+  createFetchableDevEnvironment,
+  isFetchableDevEnvironment,
+} from 'vite'
+
+const server = await createServer({
+  server: { middlewareMode: true },
+  appType: 'custom',
+  environments: {
+    custom: {
+      dev: {
+        createEnvironment(name, config) {
+          return createFetchableDevEnvironment(name, config, {
+            handleRequest(request: Request): Promise&lt;Response&gt; | Response {
+              // handle Request and return a Response
+            },
+          })
+        },
+      },
+    },
+  },
+})
+
+// Any consumer of the environment API can now call `dispatchFetch`
+if (isFetchableDevEnvironment(server.environments.custom)) {
+  const response: Response = await server.environments.custom.dispatchFetch(
+    new Request('/request-to-handle'),
+  )
+}</pre>
+</div>
+<div class="warning custom-block">
+<strong class="custom-block-title custom-block-title-default">WARNING</strong><p>Vite validates the input and output of the <code>dispatchFetch</code> method: the request must be an instance of the global <code>Request</code> class and the response must be the instance of the global <code>Response</code> class. Vite will throw a <code>TypeError</code> if this is not the case.</p>
+<p>Note that although the <code>FetchableDevEnvironment</code> is implemented as a class, it is considered an implementation detail by the Vite team and might change at any moment.</p>
+</div>
+<h3 id="raw-devenvironment" tabindex="-1">raw <code>DevEnvironment</code> </h3>
+<p>If the environment does not implement the <code>RunnableDevEnvironment</code> or <code>FetchableDevEnvironment</code> interfaces, you need to set up the communication manually.</p>
+<p>If your code can run in the same runtime as the user modules (i.e., it does not rely on Node.js-specific APIs), you can use a virtual module. This approach eliminates the need to access the value from the code using Vite's APIs.</p>
+<div class="language-ts">
+<pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr" data-language="javascript">// code using the Vite's APIs
+import { createServer } from 'vite'
+
+const server = createServer({
+  plugins: [
+    // a plugin that handles `virtual:entrypoint`
+    {
+      name: 'virtual-module',
+      /* plugin implementation */
+    },
+  ],
+})
+const ssrEnvironment = server.environment.ssr
+const input = {}
+
+// use exposed functions by each environment factories that runs the code
+// check for each environment factories what they provide
+if (ssrEnvironment instanceof CustomDevEnvironment) {
+  ssrEnvironment.runEntrypoint('virtual:entrypoint')
+} else {
+  throw new Error(`Unsupported runtime for ${ssrEnvironment.name}`)
+}
+
+// -------------------------------------
+// virtual:entrypoint
+const { createHandler } = await import('./entrypoint.js')
+const handler = createHandler(input)
+const response = handler(new Request('/'))
+
+// -------------------------------------
+// ./entrypoint.js
+export function createHandler(input) {
+  return function handler(req) {
+    return new Response('hello')
+  }
+}</pre>
+</div>
+<p>For example, to call <code>transformIndexHtml</code> on the user module, the following plugin can be used:</p>
+<div class="language-ts">
+<pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr" data-language="javascript">function vitePluginVirtualIndexHtml(): Plugin {
+  let server: ViteDevServer | undefined
+  return {
+    name: vitePluginVirtualIndexHtml.name,
+    configureServer(server_) {
+      server = server_
+    },
+    resolveId(source) {
+      return source === 'virtual:index-html' ? '\0' + source : undefined
+    },
+    async load(id) {
+      if (id === '\0' + 'virtual:index-html') {
+        let html: string
+        if (server) {
+          this.addWatchFile('index.html')
+          html = fs.readFileSync('index.html', 'utf-8')
+          html = await server.transformIndexHtml('/', html)
+        } else {
+          html = fs.readFileSync('dist/client/index.html', 'utf-8')
+        }
+        return `export default ${JSON.stringify(html)}`
+      }
+      return
+    },
+  }
+}</pre>
+</div>
+<p>If your code requires Node.js APIs, you can use <code>hot.send</code> to communicate with the code that uses Vite's APIs from the user modules. However, be aware that this approach may not work the same way after the build process.</p>
+<div class="language-ts">
+<pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr" data-language="javascript">// code using the Vite's APIs
+import { createServer } from 'vite'
+
+const server = createServer({
+  plugins: [
+    // a plugin that handles `virtual:entrypoint`
+    {
+      name: 'virtual-module',
+      /* plugin implementation */
+    },
+  ],
+})
+const ssrEnvironment = server.environment.ssr
+const input = {}
+
+// use exposed functions by each environment factories that runs the code
+// check for each environment factories what they provide
+if (ssrEnvironment instanceof RunnableDevEnvironment) {
+  ssrEnvironment.runner.import('virtual:entrypoint')
+} else if (ssrEnvironment instanceof CustomDevEnvironment) {
+  ssrEnvironment.runEntrypoint('virtual:entrypoint')
+} else {
+  throw new Error(`Unsupported runtime for ${ssrEnvironment.name}`)
+}
+
+const req = new Request('/')
+
+const uniqueId = 'a-unique-id'
+ssrEnvironment.send('request', serialize({ req, uniqueId }))
+const response = await new Promise((resolve) =&gt; {
+  ssrEnvironment.on('response', (data) =&gt; {
+    data = deserialize(data)
+    if (data.uniqueId === uniqueId) {
+      resolve(data.res)
+    }
+  })
+})
+
+// -------------------------------------
+// virtual:entrypoint
+const { createHandler } = await import('./entrypoint.js')
+const handler = createHandler(input)
+
+import.meta.hot.on('request', (data) =&gt; {
+  const { req, uniqueId } = deserialize(data)
+  const res = handler(req)
+  import.meta.hot.send('response', serialize({ res: res, uniqueId }))
+})
+
+const response = handler(new Request('/'))
+
+// -------------------------------------
+// ./entrypoint.js
+export function createHandler(input) {
+  return function handler(req) {
+    return new Response('hello')
+  }
+}</pre>
+</div>
+<h2 id="environments-during-build" tabindex="-1">Environments During Build </h2>
+<p>In the CLI, calling <code>vite build</code> and <code>vite build --ssr</code> will still build the client only and ssr only environments for backward compatibility.</p>
+<p>When <code>builder</code> is not <code>undefined</code> (or when calling <code>vite build --app</code>), <code>vite build</code> will opt-in into building the entire app instead. This would later on become the default in a future major. A <code>ViteBuilder</code> instance will be created (build-time equivalent to a <code>ViteDevServer</code>) to build all configured environments for production. By default the build of environments is run in series respecting the order of the <code>environments</code> record. A framework or user can further configure how the environments are built using:</p>
+<div class="language-js">
+<pre class="shiki shiki-themes github-light github-dark" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" dir="ltr" data-language="javascript">export default {
+  builder: {
+    buildApp: async (builder) =&gt; {
+      const environments = Object.values(builder.environments)
+      return Promise.all(
+        environments.map((environment) =&gt; builder.build(environment)),
+      )
+    },
+  },
+}</pre>
+</div>
+<p>Plugins can also define a <code>buildApp</code> hook. Order <code>'pre'</code> and <code>null</code> are executed before the configured <code>builder.buildApp</code>, and order <code>'post'</code> hooks are executed after it. <code>environment.isBuilt</code> can be used to check if an environment has already being build.</p>
+<h2 id="environment-agnostic-code" tabindex="-1">Environment Agnostic Code </h2>
+<p>Most of the time, the current <code>environment</code> instance will be available as part of the context of the code being run so the need to access them through <code>server.environments</code> should be rare. For example, inside plugin hooks the environment is exposed as part of the <code>PluginContext</code>, so it can be accessed using <code>this.environment</code>. See <a href="api-environment-plugins">Environment API for Plugins</a> to learn about how to build environment aware plugins.</p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2019–present, Yuxi (Evan) You and Vite contributors<br>Licensed under the MIT License.<br>
+    <a href="https://vite.dev/guide/api-environment-frameworks" class="_attribution-link">https://vite.dev/guide/api-environment-frameworks</a>
+  </p>
+</div>

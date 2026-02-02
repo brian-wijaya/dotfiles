@@ -1,0 +1,121 @@
+<header><h1>Actions</h1></header><h2 id="introduction">Introduction<a href="#introduction" aria-label="Direct link to Introduction" title="Direct link to Introduction">​</a>
+</h2> <p>Playwright can interact with HTML Input elements such as text inputs, checkboxes, radio buttons, select options, mouse clicks, type characters, keys and shortcuts as well as upload files and focus elements.</p> <h2 id="text-input">Text input<a href="#text-input" aria-label="Direct link to Text input" title="Direct link to Text input">​</a>
+</h2> <p>Using <a href="api/class-locator#locator-fill">locator.fill()</a> is the easiest way to fill out the form fields. It focuses the element and triggers an <code>input</code> event with the entered text. It works for <code>&lt;input&gt;</code>, <code>&lt;textarea&gt;</code> and <code>[contenteditable]</code> elements.</p> <pre tabindex="0" data-language="javascript">// Text input
+await page.getByRole('textbox').fill('Peter');
+
+// Date input
+await page.getByLabel('Birth date').fill('2020-02-02');
+
+// Time input
+await page.getByLabel('Appointment time').fill('13:15');
+
+// Local datetime input
+await page.getByLabel('Local time').fill('2020-03-02T05:15');</pre> <h2 id="checkboxes-and-radio-buttons">Checkboxes and radio buttons<a href="#checkboxes-and-radio-buttons" aria-label="Direct link to Checkboxes and radio buttons" title="Direct link to Checkboxes and radio buttons">​</a>
+</h2> <p>Using <a href="api/class-locator#locator-set-checked">locator.setChecked()</a> is the easiest way to check and uncheck a checkbox or a radio button. This method can be used with <code>input[type=checkbox]</code>, <code>input[type=radio]</code> and <code>[role=checkbox]</code> elements.</p> <pre tabindex="0" data-language="javascript">// Check the checkbox
+await page.getByLabel('I agree to the terms above').check();
+
+// Assert the checked state
+expect(page.getByLabel('Subscribe to newsletter')).toBeChecked();
+
+// Select the radio button
+await page.getByLabel('XL').check();</pre> <h2 id="select-options">Select options<a href="#select-options" aria-label="Direct link to Select options" title="Direct link to Select options">​</a>
+</h2> <p>Selects one or multiple options in the <code>&lt;select&gt;</code> element with <a href="api/class-locator#locator-select-option">locator.selectOption()</a>. You can specify option <code>value</code>, or <code>label</code> to select. Multiple options can be selected.</p> <pre tabindex="0" data-language="javascript">// Single selection matching the value or label
+await page.getByLabel('Choose a color').selectOption('blue');
+
+// Single selection matching the label
+await page.getByLabel('Choose a color').selectOption({ label: 'Blue' });
+
+// Multiple selected items
+await page.getByLabel('Choose multiple colors').selectOption(['red', 'green', 'blue']);</pre> <h2 id="mouse-click">Mouse click<a href="#mouse-click" aria-label="Direct link to Mouse click" title="Direct link to Mouse click">​</a>
+</h2> <p>Performs a simple human click.</p> <pre tabindex="0" data-language="javascript">// Generic click
+await page.getByRole('button').click();
+
+// Double click
+await page.getByText('Item').dblclick();
+
+// Right click
+await page.getByText('Item').click({ button: 'right' });
+
+// Shift + click
+await page.getByText('Item').click({ modifiers: ['Shift'] });
+
+// Ctrl + click on Windows and Linux
+// Meta + click on macOS
+await page.getByText('Item').click({ modifiers: ['ControlOrMeta'] });
+
+// Hover over element
+await page.getByText('Item').hover();
+
+// Click the top left corner
+await page.getByText('Item').click({ position: { x: 0, y: 0 } });</pre> <p>Under the hood, this and other pointer-related methods:</p> <ul> <li>wait for element with given selector to be in DOM</li> <li>wait for it to become displayed, i.e. not empty, no <code>display:none</code>, no <code>visibility:hidden</code>
+</li> <li>wait for it to stop moving, for example, until css transition finishes</li> <li>scroll the element into view</li> <li>wait for it to receive pointer events at the action point, for example, waits until element becomes non-obscured by other elements</li> <li>retry if the element is detached during any of the above checks</li> </ul> <h4 id="forcing-the-click">Forcing the click<a href="#forcing-the-click" aria-label="Direct link to Forcing the click" title="Direct link to Forcing the click">​</a>
+</h4> <p>Sometimes, apps use non-trivial logic where hovering the element overlays it with another element that intercepts the click. This behavior is indistinguishable from a bug where element gets covered and the click is dispatched elsewhere. If you know this is taking place, you can bypass the <a href="actionability">actionability</a> checks and force the click:</p> <pre tabindex="0" data-language="javascript">await page.getByRole('button').click({ force: true });</pre> <h4 id="programmatic-click">Programmatic click<a href="#programmatic-click" aria-label="Direct link to Programmatic click" title="Direct link to Programmatic click">​</a>
+</h4> <p>If you are not interested in testing your app under the real conditions and want to simulate the click by any means possible, you can trigger the <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/click" target="_blank" rel="noopener noreferrer"><code>HTMLElement.click()</code></a> behavior via simply dispatching a click event on the element with <a href="api/class-locator#locator-dispatch-event">locator.dispatchEvent()</a>:</p> <pre tabindex="0" data-language="javascript">await page.getByRole('button').dispatchEvent('click');</pre> <h2 id="type-characters">Type characters<a href="#type-characters" aria-label="Direct link to Type characters" title="Direct link to Type characters">​</a>
+</h2> <blockquote>
+<div>
+<span><svg viewbox="0 0 16 16"><path fill-rule="evenodd" d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"></path></svg></span>caution</div>
+<div><p>Most of the time, you should input text with <a href="api/class-locator#locator-fill">locator.fill()</a>. See the <a href="#text-input">Text input</a> section above. You only need to type characters if there is special keyboard handling on the page.</p></div>
+</blockquote> <p>Type into the field character by character, as if it was a user with a real keyboard with <a href="api/class-locator#locator-press-sequentially">locator.pressSequentially()</a>.</p> <pre tabindex="0" data-language="javascript">// Press keys one by one
+await page.locator('#area').pressSequentially('Hello World!');</pre> <p>This method will emit all the necessary keyboard events, with all the <code>keydown</code>, <code>keyup</code>, <code>keypress</code> events in place. You can even specify the optional <code>delay</code> between the key presses to simulate real user behavior.</p> <h2 id="keys-and-shortcuts">Keys and shortcuts<a href="#keys-and-shortcuts" aria-label="Direct link to Keys and shortcuts" title="Direct link to Keys and shortcuts">​</a>
+</h2> <pre tabindex="0" data-language="javascript">// Hit Enter
+await page.getByText('Submit').press('Enter');
+
+// Dispatch Control+Right
+await page.getByRole('textbox').press('Control+ArrowRight');
+
+// Press $ sign on keyboard
+await page.getByRole('textbox').press('$');</pre> <p>The <a href="api/class-locator#locator-press">locator.press()</a> method focuses the selected element and produces a single keystroke. It accepts the logical key names that are emitted in the <a href="https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/key" target="_blank" rel="noopener noreferrer">keyboardEvent.key</a> property of the keyboard events:</p> <pre tabindex="0" data-language="javascript">Backquote, Minus, Equal, Backslash, Backspace, Tab, Delete, Escape,
+ArrowDown, End, Enter, Home, Insert, PageDown, PageUp, ArrowRight,
+ArrowUp, F1 - F12, Digit0 - Digit9, KeyA - KeyZ, etc.</pre> <ul> <li>You can alternatively specify a single character you'd like to produce such as <code>"a"</code> or <code>"#"</code>.</li> <li>Following modification shortcuts are also supported: <code>Shift, Control, Alt, Meta</code>.</li> </ul> <p>Simple version produces a single character. This character is case-sensitive, so <code>"a"</code> and <code>"A"</code> will produce different results.</p> <pre tabindex="0" data-language="javascript">// &lt;input id=name&gt;
+await page.locator('#name').press('Shift+A');
+
+// &lt;input id=name&gt;
+await page.locator('#name').press('Shift+ArrowLeft');</pre> <p>Shortcuts such as <code>"Control+o"</code> or <code>"Control+Shift+T"</code> are supported as well. When specified with the modifier, modifier is pressed and being held while the subsequent key is being pressed.</p> <p>Note that you still need to specify the capital <code>A</code> in <code>Shift-A</code> to produce the capital character. <code>Shift-a</code> produces a lower-case one as if you had the <code>CapsLock</code> toggled.</p> <h2 id="upload-files">Upload files<a href="#upload-files" aria-label="Direct link to Upload files" title="Direct link to Upload files">​</a>
+</h2> <p>You can select input files for upload using the <a href="api/class-locator#locator-set-input-files">locator.setInputFiles()</a> method. It expects first argument to point to an <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input" target="_blank" rel="noopener noreferrer">input element</a> with the type <code>"file"</code>. Multiple files can be passed in the array. If some of the file paths are relative, they are resolved relative to the current working directory. Empty array clears the selected files.</p> <pre tabindex="0" data-language="javascript">// Select one file
+await page.getByLabel('Upload file').setInputFiles(path.join(__dirname, 'myfile.pdf'));
+
+// Select multiple files
+await page.getByLabel('Upload files').setInputFiles([
+  path.join(__dirname, 'file1.txt'),
+  path.join(__dirname, 'file2.txt'),
+]);
+
+// Select a directory
+await page.getByLabel('Upload directory').setInputFiles(path.join(__dirname, 'mydir'));
+
+// Remove all the selected files
+await page.getByLabel('Upload file').setInputFiles([]);
+
+// Upload buffer from memory
+await page.getByLabel('Upload file').setInputFiles({
+  name: 'file.txt',
+  mimeType: 'text/plain',
+  buffer: Buffer.from('this is test')
+});</pre> <p>If you don't have input element in hand (it is created dynamically), you can handle the <a href="api/class-page#page-event-file-chooser">page.on('filechooser')</a> event or use a corresponding waiting method upon your action:</p> <pre tabindex="0" data-language="javascript">// Start waiting for file chooser before clicking. Note no await.
+const fileChooserPromise = page.waitForEvent('filechooser');
+await page.getByLabel('Upload file').click();
+const fileChooser = await fileChooserPromise;
+await fileChooser.setFiles(path.join(__dirname, 'myfile.pdf'));</pre> <h2 id="focus-element">Focus element<a href="#focus-element" aria-label="Direct link to Focus element" title="Direct link to Focus element">​</a>
+</h2> <p>For the dynamic pages that handle focus events, you can focus the given element with <a href="api/class-locator#locator-focus">locator.focus()</a>.</p> <pre tabindex="0" data-language="javascript">await page.getByLabel('Password').focus();</pre> <h2 id="drag-and-drop">Drag and Drop<a href="#drag-and-drop" aria-label="Direct link to Drag and Drop" title="Direct link to Drag and Drop">​</a>
+</h2> <p>You can perform drag&amp;drop operation with <a href="api/class-locator#locator-drag-to">locator.dragTo()</a>. This method will:</p> <ul> <li>Hover the element that will be dragged.</li> <li>Press left mouse button.</li> <li>Move mouse to the element that will receive the drop.</li> <li>Release left mouse button.</li> </ul> <pre tabindex="0" data-language="javascript">await page.locator('#item-to-be-dragged').dragTo(page.locator('#item-to-drop-at'));</pre> <h3 id="dragging-manually">Dragging manually<a href="#dragging-manually" aria-label="Direct link to Dragging manually" title="Direct link to Dragging manually">​</a>
+</h3> <p>If you want precise control over the drag operation, use lower-level methods like <a href="api/class-locator#locator-hover">locator.hover()</a>, <a href="api/class-mouse#mouse-down">mouse.down()</a>, <a href="api/class-mouse#mouse-move">mouse.move()</a> and <a href="api/class-mouse#mouse-up">mouse.up()</a>.</p> <pre tabindex="0" data-language="javascript">await page.locator('#item-to-be-dragged').hover();
+await page.mouse.down();
+await page.locator('#item-to-drop-at').hover();
+await page.mouse.up();</pre> <blockquote>
+<div>
+<span><svg viewbox="0 0 14 16"><path fill-rule="evenodd" d="M6.3 5.69a.942.942 0 0 1-.28-.7c0-.28.09-.52.28-.7.19-.18.42-.28.7-.28.28 0 .52.09.7.28.18.19.28.42.28.7 0 .28-.09.52-.28.7a1 1 0 0 1-.7.3c-.28 0-.52-.11-.7-.3zM8 7.99c-.02-.25-.11-.48-.31-.69-.2-.19-.42-.3-.69-.31H6c-.27.02-.48.13-.69.31-.2.2-.3.44-.31.69h1v3c.02.27.11.5.31.69.2.2.42.31.69.31h1c.27 0 .48-.11.69-.31.2-.19.3-.42.31-.69H8V7.98v.01zM7 2.3c-3.14 0-5.7 2.54-5.7 5.68 0 3.14 2.56 5.7 5.7 5.7s5.7-2.55 5.7-5.7c0-3.15-2.56-5.69-5.7-5.69v.01zM7 .98c3.86 0 7 3.14 7 7s-3.14 7-7 7-7-3.12-7-7 3.14-7 7-7z"></path></svg></span>note</div>
+<div><p>If your page relies on the <code>dragover</code> event being dispatched, you need at least two mouse moves to trigger it in all browsers. To reliably issue the second mouse move, repeat your <a href="api/class-mouse#mouse-move">mouse.move()</a> or <a href="api/class-locator#locator-hover">locator.hover()</a> twice. The sequence of operations would be: hover the drag element, mouse down, hover the drop element, hover the drop element second time, mouse up.</p></div>
+</blockquote> <h2 id="scrolling">Scrolling<a href="#scrolling" aria-label="Direct link to Scrolling" title="Direct link to Scrolling">​</a>
+</h2> <p>Most of the time, Playwright will automatically scroll for you before doing any actions. Therefore, you do not need to scroll explicitly.</p> <pre tabindex="0" data-language="javascript">// Scrolls automatically so that button is visible
+await page.getByRole('button').click();</pre> <p>However, in rare cases you might need to manually scroll. For example, you might want to force an "infinite list" to load more elements, or position the page for a specific screenshot. In such a case, the most reliable way is to find an element that you want to make visible at the bottom, and scroll it into view.</p> <pre tabindex="0" data-language="javascript">// Scroll the footer into view, forcing an "infinite list" to load more content
+await page.getByText('Footer text').scrollIntoViewIfNeeded();</pre> <p>If you would like to control the scrolling more precisely, use <a href="api/class-mouse#mouse-wheel">mouse.wheel()</a> or <a href="api/class-locator#locator-evaluate">locator.evaluate()</a>:</p> <pre tabindex="0" data-language="javascript">// Position the mouse and scroll with the mouse wheel
+await page.getByTestId('scrolling-container').hover();
+await page.mouse.wheel(0, 10);
+
+// Alternatively, programmatically scroll a specific element
+await page.getByTestId('scrolling-container').evaluate(e =&gt; e.scrollTop += 100);</pre><div class="_attribution">
+  <p class="_attribution-p">
+          &copy; 2025 Microsoft<br>Licensed under the Apache License, Version 2.0.<br>
+    <a href="https://playwright.dev/docs/input" class="_attribution-link">https://playwright.dev/docs/input</a>
+  </p>
+</div>

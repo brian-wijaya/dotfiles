@@ -1,0 +1,125 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_crop_image()</h1> <section><p>Handles cropping an image via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="4009" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_crop_image() {
+	$attachment_id = absint( $_POST['id'] );
+
+	check_ajax_referer( 'image_editor-' . $attachment_id, 'nonce' );
+
+	if ( empty( $attachment_id ) || ! current_user_can( 'edit_post', $attachment_id ) ) {
+		wp_send_json_error();
+	}
+
+	$context = str_replace( '_', '-', $_POST['context'] );
+	$data    = array_map( 'absint', $_POST['cropDetails'] );
+	$cropped = wp_crop_image( $attachment_id, $data['x1'], $data['y1'], $data['width'], $data['height'], $data['dst_width'], $data['dst_height'] );
+
+	if ( ! $cropped || is_wp_error( $cropped ) ) {
+		wp_send_json_error( array( 'message' =&gt; __( 'Image could not be processed.' ) ) );
+	}
+
+	switch ( $context ) {
+		case 'site-icon':
+			require_once ABSPATH . 'wp-admin/includes/class-wp-site-icon.php';
+			$wp_site_icon = new WP_Site_Icon();
+
+			// Skip creating a new attachment if the attachment is a Site Icon.
+			if ( get_post_meta( $attachment_id, '_wp_attachment_context', true ) === $context ) {
+
+				// Delete the temporary cropped file, we don't need it.
+				wp_delete_file( $cropped );
+
+				// Additional sizes in wp_prepare_attachment_for_js().
+				add_filter( 'image_size_names_choose', array( $wp_site_icon, 'additional_sizes' ) );
+				break;
+			}
+
+			/** This filter is documented in wp-admin/includes/class-custom-image-header.php */
+			$cropped = apply_filters( 'wp_create_file_in_uploads', $cropped, $attachment_id ); // For replication.
+
+			// Copy attachment properties.
+			$attachment = wp_copy_parent_attachment_properties( $cropped, $attachment_id, $context );
+
+			// Update the attachment.
+			add_filter( 'intermediate_image_sizes_advanced', array( $wp_site_icon, 'additional_sizes' ) );
+			$attachment_id = $wp_site_icon-&gt;insert_attachment( $attachment, $cropped );
+			remove_filter( 'intermediate_image_sizes_advanced', array( $wp_site_icon, 'additional_sizes' ) );
+
+			// Additional sizes in wp_prepare_attachment_for_js().
+			add_filter( 'image_size_names_choose', array( $wp_site_icon, 'additional_sizes' ) );
+			break;
+
+		default:
+			/**
+			 * Fires before a cropped image is saved.
+			 *
+			 * Allows to add filters to modify the way a cropped image is saved.
+			 *
+			 * @since 4.3.0
+			 *
+			 * @param string $context       The Customizer control requesting the cropped image.
+			 * @param int    $attachment_id The attachment ID of the original image.
+			 * @param string $cropped       Path to the cropped image file.
+			 */
+			do_action( 'wp_ajax_crop_image_pre_save', $context, $attachment_id, $cropped );
+
+			/** This filter is documented in wp-admin/includes/class-custom-image-header.php */
+			$cropped = apply_filters( 'wp_create_file_in_uploads', $cropped, $attachment_id ); // For replication.
+
+			// Copy attachment properties.
+			$attachment = wp_copy_parent_attachment_properties( $cropped, $attachment_id, $context );
+
+			$attachment_id = wp_insert_attachment( $attachment, $cropped );
+			$metadata      = wp_generate_attachment_metadata( $attachment_id, $cropped );
+
+			/**
+			 * Filters the cropped image attachment metadata.
+			 *
+			 * @since 4.3.0
+			 *
+			 * @see wp_generate_attachment_metadata()
+			 *
+			 * @param array $metadata Attachment metadata.
+			 */
+			$metadata = apply_filters( 'wp_ajax_cropped_attachment_metadata', $metadata );
+			wp_update_attachment_metadata( $attachment_id, $metadata );
+
+			/**
+			 * Filters the attachment ID for a cropped image.
+			 *
+			 * @since 4.3.0
+			 *
+			 * @param int    $attachment_id The attachment ID of the cropped image.
+			 * @param string $context       The Customizer control requesting the cropped image.
+			 */
+			$attachment_id = apply_filters( 'wp_ajax_cropped_attachment_id', $attachment_id, $context );
+	}
+
+	wp_send_json_success( wp_prepare_attachment_for_js( $attachment_id ) );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L4009">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L4009-L4104">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_ajax_cropped_attachment_id"><span class="hook-func">apply_filters</span>( ‘wp_ajax_cropped_attachment_id’, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Filters the attachment ID for a cropped image.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_ajax_cropped_attachment_metadata"><span class="hook-func">apply_filters</span>( ‘wp_ajax_cropped_attachment_metadata’, <nobr><span class="arg-type">array</span> <span class="arg-name">$metadata</span></nobr> )</a></dt>
+<dd>
+<p>Filters the cropped image attachment metadata.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_ajax_crop_image_pre_save"><span class="hook-func">do_action</span>( ‘wp_ajax_crop_image_pre_save’, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$cropped</span></nobr> )</a></dt>
+<dd>
+<p>Fires before a cropped image is saved.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_create_file_in_uploads"><span class="hook-func">apply_filters</span>( ‘wp_create_file_in_uploads’, <nobr><span class="arg-type">string</span> <span class="arg-name">$file</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the attachment file path after the custom header or background image is set.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.3.0/">4.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_crop_image" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_crop_image</a>
+  </p>
+</div>

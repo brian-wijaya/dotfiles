@@ -1,0 +1,73 @@
+<h1 class="wp-block-wporg-code-reference-title">POP3::uidl( <span class="arg-name">$msgNum</span> = <span class="arg-default">""</span> )</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="519" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function uidl ($msgNum = "")
+{
+    //  Returns the UIDL of the msg specified. If called with
+    //  no arguments, returns an associative array where each
+    //  undeleted msg num is a key, and the msg's uidl is the element
+    //  Array element 0 will contain the total number of msgs
+
+    if(!isset($this-&gt;FP)) {
+        $this-&gt;ERROR = "POP3 uidl: " . _("No connection to server");
+        return false;
+    }
+
+    $fp = $this-&gt;FP;
+    $buffer = $this-&gt;BUFFER;
+
+    if(!empty($msgNum)) {
+        $cmd = "UIDL $msgNum";
+        $reply = $this-&gt;send_cmd($cmd);
+        if(!$this-&gt;is_ok($reply))
+        {
+            $this-&gt;ERROR = "POP3 uidl: " . _("Error ") . "[$reply]";
+            return false;
+        }
+        list ($ok,$num,$myUidl) = preg_split('/\s+/',$reply);
+        return $myUidl;
+    } else {
+        $this-&gt;update_timer();
+
+        $UIDLArray = array();
+        $Total = $this-&gt;COUNT;
+        $UIDLArray[0] = $Total;
+
+        if ($Total &lt; 1)
+        {
+            return $UIDLArray;
+        }
+        $cmd = "UIDL";
+        fwrite($fp, "UIDL\r\n");
+        $reply = fgets($fp, $buffer);
+        $reply = $this-&gt;strip_clf($reply);
+        if($this-&gt;DEBUG) { @error_log("POP3 SEND [$cmd] GOT [$reply]",0); }
+        if(!$this-&gt;is_ok($reply))
+        {
+            $this-&gt;ERROR = "POP3 uidl: " . _("Error ") . "[$reply]";
+            return false;
+        }
+
+        $line = "";
+        $count = 1;
+        $line = fgets($fp,$buffer);
+        while ( !preg_match('/^\.\r\n/',$line)) {
+            list ($msg,$msgUidl) = preg_split('/\s+/',$line);
+            $msgUidl = $this-&gt;strip_clf($msgUidl);
+            if($count == $msg) {
+                $UIDLArray[$msg] = $msgUidl;
+            }
+            else
+            {
+                $UIDLArray[$count] = 'deleted';
+            }
+            $count++;
+            $line = fgets($fp,$buffer);
+        }
+    }
+    return $UIDLArray;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-pop3.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-pop3.php#L519">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-pop3.php#L519-L584">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/pop3/uidl" class="_attribution-link">https://developer.wordpress.org/reference/classes/pop3/uidl</a>
+  </p>
+</div>

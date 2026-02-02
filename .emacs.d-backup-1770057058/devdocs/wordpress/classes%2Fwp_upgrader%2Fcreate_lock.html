@@ -1,0 +1,63 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Upgrader::create_lock( <span class="arg-type">string</span> <span class="arg-name">$lock_name</span>, <span class="arg-type">int</span> <span class="arg-name">$release_timeout</span> = <span class="arg-default">null</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Creates a lock using WordPress options.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$lock_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The name of this unique lock.</span></div></dd>
+<dt>
+<code>$release_timeout</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The duration in seconds to respect an existing lock.<br> Default: 1 hour.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> False if a lock couldn’t be created or if the lock is still valid. True otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1040" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function create_lock( $lock_name, $release_timeout = null ) {
+	global $wpdb;
+	if ( ! $release_timeout ) {
+		$release_timeout = HOUR_IN_SECONDS;
+	}
+	$lock_option = $lock_name . '.lock';
+
+	// Try to lock.
+	$lock_result = $wpdb-&gt;query( $wpdb-&gt;prepare( "INSERT IGNORE INTO `$wpdb-&gt;options` ( `option_name`, `option_value`, `autoload` ) VALUES (%s, %s, 'off') /* LOCK */", $lock_option, time() ) );
+
+	if ( ! $lock_result ) {
+		$lock_result = get_option( $lock_option );
+
+		// If a lock couldn't be created, and there isn't a lock, bail.
+		if ( ! $lock_result ) {
+			return false;
+		}
+
+		// Check to see if the lock is still valid. If it is, bail.
+		if ( $lock_result &gt; ( time() - $release_timeout ) ) {
+			return false;
+		}
+
+		// There must exist an expired lock, clear it and re-gain it.
+		WP_Upgrader::release_lock( $lock_name );
+
+		return WP_Upgrader::create_lock( $lock_name, $release_timeout );
+	}
+
+	// Update the lock, as by this point we've definitely got a lock, just need to fire the actions.
+	update_option( $lock_option, time(), false );
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-upgrader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-upgrader.php#L1040">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-upgrader.php#L1040-L1073">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.5.0/">4.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_upgrader/create_lock" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_upgrader/create_lock</a>
+  </p>
+</div>

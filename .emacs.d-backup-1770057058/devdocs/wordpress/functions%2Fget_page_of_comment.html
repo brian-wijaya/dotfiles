@@ -1,0 +1,190 @@
+<h1 class="wp-block-wporg-code-reference-title">get_page_of_comment( <span class="arg-type">int</span> <span class="arg-name">$comment_id</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">int|null</span>
+</h1> <section><p>Calculates what page number a comment will appear on for comment paging.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$comment_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Comment ID.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of optional arguments.<br> <ul class="param-hash">
+<li>
+<code>type</code> <span class="type">string</span><div class="desc">Limit paginated comments to those matching a given type.<br> Accepts <code>'comment'</code>, <code>'trackback'</code>, <code>'pingback'</code>, <code>'pings'</code> (trackbacks and pingbacks), or <code>'all'</code>. Default <code>'all'</code>.</div>
+</li> <li>
+<code>per_page</code> <span class="type">int</span><div class="desc">Per-page count to use when calculating pagination.<br> Defaults to the value of the <code>'comments_per_page'</code> option.</div>
+</li> <li>
+<code>max_depth</code> <span class="type">int|string</span><div class="desc">If greater than 1, comment page will be determined for the top-level parent <code>$comment_id</code>.<br> Defaults to the value of the <code>'thread_comments_depth'</code> option.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|null</span> Comment page number or null on error.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1009" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_page_of_comment( $comment_id, $args = array() ) {
+	global $wpdb;
+
+	$page = null;
+
+	$comment = get_comment( $comment_id );
+	if ( ! $comment ) {
+		return;
+	}
+
+	$defaults      = array(
+		'type'      =&gt; 'all',
+		'page'      =&gt; '',
+		'per_page'  =&gt; '',
+		'max_depth' =&gt; '',
+	);
+	$args          = wp_parse_args( $args, $defaults );
+	$original_args = $args;
+
+	// Order of precedence: 1. `$args['per_page']`, 2. 'comments_per_page' query_var, 3. 'comments_per_page' option.
+	if ( get_option( 'page_comments' ) ) {
+		if ( '' === $args['per_page'] ) {
+			$args['per_page'] = get_query_var( 'comments_per_page' );
+		}
+
+		if ( '' === $args['per_page'] ) {
+			$args['per_page'] = get_option( 'comments_per_page' );
+		}
+	}
+
+	if ( empty( $args['per_page'] ) ) {
+		$args['per_page'] = 0;
+		$args['page']     = 0;
+	}
+
+	if ( $args['per_page'] &lt; 1 ) {
+		$page = 1;
+	}
+
+	if ( null === $page ) {
+		if ( '' === $args['max_depth'] ) {
+			if ( get_option( 'thread_comments' ) ) {
+				$args['max_depth'] = get_option( 'thread_comments_depth' );
+			} else {
+				$args['max_depth'] = -1;
+			}
+		}
+
+		// Find this comment's top-level parent if threading is enabled.
+		if ( $args['max_depth'] &gt; 1 &amp;&amp; 0 != $comment-&gt;comment_parent ) {
+			return get_page_of_comment( $comment-&gt;comment_parent, $args );
+		}
+
+		$comment_args = array(
+			'type'       =&gt; $args['type'],
+			'post_id'    =&gt; $comment-&gt;comment_post_ID,
+			'fields'     =&gt; 'ids',
+			'count'      =&gt; true,
+			'status'     =&gt; 'approve',
+			'orderby'    =&gt; 'none',
+			'parent'     =&gt; 0,
+			'date_query' =&gt; array(
+				array(
+					'column' =&gt; "$wpdb-&gt;comments.comment_date_gmt",
+					'before' =&gt; $comment-&gt;comment_date_gmt,
+				),
+			),
+		);
+
+		if ( is_user_logged_in() ) {
+			$comment_args['include_unapproved'] = array( get_current_user_id() );
+		} else {
+			$unapproved_email = wp_get_unapproved_comment_author_email();
+
+			if ( $unapproved_email ) {
+				$comment_args['include_unapproved'] = array( $unapproved_email );
+			}
+		}
+
+		/**
+		 * Filters the arguments used to query comments in get_page_of_comment().
+		 *
+		 * @since 5.5.0
+		 *
+		 * @see WP_Comment_Query::__construct()
+		 *
+		 * @param array $comment_args {
+		 *     Array of WP_Comment_Query arguments.
+		 *
+		 *     @type string $type               Limit paginated comments to those matching a given type.
+		 *                                      Accepts 'comment', 'trackback', 'pingback', 'pings'
+		 *                                      (trackbacks and pingbacks), or 'all'. Default 'all'.
+		 *     @type int    $post_id            ID of the post.
+		 *     @type string $fields             Comment fields to return.
+		 *     @type bool   $count              Whether to return a comment count (true) or array
+		 *                                      of comment objects (false).
+		 *     @type string $status             Comment status.
+		 *     @type int    $parent             Parent ID of comment to retrieve children of.
+		 *     @type array  $date_query         Date query clauses to limit comments by. See WP_Date_Query.
+		 *     @type array  $include_unapproved Array of IDs or email addresses whose unapproved comments
+		 *                                      will be included in paginated comments.
+		 * }
+		 */
+		$comment_args = apply_filters( 'get_page_of_comment_query_args', $comment_args );
+
+		$comment_query       = new WP_Comment_Query();
+		$older_comment_count = $comment_query-&gt;query( $comment_args );
+
+		// No older comments? Then it's page #1.
+		if ( 0 == $older_comment_count ) {
+			$page = 1;
+
+			// Divide comments older than this one by comments per page to get this comment's page number.
+		} else {
+			$page = (int) ceil( ( $older_comment_count + 1 ) / $args['per_page'] );
+		}
+	}
+
+	/**
+	 * Filters the calculated page on which a comment appears.
+	 *
+	 * @since 4.4.0
+	 * @since 4.7.0 Introduced the `$comment_id` parameter.
+	 *
+	 * @param int   $page          Comment page.
+	 * @param array $args {
+	 *     Arguments used to calculate pagination. These include arguments auto-detected by the function,
+	 *     based on query vars, system settings, etc. For pristine arguments passed to the function,
+	 *     see `$original_args`.
+	 *
+	 *     @type string $type      Type of comments to count.
+	 *     @type int    $page      Calculated current page.
+	 *     @type int    $per_page  Calculated number of comments per page.
+	 *     @type int    $max_depth Maximum comment threading depth allowed.
+	 * }
+	 * @param array $original_args {
+	 *     Array of arguments passed to the function. Some or all of these may not be set.
+	 *
+	 *     @type string $type      Type of comments to count.
+	 *     @type int    $page      Current comment page.
+	 *     @type int    $per_page  Number of comments per page.
+	 *     @type int    $max_depth Maximum comment threading depth allowed.
+	 * }
+	 * @param int $comment_id ID of the comment.
+	 */
+	return apply_filters( 'get_page_of_comment', (int) $page, $args, $original_args, $comment_id );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment.php#L1009">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment.php#L1009-L1155">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_page_of_comment"><span class="hook-func">apply_filters</span>( ‘get_page_of_comment’, <nobr><span class="arg-type">int</span> <span class="arg-name">$page</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$original_args</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the calculated page on which a comment appears.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_page_of_comment_query_args"><span class="hook-func">apply_filters</span>( ‘get_page_of_comment_query_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$comment_args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the arguments used to query comments in <a href="get_page_of_comment" rel="function">get_page_of_comment()</a> .</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_page_of_comment" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_page_of_comment</a>
+  </p>
+</div>

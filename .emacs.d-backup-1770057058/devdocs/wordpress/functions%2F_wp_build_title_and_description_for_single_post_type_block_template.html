@@ -1,0 +1,94 @@
+<h1 class="wp-block-wporg-code-reference-title">_wp_build_title_and_description_for_single_post_type_block_template( <span class="arg-type">string</span> <span class="arg-name">$post_type</span>, <span class="arg-type">string</span> <span class="arg-name">$slug</span>, <span class="arg-type">WP_Block_Template</span> <span class="arg-name">$template</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Builds the title and description of a post-specific template based on the underlying referenced post.</p> </section> <section><h2 id="description">Description</h2> <p>Mutates the underlying template object.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post type, e.g. page, post, product.</span></div></dd>
+<dt>
+<code>$slug</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Slug of the post, e.g. a-story-about-shoes.</span></div></dd>
+<dt>
+<code>$template</code><span class="type"><span class="WP_Block_Template"><a href="../classes/wp_block_template" rel="class">WP_Block_Template</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Template to mutate adding the description and title computed.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> Returns true if the referenced post was found and false otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="658" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _wp_build_title_and_description_for_single_post_type_block_template( $post_type, $slug, WP_Block_Template $template ) {
+	$post_type_object = get_post_type_object( $post_type );
+
+	$default_args = array(
+		'post_type'              =&gt; $post_type,
+		'post_status'            =&gt; 'publish',
+		'posts_per_page'         =&gt; 1,
+		'update_post_meta_cache' =&gt; false,
+		'update_post_term_cache' =&gt; false,
+		'ignore_sticky_posts'    =&gt; true,
+		'no_found_rows'          =&gt; true,
+	);
+
+	$args = array(
+		'name' =&gt; $slug,
+	);
+	$args = wp_parse_args( $args, $default_args );
+
+	$posts_query = new WP_Query( $args );
+
+	if ( empty( $posts_query-&gt;posts ) ) {
+		$template-&gt;title = sprintf(
+			/* translators: Custom template title in the Site Editor referencing a post that was not found. 1: Post type singular name, 2: Post type slug. */
+			__( 'Not found: %1$s (%2$s)' ),
+			$post_type_object-&gt;labels-&gt;singular_name,
+			$slug
+		);
+
+		return false;
+	}
+
+	$post_title = $posts_query-&gt;posts[0]-&gt;post_title;
+
+	$template-&gt;title = sprintf(
+		/* translators: Custom template title in the Site Editor. 1: Post type singular name, 2: Post title. */
+		__( '%1$s: %2$s' ),
+		$post_type_object-&gt;labels-&gt;singular_name,
+		$post_title
+	);
+
+	$template-&gt;description = sprintf(
+		/* translators: Custom template description in the Site Editor. %s: Post title. */
+		__( 'Template for %s' ),
+		$post_title
+	);
+
+	$args = array(
+		'title' =&gt; $post_title,
+	);
+	$args = wp_parse_args( $args, $default_args );
+
+	$posts_with_same_title_query = new WP_Query( $args );
+
+	if ( count( $posts_with_same_title_query-&gt;posts ) &gt; 1 ) {
+		$template-&gt;title = sprintf(
+			/* translators: Custom template title in the Site Editor. 1: Template title, 2: Post type slug. */
+			__( '%1$s (%2$s)' ),
+			$template-&gt;title,
+			$slug
+		);
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/block-template-utils.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/block-template-utils.php#L658">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/block-template-utils.php#L658-L721">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_wp_build_title_and_description_for_single_post_type_block_template" class="_attribution-link">https://developer.wordpress.org/reference/functions/_wp_build_title_and_description_for_single_post_type_block_template</a>
+  </p>
+</div>

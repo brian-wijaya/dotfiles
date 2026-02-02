@@ -1,0 +1,202 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_update_comment( <span class="arg-type">array</span> <span class="arg-name">$commentarr</span>, <span class="arg-type">bool</span> <span class="arg-name">$wp_error</span> = <span class="arg-default">false</span> ): <span class="return-type">int|false|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Updates an existing comment in the database.</p> </section> <section><h2 id="description">Description</h2> <p>Filters the comment and makes sure certain fields are valid before updating.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$commentarr</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Contains information on the comment.</span></div></dd>
+<dt>
+<code>$wp_error</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to return a <a href="../classes/wp_error" rel="class">WP_Error</a> on failure. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|false|<a href="../classes/wp_error" rel="class">WP_Error</a></span> The value 1 if the comment was updated, 0 if not updated.<br> False or a <a href="../classes/wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="more-information">More Information</h2> <p>See <a href="get_comment" rel="function">get_comment()</a> for a list of valid attributes for $commentarr</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2509" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_update_comment( $commentarr, $wp_error = false ) {
+	global $wpdb;
+
+	// First, get all of the original fields.
+	$comment = get_comment( $commentarr['comment_ID'], ARRAY_A );
+
+	if ( empty( $comment ) ) {
+		if ( $wp_error ) {
+			return new WP_Error( 'invalid_comment_id', __( 'Invalid comment ID.' ) );
+		} else {
+			return false;
+		}
+	}
+
+	// Make sure that the comment post ID is valid (if specified).
+	if ( ! empty( $commentarr['comment_post_ID'] ) &amp;&amp; ! get_post( $commentarr['comment_post_ID'] ) ) {
+		if ( $wp_error ) {
+			return new WP_Error( 'invalid_post_id', __( 'Invalid post ID.' ) );
+		} else {
+			return false;
+		}
+	}
+
+	$filter_comment = false;
+	if ( ! has_filter( 'pre_comment_content', 'wp_filter_kses' ) ) {
+		$filter_comment = ! user_can( isset( $comment['user_id'] ) ? $comment['user_id'] : 0, 'unfiltered_html' );
+	}
+
+	if ( $filter_comment ) {
+		add_filter( 'pre_comment_content', 'wp_filter_kses' );
+	}
+
+	// Escape data pulled from DB.
+	$comment = wp_slash( $comment );
+
+	$old_status = $comment['comment_approved'];
+
+	// Merge old and new fields with new fields overwriting old ones.
+	$commentarr = array_merge( $comment, $commentarr );
+
+	$commentarr = wp_filter_comment( $commentarr );
+
+	if ( $filter_comment ) {
+		remove_filter( 'pre_comment_content', 'wp_filter_kses' );
+	}
+
+	// Now extract the merged array.
+	$data = wp_unslash( $commentarr );
+
+	/**
+	 * Filters the comment content before it is updated in the database.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @param string $comment_content The comment data.
+	 */
+	$data['comment_content'] = apply_filters( 'comment_save_pre', $data['comment_content'] );
+
+	$data['comment_date_gmt'] = get_gmt_from_date( $data['comment_date'] );
+
+	if ( ! isset( $data['comment_approved'] ) ) {
+		$data['comment_approved'] = 1;
+	} elseif ( 'hold' === $data['comment_approved'] ) {
+		$data['comment_approved'] = 0;
+	} elseif ( 'approve' === $data['comment_approved'] ) {
+		$data['comment_approved'] = 1;
+	}
+
+	$comment_id      = $data['comment_ID'];
+	$comment_post_id = $data['comment_post_ID'];
+
+	/**
+	 * Filters the comment data immediately before it is updated in the database.
+	 *
+	 * Note: data being passed to the filter is already unslashed.
+	 *
+	 * @since 4.7.0
+	 * @since 5.5.0 Returning a WP_Error value from the filter will short-circuit comment update
+	 *              and allow skipping further processing.
+	 *
+	 * @param array|WP_Error $data       The new, processed comment data, or WP_Error.
+	 * @param array          $comment    The old, unslashed comment data.
+	 * @param array          $commentarr The new, raw comment data.
+	 */
+	$data = apply_filters( 'wp_update_comment_data', $data, $comment, $commentarr );
+
+	// Do not carry on on failure.
+	if ( is_wp_error( $data ) ) {
+		if ( $wp_error ) {
+			return $data;
+		} else {
+			return false;
+		}
+	}
+
+	$keys = array(
+		'comment_post_ID',
+		'comment_author',
+		'comment_author_email',
+		'comment_author_url',
+		'comment_author_IP',
+		'comment_date',
+		'comment_date_gmt',
+		'comment_content',
+		'comment_karma',
+		'comment_approved',
+		'comment_agent',
+		'comment_type',
+		'comment_parent',
+		'user_id',
+	);
+
+	$data = wp_array_slice_assoc( $data, $keys );
+
+	$result = $wpdb-&gt;update( $wpdb-&gt;comments, $data, array( 'comment_ID' =&gt; $comment_id ) );
+
+	if ( false === $result ) {
+		if ( $wp_error ) {
+			return new WP_Error( 'db_update_error', __( 'Could not update comment in the database.' ), $wpdb-&gt;last_error );
+		} else {
+			return false;
+		}
+	}
+
+	// If metadata is provided, store it.
+	if ( isset( $commentarr['comment_meta'] ) &amp;&amp; is_array( $commentarr['comment_meta'] ) ) {
+		foreach ( $commentarr['comment_meta'] as $meta_key =&gt; $meta_value ) {
+			update_comment_meta( $comment_id, $meta_key, $meta_value );
+		}
+	}
+
+	clean_comment_cache( $comment_id );
+	wp_update_comment_count( $comment_post_id );
+
+	/**
+	 * Fires immediately after a comment is updated in the database.
+	 *
+	 * The hook also fires immediately before comment status transition hooks are fired.
+	 *
+	 * @since 1.2.0
+	 * @since 4.6.0 Added the `$data` parameter.
+	 *
+	 * @param int   $comment_id The comment ID.
+	 * @param array $data       Comment data.
+	 */
+	do_action( 'edit_comment', $comment_id, $data );
+
+	$comment = get_comment( $comment_id );
+
+	wp_transition_comment_status( $comment-&gt;comment_approved, $old_status, $comment );
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment.php#L2509">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment.php#L2509-L2661">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_save_pre"><span class="hook-func">apply_filters</span>( ‘comment_save_pre’, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_content</span></nobr> )</a></dt>
+<dd>
+<p>Filters the comment content before it is updated in the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/edit_comment"><span class="hook-func">do_action</span>( ‘edit_comment’, <nobr><span class="arg-type">int</span> <span class="arg-name">$comment_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$data</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a comment is updated in the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_update_comment_data"><span class="hook-func">apply_filters</span>( ‘wp_update_comment_data’, <nobr><span class="arg-type">array|WP_Error</span> <span class="arg-name">$data</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$comment</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$commentarr</span></nobr> )</a></dt>
+<dd>
+<p>Filters the comment data immediately before it is updated in the database.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">The return values for an invalid comment or post ID were changed to false instead of 0.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.0/">4.9.0</a></td>
+<td><span class="since-description">Add updating comment meta during comment update.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_update_comment" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_update_comment</a>
+  </p>
+</div>

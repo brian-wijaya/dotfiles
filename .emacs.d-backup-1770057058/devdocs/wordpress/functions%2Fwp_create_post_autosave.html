@@ -1,0 +1,92 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_create_post_autosave( <span class="arg-type">array|int</span> <span class="arg-name">$post_data</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Creates autosave data for the specified post from <code>$_POST</code> data.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_data</code><span class="type"><span class="array">array</span>|<span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Associative array containing the post data, or integer post ID.<br> If a numeric post ID is provided, will use the <code>$_POST</code> superglobal.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> The autosave revision ID. <a href="../classes/wp_error" rel="class">WP_Error</a> or 0 on error.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1943" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_create_post_autosave( $post_data ) {
+	if ( is_numeric( $post_data ) ) {
+		$post_id   = $post_data;
+		$post_data = $_POST;
+	} else {
+		$post_id = (int) $post_data['post_ID'];
+	}
+
+	$post_data = _wp_translate_postdata( true, $post_data );
+	if ( is_wp_error( $post_data ) ) {
+		return $post_data;
+	}
+	$post_data = _wp_get_allowed_postdata( $post_data );
+
+	$post_author = get_current_user_id();
+
+	// Store one autosave per author. If there is already an autosave, overwrite it.
+	$old_autosave = wp_get_post_autosave( $post_id, $post_author );
+	if ( $old_autosave ) {
+		$new_autosave                = _wp_post_revision_data( $post_data, true );
+		$new_autosave['ID']          = $old_autosave-&gt;ID;
+		$new_autosave['post_author'] = $post_author;
+
+		$post = get_post( $post_id );
+
+		// If the new autosave has the same content as the post, delete the autosave.
+		$autosave_is_different = false;
+		foreach ( array_intersect( array_keys( $new_autosave ), array_keys( _wp_post_revision_fields( $post ) ) ) as $field ) {
+			if ( normalize_whitespace( $new_autosave[ $field ] ) !== normalize_whitespace( $post-&gt;$field ) ) {
+				$autosave_is_different = true;
+				break;
+			}
+		}
+
+		if ( ! $autosave_is_different ) {
+			wp_delete_post_revision( $old_autosave-&gt;ID );
+			return 0;
+		}
+
+		/**
+		 * Fires before an autosave is stored.
+		 *
+		 * @since 4.1.0
+		 * @since 6.4.0 The `$is_update` parameter was added to indicate if the autosave is being updated or was newly created.
+		 *
+		 * @param array $new_autosave Post array - the autosave that is about to be saved.
+		 * @param bool  $is_update    Whether this is an existing autosave.
+		 */
+		do_action( 'wp_creating_autosave', $new_autosave, true );
+		return wp_update_post( $new_autosave );
+	}
+
+	// _wp_put_post_revision() expects unescaped.
+	$post_data = wp_unslash( $post_data );
+
+	// Otherwise create the new autosave as a special post revision.
+	$revision = _wp_put_post_revision( $post_data, true );
+
+	if ( ! is_wp_error( $revision ) &amp;&amp; 0 !== $revision ) {
+
+		/** This action is documented in wp-admin/includes/post.php */
+		do_action( 'wp_creating_autosave', get_post( $revision, ARRAY_A ), false );
+	}
+
+	return $revision;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/post.php#L1943">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/post.php#L1943-L2008">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_creating_autosave"><span class="hook-func">do_action</span>( ‘wp_creating_autosave’, <nobr><span class="arg-type">array</span> <span class="arg-name">$new_autosave</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$is_update</span></nobr> )</a></dt>
+<dd>
+<p>Fires before an autosave is stored.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_create_post_autosave" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_create_post_autosave</a>
+  </p>
+</div>

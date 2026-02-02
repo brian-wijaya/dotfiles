@@ -1,0 +1,2 @@
+;; Generated package description from bnf-mode.el  -*- no-byte-compile: t -*-
+(define-package "bnf-mode" "0.4.5" "Major mode for editing BNF grammars." '((cl-lib "0.5") (emacs "24.3")) :commit "a4fe013fc945d8396930bc6d0dcc1cf9d7102f41" :authors '(("Serghei Iakovlev" . "egrep@protonmail.ch")) :maintainer '("Serghei Iakovlev" . "egrep@protonmail.ch") :keywords '("languages") :url "https://github.com/sergeyklay/bnf-mode")

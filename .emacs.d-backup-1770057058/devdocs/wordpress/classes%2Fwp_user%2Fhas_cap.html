@@ -1,0 +1,95 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_User::has_cap( <span class="arg-type">string</span> <span class="arg-name">$cap</span>, <span class="arg-type">mixed</span> <span class="arg-name">$args</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Returns whether the user has the specified capability.</p> </section> <section><h2 id="description">Description</h2> <p>This function also accepts an ID of an object to check against if the capability is a meta capability. Meta capabilities such as <code>edit_post</code> and <code>edit_user</code> are capabilities used by the <code>map_meta_cap()</code> function to map to primitive capabilities that a user or role has, such as <code>edit_posts</code> and <code>edit_others_posts</code>.</p> <p>Example usage:</p> 
+<pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">$user-&gt;has_cap( 'edit_posts' );
+$user-&gt;has_cap( 'edit_post', $post-&gt;ID );
+$user-&gt;has_cap( 'edit_post_meta', $post-&gt;ID, $meta_key );</code></pre> <p>While checking against a role in place of a capability is supported in part, this practice is discouraged as it may produce unreliable results.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="../../functions/map_meta_cap">map_meta_cap()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$cap</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Capability name.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="mixed">mixed</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Optional further parameters, typically starting with an object ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> Whether the user has the given capability, or, if an object ID is passed, whether the user has the given capability for that object.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="776" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function has_cap( $cap, ...$args ) {
+	if ( is_numeric( $cap ) ) {
+		_deprecated_argument( __FUNCTION__, '2.0.0', __( 'Usage of user levels is deprecated. Use capabilities instead.' ) );
+		$cap = $this-&gt;translate_level_to_cap( $cap );
+	}
+
+	$caps = map_meta_cap( $cap, $this-&gt;ID, ...$args );
+
+	// Multisite super admin has all caps by definition, Unless specifically denied.
+	if ( is_multisite() &amp;&amp; is_super_admin( $this-&gt;ID ) ) {
+		if ( in_array( 'do_not_allow', $caps, true ) ) {
+			return false;
+		}
+		return true;
+	}
+
+	// Maintain BC for the argument passed to the "user_has_cap" filter.
+	$args = array_merge( array( $cap, $this-&gt;ID ), $args );
+
+	/**
+	 * Dynamically filter a user's capabilities.
+	 *
+	 * @since 2.0.0
+	 * @since 3.7.0 Added the `$user` parameter.
+	 *
+	 * @param bool[]   $allcaps Array of key/value pairs where keys represent a capability name
+	 *                          and boolean values represent whether the user has that capability.
+	 * @param string[] $caps    Required primitive capabilities for the requested capability.
+	 * @param array    $args {
+	 *     Arguments that accompany the requested capability check.
+	 *
+	 *     @type string    $0 Requested capability.
+	 *     @type int       $1 Concerned user ID.
+	 *     @type mixed  ...$2 Optional second and further parameters, typically object ID.
+	 * }
+	 * @param WP_User  $user    The user object.
+	 */
+	$capabilities = apply_filters( 'user_has_cap', $this-&gt;allcaps, $caps, $args, $this );
+
+	// Everyone is allowed to exist.
+	$capabilities['exist'] = true;
+
+	// Nobody is allowed to do things they are not allowed to do.
+	unset( $capabilities['do_not_allow'] );
+
+	// Must have ALL requested caps.
+	foreach ( (array) $caps as $cap ) {
+		if ( empty( $capabilities[ $cap ] ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-user.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-user.php#L776">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-user.php#L776-L829">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/user_has_cap"><span class="hook-func">apply_filters</span>( ‘user_has_cap’, <nobr><span class="arg-type">bool[]</span> <span class="arg-name">$allcaps</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$caps</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">WP_User</span> <span class="arg-name">$user</span></nobr> )</a></dt>
+<dd>
+<p>Dynamically filter a user’s capabilities.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">Formalized the existing and already documented <code>...$args</code> parameter by adding it to the function signature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_user/has_cap" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_user/has_cap</a>
+  </p>
+</div>

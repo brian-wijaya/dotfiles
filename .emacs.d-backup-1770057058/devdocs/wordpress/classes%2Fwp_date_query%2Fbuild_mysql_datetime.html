@@ -1,0 +1,111 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Date_Query::build_mysql_datetime( <span class="arg-type">string|array</span> <span class="arg-name">$datetime</span>, <span class="arg-type">bool</span> <span class="arg-name">$default_to_max</span> = <span class="arg-default">false</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Builds a MySQL format date/time based on some query parameters.</p> </section> <section><h2 id="description">Description</h2> <p>You can pass an array of values (year, month, etc.) with missing parameter values being defaulted to either the maximum or minimum values (controlled by the $default_to parameter). Alternatively you can pass a string that will be passed to date_create().</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$datetime</code><span class="type"><span class="string">string</span>|<span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An array of parameters or a strtotime() string.</span></div></dd>
+<dt>
+<code>$default_to_max</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to round up incomplete dates. Supported by values of $datetime that are arrays, or string values that are a subset of MySQL date format (<code>'Y'</code>, <code>'Y-m'</code>, <code>'Y-m-d'</code>, ‘Y-m-d H:i’).<br> Default: false.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> A MySQL format date/time or false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="876" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function build_mysql_datetime( $datetime, $default_to_max = false ) {
+	if ( ! is_array( $datetime ) ) {
+
+		/*
+		 * Try to parse some common date formats, so we can detect
+		 * the level of precision and support the 'inclusive' parameter.
+		 */
+		if ( preg_match( '/^(\d{4})$/', $datetime, $matches ) ) {
+			// Y
+			$datetime = array(
+				'year' =&gt; (int) $matches[1],
+			);
+
+		} elseif ( preg_match( '/^(\d{4})\-(\d{2})$/', $datetime, $matches ) ) {
+			// Y-m
+			$datetime = array(
+				'year'  =&gt; (int) $matches[1],
+				'month' =&gt; (int) $matches[2],
+			);
+
+		} elseif ( preg_match( '/^(\d{4})\-(\d{2})\-(\d{2})$/', $datetime, $matches ) ) {
+			// Y-m-d
+			$datetime = array(
+				'year'  =&gt; (int) $matches[1],
+				'month' =&gt; (int) $matches[2],
+				'day'   =&gt; (int) $matches[3],
+			);
+
+		} elseif ( preg_match( '/^(\d{4})\-(\d{2})\-(\d{2}) (\d{2}):(\d{2})$/', $datetime, $matches ) ) {
+			// Y-m-d H:i
+			$datetime = array(
+				'year'   =&gt; (int) $matches[1],
+				'month'  =&gt; (int) $matches[2],
+				'day'    =&gt; (int) $matches[3],
+				'hour'   =&gt; (int) $matches[4],
+				'minute' =&gt; (int) $matches[5],
+			);
+		}
+
+		// If no match is found, we don't support default_to_max.
+		if ( ! is_array( $datetime ) ) {
+			$wp_timezone = wp_timezone();
+
+			// Assume local timezone if not provided.
+			$dt = date_create( $datetime, $wp_timezone );
+
+			if ( false === $dt ) {
+				return gmdate( 'Y-m-d H:i:s', false );
+			}
+
+			return $dt-&gt;setTimezone( $wp_timezone )-&gt;format( 'Y-m-d H:i:s' );
+		}
+	}
+
+	$datetime = array_map( 'absint', $datetime );
+
+	if ( ! isset( $datetime['year'] ) ) {
+		$datetime['year'] = current_time( 'Y' );
+	}
+
+	if ( ! isset( $datetime['month'] ) ) {
+		$datetime['month'] = ( $default_to_max ) ? 12 : 1;
+	}
+
+	if ( ! isset( $datetime['day'] ) ) {
+		$datetime['day'] = ( $default_to_max ) ? (int) gmdate( 't', mktime( 0, 0, 0, $datetime['month'], 1, $datetime['year'] ) ) : 1;
+	}
+
+	if ( ! isset( $datetime['hour'] ) ) {
+		$datetime['hour'] = ( $default_to_max ) ? 23 : 0;
+	}
+
+	if ( ! isset( $datetime['minute'] ) ) {
+		$datetime['minute'] = ( $default_to_max ) ? 59 : 0;
+	}
+
+	if ( ! isset( $datetime['second'] ) ) {
+		$datetime['second'] = ( $default_to_max ) ? 59 : 0;
+	}
+
+	return sprintf( '%04d-%02d-%02d %02d:%02d:%02d', $datetime['year'], $datetime['month'], $datetime['day'], $datetime['hour'], $datetime['minute'], $datetime['second'] );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-date-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-date-query.php#L876">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-date-query.php#L876-L957">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_date_query/build_mysql_datetime" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_date_query/build_mysql_datetime</a>
+  </p>
+</div>

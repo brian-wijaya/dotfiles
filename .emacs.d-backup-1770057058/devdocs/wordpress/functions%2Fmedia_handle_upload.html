@@ -1,0 +1,204 @@
+<h1 class="wp-block-wporg-code-reference-title">media_handle_upload( <span class="arg-type">string</span> <span class="arg-name">$file_id</span>, <span class="arg-type">int</span> <span class="arg-name">$post_id</span>, <span class="arg-type">array</span> <span class="arg-name">$post_data</span> = <span class="arg-default">array()</span>, <span class="arg-type">array</span> <span class="arg-name">$overrides</span> = <span class="arg-default">array(‘test_form’ =&gt; false)</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Saves a file submitted from a POST request and create an attachment post for it.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file_id</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Index of the <code>$_FILES</code> array that the file was sent.</span></div></dd>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The post ID of a post to attach the media item to. Required, but can be set to 0, creating a media item that has no relationship to a post.</span></div></dd>
+<dt>
+<code>$post_data</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Overwrite some of the attachment.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$overrides</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc">
+<span class="description">Override the <a href="wp_handle_upload" rel="function">wp_handle_upload()</a> behavior.</span><details class="extended-description"><summary>More Arguments from wp_handle_upload( … $overrides )</summary><span class="description">An array of override parameters for this file, or boolean false if none are provided.<br> <ul class="param-hash">
+<li>
+<code>upload_error_handler</code> <span class="type">callable</span><div class="desc">Function to call when there is an error during the upload process.<br> See <a href="wp_handle_upload_error">wp_handle_upload_error()</a>.</div>
+</li> <li>
+<code>unique_filename_callback</code> <span class="type">callable</span><div class="desc">Function to call when determining a unique file name for the file.<br> See <a href="wp_unique_filename">wp_unique_filename()</a>.</div>
+</li> <li>
+<code>upload_error_strings</code> <span class="type">string[]</span><div class="desc">The strings that describe the error indicated in <code>$_FILES[{form field}]['error']</code>.</div>
+</li> <li>
+<code>test_form</code> <span class="type">bool</span><div class="desc">Whether to test that the <code>$_POST['action']</code> parameter is as expected.</div>
+</li> <li>
+<code>test_size</code> <span class="type">bool</span><div class="desc">Whether to test that the file size is greater than zero bytes.</div>
+</li> <li>
+<code>test_type</code> <span class="type">bool</span><div class="desc">Whether to test that the mime type of the file is as expected.</div>
+</li> <li>
+<code>mimes</code> <span class="type">string[]</span><div class="desc">Array of allowed mime types keyed by their file extension regex.</div>
+</li> </ul> </span></details>
+</div>
+<p class="default">Default:<code>array('test_form' =&gt; false)</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> ID of the attachment or a <a href="../classes/wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="295" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function media_handle_upload( $file_id, $post_id, $post_data = array(), $overrides = array( 'test_form' =&gt; false ) ) {
+	$time = current_time( 'mysql' );
+	$post = get_post( $post_id );
+
+	if ( $post ) {
+		// The post date doesn't usually matter for pages, so don't backdate this upload.
+		if ( 'page' !== $post-&gt;post_type &amp;&amp; substr( $post-&gt;post_date, 0, 4 ) &gt; 0 ) {
+			$time = $post-&gt;post_date;
+		}
+	}
+
+	$file = wp_handle_upload( $_FILES[ $file_id ], $overrides, $time );
+
+	if ( isset( $file['error'] ) ) {
+		return new WP_Error( 'upload_error', $file['error'] );
+	}
+
+	$name = $_FILES[ $file_id ]['name'];
+	$ext  = pathinfo( $name, PATHINFO_EXTENSION );
+	$name = wp_basename( $name, ".$ext" );
+
+	$url     = $file['url'];
+	$type    = $file['type'];
+	$file    = $file['file'];
+	$title   = sanitize_text_field( $name );
+	$content = '';
+	$excerpt = '';
+
+	if ( preg_match( '#^audio#', $type ) ) {
+		$meta = wp_read_audio_metadata( $file );
+
+		if ( ! empty( $meta['title'] ) ) {
+			$title = $meta['title'];
+		}
+
+		if ( ! empty( $title ) ) {
+
+			if ( ! empty( $meta['album'] ) &amp;&amp; ! empty( $meta['artist'] ) ) {
+				/* translators: 1: Audio track title, 2: Album title, 3: Artist name. */
+				$content .= sprintf( __( '"%1$s" from %2$s by %3$s.' ), $title, $meta['album'], $meta['artist'] );
+			} elseif ( ! empty( $meta['album'] ) ) {
+				/* translators: 1: Audio track title, 2: Album title. */
+				$content .= sprintf( __( '"%1$s" from %2$s.' ), $title, $meta['album'] );
+			} elseif ( ! empty( $meta['artist'] ) ) {
+				/* translators: 1: Audio track title, 2: Artist name. */
+				$content .= sprintf( __( '"%1$s" by %2$s.' ), $title, $meta['artist'] );
+			} else {
+				/* translators: %s: Audio track title. */
+				$content .= sprintf( __( '"%s".' ), $title );
+			}
+		} elseif ( ! empty( $meta['album'] ) ) {
+
+			if ( ! empty( $meta['artist'] ) ) {
+				/* translators: 1: Audio album title, 2: Artist name. */
+				$content .= sprintf( __( '%1$s by %2$s.' ), $meta['album'], $meta['artist'] );
+			} else {
+				$content .= $meta['album'] . '.';
+			}
+		} elseif ( ! empty( $meta['artist'] ) ) {
+
+			$content .= $meta['artist'] . '.';
+
+		}
+
+		if ( ! empty( $meta['year'] ) ) {
+			/* translators: Audio file track information. %d: Year of audio track release. */
+			$content .= ' ' . sprintf( __( 'Released: %d.' ), $meta['year'] );
+		}
+
+		if ( ! empty( $meta['track_number'] ) ) {
+			$track_number = explode( '/', $meta['track_number'] );
+
+			if ( is_numeric( $track_number[0] ) ) {
+				if ( isset( $track_number[1] ) &amp;&amp; is_numeric( $track_number[1] ) ) {
+					$content .= ' ' . sprintf(
+						/* translators: Audio file track information. 1: Audio track number, 2: Total audio tracks. */
+						__( 'Track %1$s of %2$s.' ),
+						number_format_i18n( $track_number[0] ),
+						number_format_i18n( $track_number[1] )
+					);
+				} else {
+					$content .= ' ' . sprintf(
+						/* translators: Audio file track information. %s: Audio track number. */
+						__( 'Track %s.' ),
+						number_format_i18n( $track_number[0] )
+					);
+				}
+			}
+		}
+
+		if ( ! empty( $meta['genre'] ) ) {
+			/* translators: Audio file genre information. %s: Audio genre name. */
+			$content .= ' ' . sprintf( __( 'Genre: %s.' ), $meta['genre'] );
+		}
+
+		// Use image exif/iptc data for title and caption defaults if possible.
+	} elseif ( str_starts_with( $type, 'image/' ) ) {
+		$image_meta = wp_read_image_metadata( $file );
+
+		if ( $image_meta ) {
+			if ( trim( $image_meta['title'] ) &amp;&amp; ! is_numeric( sanitize_title( $image_meta['title'] ) ) ) {
+				$title = $image_meta['title'];
+			}
+
+			if ( trim( $image_meta['caption'] ) ) {
+				$excerpt = $image_meta['caption'];
+			}
+		}
+	}
+
+	// Construct the attachment array.
+	$attachment = array_merge(
+		array(
+			'post_mime_type' =&gt; $type,
+			'guid'           =&gt; $url,
+			'post_parent'    =&gt; $post_id,
+			'post_title'     =&gt; $title,
+			'post_content'   =&gt; $content,
+			'post_excerpt'   =&gt; $excerpt,
+		),
+		$post_data
+	);
+
+	// This should never be set as it would then overwrite an existing attachment.
+	unset( $attachment['ID'] );
+
+	// Save the data.
+	$attachment_id = wp_insert_attachment( $attachment, $file, $post_id, true );
+
+	if ( ! is_wp_error( $attachment_id ) ) {
+		/*
+		 * Set a custom header with the attachment_id.
+		 * Used by the browser/client to resume creating image sub-sizes after a PHP fatal error.
+		 */
+		if ( ! headers_sent() ) {
+			header( 'X-WP-Upload-Attachment-ID: ' . $attachment_id );
+		}
+
+		/*
+		 * The image sub-sizes are created during wp_generate_attachment_metadata().
+		 * This is generally slow and may cause timeouts or out of memory errors.
+		 */
+		wp_update_attachment_metadata( $attachment_id, wp_generate_attachment_metadata( $attachment_id, $file ) );
+	}
+
+	return $attachment_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L295">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L295-L441">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/media_handle_upload" class="_attribution-link">https://developer.wordpress.org/reference/functions/media_handle_upload</a>
+  </p>
+</div>

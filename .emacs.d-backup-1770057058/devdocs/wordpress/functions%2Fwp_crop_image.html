@@ -1,0 +1,109 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_crop_image( <span class="arg-type">string|int</span> <span class="arg-name">$src</span>, <span class="arg-type">int</span> <span class="arg-name">$src_x</span>, <span class="arg-type">int</span> <span class="arg-name">$src_y</span>, <span class="arg-type">int</span> <span class="arg-name">$src_w</span>, <span class="arg-type">int</span> <span class="arg-name">$src_h</span>, <span class="arg-type">int</span> <span class="arg-name">$dst_w</span>, <span class="arg-type">int</span> <span class="arg-name">$dst_h</span>, <span class="arg-type">bool|false</span> <span class="arg-name">$src_abs</span> = <span class="arg-default">false</span>, <span class="arg-type">string|false</span> <span class="arg-name">$dst_file</span> = <span class="arg-default">false</span> ): <span class="return-type">string|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Crops an image to a given size.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$src</code><span class="type"><span class="string">string</span>|<span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The source file or Attachment ID.</span></div></dd>
+<dt>
+<code>$src_x</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The start x position to crop from.</span></div></dd>
+<dt>
+<code>$src_y</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The start y position to crop from.</span></div></dd>
+<dt>
+<code>$src_w</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The width to crop.</span></div></dd>
+<dt>
+<code>$src_h</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The height to crop.</span></div></dd>
+<dt>
+<code>$dst_w</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The destination width.</span></div></dd>
+<dt>
+<code>$dst_h</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The destination height.</span></div></dd>
+<dt>
+<code>$src_abs</code><span class="type"><span class="bool">bool</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">If the source crop points are absolute.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$dst_file</code><span class="type"><span class="string">string</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The destination file to write to.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|<a href="../classes/wp_error" rel="class">WP_Error</a></span> New filepath on success, <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="25" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_crop_image( $src, $src_x, $src_y, $src_w, $src_h, $dst_w, $dst_h, $src_abs = false, $dst_file = false ) {
+	$src_file = $src;
+	if ( is_numeric( $src ) ) { // Handle int as attachment ID.
+		$src_file = get_attached_file( $src );
+
+		if ( ! file_exists( $src_file ) ) {
+			/*
+			 * If the file doesn't exist, attempt a URL fopen on the src link.
+			 * This can occur with certain file replication plugins.
+			 */
+			$src = _load_image_to_edit_path( $src, 'full' );
+		} else {
+			$src = $src_file;
+		}
+	}
+
+	$editor = wp_get_image_editor( $src );
+	if ( is_wp_error( $editor ) ) {
+		return $editor;
+	}
+
+	$src = $editor-&gt;crop( $src_x, $src_y, $src_w, $src_h, $dst_w, $dst_h, $src_abs );
+	if ( is_wp_error( $src ) ) {
+		return $src;
+	}
+
+	if ( ! $dst_file ) {
+		$dst_file = str_replace( wp_basename( $src_file ), 'cropped-' . wp_basename( $src_file ), $src_file );
+	}
+
+	/*
+	 * The directory containing the original file may no longer exist when
+	 * using a replication plugin.
+	 */
+	wp_mkdir_p( dirname( $dst_file ) );
+
+	$dst_file = dirname( $dst_file ) . '/' . wp_unique_filename( dirname( $dst_file ), wp_basename( $dst_file ) );
+
+	$result = $editor-&gt;save( $dst_file );
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+
+	if ( ! empty( $result['path'] ) ) {
+		return $result['path'];
+	}
+
+	return $dst_file;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/image.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/image.php#L25">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/image.php#L25-L73">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_crop_image" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_crop_image</a>
+  </p>
+</div>

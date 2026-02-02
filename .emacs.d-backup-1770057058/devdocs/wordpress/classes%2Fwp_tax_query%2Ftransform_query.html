@@ -1,0 +1,88 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Tax_Query::transform_query( <span class="arg-type">array</span> <span class="arg-name">$query</span>, <span class="arg-type">string</span> <span class="arg-name">$resulting_field</span> )</h1> <section><p>Transforms a single query, from one field to another.</p> </section> <section><h2 id="description">Description</h2> <p>Operates on the <code>$query</code> object by reference. In the case of error, <code>$query</code> is converted to a <a href="../wp_error" rel="class">WP_Error</a> object.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$query</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The single query. Passed by reference.</span></div></dd>
+<dt>
+<code>$resulting_field</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The resulting field. Accepts <code>'slug'</code>, <code>'name'</code>, <code>'term_taxonomy_id'</code>, or <code>'term_id'</code>. Default <code>'term_id'</code>.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="596" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function transform_query( &amp;$query, $resulting_field ) {
+	if ( empty( $query['terms'] ) ) {
+		return;
+	}
+
+	if ( $query['field'] === $resulting_field ) {
+		return;
+	}
+
+	$resulting_field = sanitize_key( $resulting_field );
+
+	// Empty 'terms' always results in a null transformation.
+	$terms = array_filter( $query['terms'] );
+	if ( empty( $terms ) ) {
+		$query['terms'] = array();
+		$query['field'] = $resulting_field;
+		return;
+	}
+
+	$args = array(
+		'get'                    =&gt; 'all',
+		'number'                 =&gt; 0,
+		'taxonomy'               =&gt; $query['taxonomy'],
+		'update_term_meta_cache' =&gt; false,
+		'orderby'                =&gt; 'none',
+	);
+
+	// Term query parameter name depends on the 'field' being searched on.
+	switch ( $query['field'] ) {
+		case 'slug':
+			$args['slug'] = $terms;
+			break;
+		case 'name':
+			$args['name'] = $terms;
+			break;
+		case 'term_taxonomy_id':
+			$args['term_taxonomy_id'] = $terms;
+			break;
+		default:
+			$args['include'] = wp_parse_id_list( $terms );
+			break;
+	}
+
+	if ( ! is_taxonomy_hierarchical( $query['taxonomy'] ) ) {
+		$args['number'] = count( $terms );
+	}
+
+	$term_query = new WP_Term_Query();
+	$term_list  = $term_query-&gt;query( $args );
+
+	if ( is_wp_error( $term_list ) ) {
+		$query = $term_list;
+		return;
+	}
+
+	if ( 'AND' === $query['operator'] &amp;&amp; count( $term_list ) &lt; count( $query['terms'] ) ) {
+		$query = new WP_Error( 'inexistent_terms', __( 'Inexistent terms.' ) );
+		return;
+	}
+
+	$query['terms'] = wp_list_pluck( $term_list, $resulting_field );
+	$query['field'] = $resulting_field;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-tax-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-tax-query.php#L596">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-tax-query.php#L596-L658">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.2.0/">3.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_tax_query/transform_query" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_tax_query/transform_query</a>
+  </p>
+</div>

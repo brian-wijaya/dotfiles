@@ -1,0 +1,179 @@
+<h1 class="wp-block-wporg-code-reference-title">get_search_form( <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">void|string</span>
+</h1> <section><p>Displays search form.</p> </section> <section><h2 id="description">Description</h2> <p>Will first attempt to locate the searchform.php file in either the child or the parent, then load it. If it doesn’t exist, then the default search form will be displayed. The default search form is HTML, which will be displayed.<br>There is a filter applied to the search form HTML in order to edit or replace it. The filter is <a href="../hooks/get_search_form">‘get_search_form’</a>.</p> <p>This function is primarily used by themes which want to hardcode the search form into the sidebar and also by the search widget in WordPress.</p> <p>There is also an action that is called whenever the function is run called, <a href="../hooks/pre_get_search_form">‘pre_get_search_form’</a>. This can be useful for outputting JavaScript that the search relies on or various formatting that applies to the beginning of the search. To give a few examples of what it can be used for.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of display arguments.<br> <ul class="param-hash">
+<li>
+<code>echo</code> <span class="type">bool</span><div class="desc">Whether to echo or return the form. Default true.</div>
+</li> <li>
+<code>aria_label</code> <span class="type">string</span><div class="desc">ARIA label for the search form. Useful to distinguish multiple search forms on the same page and improve accessibility. </div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">void|string</span> Void if <code>'echo'</code> argument is true, search form HTML if <code>'echo'</code> is false.</section> <section><h2 id="more-information">More Information</h2> <h3 id="usage">Usage</h3> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">get_search_form( $echo );</code></pre> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="241" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_search_form( $args = array() ) {
+	/**
+	 * Fires before the search form is retrieved, at the start of get_search_form().
+	 *
+	 * @since 2.7.0 as 'get_search_form' action.
+	 * @since 3.6.0
+	 * @since 5.5.0 The `$args` parameter was added.
+	 *
+	 * @link https://core.trac.wordpress.org/ticket/19321
+	 *
+	 * @param array $args The array of arguments for building the search form.
+	 *                    See get_search_form() for information on accepted arguments.
+	 */
+	do_action( 'pre_get_search_form', $args );
+
+	$echo = true;
+
+	if ( ! is_array( $args ) ) {
+		/*
+		 * Back compat: to ensure previous uses of get_search_form() continue to
+		 * function as expected, we handle a value for the boolean $echo param removed
+		 * in 5.2.0. Then we deal with the $args array and cast its defaults.
+		 */
+		$echo = (bool) $args;
+
+		// Set an empty array and allow default arguments to take over.
+		$args = array();
+	}
+
+	// Defaults are to echo and to output no custom label on the form.
+	$defaults = array(
+		'echo'       =&gt; $echo,
+		'aria_label' =&gt; '',
+	);
+
+	$args = wp_parse_args( $args, $defaults );
+
+	/**
+	 * Filters the array of arguments used when generating the search form.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @param array $args The array of arguments for building the search form.
+	 *                    See get_search_form() for information on accepted arguments.
+	 */
+	$args = apply_filters( 'search_form_args', $args );
+
+	// Ensure that the filtered arguments contain all required default values.
+	$args = array_merge( $defaults, $args );
+
+	$format = current_theme_supports( 'html5', 'search-form' ) ? 'html5' : 'xhtml';
+
+	/**
+	 * Filters the HTML format of the search form.
+	 *
+	 * @since 3.6.0
+	 * @since 5.5.0 The `$args` parameter was added.
+	 *
+	 * @param string $format The type of markup to use in the search form.
+	 *                       Accepts 'html5', 'xhtml'.
+	 * @param array  $args   The array of arguments for building the search form.
+	 *                       See get_search_form() for information on accepted arguments.
+	 */
+	$format = apply_filters( 'search_form_format', $format, $args );
+
+	$search_form_template = locate_template( 'searchform.php' );
+
+	if ( '' !== $search_form_template ) {
+		ob_start();
+		require $search_form_template;
+		$form = ob_get_clean();
+	} else {
+		// Build a string containing an aria-label to use for the search form.
+		if ( $args['aria_label'] ) {
+			$aria_label = 'aria-label="' . esc_attr( $args['aria_label'] ) . '" ';
+		} else {
+			/*
+			 * If there's no custom aria-label, we can set a default here. At the
+			 * moment it's empty as there's uncertainty about what the default should be.
+			 */
+			$aria_label = '';
+		}
+
+		if ( 'html5' === $format ) {
+			$form = '&lt;form role="search" ' . $aria_label . 'method="get" class="search-form" action="' . esc_url( home_url( '/' ) ) . '"&gt;
+				&lt;label&gt;
+					&lt;span class="screen-reader-text"&gt;' .
+					/* translators: Hidden accessibility text. */
+					_x( 'Search for:', 'label' ) .
+					'&lt;/span&gt;
+					&lt;input type="search" class="search-field" placeholder="' . esc_attr_x( 'Search &amp;hellip;', 'placeholder' ) . '" value="' . get_search_query() . '" name="s" /&gt;
+				&lt;/label&gt;
+				&lt;input type="submit" class="search-submit" value="' . esc_attr_x( 'Search', 'submit button' ) . '" /&gt;
+			&lt;/form&gt;';
+		} else {
+			$form = '&lt;form role="search" ' . $aria_label . 'method="get" id="searchform" class="searchform" action="' . esc_url( home_url( '/' ) ) . '"&gt;
+				&lt;div&gt;
+					&lt;label class="screen-reader-text" for="s"&gt;' .
+					/* translators: Hidden accessibility text. */
+					_x( 'Search for:', 'label' ) .
+					'&lt;/label&gt;
+					&lt;input type="text" value="' . get_search_query() . '" name="s" id="s" /&gt;
+					&lt;input type="submit" id="searchsubmit" value="' . esc_attr_x( 'Search', 'submit button' ) . '" /&gt;
+				&lt;/div&gt;
+			&lt;/form&gt;';
+		}
+	}
+
+	/**
+	 * Filters the HTML output of the search form.
+	 *
+	 * @since 2.7.0
+	 * @since 5.5.0 The `$args` parameter was added.
+	 *
+	 * @param string $form The search form HTML output.
+	 * @param array  $args The array of arguments for building the search form.
+	 *                     See get_search_form() for information on accepted arguments.
+	 */
+	$result = apply_filters( 'get_search_form', $form, $args );
+
+	if ( null === $result ) {
+		$result = $form;
+	}
+
+	if ( $args['echo'] ) {
+		echo $result;
+	} else {
+		return $result;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/general-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/general-template.php#L241">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/general-template.php#L241-L370">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_search_form"><span class="hook-func">apply_filters</span>( ‘get_search_form’, <nobr><span class="arg-type">string</span> <span class="arg-name">$form</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the HTML output of the search form.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_get_search_form"><span class="hook-func">do_action</span>( ‘pre_get_search_form’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Fires before the search form is retrieved, at the start of <a href="get_search_form" rel="function">get_search_form()</a> .</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/search_form_args"><span class="hook-func">apply_filters</span>( ‘search_form_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the array of arguments used when generating the search form.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/search_form_format"><span class="hook-func">apply_filters</span>( ‘search_form_format’, <nobr><span class="arg-type">string</span> <span class="arg-name">$format</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the HTML format of the search form.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td><span class="since-description">The <code>$args</code> array parameter was added in place of an <code>$echo</code> boolean flag.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_search_form" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_search_form</a>
+  </p>
+</div>

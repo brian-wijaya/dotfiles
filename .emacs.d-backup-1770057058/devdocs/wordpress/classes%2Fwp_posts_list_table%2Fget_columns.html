@@ -1,0 +1,123 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Posts_List_Table::get_columns(): <span class="return-type">string[]</span>
+</h1>  <section><h2 id="return">Return</h2> <span class="return-type">string[]</span> Array of column titles keyed by their column name.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="656" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_columns() {
+	$post_type = $this-&gt;screen-&gt;post_type;
+
+	$posts_columns = array();
+
+	$posts_columns['cb'] = '&lt;input type="checkbox" /&gt;';
+
+	/* translators: Posts screen column name. */
+	$posts_columns['title'] = _x( 'Title', 'column name' );
+
+	if ( post_type_supports( $post_type, 'author' ) ) {
+		$posts_columns['author'] = __( 'Author' );
+	}
+
+	$taxonomies = get_object_taxonomies( $post_type, 'objects' );
+	$taxonomies = wp_filter_object_list( $taxonomies, array( 'show_admin_column' =&gt; true ), 'and', 'name' );
+
+	/**
+	 * Filters the taxonomy columns in the Posts list table.
+	 *
+	 * The dynamic portion of the hook name, `$post_type`, refers to the post
+	 * type slug.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `manage_taxonomies_for_post_columns`
+	 *  - `manage_taxonomies_for_page_columns`
+	 *
+	 * @since 3.5.0
+	 *
+	 * @param string[] $taxonomies Array of taxonomy names to show columns for.
+	 * @param string   $post_type  The post type.
+	 */
+	$taxonomies = apply_filters( "manage_taxonomies_for_{$post_type}_columns", $taxonomies, $post_type );
+	$taxonomies = array_filter( $taxonomies, 'taxonomy_exists' );
+
+	foreach ( $taxonomies as $taxonomy ) {
+		if ( 'category' === $taxonomy ) {
+			$column_key = 'categories';
+		} elseif ( 'post_tag' === $taxonomy ) {
+			$column_key = 'tags';
+		} else {
+			$column_key = 'taxonomy-' . $taxonomy;
+		}
+
+		$posts_columns[ $column_key ] = get_taxonomy( $taxonomy )-&gt;labels-&gt;name;
+	}
+
+	$post_status = ! empty( $_REQUEST['post_status'] ) ? $_REQUEST['post_status'] : 'all';
+
+	if ( post_type_supports( $post_type, 'comments' )
+		&amp;&amp; ! in_array( $post_status, array( 'pending', 'draft', 'future' ), true )
+	) {
+		$posts_columns['comments'] = sprintf(
+			'&lt;span class="vers comment-grey-bubble" title="%1$s" aria-hidden="true"&gt;&lt;/span&gt;&lt;span class="screen-reader-text"&gt;%2$s&lt;/span&gt;',
+			esc_attr__( 'Comments' ),
+			/* translators: Hidden accessibility text. */
+			__( 'Comments' )
+		);
+	}
+
+	$posts_columns['date'] = __( 'Date' );
+
+	if ( 'page' === $post_type ) {
+
+		/**
+		 * Filters the columns displayed in the Pages list table.
+		 *
+		 * @since 2.5.0
+		 *
+		 * @param string[] $posts_columns An associative array of column headings.
+		 */
+		$posts_columns = apply_filters( 'manage_pages_columns', $posts_columns );
+	} else {
+
+		/**
+		 * Filters the columns displayed in the Posts list table.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param string[] $posts_columns An associative array of column headings.
+		 * @param string   $post_type     The post type slug.
+		 */
+		$posts_columns = apply_filters( 'manage_posts_columns', $posts_columns, $post_type );
+	}
+
+	/**
+	 * Filters the columns displayed in the Posts list table for a specific post type.
+	 *
+	 * The dynamic portion of the hook name, `$post_type`, refers to the post type slug.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `manage_post_posts_columns`
+	 *  - `manage_page_posts_columns`
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param string[] $posts_columns An associative array of column headings.
+	 */
+	return apply_filters( "manage_{$post_type}_posts_columns", $posts_columns );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-posts-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-posts-list-table.php#L656">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-posts-list-table.php#L656-L757">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/manage_pages_columns"><span class="hook-func">apply_filters</span>( ‘manage_pages_columns’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$posts_columns</span></nobr> )</a></dt>
+<dd>
+<p>Filters the columns displayed in the Pages list table.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/manage_posts_columns"><span class="hook-func">apply_filters</span>( ‘manage_posts_columns’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$posts_columns</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters the columns displayed in the Posts list table.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/manage_taxonomies_for_post_type_columns"><span class="hook-func">apply_filters</span>( “manage_taxonomies_for_{$post_type}_columns”, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$taxonomies</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters the taxonomy columns in the Posts list table.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/manage_post_type_posts_columns"><span class="hook-func">apply_filters</span>( “manage_{$post_type}_posts_columns”, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$posts_columns</span></nobr> )</a></dt>
+<dd>
+<p>Filters the columns displayed in the Posts list table for a specific post type.</p> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_posts_list_table/get_columns" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_posts_list_table/get_columns</a>
+  </p>
+</div>

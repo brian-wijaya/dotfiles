@@ -1,0 +1,114 @@
+<h1 class="wp-block-wporg-code-reference-title">Custom_Image_Header::step_3()</h1> <section><p>Displays third step of custom header image page.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1016" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function step_3() {
+	check_admin_referer( 'custom-header-crop-image' );
+
+	if ( ! current_theme_supports( 'custom-header', 'uploads' ) ) {
+		wp_die(
+			'&lt;h1&gt;' . __( 'Something went wrong.' ) . '&lt;/h1&gt;' .
+			'&lt;p&gt;' . __( 'The active theme does not support uploading a custom header image.' ) . '&lt;/p&gt;',
+			403
+		);
+	}
+
+	if ( ! empty( $_POST['skip-cropping'] )
+		&amp;&amp; ! current_theme_supports( 'custom-header', 'flex-height' )
+		&amp;&amp; ! current_theme_supports( 'custom-header', 'flex-width' )
+	) {
+		wp_die(
+			'&lt;h1&gt;' . __( 'Something went wrong.' ) . '&lt;/h1&gt;' .
+			'&lt;p&gt;' . __( 'The active theme does not support a flexible sized header image.' ) . '&lt;/p&gt;',
+			403
+		);
+	}
+
+	if ( $_POST['oitar'] &gt; 1 ) {
+		$_POST['x1']     = $_POST['x1'] * $_POST['oitar'];
+		$_POST['y1']     = $_POST['y1'] * $_POST['oitar'];
+		$_POST['width']  = $_POST['width'] * $_POST['oitar'];
+		$_POST['height'] = $_POST['height'] * $_POST['oitar'];
+	}
+
+	$attachment_id = absint( $_POST['attachment_id'] );
+	$original      = get_attached_file( $attachment_id );
+
+	$dimensions = $this-&gt;get_header_dimensions(
+		array(
+			'height' =&gt; $_POST['height'],
+			'width'  =&gt; $_POST['width'],
+		)
+	);
+	$height     = $dimensions['dst_height'];
+	$width      = $dimensions['dst_width'];
+
+	if ( empty( $_POST['skip-cropping'] ) ) {
+		$cropped = wp_crop_image(
+			$attachment_id,
+			(int) $_POST['x1'],
+			(int) $_POST['y1'],
+			(int) $_POST['width'],
+			(int) $_POST['height'],
+			$width,
+			$height
+		);
+	} elseif ( ! empty( $_POST['create-new-attachment'] ) ) {
+		$cropped = _copy_image_file( $attachment_id );
+	} else {
+		$cropped = get_attached_file( $attachment_id );
+	}
+
+	if ( ! $cropped || is_wp_error( $cropped ) ) {
+		wp_die( __( 'Image could not be processed. Please go back and try again.' ), __( 'Image Processing Error' ) );
+	}
+
+	/** This filter is documented in wp-admin/includes/class-custom-image-header.php */
+	$cropped = apply_filters( 'wp_create_file_in_uploads', $cropped, $attachment_id ); // For replication.
+
+	$attachment = wp_copy_parent_attachment_properties( $cropped, $attachment_id, 'custom-header' );
+
+	if ( ! empty( $_POST['create-new-attachment'] ) ) {
+		unset( $attachment['ID'] );
+	}
+
+	// Update the attachment.
+	$attachment_id = $this-&gt;insert_attachment( $attachment, $cropped );
+
+	$url = wp_get_attachment_url( $attachment_id );
+	$this-&gt;set_header_image( compact( 'url', 'attachment_id', 'width', 'height' ) );
+
+	// Cleanup.
+	$medium = str_replace( wp_basename( $original ), 'midsize-' . wp_basename( $original ), $original );
+	if ( file_exists( $medium ) ) {
+		wp_delete_file( $medium );
+	}
+
+	if ( empty( $_POST['create-new-attachment'] ) &amp;&amp; empty( $_POST['skip-cropping'] ) ) {
+		wp_delete_file( $original );
+	}
+
+	return $this-&gt;finished();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-custom-image-header.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-custom-image-header.php#L1016">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-custom-image-header.php#L1016-L1103">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/wp_create_file_in_uploads"><span class="hook-func">apply_filters</span>( ‘wp_create_file_in_uploads’, <nobr><span class="arg-type">string</span> <span class="arg-name">$file</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the attachment file path after the custom header or background image is set.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Switched to using <a href="../../functions/wp_get_attachment_url" rel="function">wp_get_attachment_url()</a> instead of the guid for retrieving the header image URL.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/custom_image_header/step_3" class="_attribution-link">https://developer.wordpress.org/reference/classes/custom_image_header/step_3</a>
+  </p>
+</div>

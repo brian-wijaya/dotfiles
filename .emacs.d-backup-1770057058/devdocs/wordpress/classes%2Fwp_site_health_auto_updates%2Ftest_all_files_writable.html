@@ -1,0 +1,94 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Site_Health_Auto_Updates::test_all_files_writable(): <span class="return-type">array|false</span>
+</h1> <section><p>Checks if core files are writable by the web user/group.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> The test results. False if they’re not writeable.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="317" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function test_all_files_writable() {
+	global $wp_filesystem;
+
+	require ABSPATH . WPINC . '/version.php'; // $wp_version; // x.y.z
+
+	$skin    = new Automatic_Upgrader_Skin();
+	$success = $skin-&gt;request_filesystem_credentials( false, ABSPATH );
+
+	if ( ! $success ) {
+		return false;
+	}
+
+	WP_Filesystem();
+
+	if ( 'direct' !== $wp_filesystem-&gt;method ) {
+		return false;
+	}
+
+	// Make sure the `get_core_checksums()` function is available during our REST API call.
+	if ( ! function_exists( 'get_core_checksums' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/update.php';
+	}
+
+	$checksums = get_core_checksums( $wp_version, 'en_US' );
+	$dev       = ( str_contains( $wp_version, '-' ) );
+	// Get the last stable version's files and test against that.
+	if ( ! $checksums &amp;&amp; $dev ) {
+		$checksums = get_core_checksums( (float) $wp_version - 0.1, 'en_US' );
+	}
+
+	// There aren't always checksums for development releases, so just skip the test if we still can't find any.
+	if ( ! $checksums &amp;&amp; $dev ) {
+		return false;
+	}
+
+	if ( ! $checksums ) {
+		$description = sprintf(
+			/* translators: %s: WordPress version. */
+			__( "Couldn't retrieve a list of the checksums for WordPress %s." ),
+			$wp_version
+		);
+		$description .= ' ' . __( 'This could mean that connections are failing to WordPress.org.' );
+		return array(
+			'description' =&gt; $description,
+			'severity'    =&gt; 'warning',
+		);
+	}
+
+	$unwritable_files = array();
+	foreach ( array_keys( $checksums ) as $file ) {
+		if ( str_starts_with( $file, 'wp-content' ) ) {
+			continue;
+		}
+		if ( ! file_exists( ABSPATH . $file ) ) {
+			continue;
+		}
+		if ( ! is_writable( ABSPATH . $file ) ) {
+			$unwritable_files[] = $file;
+		}
+	}
+
+	if ( $unwritable_files ) {
+		if ( count( $unwritable_files ) &gt; 20 ) {
+			$unwritable_files   = array_slice( $unwritable_files, 0, 20 );
+			$unwritable_files[] = '...';
+		}
+		return array(
+			'description' =&gt; __( 'Some files are not writable by WordPress:' ) . ' &lt;ul&gt;&lt;li&gt;' . implode( '&lt;/li&gt;&lt;li&gt;', $unwritable_files ) . '&lt;/li&gt;&lt;/ul&gt;',
+			'severity'    =&gt; 'fail',
+		);
+	} else {
+		return array(
+			'description' =&gt; __( 'All of your WordPress files are writable.' ),
+			'severity'    =&gt; 'pass',
+		);
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-site-health-auto-updates.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-site-health-auto-updates.php#L317">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-site-health-auto-updates.php#L317-L393">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_site_health_auto_updates/test_all_files_writable" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_site_health_auto_updates/test_all_files_writable</a>
+  </p>
+</div>

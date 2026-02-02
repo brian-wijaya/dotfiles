@@ -1,0 +1,128 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Comments_List_Table::get_views()</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="234" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function get_views() {
+	global $post_id, $comment_status, $comment_type;
+
+	$status_links = array();
+	$num_comments = ( $post_id ) ? wp_count_comments( $post_id ) : wp_count_comments();
+
+	$statuses = array(
+		/* translators: %s: Number of comments. */
+		'all'       =&gt; _nx_noop(
+			'All &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'All &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'comments'
+		), // Singular not used.
+
+		/* translators: %s: Number of comments. */
+		'mine'      =&gt; _nx_noop(
+			'Mine &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'Mine &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'comments'
+		),
+
+		/* translators: %s: Number of comments. */
+		'moderated' =&gt; _nx_noop(
+			'Pending &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'Pending &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'comments'
+		),
+
+		/* translators: %s: Number of comments. */
+		'approved'  =&gt; _nx_noop(
+			'Approved &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'Approved &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'comments'
+		),
+
+		/* translators: %s: Number of comments. */
+		'spam'      =&gt; _nx_noop(
+			'Spam &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'Spam &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'comments'
+		),
+
+		/* translators: %s: Number of comments. */
+		'trash'     =&gt; _nx_noop(
+			'Trash &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'Trash &lt;span class="count"&gt;(%s)&lt;/span&gt;',
+			'comments'
+		),
+	);
+
+	if ( ! EMPTY_TRASH_DAYS ) {
+		unset( $statuses['trash'] );
+	}
+
+	$link = admin_url( 'edit-comments.php' );
+
+	if ( ! empty( $comment_type ) &amp;&amp; 'all' !== $comment_type ) {
+		$link = add_query_arg( 'comment_type', $comment_type, $link );
+	}
+
+	foreach ( $statuses as $status =&gt; $label ) {
+		if ( 'mine' === $status ) {
+			$current_user_id    = get_current_user_id();
+			$num_comments-&gt;mine = get_comments(
+				array(
+					'post_id' =&gt; $post_id ? $post_id : 0,
+					'user_id' =&gt; $current_user_id,
+					'count'   =&gt; true,
+					'orderby' =&gt; 'none',
+				)
+			);
+			$link               = add_query_arg( 'user_id', $current_user_id, $link );
+		} else {
+			$link = remove_query_arg( 'user_id', $link );
+		}
+
+		if ( ! isset( $num_comments-&gt;$status ) ) {
+			$num_comments-&gt;$status = 10;
+		}
+
+		$link = add_query_arg( 'comment_status', $status, $link );
+
+		if ( $post_id ) {
+			$link = add_query_arg( 'p', absint( $post_id ), $link );
+		}
+
+		/*
+		// I toyed with this, but decided against it. Leaving it in here in case anyone thinks it is a good idea. ~ Mark
+		if ( !empty( $_REQUEST['s'] ) )
+			$link = add_query_arg( 's', esc_attr( wp_unslash( $_REQUEST['s'] ) ), $link );
+		*/
+
+		$status_links[ $status ] = array(
+			'url'     =&gt; esc_url( $link ),
+			'label'   =&gt; sprintf(
+				translate_nooped_plural( $label, $num_comments-&gt;$status ),
+				sprintf(
+					'&lt;span class="%s-count"&gt;%s&lt;/span&gt;',
+					( 'moderated' === $status ) ? 'pending' : $status,
+					number_format_i18n( $num_comments-&gt;$status )
+				)
+			),
+			'current' =&gt; $status === $comment_status,
+		);
+	}
+
+	/**
+	 * Filters the comment status links.
+	 *
+	 * @since 2.5.0
+	 * @since 5.1.0 The 'Mine' link was added.
+	 *
+	 * @param string[] $status_links An associative array of fully-formed comment status links. Includes 'All', 'Mine',
+	 *                              'Pending', 'Approved', 'Spam', and 'Trash'.
+	 */
+	return apply_filters( 'comment_status_links', $this-&gt;get_views_links( $status_links ) );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-comments-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-comments-list-table.php#L234">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-comments-list-table.php#L234-L350">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/comment_status_links"><span class="hook-func">apply_filters</span>( ‘comment_status_links’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$status_links</span></nobr> )</a></dt>
+<dd>
+<p>Filters the comment status links.</p> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_comments_list_table/get_views" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_comments_list_table/get_views</a>
+  </p>
+</div>

@@ -1,0 +1,104 @@
+<h1 class="wp-block-wporg-code-reference-title">sanitize_bookmark_field( <span class="arg-type">string</span> <span class="arg-name">$field</span>, <span class="arg-type">mixed</span> <span class="arg-name">$value</span>, <span class="arg-type">int</span> <span class="arg-name">$bookmark_id</span>, <span class="arg-type">string</span> <span class="arg-name">$context</span> ): <span class="return-type">mixed</span>
+</h1> <section><p>Sanitizes a bookmark field.</p> </section> <section><h2 id="description">Description</h2> <p>Sanitizes the bookmark fields based on what the field name is. If the field has a strict value set, then it will be tested for that, else a more generic filtering is applied. After the more strict filter is applied, if the <code>$context</code> is ‘raw’ then the value is immediately return.</p> <p>Hooks exist for the more generic cases. With the ‘edit’ context, the <a href="../hooks/edit_field">‘edit_$field’</a> filter will be called and passed the <code>$value</code> and <code>$bookmark_id</code> respectively.</p> <p>With the ‘db’ context, the <a href="../hooks/pre_field">‘pre_$field’</a> filter is called and passed the value.<br>The ‘display’ context is the final context and has the <code>$field</code> has the filter name and is passed the <code>$value</code>, <code>$bookmark_id</code>, and <code>$context</code>, respectively.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$field</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The bookmark field.</span></div></dd>
+<dt>
+<code>$value</code><span class="type"><span class="mixed">mixed</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The bookmark field value.</span></div></dd>
+<dt>
+<code>$bookmark_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Bookmark ID.</span></div></dd>
+<dt>
+<code>$context</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">How to filter the field value. Accepts <code>'raw'</code>, <code>'edit'</code>, <code>'db'</code>, <code>'display'</code>, <code>'attribute'</code>, or <code>'js'</code>. Default <code>'display'</code>.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed</span> The filtered value.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="399" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function sanitize_bookmark_field( $field, $value, $bookmark_id, $context ) {
+	$int_fields = array( 'link_id', 'link_rating' );
+	if ( in_array( $field, $int_fields, true ) ) {
+		$value = (int) $value;
+	}
+
+	switch ( $field ) {
+		case 'link_category': // array( ints )
+			$value = array_map( 'absint', (array) $value );
+			/*
+			 * We return here so that the categories aren't filtered.
+			 * The 'link_category' filter is for the name of a link category, not an array of a link's link categories.
+			 */
+			return $value;
+
+		case 'link_visible': // bool stored as Y|N
+			$value = preg_replace( '/[^YNyn]/', '', $value );
+			break;
+		case 'link_target': // "enum"
+			$targets = array( '_top', '_blank' );
+			if ( ! in_array( $value, $targets, true ) ) {
+				$value = '';
+			}
+			break;
+	}
+
+	if ( 'raw' === $context ) {
+		return $value;
+	}
+
+	if ( 'edit' === $context ) {
+		/** This filter is documented in wp-includes/post.php */
+		$value = apply_filters( "edit_{$field}", $value, $bookmark_id );
+
+		if ( 'link_notes' === $field ) {
+			$value = esc_html( $value ); // textarea_escaped
+		} else {
+			$value = esc_attr( $value );
+		}
+	} elseif ( 'db' === $context ) {
+		/** This filter is documented in wp-includes/post.php */
+		$value = apply_filters( "pre_{$field}", $value );
+	} else {
+		/** This filter is documented in wp-includes/post.php */
+		$value = apply_filters( "{$field}", $value, $bookmark_id, $context );
+
+		if ( 'attribute' === $context ) {
+			$value = esc_attr( $value );
+		} elseif ( 'js' === $context ) {
+			$value = esc_js( $value );
+		}
+	}
+
+	// Restore the type for integer fields after esc_attr().
+	if ( in_array( $field, $int_fields, true ) ) {
+		$value = (int) $value;
+	}
+
+	return $value;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/bookmark.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/bookmark.php#L399">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/bookmark.php#L399-L458">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/edit_field"><span class="hook-func">apply_filters</span>( “edit_{$field}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the value of a specific post field to edit.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_field"><span class="hook-func">apply_filters</span>( “pre_{$field}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr> )</a></dt>
+<dd>
+<p>Filters the value of a specific post field before saving.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/field"><span class="hook-func">apply_filters</span>( “{$field}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Filters the value of a specific post field for display.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/sanitize_bookmark_field" class="_attribution-link">https://developer.wordpress.org/reference/functions/sanitize_bookmark_field</a>
+  </p>
+</div>

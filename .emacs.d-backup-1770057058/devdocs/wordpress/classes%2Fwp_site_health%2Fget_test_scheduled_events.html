@@ -1,0 +1,78 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Site_Health::get_test_scheduled_events(): <span class="return-type">array</span>
+</h1> <section><p>Tests if scheduled events run as intended.</p> </section> <section><h2 id="description">Description</h2> <p>If scheduled events are not running, this may indicate something with WP_Cron is not working as intended, or that there are orphaned events hanging around from older code.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The test results.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1632" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_test_scheduled_events() {
+	$result = array(
+		'label'       =&gt; __( 'Scheduled events are running' ),
+		'status'      =&gt; 'good',
+		'badge'       =&gt; array(
+			'label' =&gt; __( 'Performance' ),
+			'color' =&gt; 'blue',
+		),
+		'description' =&gt; sprintf(
+			'&lt;p&gt;%s&lt;/p&gt;',
+			__( 'Scheduled events are what periodically looks for updates to plugins, themes and WordPress itself. It is also what makes sure scheduled posts are published on time. It may also be used by various plugins to make sure that planned actions are executed.' )
+		),
+		'actions'     =&gt; '',
+		'test'        =&gt; 'scheduled_events',
+	);
+
+	$this-&gt;wp_schedule_test_init();
+
+	if ( is_wp_error( $this-&gt;has_missed_cron() ) ) {
+		$result['status'] = 'critical';
+
+		$result['label'] = __( 'It was not possible to check your scheduled events' );
+
+		$result['description'] = sprintf(
+			'&lt;p&gt;%s&lt;/p&gt;',
+			sprintf(
+				/* translators: %s: The error message returned while from the cron scheduler. */
+				__( 'While trying to test your site&amp;#8217;s scheduled events, the following error was returned: %s' ),
+				$this-&gt;has_missed_cron()-&gt;get_error_message()
+			)
+		);
+	} elseif ( $this-&gt;has_missed_cron() ) {
+		$result['status'] = 'recommended';
+
+		$result['label'] = __( 'A scheduled event has failed' );
+
+		$result['description'] = sprintf(
+			'&lt;p&gt;%s&lt;/p&gt;',
+			sprintf(
+				/* translators: %s: The name of the failed cron event. */
+				__( 'The scheduled event, %s, failed to run. Your site still works, but this may indicate that scheduling posts or automated updates may not work as intended.' ),
+				$this-&gt;last_missed_cron
+			)
+		);
+	} elseif ( $this-&gt;has_late_cron() ) {
+		$result['status'] = 'recommended';
+
+		$result['label'] = __( 'A scheduled event is late' );
+
+		$result['description'] = sprintf(
+			'&lt;p&gt;%s&lt;/p&gt;',
+			sprintf(
+				/* translators: %s: The name of the late cron event. */
+				__( 'The scheduled event, %s, is late to run. Your site still works, but this may indicate that scheduling posts or automated updates may not work as intended.' ),
+				$this-&gt;last_late_cron
+			)
+		);
+	}
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-site-health.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-site-health.php#L1632">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-site-health.php#L1632-L1692">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_site_health/get_test_scheduled_events" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_site_health/get_test_scheduled_events</a>
+  </p>
+</div>

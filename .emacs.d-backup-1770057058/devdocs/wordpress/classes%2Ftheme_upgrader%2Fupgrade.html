@@ -1,0 +1,110 @@
+<h1 class="wp-block-wporg-code-reference-title">Theme_Upgrader::upgrade( <span class="arg-type">string</span> <span class="arg-name">$theme</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">bool|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Upgrades a theme.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$theme</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The theme slug.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Other arguments for upgrading a theme. <br> <ul class="param-hash">
+<li>
+<code>clear_update_cache</code> <span class="type">bool</span><div class="desc">Whether to clear the update cache if successful.<br> Default true.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../wp_error" rel="class">WP_Error</a></span> True if the upgrade was successful, false or a <a href="../wp_error" rel="class">WP_Error</a> object otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="295" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function upgrade( $theme, $args = array() ) {
+	$defaults    = array(
+		'clear_update_cache' =&gt; true,
+	);
+	$parsed_args = wp_parse_args( $args, $defaults );
+
+	$this-&gt;init();
+	$this-&gt;upgrade_strings();
+
+	// Is an update available?
+	$current = get_site_transient( 'update_themes' );
+	if ( ! isset( $current-&gt;response[ $theme ] ) ) {
+		$this-&gt;skin-&gt;before();
+		$this-&gt;skin-&gt;set_result( false );
+		$this-&gt;skin-&gt;error( 'up_to_date' );
+		$this-&gt;skin-&gt;after();
+		return false;
+	}
+
+	$r = $current-&gt;response[ $theme ];
+
+	add_filter( 'upgrader_pre_install', array( $this, 'current_before' ), 10, 2 );
+	add_filter( 'upgrader_post_install', array( $this, 'current_after' ), 10, 2 );
+	add_filter( 'upgrader_clear_destination', array( $this, 'delete_old_theme' ), 10, 4 );
+	if ( $parsed_args['clear_update_cache'] ) {
+		// Clear cache so wp_update_themes() knows about the new theme.
+		add_action( 'upgrader_process_complete', 'wp_clean_themes_cache', 9, 0 );
+	}
+
+	$this-&gt;run(
+		array(
+			'package'           =&gt; $r['package'],
+			'destination'       =&gt; get_theme_root( $theme ),
+			'clear_destination' =&gt; true,
+			'clear_working'     =&gt; true,
+			'hook_extra'        =&gt; array(
+				'theme'       =&gt; $theme,
+				'type'        =&gt; 'theme',
+				'action'      =&gt; 'update',
+				'temp_backup' =&gt; array(
+					'slug' =&gt; $theme,
+					'src'  =&gt; get_theme_root( $theme ),
+					'dir'  =&gt; 'themes',
+				),
+			),
+		)
+	);
+
+	remove_action( 'upgrader_process_complete', 'wp_clean_themes_cache', 9 );
+	remove_filter( 'upgrader_pre_install', array( $this, 'current_before' ) );
+	remove_filter( 'upgrader_post_install', array( $this, 'current_after' ) );
+	remove_filter( 'upgrader_clear_destination', array( $this, 'delete_old_theme' ) );
+
+	if ( ! $this-&gt;result || is_wp_error( $this-&gt;result ) ) {
+		return $this-&gt;result;
+	}
+
+	wp_clean_themes_cache( $parsed_args['clear_update_cache'] );
+
+	/*
+	 * Ensure any future auto-update failures trigger a failure email by removing
+	 * the last failure notification from the list when themes update successfully.
+	 */
+	$past_failure_emails = get_option( 'auto_plugin_theme_update_emails', array() );
+
+	if ( isset( $past_failure_emails[ $theme ] ) ) {
+		unset( $past_failure_emails[ $theme ] );
+		update_option( 'auto_plugin_theme_update_emails', $past_failure_emails );
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-theme-upgrader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-theme-upgrader.php#L295">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-theme-upgrader.php#L295-L366">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td><span class="since-description">The <code>$args</code> parameter was added, making clearing the update cache optional.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/theme_upgrader/upgrade" class="_attribution-link">https://developer.wordpress.org/reference/classes/theme_upgrader/upgrade</a>
+  </p>
+</div>

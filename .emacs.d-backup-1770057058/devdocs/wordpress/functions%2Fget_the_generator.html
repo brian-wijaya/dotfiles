@@ -1,0 +1,104 @@
+<h1 class="wp-block-wporg-code-reference-title">get_the_generator( <span class="arg-type">string</span> <span class="arg-name">$type</span> = <span class="arg-default">”</span> ): <span class="return-type">string|void</span>
+</h1> <section><p>Creates the generator XML or Comment for RSS, ATOM, etc.</p> </section> <section><h2 id="description">Description</h2> <p>Returns the correct generator type for the requested output format. Allows for a plugin to filter generators on an individual basis using the <a href="../hooks/get_the_generator_type">‘get_the_generator_$type’</a> filter.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$type</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The type of generator to return – (<code>html|xhtml|atom|rss2|rdf|comment|export</code>).</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|void</span> The HTML content for the generator.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="5010" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_the_generator( $type = '' ) {
+	if ( empty( $type ) ) {
+
+		$current_filter = current_filter();
+		if ( empty( $current_filter ) ) {
+			return;
+		}
+
+		switch ( $current_filter ) {
+			case 'rss2_head':
+			case 'commentsrss2_head':
+				$type = 'rss2';
+				break;
+			case 'rss_head':
+			case 'opml_head':
+				$type = 'comment';
+				break;
+			case 'rdf_header':
+				$type = 'rdf';
+				break;
+			case 'atom_head':
+			case 'comments_atom_head':
+			case 'app_head':
+				$type = 'atom';
+				break;
+		}
+	}
+
+	switch ( $type ) {
+		case 'html':
+			$gen = '&lt;meta name="generator" content="WordPress ' . esc_attr( get_bloginfo( 'version' ) ) . '"&gt;';
+			break;
+		case 'xhtml':
+			$gen = '&lt;meta name="generator" content="WordPress ' . esc_attr( get_bloginfo( 'version' ) ) . '" /&gt;';
+			break;
+		case 'atom':
+			$gen = '&lt;generator uri="https://wordpress.org/" version="' . esc_attr( get_bloginfo_rss( 'version' ) ) . '"&gt;WordPress&lt;/generator&gt;';
+			break;
+		case 'rss2':
+			$gen = '&lt;generator&gt;' . sanitize_url( 'https://wordpress.org/?v=' . get_bloginfo_rss( 'version' ) ) . '&lt;/generator&gt;';
+			break;
+		case 'rdf':
+			$gen = '&lt;admin:generatorAgent rdf:resource="' . sanitize_url( 'https://wordpress.org/?v=' . get_bloginfo_rss( 'version' ) ) . '" /&gt;';
+			break;
+		case 'comment':
+			$gen = '&lt;!-- generator="WordPress/' . esc_attr( get_bloginfo( 'version' ) ) . '" --&gt;';
+			break;
+		case 'export':
+			$gen = '&lt;!-- generator="WordPress/' . esc_attr( get_bloginfo_rss( 'version' ) ) . '" created="' . gmdate( 'Y-m-d H:i' ) . '" --&gt;';
+			break;
+	}
+
+	/**
+	 * Filters the HTML for the retrieved generator type.
+	 *
+	 * The dynamic portion of the hook name, `$type`, refers to the generator type.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `get_the_generator_atom`
+	 *  - `get_the_generator_comment`
+	 *  - `get_the_generator_export`
+	 *  - `get_the_generator_html`
+	 *  - `get_the_generator_rdf`
+	 *  - `get_the_generator_rss2`
+	 *  - `get_the_generator_xhtml`
+	 *
+	 * @since 2.5.0
+	 *
+	 * @param string $gen  The HTML markup output to wp_head().
+	 * @param string $type The type of generator. Accepts 'html', 'xhtml', 'atom',
+	 *                     'rss2', 'rdf', 'comment', 'export'.
+	 */
+	return apply_filters( "get_the_generator_{$type}", $gen, $type );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/general-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/general-template.php#L5010">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/general-template.php#L5010-L5084">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_the_generator_type"><span class="hook-func">apply_filters</span>( “get_the_generator_{$type}”, <nobr><span class="arg-type">string</span> <span class="arg-name">$gen</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$type</span></nobr> )</a></dt>
+<dd>
+<p>Filters the HTML for the retrieved generator type.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_the_generator" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_the_generator</a>
+  </p>
+</div>

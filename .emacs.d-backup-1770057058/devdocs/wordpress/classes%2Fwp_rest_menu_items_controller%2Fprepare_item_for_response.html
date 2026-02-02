@@ -1,0 +1,181 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Menu_Items_Controller::prepare_item_for_response( <span class="arg-type">WP_Post</span> <span class="arg-name">$item</span>, <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span>
+</h1> <section><p>Prepares a single nav menu item output for response.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$item</code><span class="type"><span class="WP_Post"><a href="../wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post object.</span></div></dd>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Request object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span> Response object.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="493" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_item_for_response( $item, $request ) {
+	// Base fields for every post.
+	$fields    = $this-&gt;get_fields_for_response( $request );
+	$menu_item = $this-&gt;get_nav_menu_item( $item-&gt;ID );
+	$data      = array();
+
+	if ( rest_is_field_included( 'id', $fields ) ) {
+		$data['id'] = $menu_item-&gt;ID;
+	}
+
+	if ( rest_is_field_included( 'title', $fields ) ) {
+		$data['title'] = array();
+	}
+
+	if ( rest_is_field_included( 'title.raw', $fields ) ) {
+		$data['title']['raw'] = $menu_item-&gt;title;
+	}
+
+	if ( rest_is_field_included( 'title.rendered', $fields ) ) {
+		add_filter( 'protected_title_format', array( $this, 'protected_title_format' ) );
+		add_filter( 'private_title_format', array( $this, 'protected_title_format' ) );
+
+		/** This filter is documented in wp-includes/post-template.php */
+		$title = apply_filters( 'the_title', $menu_item-&gt;title, $menu_item-&gt;ID );
+
+		$data['title']['rendered'] = $title;
+
+		remove_filter( 'protected_title_format', array( $this, 'protected_title_format' ) );
+		remove_filter( 'private_title_format', array( $this, 'protected_title_format' ) );
+	}
+
+	if ( rest_is_field_included( 'status', $fields ) ) {
+		$data['status'] = $menu_item-&gt;post_status;
+	}
+
+	if ( rest_is_field_included( 'url', $fields ) ) {
+		$data['url'] = $menu_item-&gt;url;
+	}
+
+	if ( rest_is_field_included( 'attr_title', $fields ) ) {
+		// Same as post_excerpt.
+		$data['attr_title'] = $menu_item-&gt;attr_title;
+	}
+
+	if ( rest_is_field_included( 'description', $fields ) ) {
+		// Same as post_content.
+		$data['description'] = $menu_item-&gt;description;
+	}
+
+	if ( rest_is_field_included( 'type', $fields ) ) {
+		$data['type'] = $menu_item-&gt;type;
+	}
+
+	if ( rest_is_field_included( 'type_label', $fields ) ) {
+		$data['type_label'] = $menu_item-&gt;type_label;
+	}
+
+	if ( rest_is_field_included( 'object', $fields ) ) {
+		$data['object'] = $menu_item-&gt;object;
+	}
+
+	if ( rest_is_field_included( 'object_id', $fields ) ) {
+		// It is stored as a string, but should be exposed as an integer.
+		$data['object_id'] = absint( $menu_item-&gt;object_id );
+	}
+
+	if ( rest_is_field_included( 'parent', $fields ) ) {
+		// Same as post_parent, exposed as an integer.
+		$data['parent'] = (int) $menu_item-&gt;menu_item_parent;
+	}
+
+	if ( rest_is_field_included( 'menu_order', $fields ) ) {
+		// Same as post_parent, exposed as an integer.
+		$data['menu_order'] = (int) $menu_item-&gt;menu_order;
+	}
+
+	if ( rest_is_field_included( 'target', $fields ) ) {
+		$data['target'] = $menu_item-&gt;target;
+	}
+
+	if ( rest_is_field_included( 'classes', $fields ) ) {
+		$data['classes'] = (array) $menu_item-&gt;classes;
+	}
+
+	if ( rest_is_field_included( 'xfn', $fields ) ) {
+		$data['xfn'] = array_map( 'sanitize_html_class', explode( ' ', $menu_item-&gt;xfn ) );
+	}
+
+	if ( rest_is_field_included( 'invalid', $fields ) ) {
+		$data['invalid'] = (bool) $menu_item-&gt;_invalid;
+	}
+
+	if ( rest_is_field_included( 'meta', $fields ) ) {
+		$data['meta'] = $this-&gt;meta-&gt;get_value( $menu_item-&gt;ID, $request );
+	}
+
+	$taxonomies = wp_list_filter( get_object_taxonomies( $this-&gt;post_type, 'objects' ), array( 'show_in_rest' =&gt; true ) );
+
+	foreach ( $taxonomies as $taxonomy ) {
+		$base = ! empty( $taxonomy-&gt;rest_base ) ? $taxonomy-&gt;rest_base : $taxonomy-&gt;name;
+
+		if ( rest_is_field_included( $base, $fields ) ) {
+			$terms = get_the_terms( $item, $taxonomy-&gt;name );
+			if ( ! is_array( $terms ) ) {
+				continue;
+			}
+			$term_ids = $terms ? array_values( wp_list_pluck( $terms, 'term_id' ) ) : array();
+			if ( 'nav_menu' === $taxonomy-&gt;name ) {
+				$data[ $base ] = $term_ids ? array_shift( $term_ids ) : 0;
+			} else {
+				$data[ $base ] = $term_ids;
+			}
+		}
+	}
+
+	$context = ! empty( $request['context'] ) ? $request['context'] : 'view';
+	$data    = $this-&gt;add_additional_fields_to_object( $data, $request );
+	$data    = $this-&gt;filter_response_by_context( $data, $context );
+
+	// Wrap the data in a response object.
+	$response = rest_ensure_response( $data );
+
+	if ( rest_is_field_included( '_links', $fields ) || rest_is_field_included( '_embedded', $fields ) ) {
+		$links = $this-&gt;prepare_links( $item );
+		$response-&gt;add_links( $links );
+
+		if ( ! empty( $links['self']['href'] ) ) {
+			$actions = $this-&gt;get_available_actions( $item, $request );
+
+			$self = $links['self']['href'];
+
+			foreach ( $actions as $rel ) {
+				$response-&gt;add_link( $rel, $self );
+			}
+		}
+	}
+
+	/**
+	 * Filters the menu item data for a REST API response.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param WP_REST_Response $response  The response object.
+	 * @param object           $menu_item Menu item setup by <a href="../../functions/wp_setup_nav_menu_item">wp_setup_nav_menu_item()</a>.
+	 * @param WP_REST_Request  $request   Request object.
+	 */
+	return apply_filters( 'rest_prepare_nav_menu_item', $response, $menu_item, $request );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php#L493">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php#L493-L640">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_prepare_nav_menu_item"><span class="hook-func">apply_filters</span>( ‘rest_prepare_nav_menu_item’, <nobr><span class="arg-type">WP_REST_Response</span> <span class="arg-name">$response</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$menu_item</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Filters the menu item data for a REST API response.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/the_title"><span class="hook-func">apply_filters</span>( ‘the_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_title</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post title.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_menu_items_controller/prepare_item_for_response" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_menu_items_controller/prepare_item_for_response</a>
+  </p>
+</div>

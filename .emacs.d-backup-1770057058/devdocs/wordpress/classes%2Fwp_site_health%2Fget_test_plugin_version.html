@@ -1,0 +1,139 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Site_Health::get_test_plugin_version(): <span class="return-type">array</span>
+</h1> <section><p>Tests if plugins are outdated, or unnecessary.</p> </section> <section><h2 id="description">Description</h2> <p>The test checks if your plugins are up to date, and encourages you to remove any that are not in use.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The test result.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="355" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_test_plugin_version() {
+	$result = array(
+		'label'       =&gt; __( 'Your plugins are all up to date' ),
+		'status'      =&gt; 'good',
+		'badge'       =&gt; array(
+			'label' =&gt; __( 'Security' ),
+			'color' =&gt; 'blue',
+		),
+		'description' =&gt; sprintf(
+			'&lt;p&gt;%s&lt;/p&gt;',
+			__( 'Plugins extend your site&amp;#8217;s functionality with things like contact forms, ecommerce and much more. That means they have deep access to your site, so it&amp;#8217;s vital to keep them up to date.' )
+		),
+		'actions'     =&gt; sprintf(
+			'&lt;p&gt;&lt;a href="%s"&gt;%s&lt;/a&gt;&lt;/p&gt;',
+			esc_url( admin_url( 'plugins.php' ) ),
+			__( 'Manage your plugins' )
+		),
+		'test'        =&gt; 'plugin_version',
+	);
+
+	$plugins        = get_plugins();
+	$plugin_updates = get_plugin_updates();
+
+	$plugins_active      = 0;
+	$plugins_total       = 0;
+	$plugins_need_update = 0;
+
+	// Loop over the available plugins and check their versions and active state.
+	foreach ( $plugins as $plugin_path =&gt; $plugin ) {
+		++$plugins_total;
+
+		if ( is_plugin_active( $plugin_path ) ) {
+			++$plugins_active;
+		}
+
+		if ( array_key_exists( $plugin_path, $plugin_updates ) ) {
+			++$plugins_need_update;
+		}
+	}
+
+	// Add a notice if there are outdated plugins.
+	if ( $plugins_need_update &gt; 0 ) {
+		$result['status'] = 'critical';
+
+		$result['label'] = __( 'You have plugins waiting to be updated' );
+
+		$result['description'] .= sprintf(
+			'&lt;p&gt;%s&lt;/p&gt;',
+			sprintf(
+				/* translators: %d: The number of outdated plugins. */
+				_n(
+					'Your site has %d plugin waiting to be updated.',
+					'Your site has %d plugins waiting to be updated.',
+					$plugins_need_update
+				),
+				$plugins_need_update
+			)
+		);
+
+		$result['actions'] .= sprintf(
+			'&lt;p&gt;&lt;a href="%s"&gt;%s&lt;/a&gt;&lt;/p&gt;',
+			esc_url( network_admin_url( 'plugins.php?plugin_status=upgrade' ) ),
+			__( 'Update your plugins' )
+		);
+	} else {
+		if ( 1 === $plugins_active ) {
+			$result['description'] .= sprintf(
+				'&lt;p&gt;%s&lt;/p&gt;',
+				__( 'Your site has 1 active plugin, and it is up to date.' )
+			);
+		} elseif ( $plugins_active &gt; 0 ) {
+			$result['description'] .= sprintf(
+				'&lt;p&gt;%s&lt;/p&gt;',
+				sprintf(
+					/* translators: %d: The number of active plugins. */
+					_n(
+						'Your site has %d active plugin, and it is up to date.',
+						'Your site has %d active plugins, and they are all up to date.',
+						$plugins_active
+					),
+					$plugins_active
+				)
+			);
+		} else {
+			$result['description'] .= sprintf(
+				'&lt;p&gt;%s&lt;/p&gt;',
+				__( 'Your site does not have any active plugins.' )
+			);
+		}
+	}
+
+	// Check if there are inactive plugins.
+	if ( $plugins_total &gt; $plugins_active &amp;&amp; ! is_multisite() ) {
+		$unused_plugins = $plugins_total - $plugins_active;
+
+		$result['status'] = 'recommended';
+
+		$result['label'] = __( 'You should remove inactive plugins' );
+
+		$result['description'] .= sprintf(
+			'&lt;p&gt;%s %s&lt;/p&gt;',
+			sprintf(
+				/* translators: %d: The number of inactive plugins. */
+				_n(
+					'Your site has %d inactive plugin.',
+					'Your site has %d inactive plugins.',
+					$unused_plugins
+				),
+				$unused_plugins
+			),
+			__( 'Inactive plugins are tempting targets for attackers. If you are not going to use a plugin, you should consider removing it.' )
+		);
+
+		$result['actions'] .= sprintf(
+			'&lt;p&gt;&lt;a href="%s"&gt;%s&lt;/a&gt;&lt;/p&gt;',
+			esc_url( admin_url( 'plugins.php?plugin_status=inactive' ) ),
+			__( 'Manage inactive plugins' )
+		);
+	}
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-site-health.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-site-health.php#L355">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-site-health.php#L355-L476">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_site_health/get_test_plugin_version" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_site_health/get_test_plugin_version</a>
+  </p>
+</div>

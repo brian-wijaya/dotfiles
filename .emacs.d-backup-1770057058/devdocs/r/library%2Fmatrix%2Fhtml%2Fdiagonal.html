@@ -1,0 +1,44 @@
+<div class="container">
+<main>  <h2>
+<code>Diagonal</code> Construct a Diagonal Matrix</h2> <h3>Description</h3> <p>Construct a formally diagonal <code><a href="matrix-class">Matrix</a></code>, i.e., an object inheriting from virtual class <code><a href="diagonalmatrix-class">diagonalMatrix</a></code> (or, if desired, a <em>mathematically</em> diagonal <code><a href="csparsematrix-class">CsparseMatrix</a></code>). </p> <h3>Usage</h3> <pre data-language="r"><code class="language-R">Diagonal(n, x = NULL, names = FALSE)
+
+.sparseDiagonal(n, x = NULL, uplo = "U", shape = "t", unitri = TRUE, kind, cols)
+    .trDiagonal(n, x = NULL, uplo = "U", unitri = TRUE, kind)
+   .symDiagonal(n, x = NULL, uplo = "U", kind)
+</code></pre> <h3>Arguments</h3> <table> <tr>
+<td><code id="n">n</code></td> <td> <p>integer indicating the dimension of the (square) matrix. If missing, then <code>length(x)</code> is used.</p> </td>
+</tr> <tr>
+<td><code id="x">x</code></td> <td> <p>numeric or logical vector listing values for the diagonal entries, to be recycled as necessary. If <code>NULL</code> (the default), then the result is a unit diagonal matrix. <code>.sparseDiagonal()</code> and friends ignore non-<code>NULL</code> <code>x</code> when <code>kind = "n"</code>.</p> </td>
+</tr> <tr>
+<td><code id="names">names</code></td> <td> <p>either <code><a href="../../base/html/logical">logical</a></code> <code>TRUE</code> or <code>FALSE</code> or then a <code><a href="../../base/html/character">character</a></code> vector of <code><a href="../../base/html/length">length</a></code> <code>n</code>. If true <em>and</em> <code><a href="../../base/html/names">names</a>(x)</code> is not <code>NULL</code>, use that as both row and column names for the resulting matrix. When a character vector, use it for both dimnames.</p> </td>
+</tr> <tr>
+<td><code id="uplo">uplo</code></td> <td> <p>one of <code>c("U","L")</code>, specifying the <code>uplo</code> slot of the result if the result is formally triangular of symmetric.</p> </td>
+</tr> <tr>
+<td><code id="shape">shape</code></td> <td> <p>one of <code>c("t","s","g")</code>, indicating if the result should be formally triangular, symmetric, or “general”. The result will inherit from virtual class <code><a href="triangularmatrix-class">triangularMatrix</a></code>, <code><a href="symmetricmatrix-class">symmetricMatrix</a></code>, or <code><a href="generalmatrix-class">generalMatrix</a></code>, respectively.</p> </td>
+</tr> <tr>
+<td><code id="unitri">unitri</code></td> <td> <p>logical indicating if a formally triangular result with ones on the diagonal should be formally <em>unit</em> triangular, i.e., with <code>diag</code> slot equal to <code>"U"</code> rather than <code>"N"</code>.</p> </td>
+</tr> <tr>
+<td><code id="kind">kind</code></td> <td> <p>one of <code>c("d","l","n")</code>, indicating the “mode” of the result: numeric, logical, or pattern. The result will inherit from virtual class <code><a href="dsparsematrix-class">dsparseMatrix</a></code>, <code><a href="lsparsematrix-class">lsparseMatrix</a></code>, or <code><a href="nsparsematrix-class">nsparseMatrix</a></code>, respectively. Values other than <code>"n"</code> are ignored when <code>x</code> is non-<code>NULL</code>; in that case the mode is determined by <code><a href="../../base/html/typeof">typeof</a>(x)</code>.</p> </td>
+</tr> <tr>
+<td><code id="cols">cols</code></td> <td> <p>optional integer vector with values in <code>0:(n-1)</code>, indexing columns of the specified diagonal matrix. If specified, then the result is (mathematically) <code>D[, cols+1]</code> rather than <code>D</code>, where <code>D = Diagonal(n, x)</code>, and it is always “general” (i.e., <code>shape</code> is ignored).</p> </td>
+</tr> </table> <h3>Value</h3> <p><code>Diagonal()</code> returns an object inheriting from virtual class <code><a href="diagonalmatrix-class">diagonalMatrix</a></code>. </p> <p><code>.sparseDiagonal()</code> returns a <code><a href="csparsematrix-class">CsparseMatrix</a></code> representation of <code>Diagonal(n, x)</code> or, if <code>cols</code> is given, of <code>Diagonal(n, x)[, cols+1]</code>. The precise class of the result depends on <code>shape</code> and <code>kind</code>. </p> <p><code>.trDiagonal()</code> and <code>.symDiagonal()</code> are simple wrappers, for <code>.sparseDiagonal(shape = "t")</code> and <code>.sparseDiagonal(shape = "s")</code>, respectively. </p> <p><code>.sparseDiagonal()</code> exists primarily to leverage efficient C-level methods available for <code>CsparseMatrix</code>. </p> <h3>Author(s)</h3> <p>Martin Maechler</p> <h3>See Also</h3> <p>the generic function <code><a href="../../base/html/diag">diag</a></code> for <em>extraction</em> of the diagonal from a matrix works for all “Matrices”. </p> <p><code><a href="bandsparse">bandSparse</a></code> constructs a <em>banded</em> sparse matrix from its non-zero sub-/super - diagonals. <code><a href="band-methods">band</a>(A)</code> returns a band matrix containing some sub-/super - diagonals of <code>A</code>. </p> <p><code><a href="matrix">Matrix</a></code> for general matrix construction; further, class <code><a href="diagonalmatrix-class">diagonalMatrix</a></code>. </p> <h3>Examples</h3> <pre data-language="r"><code class="language-R">
+Diagonal(3)
+Diagonal(x = 10^(3:1))
+Diagonal(x = (1:4) &gt;= 2)#-&gt; "ldiMatrix"
+
+## Use Diagonal() + kronecker() for "repeated-block" matrices:
+M1 &lt;- Matrix(0+0:5, 2,3)
+(M &lt;- kronecker(Diagonal(3), M1))
+
+(S &lt;- crossprod(Matrix(rbinom(60, size=1, prob=0.1), 10,6)))
+(SI &lt;- S + 10*.symDiagonal(6)) # sparse symmetric still
+stopifnot(is(SI, "dsCMatrix"))
+(I4 &lt;- .sparseDiagonal(4, shape="t"))# now (2012-10) unitriangular
+stopifnot(I4@diag == "U", all(I4 == diag(4)))
+
+</code></pre> </main> </div><div class="_attribution">
+  <p class="_attribution-p">
+    Copyright (&copy;) 1999–2012 R Foundation for Statistical Computing.<br>Licensed under the <a href="https://www.gnu.org/copyleft/gpl.html">GNU General Public License</a>.<br>
+    
+  </p>
+</div>

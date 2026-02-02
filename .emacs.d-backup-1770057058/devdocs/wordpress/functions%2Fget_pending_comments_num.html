@@ -1,0 +1,60 @@
+<h1 class="wp-block-wporg-code-reference-title">get_pending_comments_num( <span class="arg-type">int|int[]</span> <span class="arg-name">$post_id</span> ): <span class="return-type">int|int[]</span>
+</h1> <section><p>Gets the number of pending comments on a post or posts.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span>|<span class="int[]">int[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Either a single Post ID or an array of Post IDs</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|int[]</span> Either a single Posts pending comments as an int or an array of ints keyed on the Post IDs</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="147" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_pending_comments_num( $post_id ) {
+	global $wpdb;
+
+	$single = false;
+	if ( ! is_array( $post_id ) ) {
+		$post_id_array = (array) $post_id;
+		$single        = true;
+	} else {
+		$post_id_array = $post_id;
+	}
+	$post_id_array = array_map( 'intval', $post_id_array );
+	$post_id_in    = "'" . implode( "', '", $post_id_array ) . "'";
+
+	$pending = $wpdb-&gt;get_results( "SELECT comment_post_ID, COUNT(comment_ID) as num_comments FROM $wpdb-&gt;comments WHERE comment_post_ID IN ( $post_id_in ) AND comment_approved = '0' GROUP BY comment_post_ID", ARRAY_A );
+
+	if ( $single ) {
+		if ( empty( $pending ) ) {
+			return 0;
+		} else {
+			return absint( $pending[0]['num_comments'] );
+		}
+	}
+
+	$pending_keyed = array();
+
+	// Default to zero pending for all posts in request.
+	foreach ( $post_id_array as $id ) {
+		$pending_keyed[ $id ] = 0;
+	}
+
+	if ( ! empty( $pending ) ) {
+		foreach ( $pending as $pend ) {
+			$pending_keyed[ $pend['comment_post_ID'] ] = absint( $pend['num_comments'] );
+		}
+	}
+
+	return $pending_keyed;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/comment.php#L147">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/comment.php#L147-L184">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_pending_comments_num" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_pending_comments_num</a>
+  </p>
+</div>

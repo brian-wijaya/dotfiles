@@ -1,0 +1,277 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_check_filetype_and_ext( <span class="arg-type">string</span> <span class="arg-name">$file</span>, <span class="arg-type">string</span> <span class="arg-name">$filename</span>, <span class="arg-type">string[]|null</span> <span class="arg-name">$mimes</span> = <span class="arg-default">null</span> ): <span class="return-type">array</span>
+</h1> <section><p>Attempts to determine the real file type of a file.</p> </section> <section><h2 id="description">Description</h2> <p>If unable to, the file name extension will be used to determine type.</p> <p>If it’s determined that the extension does not match the file’s real type, then the "proper_filename" value will be set with a proper filename and extension.</p> <p>Currently this function only supports renaming images validated via <a href="wp_get_image_mime" rel="function">wp_get_image_mime()</a> .</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full path to the file.</span></div></dd>
+<dt>
+<code>$filename</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The name of the file (may differ from $file due to $file being in a tmp directory).</span></div></dd>
+<dt>
+<code>$mimes</code><span class="type"><span class="string[]">string[]</span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of allowed mime types keyed by their file extension regex.<br> Defaults to the result of <a href="get_allowed_mime_types" rel="function">get_allowed_mime_types()</a> .</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Values for the extension, mime type, and corrected filename.<br> <ul class="param-hash">
+<li>
+<code>ext</code> <span class="type">string|false</span><div class="desc">File extension, or false if the file doesn’t match a mime type.</div>
+</li> <li>
+<code>type</code> <span class="type">string|false</span><div class="desc">File mime type, or false if the file doesn’t match a mime type.</div>
+</li> <li>
+<code>proper_filename</code> <span class="type">string|false</span><div class="desc">File name with its correct extension, or false if it cannot be determined.</div>
+</li> </ul> </section> <section><h2 id="more-information">More Information</h2> <h5 class="wp-block-heading">Usage:</h5> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">$validate = wp_check_filetype_and_ext( $file, $filename, $mimes );
+
+if( $validate['proper_filename'] !== false )
+$filename = $validate['proper_filename'];</code></pre> <h5 class="wp-block-heading">Notes:</h5> <p>Currently, this function only supports validating images known to getimagesize().</p> <p>If using in a plugin/theme and you get an error about this function not being defined, you probably need to add <code>require_once ABSPATH .'wp-admin/includes/file.php';</code> before the function gets called.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3083" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_check_filetype_and_ext( $file, $filename, $mimes = null ) {
+	$proper_filename = false;
+
+	// Do basic extension validation and MIME mapping.
+	$wp_filetype = wp_check_filetype( $filename, $mimes );
+	$ext         = $wp_filetype['ext'];
+	$type        = $wp_filetype['type'];
+
+	// We can't do any further validation without a file to work with.
+	if ( ! file_exists( $file ) ) {
+		return compact( 'ext', 'type', 'proper_filename' );
+	}
+
+	$real_mime = false;
+
+	// Validate image types.
+	if ( $type &amp;&amp; str_starts_with( $type, 'image/' ) ) {
+
+		// Attempt to figure out what type of image it actually is.
+		$real_mime = wp_get_image_mime( $file );
+
+		$heic_images_extensions = array(
+			'heif',
+			'heics',
+			'heifs',
+		);
+
+		if ( $real_mime &amp;&amp; ( $real_mime !== $type || in_array( $ext, $heic_images_extensions, true ) ) ) {
+			/**
+			 * Filters the list mapping image mime types to their respective extensions.
+			 *
+			 * @since 3.0.0
+			 *
+			 * @param array $mime_to_ext Array of image mime types and their matching extensions.
+			 */
+			$mime_to_ext = apply_filters(
+				'getimagesize_mimes_to_exts',
+				array(
+					'image/jpeg' =&gt; 'jpg',
+					'image/png'  =&gt; 'png',
+					'image/gif'  =&gt; 'gif',
+					'image/bmp'  =&gt; 'bmp',
+					'image/tiff' =&gt; 'tif',
+					'image/webp' =&gt; 'webp',
+					'image/avif' =&gt; 'avif',
+
+					/*
+					 * In theory there are/should be file extensions that correspond to the
+					 * mime types: .heif, .heics and .heifs. However it seems that HEIC images
+					 * with any of the mime types commonly have a .heic file extension.
+					 * Seems keeping the status quo here is best for compatibility.
+					 */
+					'image/heic' =&gt; 'heic',
+					'image/heif' =&gt; 'heic',
+					'image/heic-sequence' =&gt; 'heic',
+					'image/heif-sequence' =&gt; 'heic',
+				)
+			);
+
+			// Replace whatever is after the last period in the filename with the correct extension.
+			if ( ! empty( $mime_to_ext[ $real_mime ] ) ) {
+				$filename_parts = explode( '.', $filename );
+
+				array_pop( $filename_parts );
+				$filename_parts[] = $mime_to_ext[ $real_mime ];
+				$new_filename     = implode( '.', $filename_parts );
+
+				if ( $new_filename !== $filename ) {
+					$proper_filename = $new_filename; // Mark that it changed.
+				}
+
+				// Redefine the extension / MIME.
+				$wp_filetype = wp_check_filetype( $new_filename, $mimes );
+				$ext         = $wp_filetype['ext'];
+				$type        = $wp_filetype['type'];
+			} else {
+				// Reset $real_mime and try validating again.
+				$real_mime = false;
+			}
+		}
+	}
+
+	// Validate files that didn't get validated during previous checks.
+	if ( $type &amp;&amp; ! $real_mime &amp;&amp; extension_loaded( 'fileinfo' ) ) {
+		$finfo     = finfo_open( FILEINFO_MIME_TYPE );
+		$real_mime = finfo_file( $finfo, $file );
+		finfo_close( $finfo );
+
+		$google_docs_types = array(
+			'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+		);
+
+		foreach ( $google_docs_types as $google_docs_type ) {
+			/*
+			 * finfo_file() can return duplicate mime type for Google docs,
+			 * this conditional reduces it to a single instance.
+			 *
+			 * @see https://bugs.php.net/bug.php?id=77784
+			 * @see https://core.trac.wordpress.org/ticket/57898
+			 */
+			if ( 2 === substr_count( $real_mime, $google_docs_type ) ) {
+				$real_mime = $google_docs_type;
+			}
+		}
+
+		// fileinfo often misidentifies obscure files as one of these types.
+		$nonspecific_types = array(
+			'application/octet-stream',
+			'application/encrypted',
+			'application/CDFV2-encrypted',
+			'application/zip',
+		);
+
+		/*
+		 * If $real_mime doesn't match the content type we're expecting from the file's extension,
+		 * we need to do some additional vetting. Media types and those listed in $nonspecific_types are
+		 * allowed some leeway, but anything else must exactly match the real content type.
+		 */
+		if ( in_array( $real_mime, $nonspecific_types, true ) ) {
+			// File is a non-specific binary type. That's ok if it's a type that generally tends to be binary.
+			if ( ! in_array( substr( $type, 0, strcspn( $type, '/' ) ), array( 'application', 'video', 'audio' ), true ) ) {
+				$type = false;
+				$ext  = false;
+			}
+		} elseif ( str_starts_with( $real_mime, 'video/' ) || str_starts_with( $real_mime, 'audio/' ) ) {
+			/*
+			 * For these types, only the major type must match the real value.
+			 * This means that common mismatches are forgiven: application/vnd.apple.numbers is often misidentified as application/zip,
+			 * and some media files are commonly named with the wrong extension (.mov instead of .mp4)
+			 */
+			if ( substr( $real_mime, 0, strcspn( $real_mime, '/' ) ) !== substr( $type, 0, strcspn( $type, '/' ) ) ) {
+				$type = false;
+				$ext  = false;
+			}
+		} elseif ( 'text/plain' === $real_mime ) {
+			// A few common file types are occasionally detected as text/plain; allow those.
+			if ( ! in_array(
+				$type,
+				array(
+					'text/plain',
+					'text/csv',
+					'application/csv',
+					'text/richtext',
+					'text/tsv',
+					'text/vtt',
+				),
+				true
+			)
+			) {
+				$type = false;
+				$ext  = false;
+			}
+		} elseif ( 'application/csv' === $real_mime ) {
+			// Special casing for CSV files.
+			if ( ! in_array(
+				$type,
+				array(
+					'text/csv',
+					'text/plain',
+					'application/csv',
+				),
+				true
+			)
+			) {
+				$type = false;
+				$ext  = false;
+			}
+		} elseif ( 'text/rtf' === $real_mime ) {
+			// Special casing for RTF files.
+			if ( ! in_array(
+				$type,
+				array(
+					'text/rtf',
+					'text/plain',
+					'application/rtf',
+				),
+				true
+			)
+			) {
+				$type = false;
+				$ext  = false;
+			}
+		} else {
+			if ( $type !== $real_mime ) {
+				/*
+				 * Everything else including image/* and application/*:
+				 * If the real content type doesn't match the file extension, assume it's dangerous.
+				 */
+				$type = false;
+				$ext  = false;
+			}
+		}
+	}
+
+	// The mime type must be allowed.
+	if ( $type ) {
+		$allowed = get_allowed_mime_types();
+
+		if ( ! in_array( $type, $allowed, true ) ) {
+			$type = false;
+			$ext  = false;
+		}
+	}
+
+	/**
+	 * Filters the "real" file type of the given file.
+	 *
+	 * @since 3.0.0
+	 * @since 5.1.0 The $real_mime parameter was added.
+	 *
+	 * @param array         $wp_check_filetype_and_ext {
+	 *     Values for the extension, mime type, and corrected filename.
+	 *
+	 *     @type string|false $ext             File extension, or false if the file doesn't match a mime type.
+	 *     @type string|false $type            File mime type, or false if the file doesn't match a mime type.
+	 *     @type string|false $proper_filename File name with its correct extension, or false if it cannot be determined.
+	 * }
+	 * @param string        $file                      Full path to the file.
+	 * @param string        $filename                  The name of the file (may differ from $file due to
+	 *                                                 $file being in a tmp directory).
+	 * @param string[]|null $mimes                     Array of mime types keyed by their file extension regex, or null if
+	 *                                                 none were provided.
+	 * @param string|false  $real_mime                 The actual mime type or false if the type cannot be determined.
+	 */
+	return apply_filters( 'wp_check_filetype_and_ext', compact( 'ext', 'type', 'proper_filename' ), $file, $filename, $mimes, $real_mime );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L3083">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L3083-L3309">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/getimagesize_mimes_to_exts"><span class="hook-func">apply_filters</span>( ‘getimagesize_mimes_to_exts’, <nobr><span class="arg-type">array</span> <span class="arg-name">$mime_to_ext</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list mapping image mime types to their respective extensions.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_check_filetype_and_ext"><span class="hook-func">apply_filters</span>( ‘wp_check_filetype_and_ext’, <nobr><span class="arg-type">array</span> <span class="arg-name">$wp_check_filetype_and_ext</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$file</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$filename</span></nobr>, <nobr><span class="arg-type">string[]|null</span> <span class="arg-name">$mimes</span></nobr>, <nobr><span class="arg-type">string|false</span> <span class="arg-name">$real_mime</span></nobr> )</a></dt>
+<dd>
+<p>Filters the “real” file type of the given file.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_check_filetype_and_ext" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_check_filetype_and_ext</a>
+  </p>
+</div>

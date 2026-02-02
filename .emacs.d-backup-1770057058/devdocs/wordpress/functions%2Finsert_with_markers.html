@@ -1,0 +1,169 @@
+<h1 class="wp-block-wporg-code-reference-title">insert_with_markers( <span class="arg-type">string</span> <span class="arg-name">$filename</span>, <span class="arg-type">string</span> <span class="arg-name">$marker</span>, <span class="arg-type">array|string</span> <span class="arg-name">$insertion</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Inserts an array of strings into a file (.htaccess), placing it between BEGIN and END markers.</p> </section> <section><h2 id="description">Description</h2> <p>Replaces existing marked info. Retains surrounding data. Creates file if none exists.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$filename</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Filename to alter.</span></div></dd>
+<dt>
+<code>$marker</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The marker to alter.</span></div></dd>
+<dt>
+<code>$insertion</code><span class="type"><span class="array">array</span>|<span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The new content to insert.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on write success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="114" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function insert_with_markers( $filename, $marker, $insertion ) {
+	if ( ! file_exists( $filename ) ) {
+		if ( ! is_writable( dirname( $filename ) ) ) {
+			return false;
+		}
+
+		if ( ! touch( $filename ) ) {
+			return false;
+		}
+
+		// Make sure the file is created with a minimum set of permissions.
+		$perms = fileperms( $filename );
+
+		if ( $perms ) {
+			chmod( $filename, $perms | 0644 );
+		}
+	} elseif ( ! is_writable( $filename ) ) {
+		return false;
+	}
+
+	if ( ! is_array( $insertion ) ) {
+		$insertion = explode( "\n", $insertion );
+	}
+
+	$switched_locale = switch_to_locale( get_locale() );
+
+	$instructions = sprintf(
+		/* translators: 1: Marker. */
+		__(
+			'The directives (lines) between "BEGIN %1$s" and "END %1$s" are
+dynamically generated, and should only be modified via WordPress filters.
+Any changes to the directives between these markers will be overwritten.'
+		),
+		$marker
+	);
+
+	$instructions = explode( "\n", $instructions );
+
+	foreach ( $instructions as $line =&gt; $text ) {
+		$instructions[ $line ] = '# ' . $text;
+	}
+
+	/**
+	 * Filters the inline instructions inserted before the dynamically generated content.
+	 *
+	 * @since 5.3.0
+	 *
+	 * @param string[] $instructions Array of lines with inline instructions.
+	 * @param string   $marker       The marker being inserted.
+	 */
+	$instructions = apply_filters( 'insert_with_markers_inline_instructions', $instructions, $marker );
+
+	if ( $switched_locale ) {
+		restore_previous_locale();
+	}
+
+	$insertion = array_merge( $instructions, $insertion );
+
+	$start_marker = "# BEGIN {$marker}";
+	$end_marker   = "# END {$marker}";
+
+	$fp = fopen( $filename, 'r+' );
+
+	if ( ! $fp ) {
+		return false;
+	}
+
+	// Attempt to get a lock. If the filesystem supports locking, this will block until the lock is acquired.
+	flock( $fp, LOCK_EX );
+
+	$lines = array();
+
+	while ( ! feof( $fp ) ) {
+		$lines[] = rtrim( fgets( $fp ), "\r\n" );
+	}
+
+	// Split out the existing file into the preceding lines, and those that appear after the marker.
+	$pre_lines        = array();
+	$post_lines       = array();
+	$existing_lines   = array();
+	$found_marker     = false;
+	$found_end_marker = false;
+
+	foreach ( $lines as $line ) {
+		if ( ! $found_marker &amp;&amp; str_contains( $line, $start_marker ) ) {
+			$found_marker = true;
+			continue;
+		} elseif ( ! $found_end_marker &amp;&amp; str_contains( $line, $end_marker ) ) {
+			$found_end_marker = true;
+			continue;
+		}
+
+		if ( ! $found_marker ) {
+			$pre_lines[] = $line;
+		} elseif ( $found_marker &amp;&amp; $found_end_marker ) {
+			$post_lines[] = $line;
+		} else {
+			$existing_lines[] = $line;
+		}
+	}
+
+	// Check to see if there was a change.
+	if ( $existing_lines === $insertion ) {
+		flock( $fp, LOCK_UN );
+		fclose( $fp );
+
+		return true;
+	}
+
+	// Generate the new file data.
+	$new_file_data = implode(
+		"\n",
+		array_merge(
+			$pre_lines,
+			array( $start_marker ),
+			$insertion,
+			array( $end_marker ),
+			$post_lines
+		)
+	);
+
+	// Write to the start of the file, and truncate it to that length.
+	fseek( $fp, 0 );
+	$bytes = fwrite( $fp, $new_file_data );
+
+	if ( $bytes ) {
+		ftruncate( $fp, ftell( $fp ) );
+	}
+
+	fflush( $fp );
+	flock( $fp, LOCK_UN );
+	fclose( $fp );
+
+	return (bool) $bytes;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/misc.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/misc.php#L114">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/misc.php#L114-L248">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/insert_with_markers_inline_instructions"><span class="hook-func">apply_filters</span>( ‘insert_with_markers_inline_instructions’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$instructions</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$marker</span></nobr> )</a></dt>
+<dd>
+<p>Filters the inline instructions inserted before the dynamically generated content.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/insert_with_markers" class="_attribution-link">https://developer.wordpress.org/reference/functions/insert_with_markers</a>
+  </p>
+</div>

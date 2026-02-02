@@ -1,0 +1,54 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Setting::_multidimensional_preview_filter( <span class="arg-type">mixed</span> <span class="arg-name">$original</span> ): <span class="return-type">mixed</span>
+</h1> <section><p>Callback function to filter multidimensional theme mods and options.</p> </section> <section><h2 id="description">Description</h2> <p>For all multidimensional settings of a given type, the preview filter for the first setting previewed will be used to apply the values for the others.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li>WP_Customize_Setting::$aggregated_multidimensionals</li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$original</code><span class="type"><span class="mixed">mixed</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Original root value.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed</span> New or old value.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="480" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">final public function _multidimensional_preview_filter( $original ) {
+	if ( ! $this-&gt;is_current_blog_previewed() ) {
+		return $original;
+	}
+
+	$id_base = $this-&gt;id_data['base'];
+
+	// If no settings have been previewed yet (which should not be the case, since $this is), just pass through the original value.
+	if ( empty( self::$aggregated_multidimensionals[ $this-&gt;type ][ $id_base ]['previewed_instances'] ) ) {
+		return $original;
+	}
+
+	foreach ( self::$aggregated_multidimensionals[ $this-&gt;type ][ $id_base ]['previewed_instances'] as $previewed_setting ) {
+		// Skip applying previewed value for any settings that have already been applied.
+		if ( ! empty( self::$aggregated_multidimensionals[ $this-&gt;type ][ $id_base ]['preview_applied_instances'][ $previewed_setting-&gt;id ] ) ) {
+			continue;
+		}
+
+		// Do the replacements of the posted/default sub value into the root value.
+		$value = $previewed_setting-&gt;post_value( $previewed_setting-&gt;default );
+		$root  = self::$aggregated_multidimensionals[ $previewed_setting-&gt;type ][ $id_base ]['root_value'];
+		$root  = $previewed_setting-&gt;multidimensional_replace( $root, $previewed_setting-&gt;id_data['keys'], $value );
+		self::$aggregated_multidimensionals[ $previewed_setting-&gt;type ][ $id_base ]['root_value'] = $root;
+
+		// Mark this setting having been applied so that it will be skipped when the filter is called again.
+		self::$aggregated_multidimensionals[ $previewed_setting-&gt;type ][ $id_base ]['preview_applied_instances'][ $previewed_setting-&gt;id ] = true;
+	}
+
+	return self::$aggregated_multidimensionals[ $this-&gt;type ][ $id_base ]['root_value'];
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-setting.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-setting.php#L480">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-setting.php#L480-L509">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_setting/_multidimensional_preview_filter" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_setting/_multidimensional_preview_filter</a>
+  </p>
+</div>

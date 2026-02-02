@@ -1,0 +1,81 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_URL_Details_Controller::parse_url_details( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Retrieves the contents of the title tag from the HTML response.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> The parsed details as a response object. <a href="../wp_error" rel="class">WP_Error</a> if there are errors.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="134" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function parse_url_details( $request ) {
+	$url = untrailingslashit( $request['url'] );
+
+	if ( empty( $url ) ) {
+		return new WP_Error( 'rest_invalid_url', __( 'Invalid URL' ), array( 'status' =&gt; 404 ) );
+	}
+
+	// Transient per URL.
+	$cache_key = $this-&gt;build_cache_key_for_url( $url );
+
+	// Attempt to retrieve cached response.
+	$cached_response = $this-&gt;get_cache( $cache_key );
+
+	if ( ! empty( $cached_response ) ) {
+		$remote_url_response = $cached_response;
+	} else {
+		$remote_url_response = $this-&gt;get_remote_url( $url );
+
+		// Exit if we don't have a valid body or it's empty.
+		if ( is_wp_error( $remote_url_response ) || empty( $remote_url_response ) ) {
+			return $remote_url_response;
+		}
+
+		// Cache the valid response.
+		$this-&gt;set_cache( $cache_key, $remote_url_response );
+	}
+
+	$html_head     = $this-&gt;get_document_head( $remote_url_response );
+	$meta_elements = $this-&gt;get_meta_with_content_elements( $html_head );
+
+	$data = $this-&gt;add_additional_fields_to_object(
+		array(
+			'title'       =&gt; $this-&gt;get_title( $html_head ),
+			'icon'        =&gt; $this-&gt;get_icon( $html_head, $url ),
+			'description' =&gt; $this-&gt;get_description( $meta_elements ),
+			'image'       =&gt; $this-&gt;get_image( $meta_elements, $url ),
+		),
+		$request
+	);
+
+	// Wrap the data in a response object.
+	$response = rest_ensure_response( $data );
+
+	/**
+	 * Filters the URL data for the response.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param WP_REST_Response $response            The response object.
+	 * @param string           $url                 The requested URL.
+	 * @param WP_REST_Request  $request             Request object.
+	 * @param string           $remote_url_response HTTP response body from the remote URL.
+	 */
+	return apply_filters( 'rest_prepare_url_details', $response, $url, $request, $remote_url_response );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php#L134">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php#L134-L188">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_prepare_url_details"><span class="hook-func">apply_filters</span>( ‘rest_prepare_url_details’, <nobr><span class="arg-type">WP_REST_Response</span> <span class="arg-name">$response</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$remote_url_response</span></nobr> )</a></dt>
+<dd>
+<p>Filters the URL data for the response.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_url_details_controller/parse_url_details" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_url_details_controller/parse_url_details</a>
+  </p>
+</div>

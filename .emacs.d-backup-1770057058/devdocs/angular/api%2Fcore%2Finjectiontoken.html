@@ -1,0 +1,83 @@
+<h1>InjectionToken</h1>
+<router-outlet _ngcontent-ng-c1178817259></router-outlet><adev-main ngh="7"><router-outlet></router-outlet><adev-reference-page _nghost-ng-c972174807 ngh="6"><main _ngcontent-ng-c972174807 docsviewer class="docs-with-TOC" ngh="0"><div class="docs-api">
+<header class="docs-reference-header"><section class="docs-reference-description"><p>Creates a token that can be used in a DI Provider.</p></section><nav class="docs-pill-row"><a class="docs-pill" href="../../guide/di/defining-dependency-providers#what-is-an-injectiontoken">What is an InjectionToken?</a></nav></header><div class="docs-reference-section docs-reference-api-section">
+<h2 id="api" class="docs-reference-section-heading">API</h2>
+<pre data-language="ts">class InjectionToken&lt;T&gt; {
+  constructor(_desc: string, options?: { providedIn?: Type&lt;any&gt; | "root" | "platform" | "any" | null | undefined; factory: () =&gt; T; } | undefined): InjectionToken&lt;T&gt;;
+  toString(): string;
+}</pre>
+</div>
+<div class="docs-reference-members"><div class="docs-reference-members">
+<div id="constructor" class="docs-reference-member-card">
+<header class="docs-reference-card-header"><h3>constructor</h3>
+<code><a href="injectiontoken">InjectionToken</a>&lt;T&gt;</code></header><div class="docs-reference-card-body"><div class="docs-reference-card-item ">
+
+<div class="docs-param-group">
+<span class="docs-param-keyword">@param</span><span class="docs-param-name">_desc</span><code>string</code><div class="docs-parameter-description"><p>Description for the token, used only for debugging purposes, it should but does not need to be unique</p></div>
+</div>
+<div class="docs-param-group">
+<span class="docs-param-keyword">@param</span><span class="docs-param-name">options</span><code>{ providedIn?: <a href="type">Type</a>&lt;any&gt; | "root" | "platform" | "any" | null | undefined; factory: () =&gt; T; } | undefined</code><div class="docs-parameter-description"><p>Options for the token's usage, as described above</p></div>
+</div>
+<div class="docs-return-type">
+<span class="docs-param-keyword">@returns</span><code><a href="injectiontoken">InjectionToken</a>&lt;T&gt;</code>
+</div>
+</div></div>
+</div>
+<div id="toString" class="docs-reference-member-card">
+<header class="docs-reference-card-header"><h3>toString</h3>
+<code>string</code></header><div class="docs-reference-card-body"><div class="docs-reference-card-item ">
+
+<div class="docs-return-type">
+<span class="docs-param-keyword">@returns</span><code>string</code>
+</div>
+</div></div>
+</div>
+</div></div>
+<div class="docs-reference-section">
+<h2 id="description" class="docs-reference-section-heading">Description</h2>
+<div>
+<p>Creates a token that can be used in a DI Provider.</p> <p>Use an <a href="injectiontoken"><code>InjectionToken</code></a> whenever the type you are injecting is not reified (does not have a runtime representation) such as when injecting an interface, callable type, array or parameterized type.</p> <p><a href="injectiontoken"><code>InjectionToken</code></a> is parameterized on <code>T</code> which is the type of object which will be returned by the <a href="injector"><code>Injector</code></a>. This provides an additional level of type safety.</p> <div class="docs-alert docs-alert-helpful"> <p><strong>Important Note</strong>: Ensure that you use the same instance of the <a href="injectiontoken"><code>InjectionToken</code></a> in both the provider and the injection call. Creating a new instance of <a href="injectiontoken"><code>InjectionToken</code></a> in different places, even with the same description, will be treated as different tokens by Angular's DI system, leading to a <code>NullInjectorError</code>.</p> </div> <pre data-language="ts">const TOKEN = new InjectionToken&lt;MyInterface&gt;('SomeToken');
+
+// Setting up the provider using the same token instance
+const providers = [
+  {provide: TOKEN, useValue: {someProperty: 'exampleValue'}}, // Mock value for MyInterface
+];
+
+// Creating the injector with the provider
+const injector = Injector.create({providers});
+
+// Retrieving the value using the same token instance
+const myInterface = injector.get(TOKEN);
+// myInterface is inferred to be MyInterface.</pre>
+<p>When creating an <a href="injectiontoken"><code>InjectionToken</code></a>, you can optionally specify a factory function which returns (possibly by creating) a default value of the parameterized type <code>T</code>. This sets up the <a href="injectiontoken"><code>InjectionToken</code></a> using this factory as a provider as if it was defined explicitly in the application's root injector. If the factory function, which takes zero arguments, needs to inject dependencies, it can do so using the <a href="inject"><code>inject</code></a> function. As you can see in the Tree-shakable InjectionToken example below.</p> <p>Additionally, if a <code>factory</code> is specified you can also specify the <code>providedIn</code> option, which overrides the above behavior and marks the token as belonging to a particular <a href="ngmodule"><code>@NgModule</code></a> (note: this option is now deprecated). As mentioned above, <code>'root'</code> is the default value for <code>providedIn</code>.</p> <p>The <code>providedIn: NgModule</code> and <code>providedIn: 'any'</code> options are deprecated.</p>
+</div>
+</div>
+<div class="docs-reference-section">
+<h2 id="usage-notes" class="docs-reference-section-heading">Usage Notes</h2>
+<div> <h3 id="basic-examples"> Basic Examples </h3> <h3 id="plain-injectiontoken"> Plain InjectionToken </h3> <pre data-language="ts">const BASE_URL = new InjectionToken&lt;string&gt;('BaseUrl');
+      const injector = Injector.create({
+        providers: [{provide: BASE_URL, useValue: 'http://localhost'}],
+      });
+      const url = injector.get(BASE_URL);
+      // Note: since `BASE_URL` is `InjectionToken&lt;string&gt;`
+      // `url` is correctly inferred to be `string`
+      expect(url).toBe('http://localhost');</pre> <h3 id="tree-shakable-injectiontoken"> Tree-shakable InjectionToken </h3> <pre data-language="ts">class MyService {
+        constructor(readonly myDep: MyDep) {}
+      }
+
+      const MY_SERVICE_TOKEN = new InjectionToken&lt;MyService&gt;('Manually constructed MyService', {
+        providedIn: 'root',
+        factory: () =&gt; new MyService(inject(MyDep)),
+      });
+
+      const instance = injector.get(MY_SERVICE_TOKEN);
+      expect(instance instanceof MyService).toBeTruthy();
+      expect(instance.myDep instanceof MyDep).toBeTruthy();</pre>
+</div>
+</div>
+</div></main></adev-reference-page></adev-main><div class="_attribution">
+  <p class="_attribution-p">
+    Super-powered by Google &copy;2010&ndash;2025.<br />Code licensed under an MIT-style License. Documentation licensed under CC BY 4.0.<br>
+    <a href="https://angular.dev/api/core/InjectionToken" class="_attribution-link">https://angular.dev/api/core/InjectionToken</a>
+  </p>
+</div>

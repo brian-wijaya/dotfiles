@@ -1,0 +1,99 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_xmlrpc_server::wp_getUsers( <span class="arg-type">array</span> <span class="arg-name">$args</span> ): <span class="return-type">array|<a href="../ixr_error" rel="class">IXR_Error</a></span>
+</h1> <section><p>Retrieves users.</p> </section> <section><h2 id="description">Description</h2> <p>The optional $filter parameter modifies the query used to retrieve users.<br>Accepted keys are ‘number’ (default: 50), ‘offset’ (default: 0), ‘role’, ‘who’, ‘orderby’, and ‘order’.</p> <p>The optional $fields parameter specifies what fields will be included in the response array.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li>
+<a href="../../functions/wp_getuser">wp_getUser()</a>: for more on $fields and return values</li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Method arguments. Note: arguments must be ordered as documented.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">int</span><div class="desc">Blog ID (unused).</div>
+</li> <li>
+<code>1</code> <span class="type">string</span><div class="desc">Username.</div>
+</li> <li>
+<code>2</code> <span class="type">string</span><div class="desc">Password.</div>
+</li> <li>
+<code>3</code> <span class="type">array</span><div class="desc">Optional. Arguments for the user query.</div>
+</li> <li>
+<code>4</code> <span class="type">array</span><div class="desc">Optional. Fields to return.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../ixr_error" rel="class">IXR_Error</a></span> users data</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2747" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function wp_getUsers( $args ) {
+	if ( ! $this-&gt;minimum_args( $args, 3 ) ) {
+		return $this-&gt;error;
+	}
+
+	$this-&gt;escape( $args );
+
+	$username = $args[1];
+	$password = $args[2];
+	$filter   = isset( $args[3] ) ? $args[3] : array();
+
+	if ( isset( $args[4] ) ) {
+		$fields = $args[4];
+	} else {
+		/** This action is documented in wp-includes/class-wp-xmlrpc-server.php */
+		$fields = apply_filters( 'xmlrpc_default_user_fields', array( 'all' ), 'wp.getUsers' );
+	}
+
+	$user = $this-&gt;login( $username, $password );
+	if ( ! $user ) {
+		return $this-&gt;error;
+	}
+
+	/** This action is documented in wp-includes/class-wp-xmlrpc-server.php */
+	do_action( 'xmlrpc_call', 'wp.getUsers', $args, $this );
+
+	if ( ! current_user_can( 'list_users' ) ) {
+		return new IXR_Error( 401, __( 'Sorry, you are not allowed to list users.' ) );
+	}
+
+	$query = array( 'fields' =&gt; 'all_with_meta' );
+
+	$query['number'] = ( isset( $filter['number'] ) ) ? absint( $filter['number'] ) : 50;
+	$query['offset'] = ( isset( $filter['offset'] ) ) ? absint( $filter['offset'] ) : 0;
+
+	if ( isset( $filter['orderby'] ) ) {
+		$query['orderby'] = $filter['orderby'];
+
+		if ( isset( $filter['order'] ) ) {
+			$query['order'] = $filter['order'];
+		}
+	}
+
+	if ( isset( $filter['role'] ) ) {
+		if ( get_role( $filter['role'] ) === null ) {
+			return new IXR_Error( 403, __( 'Invalid role.' ) );
+		}
+
+		$query['role'] = $filter['role'];
+	}
+
+	if ( isset( $filter['who'] ) ) {
+		$query['who'] = $filter['who'];
+	}
+
+	$users = get_users( $query );
+
+	$_users = array();
+	foreach ( $users as $user_data ) {
+		if ( current_user_can( 'edit_user', $user_data-&gt;ID ) ) {
+			$_users[] = $this-&gt;_prepare_user( $user_data, $fields );
+		}
+	}
+	return $_users;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-xmlrpc-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L2747">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L2747-L2811">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/xmlrpc_call"><span class="hook-func">do_action</span>( ‘xmlrpc_call’, <nobr><span class="arg-type">string</span> <span class="arg-name">$name</span></nobr>, <nobr><span class="arg-type">array|string</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">wp_xmlrpc_server</span> <span class="arg-name">$server</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the XML-RPC user has been authenticated but before the rest of the method logic begins.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/xmlrpc_default_user_fields"><span class="hook-func">apply_filters</span>( ‘xmlrpc_default_user_fields’, <nobr><span class="arg-type">array</span> <span class="arg-name">$fields</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$method</span></nobr> )</a></dt>
+<dd>
+<p>Filters the default user query fields used by the given XML-RPC method.</p> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/wp_getusers" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/wp_getusers</a>
+  </p>
+</div>

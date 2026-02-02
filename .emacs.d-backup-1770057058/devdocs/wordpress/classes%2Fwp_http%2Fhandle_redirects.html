@@ -1,0 +1,73 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Http::handle_redirects( <span class="arg-type">string</span> <span class="arg-name">$url</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span>, <span class="arg-type">array</span> <span class="arg-name">$response</span> ): <span class="return-type">array|false|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Handles an HTTP redirect and follows it if appropriate.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The URL which was requested.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The arguments which were used to make the request.</span></div></dd>
+<dt>
+<code>$response</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The response of the HTTP request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false|<a href="../wp_error" rel="class">WP_Error</a></span> An HTTP API response array if the redirect is successfully followed, false if no redirect is present, or a <a href="../wp_error" rel="class">WP_Error</a> object if there’s an error.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1051" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function handle_redirects( $url, $args, $response ) {
+	// If no redirects are present, or, redirects were not requested, perform no action.
+	if ( ! isset( $response['headers']['location'] ) || 0 === $args['_redirection'] ) {
+		return false;
+	}
+
+	// Only perform redirections on redirection http codes.
+	if ( $response['response']['code'] &gt; 399 || $response['response']['code'] &lt; 300 ) {
+		return false;
+	}
+
+	// Don't redirect if we've run out of redirects.
+	if ( $args['redirection']-- &lt;= 0 ) {
+		return new WP_Error( 'http_request_failed', __( 'Too many redirects.' ) );
+	}
+
+	$redirect_location = $response['headers']['location'];
+
+	// If there were multiple Location headers, use the last header specified.
+	if ( is_array( $redirect_location ) ) {
+		$redirect_location = array_pop( $redirect_location );
+	}
+
+	$redirect_location = WP_Http::make_absolute_url( $redirect_location, $url );
+
+	// POST requests should not POST to a redirected location.
+	if ( 'POST' === $args['method'] ) {
+		if ( in_array( $response['response']['code'], array( 302, 303 ), true ) ) {
+			$args['method'] = 'GET';
+		}
+	}
+
+	// Include valid cookies in the redirect process.
+	if ( ! empty( $response['cookies'] ) ) {
+		foreach ( $response['cookies'] as $cookie ) {
+			if ( $cookie-&gt;test( $redirect_location ) ) {
+				$args['cookies'][] = $cookie;
+			}
+		}
+	}
+
+	return wp_remote_request( $redirect_location, $args );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-http.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-http.php#L1051">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-http.php#L1051-L1093">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_http/handle_redirects" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_http/handle_redirects</a>
+  </p>
+</div>

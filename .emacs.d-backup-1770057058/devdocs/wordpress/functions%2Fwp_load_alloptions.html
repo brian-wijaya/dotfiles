@@ -1,0 +1,103 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_load_alloptions( <span class="arg-type">bool</span> <span class="arg-name">$force_cache</span> = <span class="arg-default">false</span> ): <span class="return-type">array</span>
+</h1> <section><p>Loads and caches all autoloaded options, if available or all options.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$force_cache</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to force an update of the local cache from the persistent cache. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> List of all options.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="592" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_load_alloptions( $force_cache = false ) {
+	global $wpdb;
+
+	/**
+	 * Filters the array of alloptions before it is populated.
+	 *
+	 * Returning an array from the filter will effectively short circuit
+	 * wp_load_alloptions(), returning that value instead.
+	 *
+	 * @since 6.2.0
+	 *
+	 * @param array|null $alloptions  An array of alloptions. Default null.
+	 * @param bool       $force_cache Whether to force an update of the local cache from the persistent cache. Default false.
+	 */
+	$alloptions = apply_filters( 'pre_wp_load_alloptions', null, $force_cache );
+	if ( is_array( $alloptions ) ) {
+		return $alloptions;
+	}
+
+	if ( ! wp_installing() || ! is_multisite() ) {
+		$alloptions = wp_cache_get( 'alloptions', 'options', $force_cache );
+	} else {
+		$alloptions = false;
+	}
+
+	if ( ! $alloptions ) {
+		$suppress      = $wpdb-&gt;suppress_errors();
+		$alloptions_db = $wpdb-&gt;get_results( "SELECT option_name, option_value FROM $wpdb-&gt;options WHERE autoload IN ( '" . implode( "', '", esc_sql( wp_autoload_values_to_autoload() ) ) . "' )" );
+
+		if ( ! $alloptions_db ) {
+			$alloptions_db = $wpdb-&gt;get_results( "SELECT option_name, option_value FROM $wpdb-&gt;options" );
+		}
+		$wpdb-&gt;suppress_errors( $suppress );
+
+		$alloptions = array();
+		foreach ( (array) $alloptions_db as $o ) {
+			$alloptions[ $o-&gt;option_name ] = $o-&gt;option_value;
+		}
+
+		if ( ! wp_installing() || ! is_multisite() ) {
+			/**
+			 * Filters all options before caching them.
+			 *
+			 * @since 4.9.0
+			 *
+			 * @param array $alloptions Array with all options.
+			 */
+			$alloptions = apply_filters( 'pre_cache_alloptions', $alloptions );
+
+			wp_cache_add( 'alloptions', $alloptions, 'options' );
+		}
+	}
+
+	/**
+	 * Filters all options after retrieving them.
+	 *
+	 * @since 4.9.0
+	 *
+	 * @param array $alloptions Array with all options.
+	 */
+	return apply_filters( 'alloptions', $alloptions );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/option.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/option.php#L592">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/option.php#L592-L653">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/alloptions"><span class="hook-func">apply_filters</span>( ‘alloptions’, <nobr><span class="arg-type">array</span> <span class="arg-name">$alloptions</span></nobr> )</a></dt>
+<dd>
+<p>Filters all options after retrieving them.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_cache_alloptions"><span class="hook-func">apply_filters</span>( ‘pre_cache_alloptions’, <nobr><span class="arg-type">array</span> <span class="arg-name">$alloptions</span></nobr> )</a></dt>
+<dd>
+<p>Filters all options before caching them.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_wp_load_alloptions"><span class="hook-func">apply_filters</span>( ‘pre_wp_load_alloptions’, <nobr><span class="arg-type">array|null</span> <span class="arg-name">$alloptions</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$force_cache</span></nobr> )</a></dt>
+<dd>
+<p>Filters the array of alloptions before it is populated.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.1/">5.3.1</a></td>
+<td><span class="since-description">The <code>$force_cache</code> parameter was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.2.0/">2.2.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_load_alloptions" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_load_alloptions</a>
+  </p>
+</div>

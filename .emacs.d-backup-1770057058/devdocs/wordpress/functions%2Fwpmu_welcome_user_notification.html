@@ -1,0 +1,119 @@
+<h1 class="wp-block-wporg-code-reference-title">wpmu_welcome_user_notification( <span class="arg-type">int</span> <span class="arg-name">$user_id</span>, <span class="arg-type">string</span> <span class="arg-name">$password</span>, <span class="arg-type">array</span> <span class="arg-name">$meta</span> = <span class="arg-default">array()</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Notifies a user that their account activation has been successful.</p> </section> <section><h2 id="description">Description</h2> <p>Filter <a href="../hooks/wpmu_welcome_user_notification">‘wpmu_welcome_user_notification’</a> to disable or bypass.</p> <p>Filter <a href="../hooks/update_welcome_user_email">‘update_welcome_user_email’</a> and <a href="../hooks/update_welcome_user_subject">‘update_welcome_user_subject’</a> to modify the content and subject line of the notification email.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$user_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">User ID.</span></div></dd>
+<dt>
+<code>$password</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">User password.</span></div></dd>
+<dt>
+<code>$meta</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Signup meta data. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1831" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wpmu_welcome_user_notification( $user_id, $password, $meta = array() ) {
+	$current_network = get_network();
+
+	/**
+	 * Filters whether to bypass the welcome email after user activation.
+	 *
+	 * Returning false disables the welcome email.
+	 *
+	 * @since MU (3.0.0)
+	 *
+	 * @param int    $user_id  User ID.
+	 * @param string $password User password.
+	 * @param array  $meta     Signup meta data. Default empty array.
+	 */
+	if ( ! apply_filters( 'wpmu_welcome_user_notification', $user_id, $password, $meta ) ) {
+		return false;
+	}
+
+	$welcome_email = get_site_option( 'welcome_user_email' );
+
+	$user = get_userdata( $user_id );
+
+	$switched_locale = switch_to_user_locale( $user_id );
+
+	/**
+	 * Filters the content of the welcome email after user activation.
+	 *
+	 * Content should be formatted for transmission via wp_mail().
+	 *
+	 * @since MU (3.0.0)
+	 *
+	 * @param string $welcome_email The message body of the account activation success email.
+	 * @param int    $user_id       User ID.
+	 * @param string $password      User password.
+	 * @param array  $meta          Signup meta data. Default empty array.
+	 */
+	$welcome_email = apply_filters( 'update_welcome_user_email', $welcome_email, $user_id, $password, $meta );
+	$welcome_email = str_replace( 'SITE_NAME', $current_network-&gt;site_name, $welcome_email );
+	$welcome_email = str_replace( 'USERNAME', $user-&gt;user_login, $welcome_email );
+	$welcome_email = str_replace( 'PASSWORD', $password, $welcome_email );
+	$welcome_email = str_replace( 'LOGINLINK', wp_login_url(), $welcome_email );
+
+	$admin_email = get_site_option( 'admin_email' );
+
+	if ( '' === $admin_email ) {
+		$admin_email = 'support@' . wp_parse_url( network_home_url(), PHP_URL_HOST );
+	}
+
+	$from_name       = ( '' !== get_site_option( 'site_name' ) ) ? esc_html( get_site_option( 'site_name' ) ) : 'WordPress';
+	$message_headers = "From: \"{$from_name}\" &lt;{$admin_email}&gt;\n" . 'Content-Type: text/plain; charset="' . get_option( 'blog_charset' ) . "\"\n";
+	$message         = $welcome_email;
+
+	if ( empty( $current_network-&gt;site_name ) ) {
+		$current_network-&gt;site_name = 'WordPress';
+	}
+
+	/* translators: New user notification email subject. 1: Network title, 2: New user login. */
+	$subject = __( 'New %1$s User: %2$s' );
+
+	/**
+	 * Filters the subject of the welcome email after user activation.
+	 *
+	 * @since MU (3.0.0)
+	 *
+	 * @param string $subject Subject of the email.
+	 */
+	$subject = apply_filters( 'update_welcome_user_subject', sprintf( $subject, $current_network-&gt;site_name, $user-&gt;user_login ) );
+
+	wp_mail( $user-&gt;user_email, wp_specialchars_decode( $subject ), $message, $message_headers );
+
+	if ( $switched_locale ) {
+		restore_previous_locale();
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-functions.php#L1831">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-functions.php#L1831-L1906">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/update_welcome_user_email"><span class="hook-func">apply_filters</span>( ‘update_welcome_user_email’, <nobr><span class="arg-type">string</span> <span class="arg-name">$welcome_email</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$user_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$password</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$meta</span></nobr> )</a></dt>
+<dd>
+<p>Filters the content of the welcome email after user activation.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/update_welcome_user_subject"><span class="hook-func">apply_filters</span>( ‘update_welcome_user_subject’, <nobr><span class="arg-type">string</span> <span class="arg-name">$subject</span></nobr> )</a></dt>
+<dd>
+<p>Filters the subject of the welcome email after user activation.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wpmu_welcome_user_notification"><span class="hook-func">apply_filters</span>( ‘wpmu_welcome_user_notification’, <nobr><span class="arg-type">int</span> <span class="arg-name">$user_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$password</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$meta</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to bypass the welcome email after user activation.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wpmu_welcome_user_notification" class="_attribution-link">https://developer.wordpress.org/reference/functions/wpmu_welcome_user_notification</a>
+  </p>
+</div>

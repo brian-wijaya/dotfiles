@@ -1,0 +1,86 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Theme::get_post_templates(): <span class="return-type">array[]</span>
+</h1> <section><p>Returns the theme’s post templates.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array[]</span> Array of page template arrays, keyed by post type and filename, with the value of the translated header name.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1319" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_post_templates() {
+	// If you screw up your active theme and we invalidate your parent, most things still work. Let it slide.
+	if ( $this-&gt;errors() &amp;&amp; $this-&gt;errors()-&gt;get_error_codes() !== array( 'theme_parent_invalid' ) ) {
+		return array();
+	}
+
+	$post_templates = $this-&gt;cache_get( 'post_templates' );
+
+	if ( ! is_array( $post_templates ) ) {
+		$post_templates = array();
+
+		$files = (array) $this-&gt;get_files( 'php', 1, true );
+
+		foreach ( $files as $file =&gt; $full_path ) {
+			if ( ! preg_match( '|Template Name:(.*)$|mi', file_get_contents( $full_path ), $header ) ) {
+				continue;
+			}
+
+			$types = array( 'page' );
+			if ( preg_match( '|Template Post Type:(.*)$|mi', file_get_contents( $full_path ), $type ) ) {
+				$types = explode( ',', _cleanup_header_comment( $type[1] ) );
+			}
+
+			foreach ( $types as $type ) {
+				$type = sanitize_key( $type );
+				if ( ! isset( $post_templates[ $type ] ) ) {
+					$post_templates[ $type ] = array();
+				}
+
+				$post_templates[ $type ][ $file ] = _cleanup_header_comment( $header[1] );
+			}
+		}
+
+		$this-&gt;cache_add( 'post_templates', $post_templates );
+	}
+
+	if ( current_theme_supports( 'block-templates' ) ) {
+		$block_templates = get_block_templates( array(), 'wp_template' );
+		foreach ( get_post_types( array( 'public' =&gt; true ) ) as $type ) {
+			foreach ( $block_templates as $block_template ) {
+				if ( ! $block_template-&gt;is_custom ) {
+					continue;
+				}
+
+				if ( isset( $block_template-&gt;post_types ) &amp;&amp; ! in_array( $type, $block_template-&gt;post_types, true ) ) {
+					continue;
+				}
+
+				$post_templates[ $type ][ $block_template-&gt;slug ] = $block_template-&gt;title;
+			}
+		}
+	}
+
+	if ( $this-&gt;load_textdomain() ) {
+		foreach ( $post_templates as &amp;$post_type ) {
+			foreach ( $post_type as &amp;$post_template ) {
+				$post_template = $this-&gt;translate_header( 'Template Name', $post_template );
+			}
+		}
+	}
+
+	return $post_templates;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-theme.php#L1319">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-theme.php#L1319-L1381">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td><span class="since-description">Include block templates.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_theme/get_post_templates" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_theme/get_post_templates</a>
+  </p>
+</div>

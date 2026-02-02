@@ -1,0 +1,135 @@
+<h1 class="wp-block-wporg-code-reference-title">get_custom_logo( <span class="arg-type">int</span> <span class="arg-name">$blog_id</span> ): <span class="return-type">string</span>
+</h1> <section><p>Returns a custom logo, linked to home unless the theme supports removing the link on the home page.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$blog_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">ID of the blog in question. Default is the ID of the current blog.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Custom logo markup.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1058" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_custom_logo( $blog_id = 0 ) {
+	$html          = '';
+	$switched_blog = false;
+
+	if ( is_multisite() &amp;&amp; ! empty( $blog_id ) &amp;&amp; get_current_blog_id() !== (int) $blog_id ) {
+		switch_to_blog( $blog_id );
+		$switched_blog = true;
+	}
+
+	// We have a logo. Logo is go.
+	if ( has_custom_logo() ) {
+		$custom_logo_id   = get_theme_mod( 'custom_logo' );
+		$custom_logo_attr = array(
+			'class'   =&gt; 'custom-logo',
+			'loading' =&gt; false,
+		);
+
+		$unlink_homepage_logo = (bool) get_theme_support( 'custom-logo', 'unlink-homepage-logo' );
+
+		if ( $unlink_homepage_logo &amp;&amp; is_front_page() &amp;&amp; ! is_paged() ) {
+			/*
+			 * If on the home page, set the logo alt attribute to an empty string,
+			 * as the image is decorative and doesn't need its purpose to be described.
+			 */
+			$custom_logo_attr['alt'] = '';
+		} else {
+			/*
+			 * If the logo alt attribute is empty, get the site title and explicitly pass it
+			 * to the attributes used by wp_get_attachment_image().
+			 */
+			$image_alt = get_post_meta( $custom_logo_id, '_wp_attachment_image_alt', true );
+			if ( empty( $image_alt ) ) {
+				$custom_logo_attr['alt'] = get_bloginfo( 'name', 'display' );
+			}
+		}
+
+		/**
+		 * Filters the list of custom logo image attributes.
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param array $custom_logo_attr Custom logo image attributes.
+		 * @param int   $custom_logo_id   Custom logo attachment ID.
+		 * @param int   $blog_id          ID of the blog to get the custom logo for.
+		 */
+		$custom_logo_attr = apply_filters( 'get_custom_logo_image_attributes', $custom_logo_attr, $custom_logo_id, $blog_id );
+
+		/*
+		 * If the alt attribute is not empty, there's no need to explicitly pass it
+		 * because wp_get_attachment_image() already adds the alt attribute.
+		 */
+		$image = wp_get_attachment_image( $custom_logo_id, 'full', false, $custom_logo_attr );
+
+		// Check that we have a proper HTML img element.
+		if ( $image ) {
+
+			if ( $unlink_homepage_logo &amp;&amp; is_front_page() &amp;&amp; ! is_paged() ) {
+				// If on the home page, don't link the logo to home.
+				$html = sprintf(
+					'&lt;span class="custom-logo-link"&gt;%1$s&lt;/span&gt;',
+					$image
+				);
+			} else {
+				$aria_current = is_front_page() &amp;&amp; ! is_paged() ? ' aria-current="page"' : '';
+
+				$html = sprintf(
+					'&lt;a href="%1$s" class="custom-logo-link" rel="home"%2$s&gt;%3$s&lt;/a&gt;',
+					esc_url( home_url( '/' ) ),
+					$aria_current,
+					$image
+				);
+			}
+		}
+	} elseif ( is_customize_preview() ) {
+		// If no logo is set but we're in the Customizer, leave a placeholder (needed for the live preview).
+		$html = sprintf(
+			'&lt;a href="%1$s" class="custom-logo-link" style="display:none;"&gt;&lt;img class="custom-logo" alt="" /&gt;&lt;/a&gt;',
+			esc_url( home_url( '/' ) )
+		);
+	}
+
+	if ( $switched_blog ) {
+		restore_current_blog();
+	}
+
+	/**
+	 * Filters the custom logo output.
+	 *
+	 * @since 4.5.0
+	 * @since 4.6.0 Added the `$blog_id` parameter.
+	 *
+	 * @param string $html    Custom logo HTML output.
+	 * @param int    $blog_id ID of the blog to get the custom logo for.
+	 */
+	return apply_filters( 'get_custom_logo', $html, $blog_id );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/general-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/general-template.php#L1058">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/general-template.php#L1058-L1153">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_custom_logo"><span class="hook-func">apply_filters</span>( ‘get_custom_logo’, <nobr><span class="arg-type">string</span> <span class="arg-name">$html</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$blog_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the custom logo output.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_custom_logo_image_attributes"><span class="hook-func">apply_filters</span>( ‘get_custom_logo_image_attributes’, <nobr><span class="arg-type">array</span> <span class="arg-name">$custom_logo_attr</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$custom_logo_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$blog_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of custom logo image attributes.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.1/">5.5.1</a></td>
+<td><span class="since-description">Disabled lazy-loading by default.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">Added option to remove the link on the home page with <code>unlink-homepage-logo</code> theme support for the <code>custom-logo</code> theme feature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.5.0/">4.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_custom_logo" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_custom_logo</a>
+  </p>
+</div>

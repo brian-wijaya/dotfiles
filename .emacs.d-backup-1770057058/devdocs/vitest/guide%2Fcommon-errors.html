@@ -1,0 +1,102 @@
+<h1 id="common-errors" tabindex="-1">Common Errors </h1>
+<h2 id="cannot-find-module-relative-path" tabindex="-1">Cannot find module './relative-path' </h2>
+<p>If you receive an error that module cannot be found, it might mean several different things:</p>
+<ul>
+<li><ol><li>You misspelled the path. Make sure the path is correct.</li></ol></li>
+<li><ol start="2"><li>It's possible that you rely on <code>baseUrl</code> in your <code>tsconfig.json</code>. Vite doesn't take into account <code>tsconfig.json</code> by default, so you might need to install <a href="https://www.npmjs.com/package/vite-tsconfig-paths" target="_blank" rel="noreferrer"><code>vite-tsconfig-paths</code></a> yourself, if you rely on this behaviour.</li></ol></li>
+</ul>
+<div class="language-ts vp-adaptive-theme">
+<pre class="shiki shiki-themes github-light github-dark vp-code" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" data-language="javascript">import { defineConfig } from 'vitest/config'
+import tsconfigPaths from 'vite-tsconfig-paths'
+
+export default defineConfig({
+  plugins: [tsconfigPaths()]
+})</pre>
+</div>
+<p>Or rewrite your path to not be relative to root:</p>
+<div class="language-diff vp-adaptive-theme">
+<pre class="shiki shiki-themes github-light github-dark vp-code" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" data-language="javascript">- import helpers from 'src/helpers'
++ import helpers from '../src/helpers'</pre>
+</div>
+<ul><li><ol start="3"><li>Make sure you don't have relative <a href="../config/index#alias">aliases</a>. Vite treats them as relative to the file where the import is instead of the root.</li></ol></li></ul>
+<div class="language-ts vp-adaptive-theme">
+<pre class="shiki shiki-themes github-light github-dark has-diff vp-code" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" data-language="javascript">import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    alias: {
+      '@/': './src/', 
+      '@/': new URL('./src/', import.meta.url).pathname, 
+    }
+  }
+})</pre>
+</div>
+<h2 id="cannot-mock-mocked-file-js-because-it-is-already-loaded" tabindex="-1">Cannot mock "./mocked-file.js" because it is already loaded </h2>
+<p>This error happens when <code>vi.mock</code> method is called on a module that was already loaded. Vitest throws this error because this call has no effect since cached modules are preferred.</p>
+<p>Remember that <code>vi.mock</code> is always hoisted - it means that the module was loaded before the test file started executing - most likely in a setup file. To fix the error, remove the import or clear the cache at the end of a setup file - beware that setup file and your test file will reference different modules in that case.</p>
+<div class="vp-code-block-title">
+<div class="vp-code-block-title-bar"><span class="vp-code-block-title-text" data-title="setupFile.js">setupFile.js</span></div>
+<div class="language-ts vp-adaptive-theme">
+<pre class="shiki shiki-themes github-light github-dark vp-code" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" data-language="javascript">import { vi } from 'vitest'
+import { sideEffect } from './mocked-file.js'
+
+sideEffect()
+
+vi.resetModules()</pre>
+</div>
+</div>
+<h2 id="failed-to-terminate-worker" tabindex="-1">Failed to terminate worker </h2>
+<p>This error can happen when NodeJS's <code>fetch</code> is used with default <a href="../config/index#threads"><code>pool: 'threads'</code></a>. This issue is tracked on issue <a href="https://github.com/vitest-dev/vitest/issues/3077" target="_blank" rel="noreferrer">Timeout abort can leave process(es) running in the background #3077</a>.</p>
+<p>As work-around you can switch to <a href="../config/index#forks"><code>pool: 'forks'</code></a> or <a href="../config/index#vmforks"><code>pool: 'vmForks'</code></a>.</p>
+<div class="vp-code-group vp-adaptive-theme">
+<div class="tabs">
+<input type="radio" name="group-Zljlc" id="tab-FJyNGc7" checked><label data-title="vitest.config.js" for="tab-FJyNGc7">vitest.config.js</label><input type="radio" name="group-Zljlc" id="tab-U7hXnFA"><label data-title="CLI" for="tab-U7hXnFA">CLI</label>
+</div>
+<div class="blocks">
+<div class="language-ts vp-adaptive-theme active">
+<pre class="shiki shiki-themes github-light github-dark vp-code" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" data-language="javascript">import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    pool: 'forks',
+  },
+})</pre>
+</div>
+<div class="language-bash vp-adaptive-theme">
+<pre class="shiki shiki-themes github-light github-dark vp-code" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" data-language="javascript">vitest --pool=forks</pre>
+</div>
+</div>
+</div>
+<h2 id="segfaults-and-native-code-errors" tabindex="-1">Segfaults and native code errors </h2>
+<p>Running <a href="https://nodejs.org/api/addons.html" target="_blank" rel="noreferrer">native NodeJS modules</a> in <code>pool: 'threads'</code> can run into cryptic errors coming from the native code.</p>
+<ul>
+<li><code>Segmentation fault (core dumped)</code></li>
+<li><code>thread '&lt;unnamed&gt;' panicked at 'assertion failed</code></li>
+<li><code>Abort trap: 6</code></li>
+<li><code>internal error: entered unreachable code</code></li>
+</ul>
+<p>In these cases the native module is likely not built to be multi-thread safe. As work-around, you can switch to <code>pool: 'forks'</code> which runs the test cases in multiple <code>node:child_process</code> instead of multiple <code>node:worker_threads</code>.</p>
+<div class="vp-code-group vp-adaptive-theme">
+<div class="tabs">
+<input type="radio" name="group-ZZYri" id="tab-ta9IEci" checked><label data-title="vitest.config.js" for="tab-ta9IEci">vitest.config.js</label><input type="radio" name="group-ZZYri" id="tab-YBrd9t-"><label data-title="CLI" for="tab-YBrd9t-">CLI</label>
+</div>
+<div class="blocks">
+<div class="language-ts vp-adaptive-theme active">
+<pre class="shiki shiki-themes github-light github-dark vp-code" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" data-language="javascript">import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    pool: 'forks',
+  },
+})</pre>
+</div>
+<div class="language-bash vp-adaptive-theme">
+<pre class="shiki shiki-themes github-light github-dark vp-code" style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;--shiki-light-bg:#fff;--shiki-dark-bg:#24292e;" tabindex="0" data-language="javascript">vitest --pool=forks</pre>
+</div>
+</div>
+</div><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2021-Present Anthony Fu<br>&copy; 2021-Present Matias Capeletto<br>Licensed under the MIT License.<br>
+    <a href="https://vitest.dev/guide/common-errors" class="_attribution-link">https://vitest.dev/guide/common-errors</a>
+  </p>
+</div>

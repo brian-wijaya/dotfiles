@@ -1,0 +1,95 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Terms_List_Table::prepare_items()</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="77" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_items() {
+	$taxonomy = $this-&gt;screen-&gt;taxonomy;
+
+	$tags_per_page = $this-&gt;get_items_per_page( "edit_{$taxonomy}_per_page" );
+
+	if ( 'post_tag' === $taxonomy ) {
+		/**
+		 * Filters the number of terms displayed per page for the Tags list table.
+		 *
+		 * @since 2.8.0
+		 *
+		 * @param int $tags_per_page Number of tags to be displayed. Default 20.
+		 */
+		$tags_per_page = apply_filters( 'edit_tags_per_page', $tags_per_page );
+
+		/**
+		 * Filters the number of terms displayed per page for the Tags list table.
+		 *
+		 * @since 2.7.0
+		 * @deprecated 2.8.0 Use <a href="../../hooks/edit_tags_per_page">'edit_tags_per_page'</a> instead.
+		 *
+		 * @param int $tags_per_page Number of tags to be displayed. Default 20.
+		 */
+		$tags_per_page = apply_filters_deprecated( 'tagsperpage', array( $tags_per_page ), '2.8.0', 'edit_tags_per_page' );
+	} elseif ( 'category' === $taxonomy ) {
+		/**
+		 * Filters the number of terms displayed per page for the Categories list table.
+		 *
+		 * @since 2.8.0
+		 *
+		 * @param int $tags_per_page Number of categories to be displayed. Default 20.
+		 */
+		$tags_per_page = apply_filters( 'edit_categories_per_page', $tags_per_page );
+	}
+
+	$search = ! empty( $_REQUEST['s'] ) ? trim( wp_unslash( $_REQUEST['s'] ) ) : '';
+
+	$args = array(
+		'taxonomy'   =&gt; $taxonomy,
+		'search'     =&gt; $search,
+		'page'       =&gt; $this-&gt;get_pagenum(),
+		'number'     =&gt; $tags_per_page,
+		'hide_empty' =&gt; 0,
+	);
+
+	if ( ! empty( $_REQUEST['orderby'] ) ) {
+		$args['orderby'] = trim( wp_unslash( $_REQUEST['orderby'] ) );
+	}
+
+	if ( ! empty( $_REQUEST['order'] ) ) {
+		$args['order'] = trim( wp_unslash( $_REQUEST['order'] ) );
+	}
+
+	$args['offset'] = ( $args['page'] - 1 ) * $args['number'];
+
+	// Save the values because 'number' and 'offset' can be subsequently overridden.
+	$this-&gt;callback_args = $args;
+
+	if ( is_taxonomy_hierarchical( $taxonomy ) &amp;&amp; ! isset( $args['orderby'] ) ) {
+		// We'll need the full set of terms then.
+		$args['number'] = 0;
+		$args['offset'] = $args['number'];
+	}
+
+	$this-&gt;items = get_terms( $args );
+
+	$this-&gt;set_pagination_args(
+		array(
+			'total_items' =&gt; wp_count_terms(
+				array(
+					'taxonomy' =&gt; $taxonomy,
+					'search'   =&gt; $search,
+				)
+			),
+			'per_page'    =&gt; $tags_per_page,
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-terms-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-terms-list-table.php#L77">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-terms-list-table.php#L77-L154">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/edit_categories_per_page"><span class="hook-func">apply_filters</span>( ‘edit_categories_per_page’, <nobr><span class="arg-type">int</span> <span class="arg-name">$tags_per_page</span></nobr> )</a></dt>
+<dd>
+<p>Filters the number of terms displayed per page for the Categories list table.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/edit_tags_per_page"><span class="hook-func">apply_filters</span>( ‘edit_tags_per_page’, <nobr><span class="arg-type">int</span> <span class="arg-name">$tags_per_page</span></nobr> )</a></dt>
+<dd>
+<p>Filters the number of terms displayed per page for the Tags list table.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/tagsperpage"><span class="hook-func">apply_filters_deprecated</span>( ‘tagsperpage’, <nobr><span class="arg-type">int</span> <span class="arg-name">$tags_per_page</span></nobr> )</a></dt>
+<dd>
+<p>Filters the number of terms displayed per page for the Tags list table.</p> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_terms_list_table/prepare_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_terms_list_table/prepare_items</a>
+  </p>
+</div>

@@ -1,0 +1,415 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> AtomParser {}</h1> <section><p>AtomLib Atom Parser API</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="atomparser/__construct">AtomParser::__construct</a></td>
+<td>PHP5 constructor.</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/_default">AtomParser::_default</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/_p">AtomParser::_p</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/atomparser">AtomParser::AtomParser</a></td>
+<td>PHP4 constructor.</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/cdata">AtomParser::cdata</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/end_element">AtomParser::end_element</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/end_ns">AtomParser::end_ns</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/error_handler">AtomParser::error_handler</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/is_declared_content_ns">AtomParser::is_declared_content_ns</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/map_attrs">AtomParser::map_attrs</a></td>
+<td>Map attributes to key=”val”</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/map_xmlns">AtomParser::map_xmlns</a></td>
+<td>Map XML namespace to string.</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/ns_to_prefix">AtomParser::ns_to_prefix</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/parse">AtomParser::parse</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/start_element">AtomParser::start_element</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/start_ns">AtomParser::start_ns</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="atomparser/xml_escape">AtomParser::xml_escape</a></td>
+<td>–</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="65" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class AtomParser {
+
+    var $NS = 'http://www.w3.org/2005/Atom';
+    var $ATOM_CONTENT_ELEMENTS = array('content','summary','title','subtitle','rights');
+    var $ATOM_SIMPLE_ELEMENTS = array('id','updated','published','draft');
+
+    var $debug = false;
+
+    var $depth = 0;
+    var $indent = 2;
+    var $in_content;
+    var $ns_contexts = array();
+    var $ns_decls = array();
+    var $content_ns_decls = array();
+    var $content_ns_contexts = array();
+    var $is_xhtml = false;
+    var $is_html = false;
+    var $is_text = true;
+    var $skipped_div = false;
+
+    var $FILE = "php://input";
+
+    var $feed;
+    var $current;
+    var $map_attrs_func;
+    var $map_xmlns_func;
+    var $error;
+    var $content;
+
+	/**
+	 * PHP5 constructor.
+	 */
+    function __construct() {
+
+        $this-&gt;feed = new AtomFeed();
+        $this-&gt;current = null;
+        $this-&gt;map_attrs_func = array( __CLASS__, 'map_attrs' );
+        $this-&gt;map_xmlns_func = array( __CLASS__, 'map_xmlns' );
+    }
+
+	/**
+	 * PHP4 constructor.
+	 */
+	public function AtomParser() {
+		self::__construct();
+	}
+
+	/**
+	 * Map attributes to key="val"
+	 *
+	 * @param string $k Key
+	 * @param string $v Value
+	 * @return string
+	 */
+	public static function map_attrs($k, $v) {
+		return "$k=\"$v\"";
+	}
+
+	/**
+	 * Map XML namespace to string.
+	 *
+	 * @param indexish $p XML Namespace element index
+	 * @param array $n Two-element array pair. [ 0 =&gt; {namespace}, 1 =&gt; {url} ]
+	 * @return string 'xmlns="{url}"' or 'xmlns:{namespace}="{url}"'
+	 */
+	public static function map_xmlns($p, $n) {
+		$xd = "xmlns";
+		if( 0 &lt; strlen($n[0]) ) {
+			$xd .= ":{$n[0]}";
+		}
+		return "{$xd}=\"{$n[1]}\"";
+	}
+
+    function _p($msg) {
+        if($this-&gt;debug) {
+            print str_repeat(" ", $this-&gt;depth * $this-&gt;indent) . $msg ."\n";
+        }
+    }
+
+    function error_handler($log_level, $log_text, $error_file, $error_line) {
+        $this-&gt;error = $log_text;
+    }
+
+    function parse() {
+
+        set_error_handler(array(&amp;$this, 'error_handler'));
+
+        array_unshift($this-&gt;ns_contexts, array());
+
+        if ( ! function_exists( 'xml_parser_create_ns' ) ) {
+        	trigger_error( __( "PHP's XML extension is not available. Please contact your hosting provider to enable PHP's XML extension." ) );
+        	return false;
+        }
+
+        $parser = xml_parser_create_ns();
+        xml_set_element_handler($parser, array($this, "start_element"), array($this, "end_element"));
+        xml_parser_set_option($parser,XML_OPTION_CASE_FOLDING,0);
+        xml_parser_set_option($parser,XML_OPTION_SKIP_WHITE,0);
+        xml_set_character_data_handler($parser, array($this, "cdata"));
+        xml_set_default_handler($parser, array($this, "_default"));
+        xml_set_start_namespace_decl_handler($parser, array($this, "start_ns"));
+        xml_set_end_namespace_decl_handler($parser, array($this, "end_ns"));
+
+        $this-&gt;content = '';
+
+        $ret = true;
+
+        $fp = fopen($this-&gt;FILE, "r");
+        while ($data = fread($fp, 4096)) {
+            if($this-&gt;debug) $this-&gt;content .= $data;
+
+            if(!xml_parse($parser, $data, feof($fp))) {
+                /* translators: 1: Error message, 2: Line number. */
+                trigger_error(sprintf(__('XML Error: %1$s at line %2$s')."\n",
+                    xml_error_string(xml_get_error_code($parser)),
+                    xml_get_current_line_number($parser)));
+                $ret = false;
+                break;
+            }
+        }
+        fclose($fp);
+
+        xml_parser_free($parser);
+        unset($parser);
+
+        restore_error_handler();
+
+        return $ret;
+    }
+
+    function start_element($parser, $name, $attrs) {
+
+        $name_parts = explode(":", $name);
+        $tag        = array_pop($name_parts);
+
+        switch($name) {
+            case $this-&gt;NS . ':feed':
+                $this-&gt;current = $this-&gt;feed;
+                break;
+            case $this-&gt;NS . ':entry':
+                $this-&gt;current = new AtomEntry();
+                break;
+        };
+
+        $this-&gt;_p("start_element('$name')");
+        #$this-&gt;_p(print_r($this-&gt;ns_contexts,true));
+        #$this-&gt;_p('current(' . $this-&gt;current . ')');
+
+        array_unshift($this-&gt;ns_contexts, $this-&gt;ns_decls);
+
+        $this-&gt;depth++;
+
+        if(!empty($this-&gt;in_content)) {
+
+            $this-&gt;content_ns_decls = array();
+
+            if($this-&gt;is_html || $this-&gt;is_text)
+                trigger_error("Invalid content in element found. Content must not be of type text or html if it contains markup.");
+
+            $attrs_prefix = array();
+
+            // resolve prefixes for attributes
+            foreach($attrs as $key =&gt; $value) {
+                $with_prefix = $this-&gt;ns_to_prefix($key, true);
+                $attrs_prefix[$with_prefix[1]] = $this-&gt;xml_escape($value);
+            }
+
+            $attrs_str = join(' ', array_map($this-&gt;map_attrs_func, array_keys($attrs_prefix), array_values($attrs_prefix)));
+            if(strlen($attrs_str) &gt; 0) {
+                $attrs_str = " " . $attrs_str;
+            }
+
+            $with_prefix = $this-&gt;ns_to_prefix($name);
+
+            if(!$this-&gt;is_declared_content_ns($with_prefix[0])) {
+                array_push($this-&gt;content_ns_decls, $with_prefix[0]);
+            }
+
+            $xmlns_str = '';
+            if(count($this-&gt;content_ns_decls) &gt; 0) {
+                array_unshift($this-&gt;content_ns_contexts, $this-&gt;content_ns_decls);
+                $xmlns_str .= join(' ', array_map($this-&gt;map_xmlns_func, array_keys($this-&gt;content_ns_contexts[0]), array_values($this-&gt;content_ns_contexts[0])));
+                if(strlen($xmlns_str) &gt; 0) {
+                    $xmlns_str = " " . $xmlns_str;
+                }
+            }
+
+            array_push($this-&gt;in_content, array($tag, $this-&gt;depth, "&lt;". $with_prefix[1] ."{$xmlns_str}{$attrs_str}" . "&gt;"));
+
+        } else if(in_array($tag, $this-&gt;ATOM_CONTENT_ELEMENTS) || in_array($tag, $this-&gt;ATOM_SIMPLE_ELEMENTS)) {
+            $this-&gt;in_content = array();
+            $this-&gt;is_xhtml = $attrs['type'] == 'xhtml';
+            $this-&gt;is_html = $attrs['type'] == 'html' || $attrs['type'] == 'text/html';
+            $this-&gt;is_text = !in_array('type',array_keys($attrs)) || $attrs['type'] == 'text';
+            $type = $this-&gt;is_xhtml ? 'XHTML' : ($this-&gt;is_html ? 'HTML' : ($this-&gt;is_text ? 'TEXT' : $attrs['type']));
+
+            if(in_array('src',array_keys($attrs))) {
+                $this-&gt;current-&gt;$tag = $attrs;
+            } else {
+                array_push($this-&gt;in_content, array($tag,$this-&gt;depth, $type));
+            }
+        } else if($tag == 'link') {
+            array_push($this-&gt;current-&gt;links, $attrs);
+        } else if($tag == 'category') {
+            array_push($this-&gt;current-&gt;categories, $attrs);
+        }
+
+        $this-&gt;ns_decls = array();
+    }
+
+    function end_element($parser, $name) {
+
+        $name_parts = explode(":", $name);
+        $tag        = array_pop($name_parts);
+
+        $ccount = count($this-&gt;in_content);
+
+        # if we are *in* content, then let's proceed to serialize it
+        if(!empty($this-&gt;in_content)) {
+            # if we are ending the original content element
+            # then let's finalize the content
+            if($this-&gt;in_content[0][0] == $tag &amp;&amp;
+                $this-&gt;in_content[0][1] == $this-&gt;depth) {
+                $origtype = $this-&gt;in_content[0][2];
+                array_shift($this-&gt;in_content);
+                $newcontent = array();
+                foreach($this-&gt;in_content as $c) {
+                    if(count($c) == 3) {
+                        array_push($newcontent, $c[2]);
+                    } else {
+                        if($this-&gt;is_xhtml || $this-&gt;is_text) {
+                            array_push($newcontent, $this-&gt;xml_escape($c));
+                        } else {
+                            array_push($newcontent, $c);
+                        }
+                    }
+                }
+                if(in_array($tag, $this-&gt;ATOM_CONTENT_ELEMENTS)) {
+                    $this-&gt;current-&gt;$tag = array($origtype, join('',$newcontent));
+                } else {
+                    $this-&gt;current-&gt;$tag = join('',$newcontent);
+                }
+                $this-&gt;in_content = array();
+            } else if($this-&gt;in_content[$ccount-1][0] == $tag &amp;&amp;
+                $this-&gt;in_content[$ccount-1][1] == $this-&gt;depth) {
+                $this-&gt;in_content[$ccount-1][2] = substr($this-&gt;in_content[$ccount-1][2],0,-1) . "/&gt;";
+            } else {
+                # else, just finalize the current element's content
+                $endtag = $this-&gt;ns_to_prefix($name);
+                array_push($this-&gt;in_content, array($tag, $this-&gt;depth, "&lt;/$endtag[1]&gt;"));
+            }
+        }
+
+        array_shift($this-&gt;ns_contexts);
+
+        $this-&gt;depth--;
+
+        if($name == ($this-&gt;NS . ':entry')) {
+            array_push($this-&gt;feed-&gt;entries, $this-&gt;current);
+            $this-&gt;current = null;
+        }
+
+        $this-&gt;_p("end_element('$name')");
+    }
+
+    function start_ns($parser, $prefix, $uri) {
+        $this-&gt;_p("starting: " . $prefix . ":" . $uri);
+        array_push($this-&gt;ns_decls, array($prefix,$uri));
+    }
+
+    function end_ns($parser, $prefix) {
+        $this-&gt;_p("ending: #" . $prefix . "#");
+    }
+
+    function cdata($parser, $data) {
+        $this-&gt;_p("data: #" . str_replace(array("\n"), array("\\n"), trim($data)) . "#");
+        if(!empty($this-&gt;in_content)) {
+            array_push($this-&gt;in_content, $data);
+        }
+    }
+
+    function _default($parser, $data) {
+        # when does this gets called?
+    }
+
+
+    function ns_to_prefix($qname, $attr=false) {
+        # split 'http://www.w3.org/1999/xhtml:div' into ('http','//www.w3.org/1999/xhtml','div')
+        $components = explode(":", $qname);
+
+        # grab the last one (e.g 'div')
+        $name = array_pop($components);
+
+        if(!empty($components)) {
+            # re-join back the namespace component
+            $ns = join(":",$components);
+            foreach($this-&gt;ns_contexts as $context) {
+                foreach($context as $mapping) {
+                    if($mapping[1] == $ns &amp;&amp; strlen($mapping[0]) &gt; 0) {
+                        return array($mapping, "$mapping[0]:$name");
+                    }
+                }
+            }
+        }
+
+        if($attr) {
+            return array(null, $name);
+        } else {
+            foreach($this-&gt;ns_contexts as $context) {
+                foreach($context as $mapping) {
+                    if(strlen($mapping[0]) == 0) {
+                        return array($mapping, $name);
+                    }
+                }
+            }
+        }
+    }
+
+    function is_declared_content_ns($new_mapping) {
+        foreach($this-&gt;content_ns_contexts as $context) {
+            foreach($context as $mapping) {
+                if($new_mapping == $mapping) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function xml_escape($content)
+    {
+             return str_replace(array('&amp;','"',"'",'&lt;','&gt;'),
+                array('&amp;amp;','&amp;quot;','&amp;apos;','&amp;lt;','&amp;gt;'),
+                $content );
+    }
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/atomlib.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/atomlib.php#L65">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/atomlib.php#L65-L400">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/atomparser" class="_attribution-link">https://developer.wordpress.org/reference/classes/atomparser</a>
+  </p>
+</div>

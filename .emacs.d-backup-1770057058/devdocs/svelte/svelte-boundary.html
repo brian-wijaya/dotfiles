@@ -1,0 +1,88 @@
+<header> <h1>&lt;svelte:boundary&gt;</h1></header> <aside class="on-this-page svelte-wtnkd6"><label class="svelte-wtnkd6"> <h3 class="svelte-wtnkd6">On this page</h3></label> <nav class="svelte-wtnkd6"><ul class="svelte-wtnkd6">
+<li class="svelte-wtnkd6"><a href="svelte-boundary" class="svelte-wtnkd6 active">&lt;svelte:boundary&gt;</a></li> <li class="svelte-wtnkd6"><a href="#Properties" class="svelte-wtnkd6">Properties</a></li>
+</ul></nav></aside> <div class="text content"><div class="text svelte-zb31s9">
+<div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;svelte:boundary onerror={handler}&gt;...&lt;/svelte:boundary&gt;</pre>
+</div>
+<blockquote class="note">
+<p> This feature was added in 5.3.0</p> </blockquote>
+<p>Boundaries allow you to ‘wall off’ parts of your app, so that you can:</p> <ul> <li>provide UI that should be shown when <a href="await-expressions"><code>await</code></a> expressions are first resolving</li> <li>handle errors that occur during rendering or while running effects, and provide UI that should be rendered when an error happens</li> </ul> <p>If a boundary handles an error (with a <code>failed</code> snippet or <code>onerror</code> handler, or both) its existing content will be removed.</p> <blockquote class="note">
+<p> Errors occurring outside the rendering process (for example, in event handlers or after a <code>setTimeout</code> or async work) are <em>not</em> caught by error boundaries.</p> </blockquote>
+<h2 id="Properties">
+<span>Properties</span>
+</h2>
+<p>For the boundary to do anything, one or more of the following must be provided.</p> <h3 id="Properties-pending">
+<span>pending</span>
+</h3>
+<p>As of Svelte 5.36, boundaries with a <code>pending</code> snippet can contain <a href="await-expressions"><code>await</code></a> expressions. This snippet will be shown when the boundary is first created, and will remain visible until all the <code>await</code> expressions inside the boundary have resolved (<a href="https://svelte.dev/playground/untitled#H4sIAAAAAAAAE21QQW6DQAz8ytY9BKQVpFdKkPqDHnorPWzAaSwt3tWugUaIv1eE0KpKD5as8YxnNBOw6RAKKOOAVrA4up5bEy6VGknOyiO3xJ8qMnmPAhpOZDFC8T6BXPyiXADQ258X77P1FWg4moj_4Y1jQZZ49W0CealqruXUcyPkWLVozQXbZDC2R606spYiNo7bqA7qab_fp2paFLUElD6wYhzVa3AdRUySgNHZAVN1qDZaLRHljTp0vSTJ9XJjrSbpX5f0eZXN6zLXXOa_QfmurIVU-moyoyH5ib87o7XuYZfOZe6vnGWmx1uZW7lJOq9upa-sMwuUZdkmmfIbfQ1xZwwaBL8ECgk9zh8axJAdiVsoTsZGnL8Bg4tX_OMBAAA=">demo</a>):</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;svelte:boundary&gt;
+	&lt;p&gt;{await delayed('hello!')}&lt;/p&gt;
+
+	{#snippet pending()}
+		&lt;p&gt;loading...&lt;/p&gt;
+	{/snippet}
+&lt;/svelte:boundary&gt;</pre>
+</div>
+<p>The <code>pending</code> snippet will <em>not</em> be shown for subsequent async updates — for these, you can use <a href="$effect#$effect.pending"><code>$effect.pending()</code></a>.</p> <blockquote class="note">
+<p> In the <a href="https://svelte.dev/playground">playground</a>, your app is rendered inside a boundary with an empty pending snippet, so that you can use <code>await</code> without having to create one.</p> </blockquote>
+<h3 id="Properties-failed">
+<span>failed</span>
+</h3>
+<p>If a <code>failed</code> snippet is provided, it will be rendered when an error is thrown inside the boundary, with the <code>error</code> and a <code>reset</code> function that recreates the contents (<a href="https://svelte.dev/playground/hello-world#H4sIAAAAAAAAE3VRy26DMBD8lS2tFCIh6JkAUlWp39Cq9EBg06CAbdlLArL87zWGKk8ORnhmd3ZnrD1WtOjFXqKO2BDGW96xqpBD5gXerm5QefG39mgQY9EIWHxueRMinLosti0UPsJLzggZKTeilLWgLGc51a3gkuCjKQ7DO7cXZotgJ3kLqzC6hmex1SZnSXTWYHcrj8LJjWTk0PHoZ8VqIdCOKayPykcpuQxAokJaG1dGybYj4gw4K5u6PKTasSbjXKgnIDlA8VvUdo-pzonraBY2bsH7HAl78mKSHZpgIcuHjq9jXSpZSLixRlveKYQUXhQVhL6GPobXAAb7BbNeyvNUs4qfRg3OnELLj5hqH9eQZqCnoBwR9lYcQxuVXeBzc8kMF8yXY4yNJ5oGiUzP_aaf_waTRGJib5_Ad3P_vbCuaYxzeNpbU0eUMPAOKh7Yw1YErgtoXyuYlPLzc10_xo_5A91zkQL_AgAA">demo</a>):</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;svelte:boundary&gt;
+	&lt;FlakyComponent /&gt;
+
+	{#snippet failed(error, reset)}
+		&lt;button onclick={reset}&gt;oops! try again&lt;/button&gt;
+	{/snippet}
+&lt;/svelte:boundary&gt;</pre>
+</div>
+<blockquote class="note">
+<p> As with <a href="snippet#Passing-snippets-to-components">snippets passed to components</a>, the <code>failed</code> snippet can be passed explicitly as a property...</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;svelte:boundary {failed}&gt;...&lt;/svelte:boundary&gt;</pre>
+</div>
+<p>...or implicitly by declaring it directly inside the boundary, as in the example above.</p> </blockquote>
+<h3 id="Properties-onerror">
+<span>onerror</span>
+</h3>
+<p>If an <code>onerror</code> function is provided, it will be called with the same two <code>error</code> and <code>reset</code> arguments. This is useful for tracking the error with an error reporting service...</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;svelte:boundary onerror={(e) =&gt; report(e)}&gt;
+	...
+&lt;/svelte:boundary&gt;</pre>
+</div>
+<p>...or using <code>error</code> and <code>reset</code> outside the boundary itself:</p> <div class="code-block">
+
+<pre data-language="typescript" class="shiki css-variables" style="background-color:var(--shiki-background);color:var(--shiki-foreground)">&lt;script&gt;
+	let error = $state(null);
+	let reset = $state(() =&gt; {});
+
+	function onerror(e, r) {
+		error = e;
+		reset = r;
+	}
+&lt;/script&gt;
+
+&lt;svelte:boundary {onerror}&gt;
+	&lt;FlakyComponent /&gt;
+&lt;/svelte:boundary&gt;
+
+{#if error}
+	&lt;button onclick={() =&gt; {
+		error = null;
+		reset();
+	}}&gt;
+		oops! try again
+	&lt;/button&gt;
+{/if}</pre>
+</div>
+<p>If an error occurs inside the <code>onerror</code> function (or if you rethrow the error), it will be handled by a parent boundary if such exists.</p> </div></div><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2016–2025 Rich Harris and contributors<br>Licensed under the MIT License.<br>
+    <a href="https://svelte.dev/docs/svelte/svelte-boundary" class="_attribution-link">https://svelte.dev/docs/svelte/svelte-boundary</a>
+  </p>
+</div>

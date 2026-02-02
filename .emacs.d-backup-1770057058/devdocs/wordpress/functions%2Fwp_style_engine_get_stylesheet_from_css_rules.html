@@ -1,0 +1,93 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_style_engine_get_stylesheet_from_css_rules( <span class="arg-type">array</span> <span class="arg-name">$css_rules</span>, <span class="arg-type">array</span> <span class="arg-name">$options</span> = <span class="arg-default">array()</span> ): <span class="return-type">string</span>
+</h1> <section><p>Returns compiled CSS from a collection of selectors and declarations.</p> </section> <section><h2 id="description">Description</h2> <p>Useful for returning a compiled stylesheet from any collection of CSS selector + declarations.</p> <p>Example usage:</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php line-numbers">$css_rules = array(
+    array(
+        'selector'     =&gt; '.elephant-are-cool',
+        'declarations' =&gt; array(
+            'color' =&gt; 'gray',
+            'width' =&gt; '3em',
+        ),
+    ),
+);
+
+$css = wp_style_engine_get_stylesheet_from_css_rules( $css_rules );</code></pre> <p>Returns:</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">.elephant-are-cool{color:gray;width:3em}</code></pre></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$css_rules</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Required. A collection of CSS rules.<br> <ul class="param-hash"><li>
+<code>...$0</code> <span class="type">array</span><div class="desc">
+<ul class="param-hash"> <li>
+<code>rules_group</code> <span class="type">string</span><div class="desc">A parent CSS selector in the case of nested CSS, or a CSS nested @rule, such as <code>@media (min-width: 80rem)</code> or <code>@layer module</code>.</div>
+</li> <li>
+<code>selector</code> <span class="type">string</span><div class="desc">A CSS selector.</div>
+</li> <li>
+<code>declarations</code> <span class="type">string[]</span><div class="desc">An associative array of CSS definitions, e.g. <code>array( "$property" =&gt; "$value", "$property" =&gt; "$value" )</code>.<br> </div>
+</li> </ul> </div>
+<dt>
+<code>$options</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">An array of options. <br> <ul class="param-hash">
+<li>
+<code>context</code> <span class="type">string|null</span><div class="desc">An identifier describing the origin of the style object, e.g. <code>'block-supports'</code> or <code>'global-styles'</code>. Default <code>'block-supports'</code>.<br> When set, the style engine will attempt to store the CSS rules.</div>
+</li> <li>
+<code>optimize</code> <span class="type">bool</span><div class="desc">Whether to optimize the CSS output, e.g. combine rules.<br> Default false.</div>
+</li> <li>
+<code>prettify</code> <span class="type">bool</span><div class="desc">Whether to add new lines and indents to output.<br> Defaults to whether the <code>SCRIPT_DEBUG</code> constant is defined.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd> <section><h2 id="return">Return</h2> <span class="return-type">string</span> A string of compiled CSS declarations, or empty string.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="142" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_style_engine_get_stylesheet_from_css_rules( $css_rules, $options = array() ) {
+	if ( empty( $css_rules ) ) {
+		return '';
+	}
+
+	$options = wp_parse_args(
+		$options,
+		array(
+			'context' =&gt; null,
+		)
+	);
+
+	$css_rule_objects = array();
+	foreach ( $css_rules as $css_rule ) {
+		if ( empty( $css_rule['selector'] ) || empty( $css_rule['declarations'] ) || ! is_array( $css_rule['declarations'] ) ) {
+			continue;
+		}
+
+		$rules_group = $css_rule['rules_group'] ?? null;
+		if ( ! empty( $options['context'] ) ) {
+			WP_Style_Engine::store_css_rule( $options['context'], $css_rule['selector'], $css_rule['declarations'], $rules_group );
+		}
+
+		$css_rule_objects[] = new WP_Style_Engine_CSS_Rule( $css_rule['selector'], $css_rule['declarations'], $rules_group );
+	}
+
+	if ( empty( $css_rule_objects ) ) {
+		return '';
+	}
+
+	return WP_Style_Engine::compile_stylesheet_from_css_rules( $css_rule_objects, $options );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/style-engine.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/style-engine.php#L142">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/style-engine.php#L142-L173">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.6.0/">6.6.0</a></td>
+<td><span class="since-description">Added support for <code>$rules_group</code> in the <code>$css_rules</code> array.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> </li></ul></span></div> <section><h2 class="wp-block-heading">User Contributed Notes</h2> <p>You must <a href="https://login.wordpress.org/?redirect_to=https%3A%2F%2Fdeveloper.wordpress.org%2Freference%2Ffunctions%2Fwp_style_engine_get_stylesheet_from_css_rules%2F">log in</a> before being able to contribute a note or feedback.</p></section> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_style_engine_get_stylesheet_from_css_rules" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_style_engine_get_stylesheet_from_css_rules</a>
+  </p>
+</div>

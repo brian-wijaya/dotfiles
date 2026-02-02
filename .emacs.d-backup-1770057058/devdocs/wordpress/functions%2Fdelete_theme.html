@@ -1,0 +1,154 @@
+<h1 class="wp-block-wporg-code-reference-title">delete_theme( <span class="arg-type">string</span> <span class="arg-name">$stylesheet</span>, <span class="arg-type">string</span> <span class="arg-name">$redirect</span> = <span class="arg-default">”</span> ): <span class="return-type">bool|null|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Removes a theme.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$stylesheet</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Stylesheet of the theme to delete.</span></div></dd>
+<dt>
+<code>$redirect</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Redirect to page when complete.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|null|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True on success, false if <code>$stylesheet</code> is empty, <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.<br> Null if filesystem credentials are required to proceed.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="21" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function delete_theme( $stylesheet, $redirect = '' ) {
+	global $wp_filesystem;
+
+	if ( empty( $stylesheet ) ) {
+		return false;
+	}
+
+	if ( empty( $redirect ) ) {
+		$redirect = wp_nonce_url( 'themes.php?action=delete&amp;stylesheet=' . urlencode( $stylesheet ), 'delete-theme_' . $stylesheet );
+	}
+
+	ob_start();
+	$credentials = request_filesystem_credentials( $redirect );
+	$data        = ob_get_clean();
+
+	if ( false === $credentials ) {
+		if ( ! empty( $data ) ) {
+			require_once ABSPATH . 'wp-admin/admin-header.php';
+			echo $data;
+			require_once ABSPATH . 'wp-admin/admin-footer.php';
+			exit;
+		}
+		return;
+	}
+
+	if ( ! WP_Filesystem( $credentials ) ) {
+		ob_start();
+		// Failed to connect. Error and request again.
+		request_filesystem_credentials( $redirect, '', true );
+		$data = ob_get_clean();
+
+		if ( ! empty( $data ) ) {
+			require_once ABSPATH . 'wp-admin/admin-header.php';
+			echo $data;
+			require_once ABSPATH . 'wp-admin/admin-footer.php';
+			exit;
+		}
+		return;
+	}
+
+	if ( ! is_object( $wp_filesystem ) ) {
+		return new WP_Error( 'fs_unavailable', __( 'Could not access filesystem.' ) );
+	}
+
+	if ( is_wp_error( $wp_filesystem-&gt;errors ) &amp;&amp; $wp_filesystem-&gt;errors-&gt;has_errors() ) {
+		return new WP_Error( 'fs_error', __( 'Filesystem error.' ), $wp_filesystem-&gt;errors );
+	}
+
+	// Get the base theme folder.
+	$themes_dir = $wp_filesystem-&gt;wp_themes_dir();
+	if ( empty( $themes_dir ) ) {
+		return new WP_Error( 'fs_no_themes_dir', __( 'Unable to locate WordPress theme directory.' ) );
+	}
+
+	/**
+	 * Fires immediately before a theme deletion attempt.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param string $stylesheet Stylesheet of the theme to delete.
+	 */
+	do_action( 'delete_theme', $stylesheet );
+
+	$theme = wp_get_theme( $stylesheet );
+
+	$themes_dir = trailingslashit( $themes_dir );
+	$theme_dir  = trailingslashit( $themes_dir . $stylesheet );
+	$deleted    = $wp_filesystem-&gt;delete( $theme_dir, true );
+
+	/**
+	 * Fires immediately after a theme deletion attempt.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param string $stylesheet Stylesheet of the theme to delete.
+	 * @param bool   $deleted    Whether the theme deletion was successful.
+	 */
+	do_action( 'deleted_theme', $stylesheet, $deleted );
+
+	if ( ! $deleted ) {
+		return new WP_Error(
+			'could_not_remove_theme',
+			/* translators: %s: Theme name. */
+			sprintf( __( 'Could not fully remove the theme %s.' ), $stylesheet )
+		);
+	}
+
+	$theme_translations = wp_get_installed_translations( 'themes' );
+
+	// Remove language files, silently.
+	if ( ! empty( $theme_translations[ $stylesheet ] ) ) {
+		$translations = $theme_translations[ $stylesheet ];
+
+		foreach ( $translations as $translation =&gt; $data ) {
+			$wp_filesystem-&gt;delete( WP_LANG_DIR . '/themes/' . $stylesheet . '-' . $translation . '.po' );
+			$wp_filesystem-&gt;delete( WP_LANG_DIR . '/themes/' . $stylesheet . '-' . $translation . '.mo' );
+			$wp_filesystem-&gt;delete( WP_LANG_DIR . '/themes/' . $stylesheet . '-' . $translation . '.l10n.php' );
+
+			$json_translation_files = glob( WP_LANG_DIR . '/themes/' . $stylesheet . '-' . $translation . '-*.json' );
+			if ( $json_translation_files ) {
+				array_map( array( $wp_filesystem, 'delete' ), $json_translation_files );
+			}
+		}
+	}
+
+	// Remove the theme from allowed themes on the network.
+	if ( is_multisite() ) {
+		WP_Theme::network_disable_theme( $stylesheet );
+	}
+
+	// Clear theme caches.
+	$theme-&gt;cache_delete();
+
+	// Force refresh of theme update information.
+	delete_site_transient( 'update_themes' );
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/theme.php#L21">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/theme.php#L21-L138">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_theme"><span class="hook-func">do_action</span>( ‘deleted_theme’, <nobr><span class="arg-type">string</span> <span class="arg-name">$stylesheet</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$deleted</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a theme deletion attempt.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_theme"><span class="hook-func">do_action</span>( ‘delete_theme’, <nobr><span class="arg-type">string</span> <span class="arg-name">$stylesheet</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before a theme deletion attempt.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/delete_theme" class="_attribution-link">https://developer.wordpress.org/reference/functions/delete_theme</a>
+  </p>
+</div>

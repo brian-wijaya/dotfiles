@@ -1,0 +1,243 @@
+<h1 class="wp-block-wporg-code-reference-title">build_query_vars_from_query_block( <span class="arg-type">WP_Block</span> <span class="arg-name">$block</span>, <span class="arg-type">int</span> <span class="arg-name">$page</span> ): <span class="return-type">array</span>
+</h1> <section><p>Helper function that constructs a <a href="../classes/wp_query" rel="class">WP_Query</a> args array from a <code>Query</code> block properties.</p> </section> <section><h2 id="description">Description</h2> <p>It’s used in Query Loop, Query Pagination Numbers and Query Pagination Next blocks.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$block</code><span class="type"><span class="WP_Block"><a href="../classes/wp_block" rel="class">WP_Block</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Block instance.</span></div></dd>
+<dt>
+<code>$page</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Current query’s page.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Returns the constructed <a href="../classes/wp_query" rel="class">WP_Query</a> arguments.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2416" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function build_query_vars_from_query_block( $block, $page ) {
+	$query = array(
+		'post_type'    =&gt; 'post',
+		'order'        =&gt; 'DESC',
+		'orderby'      =&gt; 'date',
+		'post__not_in' =&gt; array(),
+		'tax_query'    =&gt; array(),
+	);
+
+	if ( isset( $block-&gt;context['query'] ) ) {
+		if ( ! empty( $block-&gt;context['query']['postType'] ) ) {
+			$post_type_param = $block-&gt;context['query']['postType'];
+			if ( is_post_type_viewable( $post_type_param ) ) {
+				$query['post_type'] = $post_type_param;
+			}
+		}
+		if ( isset( $block-&gt;context['query']['sticky'] ) &amp;&amp; ! empty( $block-&gt;context['query']['sticky'] ) ) {
+			$sticky = get_option( 'sticky_posts' );
+			if ( 'only' === $block-&gt;context['query']['sticky'] ) {
+				/*
+				 * Passing an empty array to post__in will return have_posts() as true (and all posts will be returned).
+				 * Logic should be used before hand to determine if WP_Query should be used in the event that the array
+				 * being passed to post__in is empty.
+				 *
+				 * @see https://core.trac.wordpress.org/ticket/28099
+				 */
+				$query['post__in']            = ! empty( $sticky ) ? $sticky : array( 0 );
+				$query['ignore_sticky_posts'] = 1;
+			} else {
+				$query['post__not_in'] = array_merge( $query['post__not_in'], $sticky );
+			}
+		}
+		if ( ! empty( $block-&gt;context['query']['exclude'] ) ) {
+			$excluded_post_ids     = array_map( 'intval', $block-&gt;context['query']['exclude'] );
+			$excluded_post_ids     = array_filter( $excluded_post_ids );
+			$query['post__not_in'] = array_merge( $query['post__not_in'], $excluded_post_ids );
+		}
+		if (
+			isset( $block-&gt;context['query']['perPage'] ) &amp;&amp;
+			is_numeric( $block-&gt;context['query']['perPage'] )
+		) {
+			$per_page = absint( $block-&gt;context['query']['perPage'] );
+			$offset   = 0;
+
+			if (
+				isset( $block-&gt;context['query']['offset'] ) &amp;&amp;
+				is_numeric( $block-&gt;context['query']['offset'] )
+			) {
+				$offset = absint( $block-&gt;context['query']['offset'] );
+			}
+
+			$query['offset']         = ( $per_page * ( $page - 1 ) ) + $offset;
+			$query['posts_per_page'] = $per_page;
+		}
+		// Migrate `categoryIds` and `tagIds` to `tax_query` for backwards compatibility.
+		if ( ! empty( $block-&gt;context['query']['categoryIds'] ) || ! empty( $block-&gt;context['query']['tagIds'] ) ) {
+			$tax_query_back_compat = array();
+			if ( ! empty( $block-&gt;context['query']['categoryIds'] ) ) {
+				$tax_query_back_compat[] = array(
+					'taxonomy'         =&gt; 'category',
+					'terms'            =&gt; array_filter( array_map( 'intval', $block-&gt;context['query']['categoryIds'] ) ),
+					'include_children' =&gt; false,
+				);
+			}
+			if ( ! empty( $block-&gt;context['query']['tagIds'] ) ) {
+				$tax_query_back_compat[] = array(
+					'taxonomy'         =&gt; 'post_tag',
+					'terms'            =&gt; array_filter( array_map( 'intval', $block-&gt;context['query']['tagIds'] ) ),
+					'include_children' =&gt; false,
+				);
+			}
+			$query['tax_query'] = array_merge( $query['tax_query'], $tax_query_back_compat );
+		}
+		if ( ! empty( $block-&gt;context['query']['taxQuery'] ) ) {
+			$tax_query = array();
+			foreach ( $block-&gt;context['query']['taxQuery'] as $taxonomy =&gt; $terms ) {
+				if ( is_taxonomy_viewable( $taxonomy ) &amp;&amp; ! empty( $terms ) ) {
+					$tax_query[] = array(
+						'taxonomy'         =&gt; $taxonomy,
+						'terms'            =&gt; array_filter( array_map( 'intval', $terms ) ),
+						'include_children' =&gt; false,
+					);
+				}
+			}
+			$query['tax_query'] = array_merge( $query['tax_query'], $tax_query );
+		}
+		if ( ! empty( $block-&gt;context['query']['format'] ) &amp;&amp; is_array( $block-&gt;context['query']['format'] ) ) {
+			$formats = $block-&gt;context['query']['format'];
+			/*
+			 * Validate that the format is either `standard` or a supported post format.
+			 * - First, add `standard` to the array of valid formats.
+			 * - Then, remove any invalid formats.
+			 */
+			$valid_formats = array_merge( array( 'standard' ), get_post_format_slugs() );
+			$formats       = array_intersect( $formats, $valid_formats );
+
+			/*
+			 * The relation needs to be set to `OR` since the request can contain
+			 * two separate conditions. The user may be querying for items that have
+			 * either the `standard` format or a specific format.
+			 */
+			$formats_query = array( 'relation' =&gt; 'OR' );
+
+			/*
+			 * The default post format, `standard`, is not stored in the database.
+			 * If `standard` is part of the request, the query needs to exclude all post items that
+			 * have a format assigned.
+			 */
+			if ( in_array( 'standard', $formats, true ) ) {
+				$formats_query[] = array(
+					'taxonomy' =&gt; 'post_format',
+					'field'    =&gt; 'slug',
+					'operator' =&gt; 'NOT EXISTS',
+				);
+				// Remove the `standard` format, since it cannot be queried.
+				unset( $formats[ array_search( 'standard', $formats, true ) ] );
+			}
+			// Add any remaining formats to the formats query.
+			if ( ! empty( $formats ) ) {
+				// Add the `post-format-` prefix.
+				$terms           = array_map(
+					static function ( $format ) {
+						return "post-format-$format";
+					},
+					$formats
+				);
+				$formats_query[] = array(
+					'taxonomy' =&gt; 'post_format',
+					'field'    =&gt; 'slug',
+					'terms'    =&gt; $terms,
+					'operator' =&gt; 'IN',
+				);
+			}
+
+			/*
+			 * Add `$formats_query` to `$query`, as long as it contains more than one key:
+			 * If `$formats_query` only contains the initial `relation` key, there are no valid formats to query,
+			 * and the query should not be modified.
+			 */
+			if ( count( $formats_query ) &gt; 1 ) {
+				// Enable filtering by both post formats and other taxonomies by combining them with `AND`.
+				if ( empty( $query['tax_query'] ) ) {
+					$query['tax_query'] = $formats_query;
+				} else {
+					$query['tax_query'] = array(
+						'relation' =&gt; 'AND',
+						$query['tax_query'],
+						$formats_query,
+					);
+				}
+			}
+		}
+
+		if (
+			isset( $block-&gt;context['query']['order'] ) &amp;&amp;
+				in_array( strtoupper( $block-&gt;context['query']['order'] ), array( 'ASC', 'DESC' ), true )
+		) {
+			$query['order'] = strtoupper( $block-&gt;context['query']['order'] );
+		}
+		if ( isset( $block-&gt;context['query']['orderBy'] ) ) {
+			$query['orderby'] = $block-&gt;context['query']['orderBy'];
+		}
+		if (
+			isset( $block-&gt;context['query']['author'] )
+		) {
+			if ( is_array( $block-&gt;context['query']['author'] ) ) {
+				$query['author__in'] = array_filter( array_map( 'intval', $block-&gt;context['query']['author'] ) );
+			} elseif ( is_string( $block-&gt;context['query']['author'] ) ) {
+				$query['author__in'] = array_filter( array_map( 'intval', explode( ',', $block-&gt;context['query']['author'] ) ) );
+			} elseif ( is_int( $block-&gt;context['query']['author'] ) &amp;&amp; $block-&gt;context['query']['author'] &gt; 0 ) {
+				$query['author'] = $block-&gt;context['query']['author'];
+			}
+		}
+		if ( ! empty( $block-&gt;context['query']['search'] ) ) {
+			$query['s'] = $block-&gt;context['query']['search'];
+		}
+		if ( ! empty( $block-&gt;context['query']['parents'] ) &amp;&amp; is_post_type_hierarchical( $query['post_type'] ) ) {
+			$query['post_parent__in'] = array_filter( array_map( 'intval', $block-&gt;context['query']['parents'] ) );
+		}
+	}
+
+	/**
+	 * Filters the arguments which will be passed to `WP_Query` for the Query Loop Block.
+	 *
+	 * Anything to this filter should be compatible with the `WP_Query` API to form
+	 * the query context which will be passed down to the Query Loop Block's children.
+	 * This can help, for example, to include additional settings or meta queries not
+	 * directly supported by the core Query Loop Block, and extend its capabilities.
+	 *
+	 * Please note that this will only influence the query that will be rendered on the
+	 * front-end. The editor preview is not affected by this filter. Also, worth noting
+	 * that the editor preview uses the REST API, so, ideally, one should aim to provide
+	 * attributes which are also compatible with the REST API, in order to be able to
+	 * implement identical queries on both sides.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param array    $query Array containing parameters for `WP_Query` as parsed by the block context.
+	 * @param WP_Block $block Block instance.
+	 * @param int      $page  Current query's page.
+	 */
+	return apply_filters( 'query_loop_block_query_vars', $query, $block, $page );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/blocks.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/blocks.php#L2416">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/blocks.php#L2416-L2618">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/query_loop_block_query_vars"><span class="hook-func">apply_filters</span>( ‘query_loop_block_query_vars’, <nobr><span class="arg-type">array</span> <span class="arg-name">$query</span></nobr>, <nobr><span class="arg-type">WP_Block</span> <span class="arg-name">$block</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$page</span></nobr> )</a></dt>
+<dd>
+<p>Filters the arguments which will be passed to <code>WP_Query</code> for the Query Loop Block.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.7.0/">6.7.0</a></td>
+<td><span class="since-description">Added support for the <code>format</code> property in query.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td><span class="since-description">Added <code>query_loop_block_query_vars</code> filter and <code>parents</code> support in query.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/build_query_vars_from_query_block" class="_attribution-link">https://developer.wordpress.org/reference/functions/build_query_vars_from_query_block</a>
+  </p>
+</div>

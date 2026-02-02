@@ -1,0 +1,115 @@
+<h1 class="wp-block-wporg-code-reference-title">get_adjacent_post_link( <span class="arg-type">string</span> <span class="arg-name">$format</span>, <span class="arg-type">string</span> <span class="arg-name">$link</span>, <span class="arg-type">bool</span> <span class="arg-name">$in_same_term</span> = <span class="arg-default">false</span>, <span class="arg-type">int[]|string</span> <span class="arg-name">$excluded_terms</span> = <span class="arg-default">”</span>, <span class="arg-type">bool</span> <span class="arg-name">$previous</span> = <span class="arg-default">true</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span> = <span class="arg-default">‘category’</span> ): <span class="return-type">string</span>
+</h1> <section><p>Retrieves the adjacent post link.</p> </section> <section><h2 id="description">Description</h2> <p>Can be either next post link or previous.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$format</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Link anchor format.</span></div></dd>
+<dt>
+<code>$link</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Link permalink format.</span></div></dd>
+<dt>
+<code>$in_same_term</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether link should be in the same taxonomy term.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$excluded_terms</code><span class="type"><span class="int[]">int[]</span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array or comma-separated list of excluded terms IDs.<br> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$previous</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to display link to previous or next post.<br> </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Taxonomy, if <code>$in_same_term</code> is true. Default <code>'category'</code>.</span></div>
+<p class="default">Default:<code>'category'</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The link URL of the previous or next post in relation to the current post.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2336" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_adjacent_post_link( $format, $link, $in_same_term = false, $excluded_terms = '', $previous = true, $taxonomy = 'category' ) {
+	if ( $previous &amp;&amp; is_attachment() ) {
+		$post = get_post( get_post()-&gt;post_parent );
+	} else {
+		$post = get_adjacent_post( $in_same_term, $excluded_terms, $previous, $taxonomy );
+	}
+
+	if ( ! $post ) {
+		$output = '';
+	} else {
+		$title = $post-&gt;post_title;
+
+		if ( empty( $post-&gt;post_title ) ) {
+			$title = $previous ? __( 'Previous Post' ) : __( 'Next Post' );
+		}
+
+		/** This filter is documented in wp-includes/post-template.php */
+		$title = apply_filters( 'the_title', $title, $post-&gt;ID );
+
+		$date = mysql2date( get_option( 'date_format' ), $post-&gt;post_date );
+		$rel  = $previous ? 'prev' : 'next';
+
+		$string = '&lt;a href="' . get_permalink( $post ) . '" rel="' . $rel . '"&gt;';
+		$inlink = str_replace( '%title', $title, $link );
+		$inlink = str_replace( '%date', $date, $inlink );
+		$inlink = $string . $inlink . '&lt;/a&gt;';
+
+		$output = str_replace( '%link', $inlink, $format );
+	}
+
+	$adjacent = $previous ? 'previous' : 'next';
+
+	/**
+	 * Filters the adjacent post link.
+	 *
+	 * The dynamic portion of the hook name, `$adjacent`, refers to the type
+	 * of adjacency, 'next' or 'previous'.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `next_post_link`
+	 *  - `previous_post_link`
+	 *
+	 * @since 2.6.0
+	 * @since 4.2.0 Added the `$adjacent` parameter.
+	 *
+	 * @param string         $output   The adjacent post link.
+	 * @param string         $format   Link anchor format.
+	 * @param string         $link     Link permalink format.
+	 * @param WP_Post|string $post     The adjacent post. Empty string if no corresponding post exists.
+	 * @param string         $adjacent Whether the post is previous or next.
+	 */
+	return apply_filters( "{$adjacent}_post_link", $output, $format, $link, $post, $adjacent );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/link-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/link-template.php#L2336">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/link-template.php#L2336-L2389">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/the_title"><span class="hook-func">apply_filters</span>( ‘the_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_title</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post title.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/adjacent_post_link"><span class="hook-func">apply_filters</span>( “{$adjacent}_post_link”, <nobr><span class="arg-type">string</span> <span class="arg-name">$output</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$format</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$link</span></nobr>, <nobr><span class="arg-type">WP_Post|string</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$adjacent</span></nobr> )</a></dt>
+<dd>
+<p>Filters the adjacent post link.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_adjacent_post_link" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_adjacent_post_link</a>
+  </p>
+</div>

@@ -1,0 +1,47 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Style_Engine_Processor::combine_rules_selectors()</h1> <section><p>Combines selectors from the rules store when they have the same styles.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="150" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function combine_rules_selectors() {
+	// Build an array of selectors along with the JSON-ified styles to make comparisons easier.
+	$selectors_json = array();
+	foreach ( $this-&gt;css_rules as $rule ) {
+		$declarations = $rule-&gt;get_declarations()-&gt;get_declarations();
+		ksort( $declarations );
+		$selectors_json[ $rule-&gt;get_selector() ] = wp_json_encode( $declarations );
+	}
+
+	// Combine selectors that have the same styles.
+	foreach ( $selectors_json as $selector =&gt; $json ) {
+		// Get selectors that use the same styles.
+		$duplicates = array_keys( $selectors_json, $json, true );
+		// Skip if there are no duplicates.
+		if ( 1 &gt;= count( $duplicates ) ) {
+			continue;
+		}
+
+		$declarations = $this-&gt;css_rules[ $selector ]-&gt;get_declarations();
+
+		foreach ( $duplicates as $key ) {
+			// Unset the duplicates from the $selectors_json array to avoid looping through them as well.
+			unset( $selectors_json[ $key ] );
+			// Remove the rules from the rules collection.
+			unset( $this-&gt;css_rules[ $key ] );
+		}
+		// Create a new rule with the combined selectors.
+		$duplicate_selectors                     = implode( ',', $duplicates );
+		$this-&gt;css_rules[ $duplicate_selectors ] = new WP_Style_Engine_CSS_Rule( $duplicate_selectors, $declarations );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/style-engine/class-wp-style-engine-processor.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/style-engine/class-wp-style-engine-processor.php#L150">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/style-engine/class-wp-style-engine-processor.php#L150-L180">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_style_engine_processor/combine_rules_selectors" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_style_engine_processor/combine_rules_selectors</a>
+  </p>
+</div>

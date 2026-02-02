@@ -1,0 +1,88 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Nav_Menu_Item_Setting::value_as_wp_post_nav_menu_item(): <span class="return-type"><a href="../wp_post" rel="class">WP_Post</a></span>
+</h1> <section><p>Get the value emulated into a <a href="../wp_post" rel="class">WP_Post</a> and set up as a nav_menu_item.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_post" rel="class">WP_Post</a></span> With <a href="../../functions/wp_setup_nav_menu_item" rel="function">wp_setup_nav_menu_item()</a> applied.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="586" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function value_as_wp_post_nav_menu_item() {
+	$item = (object) $this-&gt;value();
+	unset( $item-&gt;nav_menu_term_id );
+
+	$item-&gt;post_status = $item-&gt;status;
+	unset( $item-&gt;status );
+
+	$item-&gt;post_type  = 'nav_menu_item';
+	$item-&gt;menu_order = $item-&gt;position;
+	unset( $item-&gt;position );
+
+	if ( empty( $item-&gt;original_title ) ) {
+		$item-&gt;original_title = $this-&gt;get_original_title( $item );
+	}
+	if ( empty( $item-&gt;title ) &amp;&amp; ! empty( $item-&gt;original_title ) ) {
+		$item-&gt;title = $item-&gt;original_title;
+	}
+	if ( $item-&gt;title ) {
+		$item-&gt;post_title = $item-&gt;title;
+	}
+
+	// 'classes' should be an array, as in wp_setup_nav_menu_item().
+	if ( isset( $item-&gt;classes ) &amp;&amp; is_scalar( $item-&gt;classes ) ) {
+		$item-&gt;classes = explode( ' ', $item-&gt;classes );
+	}
+
+	$item-&gt;ID    = $this-&gt;post_id;
+	$item-&gt;db_id = $this-&gt;post_id;
+	$post        = new WP_Post( (object) $item );
+
+	if ( empty( $post-&gt;post_author ) ) {
+		$post-&gt;post_author = get_current_user_id();
+	}
+
+	if ( ! isset( $post-&gt;type_label ) ) {
+		$post-&gt;type_label = $this-&gt;get_type_label( $post );
+	}
+
+	// Ensure nav menu item URL is set according to linked object.
+	if ( 'post_type' === $post-&gt;type &amp;&amp; ! empty( $post-&gt;object_id ) ) {
+		$post-&gt;url = get_permalink( $post-&gt;object_id );
+	} elseif ( 'taxonomy' === $post-&gt;type &amp;&amp; ! empty( $post-&gt;object ) &amp;&amp; ! empty( $post-&gt;object_id ) ) {
+		$post-&gt;url = get_term_link( (int) $post-&gt;object_id, $post-&gt;object );
+	} elseif ( 'post_type_archive' === $post-&gt;type &amp;&amp; ! empty( $post-&gt;object ) ) {
+		$post-&gt;url = get_post_type_archive_link( $post-&gt;object );
+	}
+	if ( is_wp_error( $post-&gt;url ) ) {
+		$post-&gt;url = '';
+	}
+
+	/** This filter is documented in wp-includes/nav-menu.php */
+	$post-&gt;attr_title = apply_filters( 'nav_menu_attr_title', $post-&gt;attr_title );
+
+	/** This filter is documented in wp-includes/nav-menu.php */
+	$post-&gt;description = apply_filters( 'nav_menu_description', wp_trim_words( $post-&gt;description, 200 ) );
+
+	/** This filter is documented in wp-includes/nav-menu.php */
+	$post = apply_filters( 'wp_setup_nav_menu_item', $post );
+
+	return $post;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/customize/class-wp-customize-nav-menu-item-setting.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/customize/class-wp-customize-nav-menu-item-setting.php#L586">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/customize/class-wp-customize-nav-menu-item-setting.php#L586-L646">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/nav_menu_attr_title"><span class="hook-func">apply_filters</span>( ‘nav_menu_attr_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$item_title</span></nobr> )</a></dt>
+<dd>
+<p>Filters a navigation menu item’s title attribute.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/nav_menu_description"><span class="hook-func">apply_filters</span>( ‘nav_menu_description’, <nobr><span class="arg-type">string</span> <span class="arg-name">$description</span></nobr> )</a></dt>
+<dd>
+<p>Filters a navigation menu item’s description.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/wp_setup_nav_menu_item"><span class="hook-func">apply_filters</span>( ‘wp_setup_nav_menu_item’, <nobr><span class="arg-type">object</span> <span class="arg-name">$menu_item</span></nobr> )</a></dt>
+<dd>
+<p>Filters a navigation menu item object.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.3.0/">4.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_nav_menu_item_setting/value_as_wp_post_nav_menu_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_nav_menu_item_setting/value_as_wp_post_nav_menu_item</a>
+  </p>
+</div>

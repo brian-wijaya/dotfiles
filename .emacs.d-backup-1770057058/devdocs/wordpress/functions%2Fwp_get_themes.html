@@ -1,0 +1,99 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_themes( <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type"><a href="../classes/wp_theme" rel="class">WP_Theme</a>[]</span>
+</h1> <section><p>Returns an array of <a href="../classes/wp_theme" rel="class">WP_Theme</a> objects based on the arguments.</p> </section> <section><h2 id="description">Description</h2> <p>Despite advances over <a href="get_themes" rel="function">get_themes()</a> , this function is quite expensive, and grows linearly with additional themes. Stick to <a href="wp_get_theme" rel="function">wp_get_theme()</a> if possible.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The search arguments.<br> <ul class="param-hash">
+<li>
+<code>errors</code> <span class="type">mixed</span><div class="desc">True to return themes with errors, false to return themes without errors, null to return all themes.<br> Default false.</div>
+</li> <li>
+<code>allowed</code> <span class="type">mixed</span><div class="desc">(Multisite) True to return only allowed themes for a site.<br> False to return only disallowed themes for a site.<br> <code>'site'</code> to return only site-allowed themes.<br> <code>'network'</code> to return only network-allowed themes.<br> Null to return all themes. Default null.</div>
+</li> <li>
+<code>blog_id</code> <span class="type">int</span><div class="desc">(Multisite) The blog ID used to calculate which themes are allowed. Default 0, synonymous for the current blog.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../classes/wp_theme" rel="class">WP_Theme</a>[]</span> Array of <a href="../classes/wp_theme" rel="class">WP_Theme</a> objects.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="35" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_themes( $args = array() ) {
+	global $wp_theme_directories;
+
+	$defaults = array(
+		'errors'  =&gt; false,
+		'allowed' =&gt; null,
+		'blog_id' =&gt; 0,
+	);
+	$args     = wp_parse_args( $args, $defaults );
+
+	$theme_directories = search_theme_directories();
+
+	if ( is_array( $wp_theme_directories ) &amp;&amp; count( $wp_theme_directories ) &gt; 1 ) {
+		/*
+		 * Make sure the active theme wins out, in case search_theme_directories() picks the wrong
+		 * one in the case of a conflict. (Normally, last registered theme root wins.)
+		 */
+		$current_theme = get_stylesheet();
+		if ( isset( $theme_directories[ $current_theme ] ) ) {
+			$root_of_current_theme = get_raw_theme_root( $current_theme );
+			if ( ! in_array( $root_of_current_theme, $wp_theme_directories, true ) ) {
+				$root_of_current_theme = WP_CONTENT_DIR . $root_of_current_theme;
+			}
+			$theme_directories[ $current_theme ]['theme_root'] = $root_of_current_theme;
+		}
+	}
+
+	if ( empty( $theme_directories ) ) {
+		return array();
+	}
+
+	if ( is_multisite() &amp;&amp; null !== $args['allowed'] ) {
+		$allowed = $args['allowed'];
+		if ( 'network' === $allowed ) {
+			$theme_directories = array_intersect_key( $theme_directories, WP_Theme::get_allowed_on_network() );
+		} elseif ( 'site' === $allowed ) {
+			$theme_directories = array_intersect_key( $theme_directories, WP_Theme::get_allowed_on_site( $args['blog_id'] ) );
+		} elseif ( $allowed ) {
+			$theme_directories = array_intersect_key( $theme_directories, WP_Theme::get_allowed( $args['blog_id'] ) );
+		} else {
+			$theme_directories = array_diff_key( $theme_directories, WP_Theme::get_allowed( $args['blog_id'] ) );
+		}
+	}
+
+	$themes         = array();
+	static $_themes = array();
+
+	foreach ( $theme_directories as $theme =&gt; $theme_root ) {
+		if ( isset( $_themes[ $theme_root['theme_root'] . '/' . $theme ] ) ) {
+			$themes[ $theme ] = $_themes[ $theme_root['theme_root'] . '/' . $theme ];
+		} else {
+			$themes[ $theme ] = new WP_Theme( $theme, $theme_root['theme_root'] );
+
+			$_themes[ $theme_root['theme_root'] . '/' . $theme ] = $themes[ $theme ];
+		}
+	}
+
+	if ( null !== $args['errors'] ) {
+		foreach ( $themes as $theme =&gt; $wp_theme ) {
+			if ( (bool) $wp_theme-&gt;errors() !== $args['errors'] ) {
+				unset( $themes[ $theme ] );
+			}
+		}
+	}
+
+	return $themes;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/theme.php#L35">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/theme.php#L35-L101">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_themes" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_themes</a>
+  </p>
+</div>

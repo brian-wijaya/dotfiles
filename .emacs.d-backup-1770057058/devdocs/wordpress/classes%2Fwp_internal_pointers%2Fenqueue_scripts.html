@@ -1,0 +1,89 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Internal_Pointers::enqueue_scripts( <span class="arg-type">string</span> <span class="arg-name">$hook_suffix</span> )</h1> <section><p>Initializes the new feature pointers.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$hook_suffix</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The current admin page.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="37" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function enqueue_scripts( $hook_suffix ) {
+	/*
+	 * Register feature pointers
+	 *
+	 * Format:
+	 *     array(
+	 *         hook_suffix =&gt; pointer callback
+	 *     )
+	 *
+	 * Example:
+	 *     array(
+	 *         'themes.php' =&gt; 'wp390_widgets'
+	 *     )
+	 */
+	$registered_pointers = array(
+		// None currently.
+	);
+
+	// Check if screen related pointer is registered.
+	if ( empty( $registered_pointers[ $hook_suffix ] ) ) {
+		return;
+	}
+
+	$pointers = (array) $registered_pointers[ $hook_suffix ];
+
+	/*
+	 * Specify required capabilities for feature pointers
+	 *
+	 * Format:
+	 *     array(
+	 *         pointer callback =&gt; Array of required capabilities
+	 *     )
+	 *
+	 * Example:
+	 *     array(
+	 *         'wp390_widgets' =&gt; array( 'edit_theme_options' )
+	 *     )
+	 */
+	$caps_required = array(
+		// None currently.
+	);
+
+	// Get dismissed pointers.
+	$dismissed = explode( ',', (string) get_user_meta( get_current_user_id(), 'dismissed_wp_pointers', true ) );
+
+	$got_pointers = false;
+	foreach ( array_diff( $pointers, $dismissed ) as $pointer ) {
+		if ( isset( $caps_required[ $pointer ] ) ) {
+			foreach ( $caps_required[ $pointer ] as $cap ) {
+				if ( ! current_user_can( $cap ) ) {
+					continue 2;
+				}
+			}
+		}
+
+		// Bind pointer print function.
+		add_action( 'admin_print_footer_scripts', array( 'WP_Internal_Pointers', 'pointer_' . $pointer ) );
+		$got_pointers = true;
+	}
+
+	if ( ! $got_pointers ) {
+		return;
+	}
+
+	// Add pointers script and style to queue.
+	wp_enqueue_style( 'wp-pointer' );
+	wp_enqueue_script( 'wp-pointer' );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-internal-pointers.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-internal-pointers.php#L37">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-internal-pointers.php#L37-L104">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_internal_pointers/enqueue_scripts" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_internal_pointers/enqueue_scripts</a>
+  </p>
+</div>

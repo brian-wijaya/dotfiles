@@ -1,0 +1,111 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_delete_attachment_files( <span class="arg-type">int</span> <span class="arg-name">$post_id</span>, <span class="arg-type">array</span> <span class="arg-name">$meta</span>, <span class="arg-type">array</span> <span class="arg-name">$backup_sizes</span>, <span class="arg-type">string</span> <span class="arg-name">$file</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Deletes all files that belong to the given attachment.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Attachment ID.</span></div></dd>
+<dt>
+<code>$meta</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The attachment’s meta data.</span></div></dd>
+<dt>
+<code>$backup_sizes</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The meta data for the attachment’s backup images.</span></div></dd>
+<dt>
+<code>$file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Absolute path to the attachment’s file.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="6653" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_delete_attachment_files( $post_id, $meta, $backup_sizes, $file ) {
+	global $wpdb;
+
+	$uploadpath = wp_get_upload_dir();
+	$deleted    = true;
+
+	if ( ! empty( $meta['thumb'] ) ) {
+		// Don't delete the thumb if another attachment uses it.
+		if ( ! $wpdb-&gt;get_row( $wpdb-&gt;prepare( "SELECT meta_id FROM $wpdb-&gt;postmeta WHERE meta_key = '_wp_attachment_metadata' AND meta_value LIKE %s AND post_id &lt;&gt; %d", '%' . $wpdb-&gt;esc_like( $meta['thumb'] ) . '%', $post_id ) ) ) {
+			$thumbfile = str_replace( wp_basename( $file ), $meta['thumb'], $file );
+
+			if ( ! empty( $thumbfile ) ) {
+				$thumbfile = path_join( $uploadpath['basedir'], $thumbfile );
+				$thumbdir  = path_join( $uploadpath['basedir'], dirname( $file ) );
+
+				if ( ! wp_delete_file_from_directory( $thumbfile, $thumbdir ) ) {
+					$deleted = false;
+				}
+			}
+		}
+	}
+
+	// Remove intermediate and backup images if there are any.
+	if ( isset( $meta['sizes'] ) &amp;&amp; is_array( $meta['sizes'] ) ) {
+		$intermediate_dir = path_join( $uploadpath['basedir'], dirname( $file ) );
+
+		foreach ( $meta['sizes'] as $size =&gt; $sizeinfo ) {
+			$intermediate_file = str_replace( wp_basename( $file ), $sizeinfo['file'], $file );
+
+			if ( ! empty( $intermediate_file ) ) {
+				$intermediate_file = path_join( $uploadpath['basedir'], $intermediate_file );
+
+				if ( ! wp_delete_file_from_directory( $intermediate_file, $intermediate_dir ) ) {
+					$deleted = false;
+				}
+			}
+		}
+	}
+
+	if ( ! empty( $meta['original_image'] ) ) {
+		if ( empty( $intermediate_dir ) ) {
+			$intermediate_dir = path_join( $uploadpath['basedir'], dirname( $file ) );
+		}
+
+		$original_image = str_replace( wp_basename( $file ), $meta['original_image'], $file );
+
+		if ( ! empty( $original_image ) ) {
+			$original_image = path_join( $uploadpath['basedir'], $original_image );
+
+			if ( ! wp_delete_file_from_directory( $original_image, $intermediate_dir ) ) {
+				$deleted = false;
+			}
+		}
+	}
+
+	if ( is_array( $backup_sizes ) ) {
+		$del_dir = path_join( $uploadpath['basedir'], dirname( $meta['file'] ) );
+
+		foreach ( $backup_sizes as $size ) {
+			$del_file = path_join( dirname( $meta['file'] ), $size['file'] );
+
+			if ( ! empty( $del_file ) ) {
+				$del_file = path_join( $uploadpath['basedir'], $del_file );
+
+				if ( ! wp_delete_file_from_directory( $del_file, $del_dir ) ) {
+					$deleted = false;
+				}
+			}
+		}
+	}
+
+	if ( ! wp_delete_file_from_directory( $file, $uploadpath['basedir'] ) ) {
+		$deleted = false;
+	}
+
+	return $deleted;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L6653">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L6653-L6729">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.7/">4.9.7</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_delete_attachment_files" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_delete_attachment_files</a>
+  </p>
+</div>

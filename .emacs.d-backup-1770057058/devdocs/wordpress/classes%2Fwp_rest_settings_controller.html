@@ -1,0 +1,394 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_REST_Settings_Controller {}</h1> <section><p>Core class used to manage a site’s settings via the REST API.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_rest_controller">WP_REST_Controller</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_rest_settings_controller/__construct">WP_REST_Settings_Controller::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_settings_controller/get_item">WP_REST_Settings_Controller::get_item</a></td>
+<td>Retrieves the settings.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_settings_controller/get_item_permissions_check">WP_REST_Settings_Controller::get_item_permissions_check</a></td>
+<td>Checks if a given request has access to read and manage settings.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_settings_controller/get_item_schema">WP_REST_Settings_Controller::get_item_schema</a></td>
+<td>Retrieves the site setting schema, conforming to JSON Schema.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_settings_controller/get_registered_options">WP_REST_Settings_Controller::get_registered_options</a></td>
+<td>Retrieves all of the registered options for the Settings API.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_settings_controller/prepare_value">WP_REST_Settings_Controller::prepare_value</a></td>
+<td>Prepares a value for output based off a schema array.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_settings_controller/register_routes">WP_REST_Settings_Controller::register_routes</a></td>
+<td>Registers the routes for the site’s settings.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_settings_controller/sanitize_callback">WP_REST_Settings_Controller::sanitize_callback</a></td>
+<td>Custom sanitize callback used for all options to allow the use of ‘null’.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_settings_controller/set_additional_properties_to_false">WP_REST_Settings_Controller::set_additional_properties_to_false</a></td>
+<td>Recursively add additionalProperties = false to all objects in a schema if no additionalProperties setting is specified. — <span class="deprecated-method">deprecated</span>
+</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_settings_controller/update_item">WP_REST_Settings_Controller::update_item</a></td>
+<td>Updates settings for the settings object.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_REST_Settings_Controller extends WP_REST_Controller {
+
+	/**
+	 * Constructor.
+	 *
+	 * @since 4.7.0
+	 */
+	public function __construct() {
+		$this-&gt;namespace = 'wp/v2';
+		$this-&gt;rest_base = 'settings';
+	}
+
+	/**
+	 * Registers the routes for the site's settings.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @see register_rest_route()
+	 */
+	public function register_routes() {
+
+		register_rest_route(
+			$this-&gt;namespace,
+			'/' . $this-&gt;rest_base,
+			array(
+				array(
+					'methods'             =&gt; WP_REST_Server::READABLE,
+					'callback'            =&gt; array( $this, 'get_item' ),
+					'args'                =&gt; array(),
+					'permission_callback' =&gt; array( $this, 'get_item_permissions_check' ),
+				),
+				array(
+					'methods'             =&gt; WP_REST_Server::EDITABLE,
+					'callback'            =&gt; array( $this, 'update_item' ),
+					'args'                =&gt; $this-&gt;get_endpoint_args_for_item_schema( WP_REST_Server::EDITABLE ),
+					'permission_callback' =&gt; array( $this, 'get_item_permissions_check' ),
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+	}
+
+	/**
+	 * Checks if a given request has access to read and manage settings.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return bool True if the request has read access for the item, otherwise false.
+	 */
+	public function get_item_permissions_check( $request ) {
+		return current_user_can( 'manage_options' );
+	}
+
+	/**
+	 * Retrieves the settings.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return array|WP_Error Array on success, or WP_Error object on failure.
+	 */
+	public function get_item( $request ) {
+		$options  = $this-&gt;get_registered_options();
+		$response = array();
+
+		foreach ( $options as $name =&gt; $args ) {
+			/**
+			 * Filters the value of a setting recognized by the REST API.
+			 *
+			 * Allow hijacking the setting value and overriding the built-in behavior by returning a
+			 * non-null value.  The returned value will be presented as the setting value instead.
+			 *
+			 * @since 4.7.0
+			 *
+			 * @param mixed  $result Value to use for the requested setting. Can be a scalar
+			 *                       matching the registered schema for the setting, or null to
+			 *                       follow the default get_option() behavior.
+			 * @param string $name   Setting name (as shown in REST API responses).
+			 * @param array  $args   Arguments passed to register_setting() for this setting.
+			 */
+			$response[ $name ] = apply_filters( 'rest_pre_get_setting', null, $name, $args );
+
+			if ( is_null( $response[ $name ] ) ) {
+				// Default to a null value as "null" in the response means "not set".
+				$response[ $name ] = get_option( $args['option_name'], $args['schema']['default'] );
+			}
+
+			/*
+			 * Because get_option() is lossy, we have to
+			 * cast values to the type they are registered with.
+			 */
+			$response[ $name ] = $this-&gt;prepare_value( $response[ $name ], $args['schema'] );
+		}
+
+		return $response;
+	}
+
+	/**
+	 * Prepares a value for output based off a schema array.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param mixed $value  Value to prepare.
+	 * @param array $schema Schema to match.
+	 * @return mixed The prepared value.
+	 */
+	protected function prepare_value( $value, $schema ) {
+		/*
+		 * If the value is not valid by the schema, set the value to null.
+		 * Null values are specifically non-destructive, so this will not cause
+		 * overwriting the current invalid value to null.
+		 */
+		if ( is_wp_error( rest_validate_value_from_schema( $value, $schema ) ) ) {
+			return null;
+		}
+
+		return rest_sanitize_value_from_schema( $value, $schema );
+	}
+
+	/**
+	 * Updates settings for the settings object.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return array|WP_Error Array on success, or error object on failure.
+	 */
+	public function update_item( $request ) {
+		$options = $this-&gt;get_registered_options();
+
+		$params = $request-&gt;get_params();
+
+		foreach ( $options as $name =&gt; $args ) {
+			if ( ! array_key_exists( $name, $params ) ) {
+				continue;
+			}
+
+			/**
+			 * Filters whether to preempt a setting value update via the REST API.
+			 *
+			 * Allows hijacking the setting update logic and overriding the built-in behavior by
+			 * returning true.
+			 *
+			 * @since 4.7.0
+			 *
+			 * @param bool   $result Whether to override the default behavior for updating the
+			 *                       value of a setting.
+			 * @param string $name   Setting name (as shown in REST API responses).
+			 * @param mixed  $value  Updated setting value.
+			 * @param array  $args   Arguments passed to register_setting() for this setting.
+			 */
+			$updated = apply_filters( 'rest_pre_update_setting', false, $name, $request[ $name ], $args );
+
+			if ( $updated ) {
+				continue;
+			}
+
+			/*
+			 * A null value for an option would have the same effect as
+			 * deleting the option from the database, and relying on the
+			 * default value.
+			 */
+			if ( is_null( $request[ $name ] ) ) {
+				/*
+				 * A null value is returned in the response for any option
+				 * that has a non-scalar value.
+				 *
+				 * To protect clients from accidentally including the null
+				 * values from a response object in a request, we do not allow
+				 * options with values that don't pass validation to be updated to null.
+				 * Without this added protection a client could mistakenly
+				 * delete all options that have invalid values from the
+				 * database.
+				 */
+				if ( is_wp_error( rest_validate_value_from_schema( get_option( $args['option_name'], false ), $args['schema'] ) ) ) {
+					return new WP_Error(
+						'rest_invalid_stored_value',
+						/* translators: %s: Property name. */
+						sprintf( __( 'The %s property has an invalid stored value, and cannot be updated to null.' ), $name ),
+						array( 'status' =&gt; 500 )
+					);
+				}
+
+				delete_option( $args['option_name'] );
+			} else {
+				update_option( $args['option_name'], $request[ $name ] );
+			}
+		}
+
+		return $this-&gt;get_item( $request );
+	}
+
+	/**
+	 * Retrieves all of the registered options for the Settings API.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @return array Array of registered options.
+	 */
+	protected function get_registered_options() {
+		$rest_options = array();
+
+		foreach ( get_registered_settings() as $name =&gt; $args ) {
+			if ( empty( $args['show_in_rest'] ) ) {
+				continue;
+			}
+
+			$rest_args = array();
+
+			if ( is_array( $args['show_in_rest'] ) ) {
+				$rest_args = $args['show_in_rest'];
+			}
+
+			$defaults = array(
+				'name'   =&gt; ! empty( $rest_args['name'] ) ? $rest_args['name'] : $name,
+				'schema' =&gt; array(),
+			);
+
+			$rest_args = array_merge( $defaults, $rest_args );
+
+			$default_schema = array(
+				'type'        =&gt; empty( $args['type'] ) ? null : $args['type'],
+				'title'       =&gt; empty( $args['label'] ) ? '' : $args['label'],
+				'description' =&gt; empty( $args['description'] ) ? '' : $args['description'],
+				'default'     =&gt; isset( $args['default'] ) ? $args['default'] : null,
+			);
+
+			$rest_args['schema']      = array_merge( $default_schema, $rest_args['schema'] );
+			$rest_args['option_name'] = $name;
+
+			// Skip over settings that don't have a defined type in the schema.
+			if ( empty( $rest_args['schema']['type'] ) ) {
+				continue;
+			}
+
+			/*
+			 * Allow the supported types for settings, as we don't want invalid types
+			 * to be updated with arbitrary values that we can't do decent sanitizing for.
+			 */
+			if ( ! in_array( $rest_args['schema']['type'], array( 'number', 'integer', 'string', 'boolean', 'array', 'object' ), true ) ) {
+				continue;
+			}
+
+			$rest_args['schema'] = rest_default_additional_properties_to_false( $rest_args['schema'] );
+
+			$rest_options[ $rest_args['name'] ] = $rest_args;
+		}
+
+		return $rest_options;
+	}
+
+	/**
+	 * Retrieves the site setting schema, conforming to JSON Schema.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @return array Item schema data.
+	 */
+	public function get_item_schema() {
+		if ( $this-&gt;schema ) {
+			return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+		}
+
+		$options = $this-&gt;get_registered_options();
+
+		$schema = array(
+			'$schema'    =&gt; 'http://json-schema.org/draft-04/schema#',
+			'title'      =&gt; 'settings',
+			'type'       =&gt; 'object',
+			'properties' =&gt; array(),
+		);
+
+		foreach ( $options as $option_name =&gt; $option ) {
+			$schema['properties'][ $option_name ]                = $option['schema'];
+			$schema['properties'][ $option_name ]['arg_options'] = array(
+				'sanitize_callback' =&gt; array( $this, 'sanitize_callback' ),
+			);
+		}
+
+		$this-&gt;schema = $schema;
+
+		return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+	}
+
+	/**
+	 * Custom sanitize callback used for all options to allow the use of 'null'.
+	 *
+	 * By default, the schema of settings will throw an error if a value is set to
+	 * `null` as it's not a valid value for something like "type =&gt; string". We
+	 * provide a wrapper sanitizer to allow the use of `null`.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param mixed           $value   The value for the setting.
+	 * @param WP_REST_Request $request The request object.
+	 * @param string          $param   The parameter name.
+	 * @return mixed|WP_Error
+	 */
+	public function sanitize_callback( $value, $request, $param ) {
+		if ( is_null( $value ) ) {
+			return $value;
+		}
+
+		return rest_parse_request_arg( $value, $request, $param );
+	}
+
+	/**
+	 * Recursively add additionalProperties = false to all objects in a schema
+	 * if no additionalProperties setting is specified.
+	 *
+	 * This is needed to restrict properties of objects in settings values to only
+	 * registered items, as the REST API will allow additional properties by
+	 * default.
+	 *
+	 * @since 4.9.0
+	 * @deprecated 6.1.0 Use <a href="../functions/rest_default_additional_properties_to_false">rest_default_additional_properties_to_false()</a> instead.
+	 *
+	 * @param array $schema The schema array.
+	 * @return array
+	 */
+	protected function set_additional_properties_to_false( $schema ) {
+		_deprecated_function( __METHOD__, '6.1.0', 'rest_default_additional_properties_to_false()' );
+
+		return rest_default_additional_properties_to_false( $schema );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-settings-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-settings-controller.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-settings-controller.php#L17-L343">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_settings_controller" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_settings_controller</a>
+  </p>
+</div>

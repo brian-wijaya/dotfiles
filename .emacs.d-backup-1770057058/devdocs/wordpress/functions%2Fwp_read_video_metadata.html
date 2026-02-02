@@ -1,0 +1,132 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_read_video_metadata( <span class="arg-type">string</span> <span class="arg-name">$file</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Retrieves metadata from a video file’s ID3 tags.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Path to file.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> Returns array of metadata, if found.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3573" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_read_video_metadata( $file ) {
+	if ( ! file_exists( $file ) ) {
+		return false;
+	}
+
+	$metadata = array();
+
+	if ( ! defined( 'GETID3_TEMP_DIR' ) ) {
+		define( 'GETID3_TEMP_DIR', get_temp_dir() );
+	}
+
+	if ( ! class_exists( 'getID3', false ) ) {
+		require ABSPATH . WPINC . '/ID3/getid3.php';
+	}
+
+	$id3 = new getID3();
+	// Required to get the `created_timestamp` value.
+	$id3-&gt;options_audiovideo_quicktime_ReturnAtomData = true; // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+
+	$data = $id3-&gt;analyze( $file );
+
+	if ( isset( $data['video']['lossless'] ) ) {
+		$metadata['lossless'] = $data['video']['lossless'];
+	}
+
+	if ( ! empty( $data['video']['bitrate'] ) ) {
+		$metadata['bitrate'] = (int) $data['video']['bitrate'];
+	}
+
+	if ( ! empty( $data['video']['bitrate_mode'] ) ) {
+		$metadata['bitrate_mode'] = $data['video']['bitrate_mode'];
+	}
+
+	if ( ! empty( $data['filesize'] ) ) {
+		$metadata['filesize'] = (int) $data['filesize'];
+	}
+
+	if ( ! empty( $data['mime_type'] ) ) {
+		$metadata['mime_type'] = $data['mime_type'];
+	}
+
+	if ( ! empty( $data['playtime_seconds'] ) ) {
+		$metadata['length'] = (int) round( $data['playtime_seconds'] );
+	}
+
+	if ( ! empty( $data['playtime_string'] ) ) {
+		$metadata['length_formatted'] = $data['playtime_string'];
+	}
+
+	if ( ! empty( $data['video']['resolution_x'] ) ) {
+		$metadata['width'] = (int) $data['video']['resolution_x'];
+	}
+
+	if ( ! empty( $data['video']['resolution_y'] ) ) {
+		$metadata['height'] = (int) $data['video']['resolution_y'];
+	}
+
+	if ( ! empty( $data['fileformat'] ) ) {
+		$metadata['fileformat'] = $data['fileformat'];
+	}
+
+	if ( ! empty( $data['video']['dataformat'] ) ) {
+		$metadata['dataformat'] = $data['video']['dataformat'];
+	}
+
+	if ( ! empty( $data['video']['encoder'] ) ) {
+		$metadata['encoder'] = $data['video']['encoder'];
+	}
+
+	if ( ! empty( $data['video']['codec'] ) ) {
+		$metadata['codec'] = $data['video']['codec'];
+	}
+
+	if ( ! empty( $data['audio'] ) ) {
+		unset( $data['audio']['streams'] );
+		$metadata['audio'] = $data['audio'];
+	}
+
+	if ( empty( $metadata['created_timestamp'] ) ) {
+		$created_timestamp = wp_get_media_creation_timestamp( $data );
+
+		if ( false !== $created_timestamp ) {
+			$metadata['created_timestamp'] = $created_timestamp;
+		}
+	}
+
+	wp_add_id3_tag_data( $metadata, $data );
+
+	$file_format = isset( $metadata['fileformat'] ) ? $metadata['fileformat'] : null;
+
+	/**
+	 * Filters the array of metadata retrieved from a video.
+	 *
+	 * In core, usually this selection is what is stored.
+	 * More complete data can be parsed from the `$data` parameter.
+	 *
+	 * @since 4.9.0
+	 *
+	 * @param array       $metadata    Filtered video metadata.
+	 * @param string      $file        Path to video file.
+	 * @param string|null $file_format File format of video, as analyzed by getID3.
+	 *                                 Null if unknown.
+	 * @param array       $data        Raw metadata from getID3.
+	 */
+	return apply_filters( 'wp_read_video_metadata', $metadata, $file, $file_format, $data );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L3573">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L3573-L3678">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_read_video_metadata"><span class="hook-func">apply_filters</span>( ‘wp_read_video_metadata’, <nobr><span class="arg-type">array</span> <span class="arg-name">$metadata</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$file</span></nobr>, <nobr><span class="arg-type">string|null</span> <span class="arg-name">$file_format</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$data</span></nobr> )</a></dt>
+<dd>
+<p>Filters the array of metadata retrieved from a video.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.6.0/">3.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_read_video_metadata" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_read_video_metadata</a>
+  </p>
+</div>

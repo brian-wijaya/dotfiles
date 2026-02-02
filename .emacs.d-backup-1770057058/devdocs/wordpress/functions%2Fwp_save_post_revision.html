@@ -1,0 +1,165 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_save_post_revision( <span class="arg-type">int</span> <span class="arg-name">$post_id</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a>|void</span>
+</h1> <section><p>Creates a revision for the current version of a post.</p> </section> <section><h2 id="description">Description</h2> <p>Typically used immediately after a post update, as every update is a revision, and the most recent revision always matches the current post.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The ID of the post to save as a revision.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a>|void</span> Void or 0 if error, new revision ID, if success.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="130" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_save_post_revision( $post_id ) {
+	if ( defined( 'DOING_AUTOSAVE' ) &amp;&amp; DOING_AUTOSAVE ) {
+		return;
+	}
+
+	// Prevent saving post revisions if revisions should be saved on wp_after_insert_post.
+	if ( doing_action( 'post_updated' ) &amp;&amp; has_action( 'wp_after_insert_post', 'wp_save_post_revision_on_insert' ) ) {
+		return;
+	}
+
+	$post = get_post( $post_id );
+
+	if ( ! $post ) {
+		return;
+	}
+
+	if ( ! post_type_supports( $post-&gt;post_type, 'revisions' ) ) {
+		return;
+	}
+
+	if ( 'auto-draft' === $post-&gt;post_status ) {
+		return;
+	}
+
+	if ( ! wp_revisions_enabled( $post ) ) {
+		return;
+	}
+
+	/*
+	 * Compare the proposed update with the last stored revision verifying that
+	 * they are different, unless a plugin tells us to always save regardless.
+	 * If no previous revisions, save one.
+	 */
+	$revisions = wp_get_post_revisions( $post_id );
+	if ( $revisions ) {
+		// Grab the latest revision, but not an autosave.
+		foreach ( $revisions as $revision ) {
+			if ( str_contains( $revision-&gt;post_name, "{$revision-&gt;post_parent}-revision" ) ) {
+				$latest_revision = $revision;
+				break;
+			}
+		}
+
+		/**
+		 * Filters whether the post has changed since the latest revision.
+		 *
+		 * By default a revision is saved only if one of the revisioned fields has changed.
+		 * This filter can override that so a revision is saved even if nothing has changed.
+		 *
+		 * @since 3.6.0
+		 *
+		 * @param bool    $check_for_changes Whether to check for changes before saving a new revision.
+		 *                                   Default true.
+		 * @param WP_Post $latest_revision   The latest revision post object.
+		 * @param WP_Post $post              The post object.
+		 */
+		if ( isset( $latest_revision ) &amp;&amp; apply_filters( 'wp_save_post_revision_check_for_changes', true, $latest_revision, $post ) ) {
+			$post_has_changed = false;
+
+			foreach ( array_keys( _wp_post_revision_fields( $post ) ) as $field ) {
+				if ( normalize_whitespace( $post-&gt;$field ) !== normalize_whitespace( $latest_revision-&gt;$field ) ) {
+					$post_has_changed = true;
+					break;
+				}
+			}
+
+			/**
+			 * Filters whether a post has changed.
+			 *
+			 * By default a revision is saved only if one of the revisioned fields has changed.
+			 * This filter allows for additional checks to determine if there were changes.
+			 *
+			 * @since 4.1.0
+			 *
+			 * @param bool    $post_has_changed Whether the post has changed.
+			 * @param WP_Post $latest_revision  The latest revision post object.
+			 * @param WP_Post $post             The post object.
+			 */
+			$post_has_changed = (bool) apply_filters( 'wp_save_post_revision_post_has_changed', $post_has_changed, $latest_revision, $post );
+
+			// Don't save revision if post unchanged.
+			if ( ! $post_has_changed ) {
+				return;
+			}
+		}
+	}
+
+	$return = _wp_put_post_revision( $post );
+
+	/*
+	 * If a limit for the number of revisions to keep has been set,
+	 * delete the oldest ones.
+	 */
+	$revisions_to_keep = wp_revisions_to_keep( $post );
+
+	if ( $revisions_to_keep &lt; 0 ) {
+		return $return;
+	}
+
+	$revisions = wp_get_post_revisions( $post_id, array( 'order' =&gt; 'ASC' ) );
+
+	/**
+	 * Filters the revisions to be considered for deletion.
+	 *
+	 * @since 6.2.0
+	 *
+	 * @param WP_Post[] $revisions Array of revisions, or an empty array if none.
+	 * @param int       $post_id   The ID of the post to save as a revision.
+	 */
+	$revisions = apply_filters(
+		'wp_save_post_revision_revisions_before_deletion',
+		$revisions,
+		$post_id
+	);
+
+	$delete = count( $revisions ) - $revisions_to_keep;
+
+	if ( $delete &lt; 1 ) {
+		return $return;
+	}
+
+	$revisions = array_slice( $revisions, 0, $delete );
+
+	for ( $i = 0; isset( $revisions[ $i ] ); $i++ ) {
+		if ( str_contains( $revisions[ $i ]-&gt;post_name, 'autosave' ) ) {
+			continue;
+		}
+
+		wp_delete_post_revision( $revisions[ $i ]-&gt;ID );
+	}
+
+	return $return;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/revision.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/revision.php#L130">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/revision.php#L130-L262">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_save_post_revision_check_for_changes"><span class="hook-func">apply_filters</span>( ‘wp_save_post_revision_check_for_changes’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$check_for_changes</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$latest_revision</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether the post has changed since the latest revision.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_save_post_revision_post_has_changed"><span class="hook-func">apply_filters</span>( ‘wp_save_post_revision_post_has_changed’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$post_has_changed</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$latest_revision</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether a post has changed.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_save_post_revision_revisions_before_deletion"><span class="hook-func">apply_filters</span>( ‘wp_save_post_revision_revisions_before_deletion’, <nobr><span class="arg-type">WP_Post[]</span> <span class="arg-name">$revisions</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the revisions to be considered for deletion.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_save_post_revision" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_save_post_revision</a>
+  </p>
+</div>

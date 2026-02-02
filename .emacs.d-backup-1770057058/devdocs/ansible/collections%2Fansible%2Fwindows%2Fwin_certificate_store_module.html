@@ -1,0 +1,127 @@
+<section id="ansible-windows-win-certificate-store-module-manages-the-certificate-store"> <h1>ansible.windows.win_certificate_store module – Manages the certificate store</h1> <div class="admonition note"> <p class="admonition-title">Note</p> <p>This module is part of the <a class="reference external" href="https://galaxy.ansible.com/ui/repo/published/ansible/windows/">ansible.windows collection</a> (version 2.8.0).</p> <p>You might already have this collection installed if you are using the <code>ansible</code> package. It is not included in <code>ansible-core</code>. To check whether it is installed, run <code>ansible-galaxy collection list</code>.</p> <p>To install it, use: <code>ansible-galaxy collection install ansible.windows</code>.</p> <p>To use it in a playbook, specify: <code>ansible.windows.win_certificate_store</code>.</p> </div>  <ul class="simple"> <li><a class="reference internal" href="#synopsis" id="id1">Synopsis</a></li> <li><a class="reference internal" href="#parameters" id="id2">Parameters</a></li> <li><a class="reference internal" href="#notes" id="id3">Notes</a></li> <li><a class="reference internal" href="#examples" id="id4">Examples</a></li> <li><a class="reference internal" href="#return-values" id="id5">Return Values</a></li> </ul>  <section id="synopsis"> <h2>Synopsis</h2> <ul class="simple"> <li>Used to import/export and remove certificates and keys from the local certificate store.</li> <li>This module is not used to create certificates and will only manage existing certs as a file or in the store.</li> <li>It can be used to import PEM, DER, P7B, PKCS12 (PFX) certificates and export PEM, DER and PKCS12 certificates.</li> </ul> </section> <section id="parameters"> <h2>Parameters</h2> <table class="longtable ansible-option-table docutils align-default" style="width: 100%"> <thead> <tr>
+<th class="head"><p>Parameter</p></th> <th class="head"><p>Comments</p></th> </tr> </thead>  <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-file-type"><strong>file_type</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The file type to export the certificate as when <code>state=exported</code>.</p> <p><code>der</code> is a binary ASN.1 encoded file.</p> <p><code>pem</code> is a base64 encoded file of a der file in the OpenSSL form.</p> <p><code>pkcs12</code> (also known as pfx) is a binary container that contains both the certificate and private key unlike the other options.</p> <p>When <code>pkcs12</code> is set and the private key is not exportable or accessible by the current user, it will throw an exception.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li>
+<code><strong>"der"</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> <li><code>"pem"</code></li> <li><code>"pkcs12"</code></li> </ul> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-key-exportable"><strong>key_exportable</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Whether to allow the private key to be exported.</p> <p>If <code>false</code>, then this module and other process will only be able to export the certificate and the private key cannot be exported.</p> <p>Used when <code>state=present</code> only.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li><code>false</code></li> <li>
+<code><strong>true</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> </ul> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-key-storage"><strong>key_storage</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Specifies where Windows will store the private key when it is imported.</p> <p>When set to <code>default</code>, the default option as set by Windows is used, typically <code>user</code>.</p> <p>When set to <code>machine</code>, the key is stored in a path accessible by various users.</p> <p>When set to <code>user</code>, the key is stored in a path only accessible by the current user.</p> <p>Used when <code>state=present</code> only and cannot be changed once imported.</p> <p>See <a class="reference external" href="https://msdn.microsoft.com/en-us/library/system.security.cryptography.x509certificates.x509keystorageflags.aspx">https://msdn.microsoft.com/en-us/library/system.security.cryptography.x509certificates.x509keystorageflags.aspx</a> for more details.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li>
+<code><strong>"default"</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> <li><code>"machine"</code></li> <li><code>"user"</code></li> </ul> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-password"><strong>password</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The password of the pkcs12 certificate key.</p> <p>This is used when reading a pkcs12 certificate file or the password to set when <code>state=exported</code> and <code>file_type=pkcs12</code>.</p> <p>If the pkcs12 file has no password set or no password should be set on the exported file, do not set this option.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-path"><strong>path</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The path to a certificate file.</p> <p>This is required when <em>state</em> is <code>present</code> or <code>exported</code>.</p> <p>When <em>state</em> is <code>absent</code> and <em>thumbprint</em> is not specified, the thumbprint is derived from the certificate at this path.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-state"><strong>state</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>If <code>present</code>, will ensure that the certificate at <em>path</em> is imported into the certificate store specified.</p> <p>If <code>absent</code>, will ensure that the certificate specified by <em>thumbprint</em> or the thumbprint of the cert at <em>path</em> is removed from the store specified.</p> <p>If <code>exported</code>, will ensure the file at <em>path</em> is a certificate specified by <em>thumbprint</em>.</p> <p>When exporting a certificate, if <em>path</em> is a directory then the module will fail, otherwise the file will be replaced if needed.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li><code>"absent"</code></li> <li><code>"exported"</code></li> <li>
+<code><strong>"present"</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> </ul> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-store-location"><strong>store_location</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The store location to use when importing a certificate or searching for a certificate.</p> <p>Can be set to <code>CurrentUser</code> or <code>LocalMachine</code> when <code>store_type=system</code>.</p> <p>Defaults to <code>LocalMachine</code> when <code>store_type=system</code>.</p> <p>Must be set to any service name when <code>store_type=service</code>.</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>"LocalMachine"</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-store-name"><strong>store_name</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The store name to use when importing a certificate or searching for a certificate.</p> <p><code>AddressBook</code>: The X.509 certificate store for other users</p> <p><code>AuthRoot</code>: The X.509 certificate store for third-party certificate authorities (CAs)</p> <p><code>CertificateAuthority</code>: The X.509 certificate store for intermediate certificate authorities (CAs)</p> <p><code>Disallowed</code>: The X.509 certificate store for revoked certificates</p> <p><code>My</code>: The X.509 certificate store for personal certificates</p> <p><code>Root</code>: The X.509 certificate store for trusted root certificate authorities (CAs)</p> <p><code>TrustedPeople</code>: The X.509 certificate store for directly trusted people and resources</p> <p><code>TrustedPublisher</code>: The X.509 certificate store for directly trusted publishers</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>"My"</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-store-type"><strong>store_type</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> <p><em class="ansible-option-versionadded">added in ansible.windows 1.5.0</em></p> </div></td> <td><div class="ansible-option-cell">
+<p>The store type to manage.</p> <p>Use <code>system</code> to manage locations in the system store, <code>LocalMachine</code> and <code>CurrentUser</code>.</p> <p>Use <code>service</code> to manage the store of a service account specified by <em>store_location</em>.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li>
+<code><strong>"system"</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> <li><code>"service"</code></li> </ul> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-parameter-thumbprint"><strong>thumbprint</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The thumbprint as a hex string to either export or remove.</p> <p>See the examples for how to specify the thumbprint.</p> </div></td> </tr>  </table> </section> <section id="notes"> <h2>Notes</h2> <div class="admonition note"> <p class="admonition-title">Note</p> <ul class="simple"> <li>Some actions on PKCS12 certificates and keys may fail with the error <code>the specified network password is not correct</code>, either use CredSSP or Kerberos with credential delegation, or use <code>become</code> to bypass these restrictions.</li> <li>The certificates must be located on the Windows host to be set with <em>path</em>.</li> <li>When importing a certificate for usage in IIS, it is generally required to use the <code>machine</code> key_storage option, as both <code>default</code> and <code>user</code> will make the private key unreadable to IIS APPPOOL identities and prevent binding the certificate to the https endpoint.</li> </ul> </div> </section> <section id="examples"> <h2>Examples</h2> <pre data-language="yaml+jinja">- name: Import a certificate
+  ansible.windows.win_certificate_store:
+    path: C:\Temp\cert.pem
+    state: present
+
+- name: Import pfx certificate that is password protected
+  ansible.windows.win_certificate_store:
+    path: C:\Temp\cert.pfx
+    state: present
+    password: VeryStrongPasswordHere!
+  become: true
+  become_method: runas
+
+- name: Import pfx certificate without password and set private key as un-exportable
+  ansible.windows.win_certificate_store:
+    path: C:\Temp\cert.pfx
+    state: present
+    key_exportable: false
+  # usually you don't set this here but it is for illustrative purposes
+  vars:
+    ansible_winrm_transport: credssp
+
+- name: Remove a certificate based on file thumbprint
+  ansible.windows.win_certificate_store:
+    path: C:\Temp\cert.pem
+    state: absent
+
+- name: Remove a certificate based on thumbprint
+  ansible.windows.win_certificate_store:
+    thumbprint: BD7AF104CF1872BDB518D95C9534EA941665FD27
+    state: absent
+
+- name: Remove certificate based on thumbprint is CurrentUser/TrustedPublishers store
+  ansible.windows.win_certificate_store:
+    thumbprint: BD7AF104CF1872BDB518D95C9534EA941665FD27
+    state: absent
+    store_location: CurrentUser
+    store_name: TrustedPublisher
+
+- name: Export certificate as der encoded file
+  ansible.windows.win_certificate_store:
+    path: C:\Temp\cert.cer
+    state: exported
+    file_type: der
+
+- name: Export certificate and key as pfx encoded file
+  ansible.windows.win_certificate_store:
+    path: C:\Temp\cert.pfx
+    state: exported
+    file_type: pkcs12
+    password: AnotherStrongPass!
+  become: true
+  become_method: runas
+  become_user: SYSTEM
+
+- name: Import certificate be used by IIS
+  ansible.windows.win_certificate_store:
+    path: C:\Temp\cert.pfx
+    file_type: pkcs12
+    password: StrongPassword!
+    store_location: LocalMachine
+    key_storage: machine
+    state: present
+  become: true
+  become_method: runas
+  become_user: SYSTEM
+
+- name: Import certificate to be used for LDAPS
+  ansible.windows.win_certificate_store:
+    path: C:\Temp\cert.pfx
+    password: StrongPassword!
+    store_type: service
+    store_location: NTDS
+    key_exportable: false
+    key_storage: machine
+    state: present
+</pre> </section> <section id="return-values"> <h2>Return Values</h2> <p>Common return values are documented <a class="reference internal" href="../../../reference_appendices/common_return_values#common-return-values"><span class="std std-ref">here</span></a>, the following are the fields unique to this module:</p> <table class="longtable ansible-option-table docutils align-default" style="width: 100%"> <thead> <tr>
+<th class="head"><p>Key</p></th> <th class="head"><p>Description</p></th> </tr> </thead>  <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-ansible-windows-win-certificate-store-module-return-thumbprints"><strong>thumbprints</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">list</span> / <span class="ansible-option-elements">elements=string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>A list of certificate thumbprints that were touched by the module.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> success</p> <p class="ansible-option-line ansible-option-sample"><strong class="ansible-option-sample-bold">Sample:</strong> <code>["BC05633694E675449136679A658281F17A191087"]</code></p> </div></td> </tr>  </table> <section id="authors"> <h3>Authors</h3> <ul class="simple"> <li>Jordan Borean (@jborean93)</li> </ul> </section> <section id="collection-links"> <h3>Collection links</h3> <ul class="ansible-links"> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/ansible.windows/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc" rel="noopener external" target="_blank">Issue Tracker</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/ansible.windows" rel="noopener external" target="_blank">Repository (Sources)</a></span></li> </ul> </section> </section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2012&ndash;2018 Michael DeHaan<br>&copy; 2018&ndash;2025 Red Hat, Inc.<br>Licensed under the GNU General Public License version 3.<br>
+    <a href="https://docs.ansible.com/ansible/latest/collections/ansible/windows/win_certificate_store_module.html" class="_attribution-link">https://docs.ansible.com/ansible/latest/collections/ansible/windows/win_certificate_store_module.html</a>
+  </p>
+</div>

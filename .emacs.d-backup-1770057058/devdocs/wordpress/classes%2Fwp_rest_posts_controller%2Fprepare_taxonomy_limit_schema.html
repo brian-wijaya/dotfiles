@@ -1,0 +1,111 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Posts_Controller::prepare_taxonomy_limit_schema( <span class="arg-type">array</span> <span class="arg-name">$query_params</span> ): <span class="return-type">array</span>
+</h1> <section><p>Prepares the collection schema for including and excluding items by terms.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$query_params</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Collection schema.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Updated schema.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3208" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function prepare_taxonomy_limit_schema( array $query_params ) {
+	$taxonomies = wp_list_filter( get_object_taxonomies( $this-&gt;post_type, 'objects' ), array( 'show_in_rest' =&gt; true ) );
+
+	if ( ! $taxonomies ) {
+		return $query_params;
+	}
+
+	$query_params['tax_relation'] = array(
+		'description' =&gt; __( 'Limit result set based on relationship between multiple taxonomies.' ),
+		'type'        =&gt; 'string',
+		'enum'        =&gt; array( 'AND', 'OR' ),
+	);
+
+	$limit_schema = array(
+		'type'  =&gt; array( 'object', 'array' ),
+		'oneOf' =&gt; array(
+			array(
+				'title'       =&gt; __( 'Term ID List' ),
+				'description' =&gt; __( 'Match terms with the listed IDs.' ),
+				'type'        =&gt; 'array',
+				'items'       =&gt; array(
+					'type' =&gt; 'integer',
+				),
+			),
+			array(
+				'title'                =&gt; __( 'Term ID Taxonomy Query' ),
+				'description'          =&gt; __( 'Perform an advanced term query.' ),
+				'type'                 =&gt; 'object',
+				'properties'           =&gt; array(
+					'terms'            =&gt; array(
+						'description' =&gt; __( 'Term IDs.' ),
+						'type'        =&gt; 'array',
+						'items'       =&gt; array(
+							'type' =&gt; 'integer',
+						),
+						'default'     =&gt; array(),
+					),
+					'include_children' =&gt; array(
+						'description' =&gt; __( 'Whether to include child terms in the terms limiting the result set.' ),
+						'type'        =&gt; 'boolean',
+						'default'     =&gt; false,
+					),
+				),
+				'additionalProperties' =&gt; false,
+			),
+		),
+	);
+
+	$include_schema = array_merge(
+		array(
+			/* translators: %s: Taxonomy name. */
+			'description' =&gt; __( 'Limit result set to items with specific terms assigned in the %s taxonomy.' ),
+		),
+		$limit_schema
+	);
+	// 'operator' is supported only for 'include' queries.
+	$include_schema['oneOf'][1]['properties']['operator'] = array(
+		'description' =&gt; __( 'Whether items must be assigned all or any of the specified terms.' ),
+		'type'        =&gt; 'string',
+		'enum'        =&gt; array( 'AND', 'OR' ),
+		'default'     =&gt; 'OR',
+	);
+
+	$exclude_schema = array_merge(
+		array(
+			/* translators: %s: Taxonomy name. */
+			'description' =&gt; __( 'Limit result set to items except those with specific terms assigned in the %s taxonomy.' ),
+		),
+		$limit_schema
+	);
+
+	foreach ( $taxonomies as $taxonomy ) {
+		$base         = ! empty( $taxonomy-&gt;rest_base ) ? $taxonomy-&gt;rest_base : $taxonomy-&gt;name;
+		$base_exclude = $base . '_exclude';
+
+		$query_params[ $base ]                = $include_schema;
+		$query_params[ $base ]['description'] = sprintf( $query_params[ $base ]['description'], $base );
+
+		$query_params[ $base_exclude ]                = $exclude_schema;
+		$query_params[ $base_exclude ]['description'] = sprintf( $query_params[ $base_exclude ]['description'], $base );
+
+		if ( ! $taxonomy-&gt;hierarchical ) {
+			unset( $query_params[ $base ]['oneOf'][1]['properties']['include_children'] );
+			unset( $query_params[ $base_exclude ]['oneOf'][1]['properties']['include_children'] );
+		}
+	}
+
+	return $query_params;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php#L3208">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php#L3208-L3296">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.7.0/">5.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_posts_controller/prepare_taxonomy_limit_schema" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_posts_controller/prepare_taxonomy_limit_schema</a>
+  </p>
+</div>

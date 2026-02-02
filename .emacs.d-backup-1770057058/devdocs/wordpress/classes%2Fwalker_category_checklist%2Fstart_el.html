@@ -1,0 +1,102 @@
+<h1 class="wp-block-wporg-code-reference-title">Walker_Category_Checklist::start_el( <span class="arg-type">string</span> <span class="arg-name">$output</span>, <span class="arg-type">WP_Term</span> <span class="arg-name">$data_object</span>, <span class="arg-type">int</span> <span class="arg-name">$depth</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span>, <span class="arg-type">int</span> <span class="arg-name">$current_object_id</span> )</h1> <section><p>Start the element output.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="../walker/start_el">Walker::start_el()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$output</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Used to append additional content (passed by reference).</span></div></dd>
+<dt>
+<code>$data_object</code><span class="type"><span class="WP_Term"><a href="../wp_term" rel="class">WP_Term</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The current term object.</span></div></dd>
+<dt>
+<code>$depth</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Depth of the term in reference to parents. Default 0.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">An array of arguments. See <a href="../../functions/wp_terms_checklist">wp_terms_checklist()</a>.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$current_object_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">ID of the current term. Default 0.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="73" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function start_el( &amp;$output, $data_object, $depth = 0, $args = array(), $current_object_id = 0 ) {
+	// Restores the more descriptive, specific name for use within this method.
+	$category = $data_object;
+
+	if ( empty( $args['taxonomy'] ) ) {
+		$taxonomy = 'category';
+	} else {
+		$taxonomy = $args['taxonomy'];
+	}
+
+	if ( 'category' === $taxonomy ) {
+		$name = 'post_category';
+	} else {
+		$name = 'tax_input[' . $taxonomy . ']';
+	}
+
+	$args['popular_cats'] = ! empty( $args['popular_cats'] ) ? array_map( 'intval', $args['popular_cats'] ) : array();
+
+	$class = in_array( $category-&gt;term_id, $args['popular_cats'], true ) ? ' class="popular-category"' : '';
+
+	$args['selected_cats'] = ! empty( $args['selected_cats'] ) ? array_map( 'intval', $args['selected_cats'] ) : array();
+
+	if ( ! empty( $args['list_only'] ) ) {
+		$aria_checked = 'false';
+		$inner_class  = 'category';
+
+		if ( in_array( $category-&gt;term_id, $args['selected_cats'], true ) ) {
+			$inner_class .= ' selected';
+			$aria_checked = 'true';
+		}
+
+		$output .= "\n" . '&lt;li' . $class . '&gt;' .
+			'&lt;div class="' . $inner_class . '" data-term-id=' . $category-&gt;term_id .
+			' tabindex="0" role="checkbox" aria-checked="' . $aria_checked . '"&gt;' .
+			/** This filter is documented in wp-includes/category-template.php */
+			esc_html( apply_filters( 'the_category', $category-&gt;name, '', '' ) ) . '&lt;/div&gt;';
+	} else {
+		$is_selected         = in_array( $category-&gt;term_id, $args['selected_cats'], true );
+		$is_disabled         = ! empty( $args['disabled'] );
+		$li_element_id       = wp_unique_prefixed_id( "in-{$taxonomy}-{$category-&gt;term_id}-" );
+		$checkbox_element_id = wp_unique_prefixed_id( "in-{$taxonomy}-{$category-&gt;term_id}-" );
+
+		$output .= "\n&lt;li id='" . esc_attr( $li_element_id ) . "'$class&gt;" .
+			'&lt;label class="selectit"&gt;&lt;input value="' . $category-&gt;term_id . '" type="checkbox" name="' . $name . '[]" id="' . esc_attr( $checkbox_element_id ) . '"' .
+			checked( $is_selected, true, false ) .
+			disabled( $is_disabled, true, false ) . ' /&gt; ' .
+			/** This filter is documented in wp-includes/category-template.php */
+			esc_html( apply_filters( 'the_category', $category-&gt;name, '', '' ) ) . '&lt;/label&gt;';
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-walker-category-checklist.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-walker-category-checklist.php#L73">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-walker-category-checklist.php#L73-L122">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/the_category"><span class="hook-func">apply_filters</span>( ‘the_category’, <nobr><span class="arg-type">string</span> <span class="arg-name">$thelist</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$separator</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$parents</span></nobr> )</a></dt>
+<dd>
+<p>Filters the category or list of categories.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Renamed <code>$category</code> to <code>$data_object</code> and <code>$id</code> to <code>$current_object_id</code> to match parent class for PHP 8 named parameter support.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.1/">2.5.1</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/walker_category_checklist/start_el" class="_attribution-link">https://developer.wordpress.org/reference/classes/walker_category_checklist/start_el</a>
+  </p>
+</div>

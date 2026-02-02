@@ -1,0 +1,71 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_script_polyfill( <span class="arg-type">WP_Scripts</span> <span class="arg-name">$scripts</span>, <span class="arg-type">string[]</span> <span class="arg-name">$tests</span> ): <span class="return-type">string</span>
+</h1> <section><p>Returns contents of an inline script used in appending polyfill scripts for browsers which fail the provided tests. The provided array is a mapping from a condition to verify feature support to its polyfill script handle.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$scripts</code><span class="type"><span class="WP_Scripts"><a href="../classes/wp_scripts" rel="class">WP_Scripts</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description"><a href="../classes/wp_scripts" rel="class">WP_Scripts</a> object.</span></div></dd>
+<dt>
+<code>$tests</code><span class="type"><span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Features to detect.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Conditional polyfill inline script.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="180" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_script_polyfill( $scripts, $tests ) {
+	$polyfill = '';
+	foreach ( $tests as $test =&gt; $handle ) {
+		if ( ! array_key_exists( $handle, $scripts-&gt;registered ) ) {
+			continue;
+		}
+
+		$src = $scripts-&gt;registered[ $handle ]-&gt;src;
+		$ver = $scripts-&gt;registered[ $handle ]-&gt;ver;
+
+		if ( ! preg_match( '|^(https?:)?//|', $src ) &amp;&amp; ! ( $scripts-&gt;content_url &amp;&amp; str_starts_with( $src, $scripts-&gt;content_url ) ) ) {
+			$src = $scripts-&gt;base_url . $src;
+		}
+
+		if ( ! empty( $ver ) ) {
+			$src = add_query_arg( 'ver', $ver, $src );
+		}
+
+		/** This filter is documented in wp-includes/class-wp-scripts.php */
+		$src = esc_url( apply_filters( 'script_loader_src', $src, $handle ) );
+
+		if ( ! $src ) {
+			continue;
+		}
+
+		$polyfill .= (
+			// Test presence of feature...
+			'( ' . $test . ' ) || ' .
+			/*
+			 * ...appending polyfill on any failures. Cautious viewers may balk
+			 * at the `document.write`. Its caveat of synchronous mid-stream
+			 * blocking write is exactly the behavior we need though.
+			 */
+			'document.write( \'&lt;script src="' .
+			$src .
+			'"&gt;&lt;/scr\' + \'ipt&gt;\' );'
+		);
+	}
+
+	return $polyfill;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/script-loader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/script-loader.php#L180">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/script-loader.php#L180-L220">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/script_loader_src"><span class="hook-func">apply_filters</span>( ‘script_loader_src’, <nobr><span class="arg-type">string</span> <span class="arg-name">$src</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$handle</span></nobr> )</a></dt>
+<dd>
+<p>Filters the script loader source.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_script_polyfill" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_script_polyfill</a>
+  </p>
+</div>

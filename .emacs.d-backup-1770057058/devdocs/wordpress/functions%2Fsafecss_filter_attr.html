@@ -1,0 +1,421 @@
+<h1 class="wp-block-wporg-code-reference-title">safecss_filter_attr( <span class="arg-type">string</span> <span class="arg-name">$css</span>, <span class="arg-type">string</span> <span class="arg-name">$deprecated</span> = <span class="arg-default">”</span> ): <span class="return-type">string</span>
+</h1> <section><p>Filters an inline style attribute and removes disallowed rules.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$css</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">A string of CSS rules.</span></div></dd>
+<dt>
+<code>$deprecated</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Not used.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Filtered string of CSS rules.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2373" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function safecss_filter_attr( $css, $deprecated = '' ) {
+	if ( ! empty( $deprecated ) ) {
+		_deprecated_argument( __FUNCTION__, '2.8.1' ); // Never implemented.
+	}
+
+	$css = wp_kses_no_null( $css );
+	$css = str_replace( array( "\n", "\r", "\t" ), '', $css );
+
+	$allowed_protocols = wp_allowed_protocols();
+
+	$css_array = explode( ';', trim( $css ) );
+
+	/**
+	 * Filters the list of allowed CSS attributes.
+	 *
+	 * @since 2.8.1
+	 *
+	 * @param string[] $attr Array of allowed CSS attributes.
+	 */
+	$allowed_attr = apply_filters(
+		'safe_style_css',
+		array(
+			'background',
+			'background-color',
+			'background-image',
+			'background-position',
+			'background-repeat',
+			'background-size',
+			'background-attachment',
+			'background-blend-mode',
+
+			'border',
+			'border-radius',
+			'border-width',
+			'border-color',
+			'border-style',
+			'border-right',
+			'border-right-color',
+			'border-right-style',
+			'border-right-width',
+			'border-bottom',
+			'border-bottom-color',
+			'border-bottom-left-radius',
+			'border-bottom-right-radius',
+			'border-bottom-style',
+			'border-bottom-width',
+			'border-bottom-right-radius',
+			'border-bottom-left-radius',
+			'border-left',
+			'border-left-color',
+			'border-left-style',
+			'border-left-width',
+			'border-top',
+			'border-top-color',
+			'border-top-left-radius',
+			'border-top-right-radius',
+			'border-top-style',
+			'border-top-width',
+			'border-top-left-radius',
+			'border-top-right-radius',
+
+			'border-spacing',
+			'border-collapse',
+			'caption-side',
+
+			'columns',
+			'column-count',
+			'column-fill',
+			'column-gap',
+			'column-rule',
+			'column-span',
+			'column-width',
+
+			'color',
+			'filter',
+			'font',
+			'font-family',
+			'font-size',
+			'font-style',
+			'font-variant',
+			'font-weight',
+			'letter-spacing',
+			'line-height',
+			'text-align',
+			'text-decoration',
+			'text-indent',
+			'text-transform',
+
+			'height',
+			'min-height',
+			'max-height',
+
+			'width',
+			'min-width',
+			'max-width',
+
+			'margin',
+			'margin-right',
+			'margin-bottom',
+			'margin-left',
+			'margin-top',
+			'margin-block-start',
+			'margin-block-end',
+			'margin-inline-start',
+			'margin-inline-end',
+
+			'padding',
+			'padding-right',
+			'padding-bottom',
+			'padding-left',
+			'padding-top',
+			'padding-block-start',
+			'padding-block-end',
+			'padding-inline-start',
+			'padding-inline-end',
+
+			'flex',
+			'flex-basis',
+			'flex-direction',
+			'flex-flow',
+			'flex-grow',
+			'flex-shrink',
+			'flex-wrap',
+
+			'gap',
+			'column-gap',
+			'row-gap',
+
+			'grid-template-columns',
+			'grid-auto-columns',
+			'grid-column-start',
+			'grid-column-end',
+			'grid-column',
+			'grid-column-gap',
+			'grid-template-rows',
+			'grid-auto-rows',
+			'grid-row-start',
+			'grid-row-end',
+			'grid-row',
+			'grid-row-gap',
+			'grid-gap',
+
+			'justify-content',
+			'justify-items',
+			'justify-self',
+			'align-content',
+			'align-items',
+			'align-self',
+
+			'clear',
+			'cursor',
+			'direction',
+			'float',
+			'list-style-type',
+			'object-fit',
+			'object-position',
+			'opacity',
+			'overflow',
+			'vertical-align',
+			'writing-mode',
+
+			'position',
+			'top',
+			'right',
+			'bottom',
+			'left',
+			'z-index',
+			'box-shadow',
+			'aspect-ratio',
+			'container-type',
+
+			// Custom CSS properties.
+			'--*',
+		)
+	);
+
+	/*
+	 * CSS attributes that accept URL data types.
+	 *
+	 * This is in accordance to the CSS spec and unrelated to
+	 * the sub-set of supported attributes above.
+	 *
+	 * See: https://developer.mozilla.org/en-US/docs/Web/CSS/url
+	 */
+	$css_url_data_types = array(
+		'background',
+		'background-image',
+
+		'cursor',
+		'filter',
+
+		'list-style',
+		'list-style-image',
+	);
+
+	/*
+	 * CSS attributes that accept gradient data types.
+	 *
+	 */
+	$css_gradient_data_types = array(
+		'background',
+		'background-image',
+	);
+
+	if ( empty( $allowed_attr ) ) {
+		return $css;
+	}
+
+	$css = '';
+	foreach ( $css_array as $css_item ) {
+		if ( '' === $css_item ) {
+			continue;
+		}
+
+		$css_item        = trim( $css_item );
+		$css_test_string = $css_item;
+		$found           = false;
+		$url_attr        = false;
+		$gradient_attr   = false;
+		$is_custom_var   = false;
+
+		if ( ! str_contains( $css_item, ':' ) ) {
+			$found = true;
+		} else {
+			$parts        = explode( ':', $css_item, 2 );
+			$css_selector = trim( $parts[0] );
+
+			// Allow assigning values to CSS variables.
+			if ( in_array( '--*', $allowed_attr, true ) &amp;&amp; preg_match( '/^--[a-zA-Z0-9-_]+$/', $css_selector ) ) {
+				$allowed_attr[] = $css_selector;
+				$is_custom_var  = true;
+			}
+
+			if ( in_array( $css_selector, $allowed_attr, true ) ) {
+				$found         = true;
+				$url_attr      = in_array( $css_selector, $css_url_data_types, true );
+				$gradient_attr = in_array( $css_selector, $css_gradient_data_types, true );
+			}
+
+			if ( $is_custom_var ) {
+				$css_value     = trim( $parts[1] );
+				$url_attr      = str_starts_with( $css_value, 'url(' );
+				$gradient_attr = str_contains( $css_value, '-gradient(' );
+			}
+		}
+
+		if ( $found &amp;&amp; $url_attr ) {
+			// Simplified: matches the sequence `url(*)`.
+			preg_match_all( '/url\([^)]+\)/', $parts[1], $url_matches );
+
+			foreach ( $url_matches[0] as $url_match ) {
+				// Clean up the URL from each of the matches above.
+				preg_match( '/^url\(\s*([\'\"]?)(.*)(\g1)\s*\)$/', $url_match, $url_pieces );
+
+				if ( empty( $url_pieces[2] ) ) {
+					$found = false;
+					break;
+				}
+
+				$url = trim( $url_pieces[2] );
+
+				if ( empty( $url ) || wp_kses_bad_protocol( $url, $allowed_protocols ) !== $url ) {
+					$found = false;
+					break;
+				} else {
+					// Remove the whole `url(*)` bit that was matched above from the CSS.
+					$css_test_string = str_replace( $url_match, '', $css_test_string );
+				}
+			}
+		}
+
+		if ( $found &amp;&amp; $gradient_attr ) {
+			$css_value = trim( $parts[1] );
+			if ( preg_match( '/^(repeating-)?(linear|radial|conic)-gradient\(([^()]|rgb[a]?\([^()]*\))*\)$/', $css_value ) ) {
+				// Remove the whole `gradient` bit that was matched above from the CSS.
+				$css_test_string = str_replace( $css_value, '', $css_test_string );
+			}
+		}
+
+		if ( $found ) {
+			/*
+			 * Allow CSS functions like var(), calc(), etc. by removing them from the test string.
+			 * Nested functions and parentheses are also removed, so long as the parentheses are balanced.
+			 */
+			$css_test_string = preg_replace(
+				'/\b(?:var|calc|min|max|minmax|clamp|repeat)(\((?:[^()]|(?1))*\))/',
+				'',
+				$css_test_string
+			);
+
+			/*
+			 * Disallow CSS containing \ ( &amp; } = or comments, except for within url(), var(), calc(), etc.
+			 * which were removed from the test string above.
+			 */
+			$allow_css = ! preg_match( '%[\\\(&amp;=}]|/\*%', $css_test_string );
+
+			/**
+			 * Filters the check for unsafe CSS in `safecss_filter_attr`.
+			 *
+			 * Enables developers to determine whether a section of CSS should be allowed or discarded.
+			 * By default, the value will be false if the part contains \ ( &amp; } = or comments.
+			 * Return true to allow the CSS part to be included in the output.
+			 *
+			 * @since 5.5.0
+			 *
+			 * @param bool   $allow_css       Whether the CSS in the test string is considered safe.
+			 * @param string $css_test_string The CSS string to test.
+			 */
+			$allow_css = apply_filters( 'safecss_filter_attr_allow_css', $allow_css, $css_test_string );
+
+			// Only add the CSS part if it passes the regex check.
+			if ( $allow_css ) {
+				if ( '' !== $css ) {
+					$css .= ';';
+				}
+
+				$css .= $css_item;
+			}
+		}
+	}
+
+	return $css;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/kses.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/kses.php#L2373">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/kses.php#L2373-L2695">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/safecss_filter_attr_allow_css"><span class="hook-func">apply_filters</span>( ‘safecss_filter_attr_allow_css’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$allow_css</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$css_test_string</span></nobr> )</a></dt>
+<dd>
+<p>Filters the check for unsafe CSS in <code>safecss_filter_attr</code>.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/safe_style_css"><span class="hook-func">apply_filters</span>( ‘safe_style_css’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$attr</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of allowed CSS attributes.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.6.0/">6.6.0</a></td>
+<td><span class="since-description">Added support for <code>grid-column</code>, <code>grid-row</code>, and <code>container-type</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.5.0/">6.5.0</a></td>
+<td><span class="since-description">Added support for <code>background-repeat</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.4.0/">6.4.0</a></td>
+<td><span class="since-description">Added support for <code>writing-mode</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description">Extended support for <code>filter</code> to accept a URL and added support for repeat().<br> Added support for <code>box-shadow</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.2.0/">6.2.0</a></td>
+<td><span class="since-description">Added support for <code>aspect-ratio</code>, <code>position</code>, <code>top</code>, <code>right</code>, <code>bottom</code>, <code>left</code>, and <code>z-index</code> CSS properties.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td><span class="since-description">Added support for <code>min()</code>, <code>max()</code>, <code>minmax()</code>, <code>clamp()</code>, nested <code>var()</code> values, and assigning values to CSS variables.<br> Added support for <code>object-fit</code>, <code>gap</code>, <code>column-gap</code>, <code>row-gap</code>, and <code>flex-wrap</code>.<br> Extended <code>margin-*</code> and <code>padding-*</code> support for logical properties.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td><span class="since-description">Added support for <code>calc()</code> and <code>var()</code> values.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/5.7.1/">5.7.1</a></td>
+<td><span class="since-description">Added support for <code>object-position</code>.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.1/">5.3.1</a></td>
+<td><span class="since-description">Added support for gradient backgrounds.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">Added support for <code>grid</code>, <code>flex</code> and <code>column</code> layout properties.<br> Extended <code>background-*</code> support for individual properties.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td><span class="since-description">Added support for <code>background-position</code> and <code>grid-template-columns</code>.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td><span class="since-description">Added support for <code>text-transform</code>.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td><span class="since-description">Added support for <code>background-image</code>.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td><span class="since-description">Added support for <code>list-style-type</code>.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Added support for <code>min-height</code>, <code>max-height</code>, <code>min-width</code>, and <code>max-width</code>.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.1/">2.8.1</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure><a class="wp-block-wporg-code-table-show-more" href="#">Show 11 more</a><a class="wp-block-wporg-code-table-show-less" href="#">Show less</a></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/safecss_filter_attr" class="_attribution-link">https://developer.wordpress.org/reference/functions/safecss_filter_attr</a>
+  </p>
+</div>

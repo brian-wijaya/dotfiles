@@ -1,0 +1,179 @@
+<h1 class="wp-block-wporg-code-reference-title">get_permalink( <span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span>, <span class="arg-type">bool</span> <span class="arg-name">$leavename</span> = <span class="arg-default">false</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Retrieves the full permalink for the current post or post ID.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID or post object. Default is the global <code>$post</code>.</span></div></dd>
+<dt>
+<code>$leavename</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to keep post name or page name. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> The permalink URL. False if the post does not exist.</section> <section><h2 id="more-information">More Information</h2> <p>In a Plugin or Theme, it can be used as early as the <code><a href="../hooks/setup_theme">setup_theme</a></code> Action. Any earlier usage, including <code><a href="../hooks/plugins_loaded">plugins_loaded</a></code>, generates a Fatal Error.</p> <p>Note that when used outside The Loop on a posts page (index, archive, etc.) without the ID parameter, it will return the URL of the last post in The Loop, <i>not</i> the permalink for the current page.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="170" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_permalink( $post = 0, $leavename = false ) {
+	$rewritecode = array(
+		'%year%',
+		'%monthnum%',
+		'%day%',
+		'%hour%',
+		'%minute%',
+		'%second%',
+		$leavename ? '' : '%postname%',
+		'%post_id%',
+		'%category%',
+		'%author%',
+		$leavename ? '' : '%pagename%',
+	);
+
+	if ( is_object( $post ) &amp;&amp; isset( $post-&gt;filter ) &amp;&amp; 'sample' === $post-&gt;filter ) {
+		$sample = true;
+	} else {
+		$post   = get_post( $post );
+		$sample = false;
+	}
+
+	if ( empty( $post-&gt;ID ) ) {
+		return false;
+	}
+
+	if ( 'page' === $post-&gt;post_type ) {
+		return get_page_link( $post, $leavename, $sample );
+	} elseif ( 'attachment' === $post-&gt;post_type ) {
+		return get_attachment_link( $post, $leavename );
+	} elseif ( in_array( $post-&gt;post_type, get_post_types( array( '_builtin' =&gt; false ) ), true ) ) {
+		return get_post_permalink( $post, $leavename, $sample );
+	}
+
+	$permalink = get_option( 'permalink_structure' );
+
+	/**
+	 * Filters the permalink structure for a post before token replacement occurs.
+	 *
+	 * Only applies to posts with post_type of 'post'.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param string  $permalink The site's permalink structure.
+	 * @param WP_Post $post      The post in question.
+	 * @param bool    $leavename Whether to keep the post name.
+	 */
+	$permalink = apply_filters( 'pre_post_link', $permalink, $post, $leavename );
+
+	if (
+		$permalink &amp;&amp;
+		! wp_force_plain_post_permalink( $post )
+	) {
+
+		$category = '';
+		if ( str_contains( $permalink, '%category%' ) ) {
+			$cats = get_the_category( $post-&gt;ID );
+			if ( $cats ) {
+				$cats = wp_list_sort(
+					$cats,
+					array(
+						'term_id' =&gt; 'ASC',
+					)
+				);
+
+				/**
+				 * Filters the category that gets used in the %category% permalink token.
+				 *
+				 * @since 3.5.0
+				 *
+				 * @param WP_Term  $cat  The category to use in the permalink.
+				 * @param array    $cats Array of all categories (WP_Term objects) associated with the post.
+				 * @param WP_Post  $post The post in question.
+				 */
+				$category_object = apply_filters( 'post_link_category', $cats[0], $cats, $post );
+
+				$category_object = get_term( $category_object, 'category' );
+				$category        = $category_object-&gt;slug;
+				if ( $category_object-&gt;parent ) {
+					$category = get_category_parents( $category_object-&gt;parent, false, '/', true ) . $category;
+				}
+			}
+			/*
+			 * Show default category in permalinks,
+			 * without having to assign it explicitly.
+			 */
+			if ( empty( $category ) ) {
+				$default_category = get_term( get_option( 'default_category' ), 'category' );
+				if ( $default_category &amp;&amp; ! is_wp_error( $default_category ) ) {
+					$category = $default_category-&gt;slug;
+				}
+			}
+		}
+
+		$author = '';
+		if ( str_contains( $permalink, '%author%' ) ) {
+			$authordata = get_userdata( $post-&gt;post_author );
+			$author     = $authordata-&gt;user_nicename;
+		}
+
+		/*
+		 * This is not an API call because the permalink is based on the stored post_date value,
+		 * which should be parsed as local time regardless of the default PHP timezone.
+		 */
+		$date = explode( ' ', str_replace( array( '-', ':' ), ' ', $post-&gt;post_date ) );
+
+		$rewritereplace = array(
+			$date[0],
+			$date[1],
+			$date[2],
+			$date[3],
+			$date[4],
+			$date[5],
+			$post-&gt;post_name,
+			$post-&gt;ID,
+			$category,
+			$author,
+			$post-&gt;post_name,
+		);
+
+		$permalink = home_url( str_replace( $rewritecode, $rewritereplace, $permalink ) );
+		$permalink = user_trailingslashit( $permalink, 'single' );
+
+	} else { // If they're not using the fancy permalink option.
+		$permalink = home_url( '?p=' . $post-&gt;ID );
+	}
+
+	/**
+	 * Filters the permalink for a post.
+	 *
+	 * Only applies to posts with post_type of 'post'.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @param string  $permalink The post's permalink.
+	 * @param WP_Post $post      The post in question.
+	 * @param bool    $leavename Whether to keep the post name.
+	 */
+	return apply_filters( 'post_link', $permalink, $post, $leavename );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/link-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/link-template.php#L170">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/link-template.php#L170-L309">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/post_link"><span class="hook-func">apply_filters</span>( ‘post_link’, <nobr><span class="arg-type">string</span> <span class="arg-name">$permalink</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$leavename</span></nobr> )</a></dt>
+<dd>
+<p>Filters the permalink for a post.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/post_link_category"><span class="hook-func">apply_filters</span>( ‘post_link_category’, <nobr><span class="arg-type">WP_Term</span> <span class="arg-name">$cat</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$cats</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters the category that gets used in the %category% permalink token.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_post_link"><span class="hook-func">apply_filters</span>( ‘pre_post_link’, <nobr><span class="arg-type">string</span> <span class="arg-name">$permalink</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$leavename</span></nobr> )</a></dt>
+<dd>
+<p>Filters the permalink structure for a post before token replacement occurs.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.0.0/">1.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_permalink" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_permalink</a>
+  </p>
+</div>

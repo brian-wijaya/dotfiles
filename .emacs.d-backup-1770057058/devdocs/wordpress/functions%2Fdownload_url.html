@@ -1,0 +1,242 @@
+<h1 class="wp-block-wporg-code-reference-title">download_url( <span class="arg-type">string</span> <span class="arg-name">$url</span>, <span class="arg-type">int</span> <span class="arg-name">$timeout</span> = <span class="arg-default">300</span>, <span class="arg-type">bool</span> <span class="arg-name">$signature_verification</span> = <span class="arg-default">false</span> ): <span class="return-type">string|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Downloads a URL to a local temporary file using the WordPress HTTP API.</p> </section> <section><h2 id="description">Description</h2> <p>Please note that the calling function must delete or move the file.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The URL of the file to download.</span></div></dd>
+<dt>
+<code>$timeout</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The timeout for the request to download the file.<br> Default 300 seconds.</span></div>
+<p class="default">Default:<code>300</code></p>
+</dd>
+<dt>
+<code>$signature_verification</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to perform Signature Verification.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Filename on success, <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1155" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function download_url( $url, $timeout = 300, $signature_verification = false ) {
+	// WARNING: The file is not automatically deleted, the script must delete or move the file.
+	if ( ! $url ) {
+		return new WP_Error( 'http_no_url', __( 'No URL Provided.' ) );
+	}
+
+	$url_path     = parse_url( $url, PHP_URL_PATH );
+	$url_filename = '';
+	if ( is_string( $url_path ) &amp;&amp; '' !== $url_path ) {
+		$url_filename = basename( $url_path );
+	}
+
+	$tmpfname = wp_tempnam( $url_filename );
+	if ( ! $tmpfname ) {
+		return new WP_Error( 'http_no_file', __( 'Could not create temporary file.' ) );
+	}
+
+	$response = wp_safe_remote_get(
+		$url,
+		array(
+			'timeout'  =&gt; $timeout,
+			'stream'   =&gt; true,
+			'filename' =&gt; $tmpfname,
+		)
+	);
+
+	if ( is_wp_error( $response ) ) {
+		unlink( $tmpfname );
+		return $response;
+	}
+
+	$response_code = wp_remote_retrieve_response_code( $response );
+
+	if ( 200 !== $response_code ) {
+		$data = array(
+			'code' =&gt; $response_code,
+		);
+
+		// Retrieve a sample of the response body for debugging purposes.
+		$tmpf = fopen( $tmpfname, 'rb' );
+
+		if ( $tmpf ) {
+			/**
+			 * Filters the maximum error response body size in `download_url()`.
+			 *
+			 * @since 5.1.0
+			 *
+			 * @see download_url()
+			 *
+			 * @param int $size The maximum error response body size. Default 1 KB.
+			 */
+			$response_size = apply_filters( 'download_url_error_max_body_size', KB_IN_BYTES );
+
+			$data['body'] = fread( $tmpf, $response_size );
+			fclose( $tmpf );
+		}
+
+		unlink( $tmpfname );
+
+		return new WP_Error( 'http_404', trim( wp_remote_retrieve_response_message( $response ) ), $data );
+	}
+
+	$content_disposition = wp_remote_retrieve_header( $response, 'Content-Disposition' );
+
+	if ( $content_disposition ) {
+		$content_disposition = strtolower( $content_disposition );
+
+		if ( str_starts_with( $content_disposition, 'attachment; filename=' ) ) {
+			$tmpfname_disposition = sanitize_file_name( substr( $content_disposition, 21 ) );
+		} else {
+			$tmpfname_disposition = '';
+		}
+
+		// Potential file name must be valid string.
+		if ( $tmpfname_disposition &amp;&amp; is_string( $tmpfname_disposition )
+			&amp;&amp; ( 0 === validate_file( $tmpfname_disposition ) )
+		) {
+			$tmpfname_disposition = dirname( $tmpfname ) . '/' . $tmpfname_disposition;
+
+			if ( rename( $tmpfname, $tmpfname_disposition ) ) {
+				$tmpfname = $tmpfname_disposition;
+			}
+
+			if ( ( $tmpfname !== $tmpfname_disposition ) &amp;&amp; file_exists( $tmpfname_disposition ) ) {
+				unlink( $tmpfname_disposition );
+			}
+		}
+	}
+
+	$content_md5 = wp_remote_retrieve_header( $response, 'Content-MD5' );
+
+	if ( $content_md5 ) {
+		$md5_check = verify_file_md5( $tmpfname, $content_md5 );
+
+		if ( is_wp_error( $md5_check ) ) {
+			unlink( $tmpfname );
+			return $md5_check;
+		}
+	}
+
+	// If the caller expects signature verification to occur, check to see if this URL supports it.
+	if ( $signature_verification ) {
+		/**
+		 * Filters the list of hosts which should have Signature Verification attempted on.
+		 *
+		 * @since 5.2.0
+		 *
+		 * @param string[] $hostnames List of hostnames.
+		 */
+		$signed_hostnames = apply_filters( 'wp_signature_hosts', array( 'wordpress.org', 'downloads.wordpress.org', 's.w.org' ) );
+
+		$signature_verification = in_array( parse_url( $url, PHP_URL_HOST ), $signed_hostnames, true );
+	}
+
+	// Perform signature validation if supported.
+	if ( $signature_verification ) {
+		$signature = wp_remote_retrieve_header( $response, 'X-Content-Signature' );
+
+		if ( ! $signature ) {
+			/*
+			 * Retrieve signatures from a file if the header wasn't included.
+			 * WordPress.org stores signatures at $package_url.sig.
+			 */
+
+			$signature_url = false;
+
+			if ( is_string( $url_path ) &amp;&amp; ( str_ends_with( $url_path, '.zip' ) || str_ends_with( $url_path, '.tar.gz' ) ) ) {
+				$signature_url = str_replace( $url_path, $url_path . '.sig', $url );
+			}
+
+			/**
+			 * Filters the URL where the signature for a file is located.
+			 *
+			 * @since 5.2.0
+			 *
+			 * @param false|string $signature_url The URL where signatures can be found for a file, or false if none are known.
+			 * @param string $url                 The URL being verified.
+			 */
+			$signature_url = apply_filters( 'wp_signature_url', $signature_url, $url );
+
+			if ( $signature_url ) {
+				$signature_request = wp_safe_remote_get(
+					$signature_url,
+					array(
+						'limit_response_size' =&gt; 10 * KB_IN_BYTES, // 10KB should be large enough for quite a few signatures.
+					)
+				);
+
+				if ( ! is_wp_error( $signature_request ) &amp;&amp; 200 === wp_remote_retrieve_response_code( $signature_request ) ) {
+					$signature = explode( "\n", wp_remote_retrieve_body( $signature_request ) );
+				}
+			}
+		}
+
+		// Perform the checks.
+		$signature_verification = verify_file_signature( $tmpfname, $signature, $url_filename );
+	}
+
+	if ( is_wp_error( $signature_verification ) ) {
+		if (
+			/**
+			 * Filters whether Signature Verification failures should be allowed to soft fail.
+			 *
+			 * WARNING: This may be removed from a future release.
+			 *
+			 * @since 5.2.0
+			 *
+			 * @param bool   $signature_softfail If a softfail is allowed.
+			 * @param string $url                The url being accessed.
+			 */
+			apply_filters( 'wp_signature_softfail', true, $url )
+		) {
+			$signature_verification-&gt;add_data( $tmpfname, 'softfail-filename' );
+		} else {
+			// Hard-fail.
+			unlink( $tmpfname );
+		}
+
+		return $signature_verification;
+	}
+
+	return $tmpfname;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/file.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/file.php#L1155">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/file.php#L1155-L1337">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/download_url_error_max_body_size"><span class="hook-func">apply_filters</span>( ‘download_url_error_max_body_size’, <nobr><span class="arg-type">int</span> <span class="arg-name">$size</span></nobr> )</a></dt>
+<dd>
+<p>Filters the maximum error response body size in <code>download_url()</code>.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_signature_hosts"><span class="hook-func">apply_filters</span>( ‘wp_signature_hosts’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$hostnames</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of hosts which should have Signature Verification attempted on.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_signature_softfail"><span class="hook-func">apply_filters</span>( ‘wp_signature_softfail’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$signature_softfail</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether Signature Verification failures should be allowed to soft fail.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_signature_url"><span class="hook-func">apply_filters</span>( ‘wp_signature_url’, <nobr><span class="arg-type">false|string</span> <span class="arg-name">$signature_url</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters the URL where the signature for a file is located.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Support for Content-Disposition filename was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td><span class="since-description">Signature Verification with SoftFail was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/download_url" class="_attribution-link">https://developer.wordpress.org/reference/functions/download_url</a>
+  </p>
+</div>

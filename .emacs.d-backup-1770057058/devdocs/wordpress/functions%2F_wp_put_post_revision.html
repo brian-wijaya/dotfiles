@@ -1,0 +1,74 @@
+<h1 class="wp-block-wporg-code-reference-title">_wp_put_post_revision( <span class="arg-type">int|WP_Post|array|null</span> <span class="arg-name">$post</span> = <span class="arg-default">null</span>, <span class="arg-type">bool</span> <span class="arg-name">$autosave</span> = <span class="arg-default">false</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Inserts post data into the posts table as a post revision.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span>|<span class="array">array</span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Post ID, post object OR post array.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$autosave</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether the revision is an autosave or not.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> <a href="../classes/wp_error" rel="class">WP_Error</a> or 0 if error, new revision ID if success.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="362" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _wp_put_post_revision( $post = null, $autosave = false ) {
+	if ( is_object( $post ) ) {
+		$post = get_object_vars( $post );
+	} elseif ( ! is_array( $post ) ) {
+		$post = get_post( $post, ARRAY_A );
+	}
+
+	if ( ! $post || empty( $post['ID'] ) ) {
+		return new WP_Error( 'invalid_post', __( 'Invalid post ID.' ) );
+	}
+
+	if ( isset( $post['post_type'] ) &amp;&amp; 'revision' === $post['post_type'] ) {
+		return new WP_Error( 'post_type', __( 'Cannot create a revision of a revision' ) );
+	}
+
+	$post = _wp_post_revision_data( $post, $autosave );
+	$post = wp_slash( $post ); // Since data is from DB.
+
+	$revision_id = wp_insert_post( $post, true );
+	if ( is_wp_error( $revision_id ) ) {
+		return $revision_id;
+	}
+
+	if ( $revision_id ) {
+		/**
+		 * Fires once a revision has been saved.
+		 *
+		 * @since 2.6.0
+		 * @since 6.4.0 The post_id parameter was added.
+		 *
+		 * @param int $revision_id Post revision ID.
+		 * @param int $post_id     Post ID.
+		 */
+		do_action( '_wp_put_post_revision', $revision_id, $post['post_parent'] );
+	}
+
+	return $revision_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/revision.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/revision.php#L362">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/revision.php#L362-L399">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/_wp_put_post_revision"><span class="hook-func">do_action</span>( ‘_wp_put_post_revision’, <nobr><span class="arg-type">int</span> <span class="arg-name">$revision_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires once a revision has been saved.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_wp_put_post_revision" class="_attribution-link">https://developer.wordpress.org/reference/functions/_wp_put_post_revision</a>
+  </p>
+</div>

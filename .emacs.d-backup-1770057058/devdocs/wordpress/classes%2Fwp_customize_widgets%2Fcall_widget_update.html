@@ -1,0 +1,135 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Widgets::call_widget_update( <span class="arg-type">string</span> <span class="arg-name">$widget_id</span> ): <span class="return-type">array|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Finds and invokes the widget update and control callbacks.</p> </section> <section><h2 id="description">Description</h2> <p>Requires that <code>$_POST</code> be populated with the instance data.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$widget_id</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Widget ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../wp_error" rel="class">WP_Error</a></span> Array containing the updated widget information.<br> A <a href="../wp_error" rel="class">WP_Error</a> object, otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1571" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function call_widget_update( $widget_id ) {
+	global $wp_registered_widget_updates, $wp_registered_widget_controls;
+
+	$setting_id = $this-&gt;get_setting_id( $widget_id );
+
+	/*
+	 * Make sure that other setting changes have previewed since this widget
+	 * may depend on them (e.g. Menus being present for Navigation Menu widget).
+	 */
+	if ( ! did_action( 'customize_preview_init' ) ) {
+		foreach ( $this-&gt;manager-&gt;settings() as $setting ) {
+			if ( $setting-&gt;id !== $setting_id ) {
+				$setting-&gt;preview();
+			}
+		}
+	}
+
+	$this-&gt;start_capturing_option_updates();
+	$parsed_id   = $this-&gt;parse_widget_id( $widget_id );
+	$option_name = 'widget_' . $parsed_id['id_base'];
+
+	/*
+	 * If a previously-sanitized instance is provided, populate the input vars
+	 * with its values so that the widget update callback will read this instance
+	 */
+	$added_input_vars = array();
+	if ( ! empty( $_POST['sanitized_widget_setting'] ) ) {
+		$sanitized_widget_setting = json_decode( $this-&gt;get_post_value( 'sanitized_widget_setting' ), true );
+		if ( false === $sanitized_widget_setting ) {
+			$this-&gt;stop_capturing_option_updates();
+			return new WP_Error( 'widget_setting_malformed' );
+		}
+
+		$instance = $this-&gt;sanitize_widget_instance( $sanitized_widget_setting, $parsed_id['id_base'] );
+		if ( is_null( $instance ) ) {
+			$this-&gt;stop_capturing_option_updates();
+			return new WP_Error( 'widget_setting_unsanitized' );
+		}
+
+		if ( ! is_null( $parsed_id['number'] ) ) {
+			$value                         = array();
+			$value[ $parsed_id['number'] ] = $instance;
+			$key                           = 'widget-' . $parsed_id['id_base'];
+			$_REQUEST[ $key ]              = wp_slash( $value );
+			$_POST[ $key ]                 = $_REQUEST[ $key ];
+			$added_input_vars[]            = $key;
+		} else {
+			foreach ( $instance as $key =&gt; $value ) {
+				$_REQUEST[ $key ]   = wp_slash( $value );
+				$_POST[ $key ]      = $_REQUEST[ $key ];
+				$added_input_vars[] = $key;
+			}
+		}
+	}
+
+	// Invoke the widget update callback.
+	foreach ( (array) $wp_registered_widget_updates as $name =&gt; $control ) {
+		if ( $name === $parsed_id['id_base'] &amp;&amp; is_callable( $control['callback'] ) ) {
+			ob_start();
+			call_user_func_array( $control['callback'], $control['params'] );
+			ob_end_clean();
+			break;
+		}
+	}
+
+	// Clean up any input vars that were manually added.
+	foreach ( $added_input_vars as $key ) {
+		unset( $_POST[ $key ] );
+		unset( $_REQUEST[ $key ] );
+	}
+
+	// Make sure the expected option was updated.
+	if ( 0 !== $this-&gt;count_captured_options() ) {
+		if ( $this-&gt;count_captured_options() &gt; 1 ) {
+			$this-&gt;stop_capturing_option_updates();
+			return new WP_Error( 'widget_setting_too_many_options' );
+		}
+
+		$updated_option_name = key( $this-&gt;get_captured_options() );
+		if ( $updated_option_name !== $option_name ) {
+			$this-&gt;stop_capturing_option_updates();
+			return new WP_Error( 'widget_setting_unexpected_option' );
+		}
+	}
+
+	// Obtain the widget instance.
+	$option = $this-&gt;get_captured_option( $option_name );
+	if ( null !== $parsed_id['number'] ) {
+		$instance = $option[ $parsed_id['number'] ];
+	} else {
+		$instance = $option;
+	}
+
+	/*
+	 * Override the incoming $_POST['customized'] for a newly-created widget's
+	 * setting with the new $instance so that the preview filter currently
+	 * in place from WP_Customize_Setting::preview() will use this value
+	 * instead of the default widget instance value (an empty array).
+	 */
+	$this-&gt;manager-&gt;set_post_value( $setting_id, $this-&gt;sanitize_widget_js_instance( $instance, $parsed_id['id_base'] ) );
+
+	// Obtain the widget control with the updated instance in place.
+	ob_start();
+	$form = $wp_registered_widget_controls[ $widget_id ];
+	if ( $form ) {
+		call_user_func_array( $form['callback'], $form['params'] );
+	}
+	$form = ob_get_clean();
+
+	$this-&gt;stop_capturing_option_updates();
+
+	return compact( 'instance', 'form' );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-widgets.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-widgets.php#L1571">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-widgets.php#L1571-L1683">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.9.0/">3.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_widgets/call_widget_update" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_widgets/call_widget_update</a>
+  </p>
+</div>

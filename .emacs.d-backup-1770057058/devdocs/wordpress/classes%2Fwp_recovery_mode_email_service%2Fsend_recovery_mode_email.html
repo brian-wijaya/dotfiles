@@ -1,0 +1,170 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Recovery_Mode_Email_Service::send_recovery_mode_email( <span class="arg-type">int</span> <span class="arg-name">$rate_limit</span>, <span class="arg-type">array</span> <span class="arg-name">$error</span>, <span class="arg-type">array</span> <span class="arg-name">$extension</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Sends the Recovery Mode email to the site admin email address.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$rate_limit</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Number of seconds before another email can be sent.</span></div></dd>
+<dt>
+<code>$error</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Error details from <code>error_get_last()</code>.</span></div></dd>
+<dt>
+<code>$extension</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The extension that caused the error.<br> <ul class="param-hash">
+<li>
+<code>slug</code> <span class="type">string</span><div class="desc">The extension slug. The directory of the plugin or theme.</div>
+</li> <li>
+<code>type</code> <span class="type">string</span><div class="desc">The extension type. Either <code>'plugin'</code> or <code>'theme'</code>.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> Whether the email was sent successfully.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="114" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">	private function send_recovery_mode_email( $rate_limit, $error, $extension ) {
+
+		$url      = $this-&gt;link_service-&gt;generate_url();
+		$blogname = wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES );
+
+		$switched_locale = switch_to_locale( get_locale() );
+
+		if ( $extension ) {
+			$cause   = $this-&gt;get_cause( $extension );
+			$details = wp_strip_all_tags( wp_get_extension_error_description( $error ) );
+
+			if ( $details ) {
+				$header  = __( 'Error Details' );
+				$details = "\n\n" . $header . "\n" . str_pad( '', strlen( $header ), '=' ) . "\n" . $details;
+			}
+		} else {
+			$cause   = '';
+			$details = '';
+		}
+
+		/**
+		 * Filters the support message sent with the the fatal error protection email.
+		 *
+		 * @since 5.2.0
+		 *
+		 * @param string $message The Message to include in the email.
+		 */
+		$support = apply_filters( 'recovery_email_support_info', __( 'Please contact your host for assistance with investigating this issue further.' ) );
+
+		/**
+		 * Filters the debug information included in the fatal error protection email.
+		 *
+		 * @since 5.3.0
+		 *
+		 * @param array $message An associative array of debug information.
+		 */
+		$debug = apply_filters( 'recovery_email_debug_info', $this-&gt;get_debug( $extension ) );
+
+		/* translators: Do not translate LINK, EXPIRES, CAUSE, DETAILS, SITEURL, PAGEURL, SUPPORT. DEBUG: those are placeholders. */
+		$message = __(
+			'Howdy!
+
+WordPress has a built-in feature that detects when a plugin or theme causes a fatal error on your site, and notifies you with this automated email.
+###CAUSE###
+First, visit your website (###SITEURL###) and check for any visible issues. Next, visit the page where the error was caught (###PAGEURL###) and check for any visible issues.
+
+###SUPPORT###
+
+If your site appears broken and you can\'t access your dashboard normally, WordPress now has a special "recovery mode". This lets you safely login to your dashboard and investigate further.
+
+###LINK###
+
+To keep your site safe, this link will expire in ###EXPIRES###. Don\'t worry about that, though: a new link will be emailed to you if the error occurs again after it expires.
+
+When seeking help with this issue, you may be asked for some of the following information:
+###DEBUG###
+
+###DETAILS###'
+		);
+		$message = str_replace(
+			array(
+				'###LINK###',
+				'###EXPIRES###',
+				'###CAUSE###',
+				'###DETAILS###',
+				'###SITEURL###',
+				'###PAGEURL###',
+				'###SUPPORT###',
+				'###DEBUG###',
+			),
+			array(
+				$url,
+				human_time_diff( time() + $rate_limit ),
+				$cause ? "\n{$cause}\n" : "\n",
+				$details,
+				home_url( '/' ),
+				home_url( $_SERVER['REQUEST_URI'] ),
+				$support,
+				implode( "\r\n", $debug ),
+			),
+			$message
+		);
+
+		$email = array(
+			'to'          =&gt; $this-&gt;get_recovery_mode_email_address(),
+			/* translators: %s: Site title. */
+			'subject'     =&gt; __( '[%s] Your Site is Experiencing a Technical Issue' ),
+			'message'     =&gt; $message,
+			'headers'     =&gt; '',
+			'attachments' =&gt; '',
+		);
+
+		/**
+		 * Filters the contents of the Recovery Mode email.
+		 *
+		 * @since 5.2.0
+		 * @since 5.6.0 The `$email` argument includes the `attachments` key.
+		 *
+		 * @param array  $email {
+		 *     Used to build a call to wp_mail().
+		 *
+		 *     @type string|array $to          Array or comma-separated list of email addresses to send message.
+		 *     @type string       $subject     Email subject
+		 *     @type string       $message     Message contents
+		 *     @type string|array $headers     Optional. Additional headers.
+		 *     @type string|array $attachments Optional. Files to attach.
+		 * }
+		 * @param string $url   URL to enter recovery mode.
+		 */
+		$email = apply_filters( 'recovery_mode_email', $email, $url );
+
+		$sent = wp_mail(
+			$email['to'],
+			wp_specialchars_decode( sprintf( $email['subject'], $blogname ) ),
+			$email['message'],
+			$email['headers'],
+			$email['attachments']
+		);
+
+		if ( $switched_locale ) {
+			restore_previous_locale();
+		}
+
+		return $sent;
+	}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-recovery-mode-email-service.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-recovery-mode-email-service.php#L114">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-recovery-mode-email-service.php#L114-L238">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/recovery_email_debug_info"><span class="hook-func">apply_filters</span>( ‘recovery_email_debug_info’, <nobr><span class="arg-type">array</span> <span class="arg-name">$message</span></nobr> )</a></dt>
+<dd>
+<p>Filters the debug information included in the fatal error protection email.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/recovery_email_support_info"><span class="hook-func">apply_filters</span>( ‘recovery_email_support_info’, <nobr><span class="arg-type">string</span> <span class="arg-name">$message</span></nobr> )</a></dt>
+<dd>
+<p>Filters the support message sent with the the fatal error protection email.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/recovery_mode_email"><span class="hook-func">apply_filters</span>( ‘recovery_mode_email’, <nobr><span class="arg-type">array</span> <span class="arg-name">$email</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters the contents of the Recovery Mode email.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_recovery_mode_email_service/send_recovery_mode_email" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_recovery_mode_email_service/send_recovery_mode_email</a>
+  </p>
+</div>

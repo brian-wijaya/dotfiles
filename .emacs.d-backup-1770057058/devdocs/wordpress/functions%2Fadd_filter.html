@@ -1,0 +1,70 @@
+<h1 class="wp-block-wporg-code-reference-title">add_filter( <span class="arg-type">string</span> <span class="arg-name">$hook_name</span>, <span class="arg-type">callable</span> <span class="arg-name">$callback</span>, <span class="arg-type">int</span> <span class="arg-name">$priority</span> = <span class="arg-default">10</span>, <span class="arg-type">int</span> <span class="arg-name">$accepted_args</span> = <span class="arg-default">1</span> ): <span class="return-type">true</span>
+</h1> <section><p>Adds a callback function to a filter hook.</p> </section> <section><h2 id="description">Description</h2> <p>WordPress offers filter hooks to allow plugins to modify various types of internal data at runtime.</p> <p>A plugin can modify data by binding a callback to a filter hook. When the filter is later applied, each bound callback is run in order of priority, and given the opportunity to modify a value by returning a new value.</p> <p>The following example shows how a callback function is bound to a filter hook.</p> <p>Note that <code>$example</code> is passed to the callback, (maybe) modified, then returned:</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php line-numbers">function example_callback( $example ) {
+    // Maybe modify $example in some way.
+    return $example;
+}
+add_filter( 'example_filter', 'example_callback' );</code></pre> <p>Bound callbacks can accept from none to the total number of arguments passed as parameters in the corresponding <a href="apply_filters" rel="function">apply_filters()</a> call.</p> <p>In other words, if an <a href="apply_filters" rel="function">apply_filters()</a> call passes four total arguments, callbacks bound to it can accept none (the same as 1) of the arguments or up to four. The important part is that the <code>$accepted_args</code> value must reflect the number of arguments the bound callback <em>actually</em> opted to accept. If no arguments were accepted by the callback that is considered to be the same as accepting 1 argument. For example:</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php line-numbers">// Filter call.
+$value = apply_filters( 'hook', $value, $arg2, $arg3 );
+
+// Accepting zero/one arguments.
+function example_callback() {
+    ...
+    return 'some value';
+}
+add_filter( 'hook', 'example_callback' ); // Where $priority is default 10, $accepted_args is default 1.
+
+// Accepting two arguments (three possible).
+function example_callback( $value, $arg2 ) {
+    ...
+    return $maybe_modified_value;
+}
+add_filter( 'hook', 'example_callback', 10, 2 ); // Where $priority is 10, $accepted_args is 2.</code></pre> <p>_Note:_ The function will return true whether or not the callback is valid.<br>It is up to you to take care. This is done for optimization purposes, so everything is as quick as possible.</p></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$hook_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The name of the filter to add the callback to.</span></div></dd>
+<dt>
+<code>$callback</code><span class="type"><span class="callable">callable</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The callback to be run when the filter is applied.</span></div></dd>
+<dt>
+<code>$priority</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Used to specify the order in which the functions associated with a particular filter are executed.<br> Lower numbers correspond with earlier execution, and functions with the same priority are executed in the order in which they were added to the filter. </span></div>
+<p class="default">Default:<code>10</code></p>
+</dd>
+<dt>
+<code>$accepted_args</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The number of arguments the function accepts. </span></div>
+<p class="default">Default:<code>1</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true</span> Always returns true.</section> <section><h2 id="more-information">More Information</h2> <ul class="wp-block-list"> <li>Hooked functions can take extra arguments that are set when the matching <tt><a title="Function Reference/do action" href="do_action"> do_action()</a></tt> or <tt><a title="Function Reference/apply filters" href="apply_filters"> apply_filters()</a></tt> call is run. For example, the <tt><a class="new" title="Plugin API/Action Reference/comment id not found (page does not exist)" href="../hooks/comment_id_not_found-3">comment_id_not_found</a></tt> action will pass the comment ID to each callback.</li> <li>Although you can pass the number of <tt>$accepted_args</tt>, you can only manipulate the <tt>$value</tt>. The other arguments are only to provide context, and their values cannot be changed by the filter function.</li> <li>You can also pass a class method as a callback.</li> </ul> <dl> Static class method:<br> </dl> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">add_filter( 'media_upload_newtab', array( 'My_Class', 'media_upload_callback' ) );</code></pre> <dl> Instance method:<br> </dl> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">add_filter( 'media_upload_newtab', array( $this, 'media_upload_callback' ) );</code></pre> <ul class="wp-block-list"> <li>You can also pass an an anonymous function as a callback. For example:</li> </ul>  <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">add_filter( 'the_title', function( $title ) { return '&lt;strong&gt;' . $title . '&lt;/strong&gt;'; } );</code></pre> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="121" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function add_filter( $hook_name, $callback, $priority = 10, $accepted_args = 1 ) {
+	global $wp_filter;
+
+	if ( ! isset( $wp_filter[ $hook_name ] ) ) {
+		$wp_filter[ $hook_name ] = new WP_Hook();
+	}
+
+	$wp_filter[ $hook_name ]-&gt;add_filter( $hook_name, $callback, $priority, $accepted_args );
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/plugin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/plugin.php#L121">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/plugin.php#L121-L131">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/0.71/">0.71</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/add_filter" class="_attribution-link">https://developer.wordpress.org/reference/functions/add_filter</a>
+  </p>
+</div>

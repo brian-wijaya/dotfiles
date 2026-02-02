@@ -1,0 +1,68 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_add_user( <span class="arg-type">string</span> <span class="arg-name">$action</span> )</h1> <section><p>Handles adding a user via AJAX.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$action</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Action to perform.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1741" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_add_user( $action ) {
+	if ( empty( $action ) ) {
+		$action = 'add-user';
+	}
+
+	check_ajax_referer( $action );
+
+	if ( ! current_user_can( 'create_users' ) ) {
+		wp_die( -1 );
+	}
+
+	$user_id = edit_user();
+
+	if ( ! $user_id ) {
+		wp_die( 0 );
+	} elseif ( is_wp_error( $user_id ) ) {
+		$x = new WP_Ajax_Response(
+			array(
+				'what' =&gt; 'user',
+				'id'   =&gt; $user_id,
+			)
+		);
+		$x-&gt;send();
+	}
+
+	$user_object   = get_userdata( $user_id );
+	$wp_list_table = _get_list_table( 'WP_Users_List_Table' );
+
+	$role = current( $user_object-&gt;roles );
+
+	$x = new WP_Ajax_Response(
+		array(
+			'what'         =&gt; 'user',
+			'id'           =&gt; $user_id,
+			'data'         =&gt; $wp_list_table-&gt;single_row( $user_object, '', $role ),
+			'supplemental' =&gt; array(
+				'show-link' =&gt; sprintf(
+					/* translators: %s: The new user. */
+					__( 'User %s added' ),
+					'&lt;a href="#user-' . $user_id . '"&gt;' . $user_object-&gt;user_login . '&lt;/a&gt;'
+				),
+				'role'      =&gt; $role,
+			),
+		)
+	);
+	$x-&gt;send();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L1741">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L1741-L1787">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_add_user" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_add_user</a>
+  </p>
+</div>

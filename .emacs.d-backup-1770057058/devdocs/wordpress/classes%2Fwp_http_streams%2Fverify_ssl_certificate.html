@@ -1,0 +1,78 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Http_Streams::verify_ssl_certificate( <span class="arg-type">resource</span> <span class="arg-name">$stream</span>, <span class="arg-type">string</span> <span class="arg-name">$host</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Verifies the received SSL certificate against its Common Names and subjectAltName fields.</p> </section> <section><h2 id="description">Description</h2> <p>PHP’s SSL verifications only verify that it’s a valid Certificate, it doesn’t verify if the certificate is valid for the hostname which was requested.<br>This function verifies the requested hostname against certificate’s subjectAltName field, if that is empty, or contains no DNS entries, a fallback to the Common Name field is used.</p> <p>IP Address support is included if the request is being made to an IP address.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$stream</code><span class="type"><span class="resource">resource</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The PHP Stream which the SSL request is being made over</span></div></dd>
+<dt>
+<code>$host</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The hostname being requested</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> If the certificate presented in $stream is valid for $host</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="433" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function verify_ssl_certificate( $stream, $host ) {
+	$context_options = stream_context_get_options( $stream );
+
+	if ( empty( $context_options['ssl']['peer_certificate'] ) ) {
+		return false;
+	}
+
+	$cert = openssl_x509_parse( $context_options['ssl']['peer_certificate'] );
+	if ( ! $cert ) {
+		return false;
+	}
+
+	/*
+	 * If the request is being made to an IP address, we'll validate against IP fields
+	 * in the cert (if they exist)
+	 */
+	$host_type = ( WP_Http::is_ip_address( $host ) ? 'ip' : 'dns' );
+
+	$certificate_hostnames = array();
+	if ( ! empty( $cert['extensions']['subjectAltName'] ) ) {
+		$match_against = preg_split( '/,\s*/', $cert['extensions']['subjectAltName'] );
+		foreach ( $match_against as $match ) {
+			list( $match_type, $match_host ) = explode( ':', $match );
+			if ( strtolower( trim( $match_type ) ) === $host_type ) { // IP: or DNS:
+				$certificate_hostnames[] = strtolower( trim( $match_host ) );
+			}
+		}
+	} elseif ( ! empty( $cert['subject']['CN'] ) ) {
+		// Only use the CN when the certificate includes no subjectAltName extension.
+		$certificate_hostnames[] = strtolower( $cert['subject']['CN'] );
+	}
+
+	// Exact hostname/IP matches.
+	if ( in_array( strtolower( $host ), $certificate_hostnames, true ) ) {
+		return true;
+	}
+
+	// IP's can't be wildcards, Stop processing.
+	if ( 'ip' === $host_type ) {
+		return false;
+	}
+
+	// Test to see if the domain is at least 2 deep for wildcard support.
+	if ( substr_count( $host, '.' ) &lt; 2 ) {
+		return false;
+	}
+
+	// Wildcard subdomains certs (*.example.com) are valid for a.example.com but not a.b.example.com.
+	$wildcard_host = preg_replace( '/^[^.]+\./', '*.', $host );
+
+	return in_array( strtolower( $wildcard_host ), $certificate_hostnames, true );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-http-streams.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-http-streams.php#L433">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-http-streams.php#L433-L484">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_http_streams/verify_ssl_certificate" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_http_streams/verify_ssl_certificate</a>
+  </p>
+</div>

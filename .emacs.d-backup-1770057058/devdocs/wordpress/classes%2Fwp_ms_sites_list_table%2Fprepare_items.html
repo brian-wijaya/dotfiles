@@ -1,0 +1,159 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_MS_Sites_List_Table::prepare_items()</h1> <section><p>Prepares the list of sites for display.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="68" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_items() {
+	global $mode, $s, $wpdb;
+
+	if ( ! empty( $_REQUEST['mode'] ) ) {
+		$mode = 'excerpt' === $_REQUEST['mode'] ? 'excerpt' : 'list';
+		set_user_setting( 'sites_list_mode', $mode );
+	} else {
+		$mode = get_user_setting( 'sites_list_mode', 'list' );
+	}
+
+	$per_page = $this-&gt;get_items_per_page( 'sites_network_per_page' );
+
+	$pagenum = $this-&gt;get_pagenum();
+
+	$s    = isset( $_REQUEST['s'] ) ? wp_unslash( trim( $_REQUEST['s'] ) ) : '';
+	$wild = '';
+	if ( str_contains( $s, '*' ) ) {
+		$wild = '*';
+		$s    = trim( $s, '*' );
+	}
+
+	/*
+	 * If the network is large and a search is not being performed, show only
+	 * the latest sites with no paging in order to avoid expensive count queries.
+	 */
+	if ( ! $s &amp;&amp; wp_is_large_network() ) {
+		if ( ! isset( $_REQUEST['orderby'] ) ) {
+			$_GET['orderby']     = '';
+			$_REQUEST['orderby'] = '';
+		}
+		if ( ! isset( $_REQUEST['order'] ) ) {
+			$_GET['order']     = 'DESC';
+			$_REQUEST['order'] = 'DESC';
+		}
+	}
+
+	$args = array(
+		'number'     =&gt; (int) $per_page,
+		'offset'     =&gt; (int) ( ( $pagenum - 1 ) * $per_page ),
+		'network_id' =&gt; get_current_network_id(),
+	);
+
+	if ( empty( $s ) ) {
+		// Nothing to do.
+	} elseif ( preg_match( '/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/', $s )
+		|| preg_match( '/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.?$/', $s )
+		|| preg_match( '/^[0-9]{1,3}\.[0-9]{1,3}\.?$/', $s )
+		|| preg_match( '/^[0-9]{1,3}\.$/', $s )
+	) {
+		// IPv4 address.
+		$sql = $wpdb-&gt;prepare(
+			"SELECT blog_id FROM {$wpdb-&gt;registration_log} WHERE {$wpdb-&gt;registration_log}.IP LIKE %s",
+			$wpdb-&gt;esc_like( $s ) . ( ! empty( $wild ) ? '%' : '' )
+		);
+
+		$reg_blog_ids = $wpdb-&gt;get_col( $sql );
+
+		if ( $reg_blog_ids ) {
+			$args['site__in'] = $reg_blog_ids;
+		}
+	} elseif ( is_numeric( $s ) &amp;&amp; empty( $wild ) ) {
+		$args['ID'] = $s;
+	} else {
+		$args['search'] = $s;
+
+		if ( ! is_subdomain_install() ) {
+			$args['search_columns'] = array( 'path' );
+		}
+	}
+
+	$order_by = isset( $_REQUEST['orderby'] ) ? $_REQUEST['orderby'] : '';
+	if ( 'registered' === $order_by ) {
+		// 'registered' is a valid field name.
+	} elseif ( 'lastupdated' === $order_by ) {
+		$order_by = 'last_updated';
+	} elseif ( 'blogname' === $order_by ) {
+		if ( is_subdomain_install() ) {
+			$order_by = 'domain';
+		} else {
+			$order_by = 'path';
+		}
+	} elseif ( 'blog_id' === $order_by ) {
+		$order_by = 'id';
+	} elseif ( ! $order_by ) {
+		$order_by = false;
+	}
+
+	$args['orderby'] = $order_by;
+
+	if ( $order_by ) {
+		$args['order'] = ( isset( $_REQUEST['order'] ) &amp;&amp; 'DESC' === strtoupper( $_REQUEST['order'] ) ) ? 'DESC' : 'ASC';
+	}
+
+	if ( wp_is_large_network() ) {
+		$args['no_found_rows'] = true;
+	} else {
+		$args['no_found_rows'] = false;
+	}
+
+	// Take into account the role the user has selected.
+	$status = isset( $_REQUEST['status'] ) ? wp_unslash( trim( $_REQUEST['status'] ) ) : '';
+	if ( in_array( $status, array( 'public', 'archived', 'mature', 'spam', 'deleted' ), true ) ) {
+		$args[ $status ] = 1;
+	}
+
+	/**
+	 * Filters the arguments for the site query in the sites list table.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @param array $args An array of get_sites() arguments.
+	 */
+	$args = apply_filters( 'ms_sites_list_table_query_args', $args );
+
+	$_sites = get_sites( $args );
+	if ( is_array( $_sites ) ) {
+		update_site_cache( $_sites );
+
+		$this-&gt;items = array_slice( $_sites, 0, $per_page );
+	}
+
+	$total_sites = get_sites(
+		array_merge(
+			$args,
+			array(
+				'count'  =&gt; true,
+				'offset' =&gt; 0,
+				'number' =&gt; 0,
+			)
+		)
+	);
+
+	$this-&gt;set_pagination_args(
+		array(
+			'total_items' =&gt; $total_sites,
+			'per_page'    =&gt; $per_page,
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-ms-sites-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-ms-sites-list-table.php#L68">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-ms-sites-list-table.php#L68-L206">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/ms_sites_list_table_query_args"><span class="hook-func">apply_filters</span>( ‘ms_sites_list_table_query_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the arguments for the site query in the sites list table.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_ms_sites_list_table/prepare_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_ms_sites_list_table/prepare_items</a>
+  </p>
+</div>

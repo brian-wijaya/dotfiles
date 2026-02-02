@@ -1,0 +1,164 @@
+<h1 class="wp-block-wporg-code-reference-title">_wp_ajax_menu_quick_search( <span class="arg-type">array</span> <span class="arg-name">$request</span> = <span class="arg-default">array()</span> )</h1> <section><p>Prints the appropriate response to a menu quick search.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The unsanitized request values.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="23" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _wp_ajax_menu_quick_search( $request = array() ) {
+	$args            = array();
+	$type            = isset( $request['type'] ) ? $request['type'] : '';
+	$object_type     = isset( $request['object_type'] ) ? $request['object_type'] : '';
+	$query           = isset( $request['q'] ) ? $request['q'] : '';
+	$response_format = isset( $request['response-format'] ) ? $request['response-format'] : '';
+
+	if ( ! $response_format || ! in_array( $response_format, array( 'json', 'markup' ), true ) ) {
+		$response_format = 'json';
+	}
+
+	if ( 'markup' === $response_format ) {
+		$args['walker'] = new Walker_Nav_Menu_Checklist();
+	}
+
+	if ( 'get-post-item' === $type ) {
+		if ( post_type_exists( $object_type ) ) {
+			if ( isset( $request['ID'] ) ) {
+				$object_id = (int) $request['ID'];
+
+				if ( 'markup' === $response_format ) {
+					echo walk_nav_menu_tree(
+						array_map( 'wp_setup_nav_menu_item', array( get_post( $object_id ) ) ),
+						0,
+						(object) $args
+					);
+				} elseif ( 'json' === $response_format ) {
+					echo wp_json_encode(
+						array(
+							'ID'         =&gt; $object_id,
+							'post_title' =&gt; get_the_title( $object_id ),
+							'post_type'  =&gt; get_post_type( $object_id ),
+						)
+					);
+					echo "\n";
+				}
+			}
+		} elseif ( taxonomy_exists( $object_type ) ) {
+			if ( isset( $request['ID'] ) ) {
+				$object_id = (int) $request['ID'];
+
+				if ( 'markup' === $response_format ) {
+					echo walk_nav_menu_tree(
+						array_map( 'wp_setup_nav_menu_item', array( get_term( $object_id, $object_type ) ) ),
+						0,
+						(object) $args
+					);
+				} elseif ( 'json' === $response_format ) {
+					$post_obj = get_term( $object_id, $object_type );
+					echo wp_json_encode(
+						array(
+							'ID'         =&gt; $object_id,
+							'post_title' =&gt; $post_obj-&gt;name,
+							'post_type'  =&gt; $object_type,
+						)
+					);
+					echo "\n";
+				}
+			}
+		}
+	} elseif ( preg_match( '/quick-search-(posttype|taxonomy)-([a-zA-Z_-]*\b)/', $type, $matches ) ) {
+		if ( 'posttype' === $matches[1] &amp;&amp; get_post_type_object( $matches[2] ) ) {
+			$post_type_obj = _wp_nav_menu_meta_box_object( get_post_type_object( $matches[2] ) );
+			$args          = array_merge(
+				$args,
+				array(
+					'no_found_rows'          =&gt; true,
+					'update_post_meta_cache' =&gt; false,
+					'update_post_term_cache' =&gt; false,
+					'posts_per_page'         =&gt; 10,
+					'post_type'              =&gt; $matches[2],
+					's'                      =&gt; $query,
+				)
+			);
+
+			if ( isset( $post_type_obj-&gt;_default_query ) ) {
+				$args = array_merge( $args, (array) $post_type_obj-&gt;_default_query );
+			}
+
+			$search_results_query = new WP_Query( $args );
+			if ( ! $search_results_query-&gt;have_posts() ) {
+				return;
+			}
+
+			while ( $search_results_query-&gt;have_posts() ) {
+				$post = $search_results_query-&gt;next_post();
+
+				if ( 'markup' === $response_format ) {
+					$var_by_ref = $post-&gt;ID;
+					echo walk_nav_menu_tree(
+						array_map( 'wp_setup_nav_menu_item', array( get_post( $var_by_ref ) ) ),
+						0,
+						(object) $args
+					);
+				} elseif ( 'json' === $response_format ) {
+					echo wp_json_encode(
+						array(
+							'ID'         =&gt; $post-&gt;ID,
+							'post_title' =&gt; get_the_title( $post-&gt;ID ),
+							'post_type'  =&gt; $matches[2],
+						)
+					);
+					echo "\n";
+				}
+			}
+		} elseif ( 'taxonomy' === $matches[1] ) {
+			$terms = get_terms(
+				array(
+					'taxonomy'   =&gt; $matches[2],
+					'name__like' =&gt; $query,
+					'number'     =&gt; 10,
+					'hide_empty' =&gt; false,
+				)
+			);
+
+			if ( empty( $terms ) || is_wp_error( $terms ) ) {
+				return;
+			}
+
+			foreach ( (array) $terms as $term ) {
+				if ( 'markup' === $response_format ) {
+					echo walk_nav_menu_tree(
+						array_map( 'wp_setup_nav_menu_item', array( $term ) ),
+						0,
+						(object) $args
+					);
+				} elseif ( 'json' === $response_format ) {
+					echo wp_json_encode(
+						array(
+							'ID'         =&gt; $term-&gt;term_id,
+							'post_title' =&gt; $term-&gt;name,
+							'post_type'  =&gt; $matches[2],
+						)
+					);
+					echo "\n";
+				}
+			}
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/nav-menu.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/nav-menu.php#L23">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/nav-menu.php#L23-L162">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_wp_ajax_menu_quick_search" class="_attribution-link">https://developer.wordpress.org/reference/functions/_wp_ajax_menu_quick_search</a>
+  </p>
+</div>

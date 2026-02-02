@@ -1,0 +1,106 @@
+<h1 class="wp-block-wporg-code-reference-title">media_upload_type_form( <span class="arg-type">string</span> <span class="arg-name">$type</span> = <span class="arg-default">‘file’</span>, <span class="arg-type">array</span> <span class="arg-name">$errors</span> = <span class="arg-default">null</span>, <span class="arg-type">int|WP_Error</span> <span class="arg-name">$id</span> = <span class="arg-default">null</span> )</h1> <section><p>Outputs the legacy media upload form for a given media type.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$type</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>'file'</code></p>
+</dd>
+<dt>
+<code>$errors</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$id</code><span class="type"><span class="int">int</span>|<span class="WP_Error"><a href="../classes/wp_error" rel="class">WP_Error</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2326" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function media_upload_type_form( $type = 'file', $errors = null, $id = null ) {
+
+	media_upload_header();
+
+	$post_id = isset( $_REQUEST['post_id'] ) ? (int) $_REQUEST['post_id'] : 0;
+
+	$form_action_url = admin_url( "media-upload.php?type=$type&amp;tab=type&amp;post_id=$post_id" );
+
+	/**
+	 * Filters the media upload form action URL.
+	 *
+	 * @since 2.6.0
+	 *
+	 * @param string $form_action_url The media upload form action URL.
+	 * @param string $type            The type of media. Default 'file'.
+	 */
+	$form_action_url = apply_filters( 'media_upload_form_url', $form_action_url, $type );
+	$form_class      = 'media-upload-form type-form validate';
+
+	if ( get_user_setting( 'uploader' ) ) {
+		$form_class .= ' html-uploader';
+	}
+
+	?&gt;
+	&lt;form enctype="multipart/form-data" method="post" action="&lt;?php echo esc_url( $form_action_url ); ?&gt;" class="&lt;?php echo $form_class; ?&gt;" id="&lt;?php echo $type; ?&gt;-form"&gt;
+		&lt;?php submit_button( '', 'hidden', 'save', false ); ?&gt;
+	&lt;input type="hidden" name="post_id" id="post_id" value="&lt;?php echo (int) $post_id; ?&gt;" /&gt;
+		&lt;?php wp_nonce_field( 'media-form' ); ?&gt;
+
+	&lt;h3 class="media-title"&gt;&lt;?php _e( 'Add media files from your computer' ); ?&gt;&lt;/h3&gt;
+
+	&lt;?php media_upload_form( $errors ); ?&gt;
+
+	&lt;script type="text/javascript"&gt;
+	jQuery(function($){
+		var preloaded = $(".media-item.preloaded");
+		if ( preloaded.length &gt; 0 ) {
+			preloaded.each(function(){prepareMediaItem({id:this.id.replace(/[^0-9]/g, '')},'');});
+		}
+		updateMediaForm();
+	});
+	&lt;/script&gt;
+	&lt;div id="media-items"&gt;
+	&lt;?php
+
+	if ( $id ) {
+		if ( ! is_wp_error( $id ) ) {
+			add_filter( 'attachment_fields_to_edit', 'media_post_single_attachment_fields_to_edit', 10, 2 );
+			echo get_media_items( $id, $errors );
+		} else {
+			echo '&lt;div id="media-upload-error"&gt;' . esc_html( $id-&gt;get_error_message() ) . '&lt;/div&gt;&lt;/div&gt;';
+			exit;
+		}
+	}
+
+	?&gt;
+	&lt;/div&gt;
+
+	&lt;p class="savebutton ml-submit"&gt;
+		&lt;?php submit_button( __( 'Save all changes' ), '', 'save', false ); ?&gt;
+	&lt;/p&gt;
+	&lt;/form&gt;
+	&lt;?php
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L2326">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L2326-L2389">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/media_upload_form_url"><span class="hook-func">apply_filters</span>( ‘media_upload_form_url’, <nobr><span class="arg-type">string</span> <span class="arg-name">$form_action_url</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$type</span></nobr> )</a></dt>
+<dd>
+<p>Filters the media upload form action URL.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/media_upload_type_form" class="_attribution-link">https://developer.wordpress.org/reference/functions/media_upload_type_form</a>
+  </p>
+</div>

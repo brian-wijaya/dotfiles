@@ -1,0 +1,54 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_active_and_valid_plugins(): <span class="return-type">string[]</span>
+</h1> <section><p>Retrieves an array of active and valid plugin files.</p> </section> <section><h2 id="description">Description</h2> <p>While upgrading or installing WordPress, no plugins are returned.</p> <p>The default directory is <code>wp-content/plugins</code>. To change the default directory manually, define <code>WP_PLUGIN_DIR</code> and <code>WP_PLUGIN_URL</code> in <code>wp-config.php</code>.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">string[]</span> Array of paths to plugin files relative to the plugins directory.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="984" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_active_and_valid_plugins() {
+	$plugins        = array();
+	$active_plugins = (array) get_option( 'active_plugins', array() );
+
+	// Check for hacks file if the option is enabled.
+	if ( get_option( 'hack_file' ) &amp;&amp; file_exists( ABSPATH . 'my-hacks.php' ) ) {
+		_deprecated_file( 'my-hacks.php', '1.5.0' );
+		array_unshift( $plugins, ABSPATH . 'my-hacks.php' );
+	}
+
+	if ( empty( $active_plugins ) || wp_installing() ) {
+		return $plugins;
+	}
+
+	$network_plugins = is_multisite() ? wp_get_active_network_plugins() : false;
+
+	foreach ( $active_plugins as $plugin ) {
+		if ( ! validate_file( $plugin )                     // $plugin must validate as file.
+			&amp;&amp; str_ends_with( $plugin, '.php' )             // $plugin must end with '.php'.
+			&amp;&amp; file_exists( WP_PLUGIN_DIR . '/' . $plugin ) // $plugin must exist.
+			// Not already included as a network plugin.
+			&amp;&amp; ( ! $network_plugins || ! in_array( WP_PLUGIN_DIR . '/' . $plugin, $network_plugins, true ) )
+		) {
+			$plugins[] = WP_PLUGIN_DIR . '/' . $plugin;
+		}
+	}
+
+	/*
+	 * Remove plugins from the list of active plugins when we're on an endpoint
+	 * that should be protected against WSODs and the plugin is paused.
+	 */
+	if ( wp_is_recovery_mode() ) {
+		$plugins = wp_skip_paused_plugins( $plugins );
+	}
+
+	return $plugins;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/load.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/load.php#L984">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/load.php#L984-L1020">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_active_and_valid_plugins" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_active_and_valid_plugins</a>
+  </p>
+</div>

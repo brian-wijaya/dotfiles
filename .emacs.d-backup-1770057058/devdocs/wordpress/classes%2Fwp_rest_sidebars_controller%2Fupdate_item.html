@@ -1,0 +1,65 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Sidebars_Controller::update_item( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span>
+</h1> <section><p>Updates a sidebar.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="216" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function update_item( $request ) {
+	if ( isset( $request['widgets'] ) ) {
+		$sidebars = wp_get_sidebars_widgets();
+
+		foreach ( $sidebars as $sidebar_id =&gt; $widgets ) {
+			foreach ( $widgets as $i =&gt; $widget_id ) {
+				// This automatically removes the passed widget IDs from any other sidebars in use.
+				if ( $sidebar_id !== $request['id'] &amp;&amp; in_array( $widget_id, $request['widgets'], true ) ) {
+					unset( $sidebars[ $sidebar_id ][ $i ] );
+				}
+
+				// This automatically removes omitted widget IDs to the inactive sidebar.
+				if ( $sidebar_id === $request['id'] &amp;&amp; ! in_array( $widget_id, $request['widgets'], true ) ) {
+					$sidebars['wp_inactive_widgets'][] = $widget_id;
+				}
+			}
+		}
+
+		$sidebars[ $request['id'] ] = $request['widgets'];
+
+		wp_set_sidebars_widgets( $sidebars );
+	}
+
+	$request['context'] = 'edit';
+
+	$sidebar = $this-&gt;get_sidebar( $request['id'] );
+
+	/**
+	 * Fires after a sidebar is updated via the REST API.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param array           $sidebar The updated sidebar.
+	 * @param WP_REST_Request $request Request object.
+	 */
+	do_action( 'rest_save_sidebar', $sidebar, $request );
+
+	return $this-&gt;prepare_item_for_response( $sidebar, $request );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-sidebars-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-sidebars-controller.php#L216">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-sidebars-controller.php#L216-L254">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_save_sidebar"><span class="hook-func">do_action</span>( ‘rest_save_sidebar’, <nobr><span class="arg-type">array</span> <span class="arg-name">$sidebar</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a sidebar is updated via the REST API.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_sidebars_controller/update_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_sidebars_controller/update_item</a>
+  </p>
+</div>

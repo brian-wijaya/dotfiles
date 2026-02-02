@@ -1,0 +1,208 @@
+<h1 class="wp-block-wporg-code-reference-title">edit_form_image_editor( <span class="arg-type">WP_Post</span> <span class="arg-name">$post</span> )</h1> <section><p>Displays the image and editor in the post editor</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">A post object.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3121" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function edit_form_image_editor( $post ) {
+	$open = isset( $_GET['image-editor'] );
+
+	if ( $open ) {
+		require_once ABSPATH . 'wp-admin/includes/image-edit.php';
+	}
+
+	$thumb_url     = false;
+	$attachment_id = (int) $post-&gt;ID;
+
+	if ( $attachment_id ) {
+		$thumb_url = wp_get_attachment_image_src( $attachment_id, array( 900, 450 ), true );
+	}
+
+	$alt_text = get_post_meta( $post-&gt;ID, '_wp_attachment_image_alt', true );
+
+	$att_url = wp_get_attachment_url( $post-&gt;ID );
+	?&gt;
+	&lt;div class="wp_attachment_holder wp-clearfix"&gt;
+	&lt;?php
+
+	if ( wp_attachment_is_image( $post-&gt;ID ) ) :
+		$image_edit_button = '';
+		if ( wp_image_editor_supports( array( 'mime_type' =&gt; $post-&gt;post_mime_type ) ) ) {
+			$nonce             = wp_create_nonce( "image_editor-$post-&gt;ID" );
+			$image_edit_button = "&lt;input type='button' id='imgedit-open-btn-$post-&gt;ID' onclick='imageEdit.open( $post-&gt;ID, \"$nonce\" )' class='button' value='" . esc_attr__( 'Edit Image' ) . "' /&gt; &lt;span class='spinner'&gt;&lt;/span&gt;";
+		}
+
+		$open_style     = '';
+		$not_open_style = '';
+
+		if ( $open ) {
+			$open_style = ' style="display:none"';
+		} else {
+			$not_open_style = ' style="display:none"';
+		}
+
+		?&gt;
+		&lt;div class="imgedit-response" id="imgedit-response-&lt;?php echo $attachment_id; ?&gt;"&gt;&lt;/div&gt;
+
+		&lt;div&lt;?php echo $open_style; ?&gt; class="wp_attachment_image wp-clearfix" id="media-head-&lt;?php echo $attachment_id; ?&gt;"&gt;
+			&lt;p id="thumbnail-head-&lt;?php echo $attachment_id; ?&gt;"&gt;&lt;img class="thumbnail" src="&lt;?php echo set_url_scheme( $thumb_url[0] ); ?&gt;" style="max-width:100%" alt="" /&gt;&lt;/p&gt;
+			&lt;p&gt;&lt;?php echo $image_edit_button; ?&gt;&lt;/p&gt;
+		&lt;/div&gt;
+		&lt;div&lt;?php echo $not_open_style; ?&gt; class="image-editor" id="image-editor-&lt;?php echo $attachment_id; ?&gt;"&gt;
+		&lt;?php
+
+		if ( $open ) {
+			wp_image_editor( $attachment_id );
+		}
+
+		?&gt;
+		&lt;/div&gt;
+		&lt;?php
+	elseif ( $attachment_id &amp;&amp; wp_attachment_is( 'audio', $post ) ) :
+
+		wp_maybe_generate_attachment_metadata( $post );
+
+		echo wp_audio_shortcode( array( 'src' =&gt; $att_url ) );
+
+	elseif ( $attachment_id &amp;&amp; wp_attachment_is( 'video', $post ) ) :
+
+		wp_maybe_generate_attachment_metadata( $post );
+
+		$meta = wp_get_attachment_metadata( $attachment_id );
+		$w    = ! empty( $meta['width'] ) ? min( $meta['width'], 640 ) : 0;
+		$h    = ! empty( $meta['height'] ) ? $meta['height'] : 0;
+
+		if ( $h &amp;&amp; $w &lt; $meta['width'] ) {
+			$h = round( ( $meta['height'] * $w ) / $meta['width'] );
+		}
+
+		$attr = array( 'src' =&gt; $att_url );
+
+		if ( ! empty( $w ) &amp;&amp; ! empty( $h ) ) {
+			$attr['width']  = $w;
+			$attr['height'] = $h;
+		}
+
+		$thumb_id = get_post_thumbnail_id( $attachment_id );
+
+		if ( ! empty( $thumb_id ) ) {
+			$attr['poster'] = wp_get_attachment_url( $thumb_id );
+		}
+
+		echo wp_video_shortcode( $attr );
+
+	elseif ( isset( $thumb_url[0] ) ) :
+		?&gt;
+		&lt;div class="wp_attachment_image wp-clearfix" id="media-head-&lt;?php echo $attachment_id; ?&gt;"&gt;
+			&lt;p id="thumbnail-head-&lt;?php echo $attachment_id; ?&gt;"&gt;
+				&lt;img class="thumbnail" src="&lt;?php echo set_url_scheme( $thumb_url[0] ); ?&gt;" style="max-width:100%" alt="" /&gt;
+			&lt;/p&gt;
+		&lt;/div&gt;
+		&lt;?php
+
+	else :
+
+		/**
+		 * Fires when an attachment type can't be rendered in the edit form.
+		 *
+		 * @since 4.6.0
+		 *
+		 * @param WP_Post $post A post object.
+		 */
+		do_action( 'wp_edit_form_attachment_display', $post );
+
+	endif;
+
+	?&gt;
+	&lt;/div&gt;
+	&lt;div class="wp_attachment_details edit-form-section"&gt;
+	&lt;?php if ( str_starts_with( $post-&gt;post_mime_type, 'image' ) ) : ?&gt;
+		&lt;p class="attachment-alt-text"&gt;
+			&lt;label for="attachment_alt"&gt;&lt;strong&gt;&lt;?php _e( 'Alternative Text' ); ?&gt;&lt;/strong&gt;&lt;/label&gt;&lt;br /&gt;
+			&lt;textarea class="widefat" name="_wp_attachment_image_alt" id="attachment_alt" aria-describedby="alt-text-description"&gt;&lt;?php echo esc_attr( $alt_text ); ?&gt;&lt;/textarea&gt;
+		&lt;/p&gt;
+		&lt;p class="attachment-alt-text-description" id="alt-text-description"&gt;
+		&lt;?php
+
+		printf(
+			/* translators: 1: Link to tutorial, 2: Additional link attributes, 3: Accessibility text. */
+			__( '&lt;a href="%1$s" %2$s&gt;Learn how to describe the purpose of the image%3$s&lt;/a&gt;. Leave empty if the image is purely decorative.' ),
+			/* translators: Localized tutorial, if one exists. W3C Web Accessibility Initiative link has list of existing translations. */
+			esc_url( __( 'https://www.w3.org/WAI/tutorials/images/decision-tree/' ) ),
+			'target="_blank"',
+			sprintf(
+				'&lt;span class="screen-reader-text"&gt; %s&lt;/span&gt;',
+				/* translators: Hidden accessibility text. */
+				__( '(opens in a new tab)' )
+			)
+		);
+
+		?&gt;
+		&lt;/p&gt;
+	&lt;?php endif; ?&gt;
+
+		&lt;p&gt;
+			&lt;label for="attachment_caption"&gt;&lt;strong&gt;&lt;?php _e( 'Caption' ); ?&gt;&lt;/strong&gt;&lt;/label&gt;&lt;br /&gt;
+			&lt;textarea class="widefat" name="excerpt" id="attachment_caption"&gt;&lt;?php echo $post-&gt;post_excerpt; ?&gt;&lt;/textarea&gt;
+		&lt;/p&gt;
+
+	&lt;?php
+
+	$quicktags_settings = array( 'buttons' =&gt; 'strong,em,link,block,del,ins,img,ul,ol,li,code,close' );
+	$editor_args        = array(
+		'textarea_name' =&gt; 'content',
+		'textarea_rows' =&gt; 5,
+		'media_buttons' =&gt; false,
+		/**
+		 * Filters the TinyMCE argument for the media description field on the attachment details screen.
+		 *
+		 * @since 6.6.0
+		 *
+		 * @param bool $tinymce Whether to activate TinyMCE in media description field. Default false.
+		 */
+		'tinymce'       =&gt; apply_filters( 'activate_tinymce_for_media_description', false ),
+		'quicktags'     =&gt; $quicktags_settings,
+	);
+
+	?&gt;
+
+	&lt;label for="attachment_content" class="attachment-content-description"&gt;&lt;strong&gt;&lt;?php _e( 'Description' ); ?&gt;&lt;/strong&gt;
+	&lt;?php
+
+	if ( preg_match( '#^(audio|video)/#', $post-&gt;post_mime_type ) ) {
+		echo ': ' . __( 'Displayed on attachment pages.' );
+	}
+
+	?&gt;
+	&lt;/label&gt;
+	&lt;?php wp_editor( format_to_edit( $post-&gt;post_content ), 'attachment_content', $editor_args ); ?&gt;
+
+	&lt;/div&gt;
+	&lt;?php
+
+	$extras = get_compat_media_markup( $post-&gt;ID );
+	echo $extras['item'];
+	echo '&lt;input type="hidden" id="image-edit-context" value="edit-attachment" /&gt;' . "\n";
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L3121">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L3121-L3300">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/activate_tinymce_for_media_description"><span class="hook-func">apply_filters</span>( ‘activate_tinymce_for_media_description’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$tinymce</span></nobr> )</a></dt>
+<dd>
+<p>Filters the TinyMCE argument for the media description field on the attachment details screen.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_edit_form_attachment_display"><span class="hook-func">do_action</span>( ‘wp_edit_form_attachment_display’, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Fires when an attachment type can’t be rendered in the edit form.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.5.0/">3.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/edit_form_image_editor" class="_attribution-link">https://developer.wordpress.org/reference/functions/edit_form_image_editor</a>
+  </p>
+</div>

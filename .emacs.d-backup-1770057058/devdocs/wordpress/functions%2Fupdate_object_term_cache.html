@@ -1,0 +1,92 @@
+<h1 class="wp-block-wporg-code-reference-title">update_object_term_cache( <span class="arg-type">string|int[]</span> <span class="arg-name">$object_ids</span>, <span class="arg-type">string|string[]</span> <span class="arg-name">$object_type</span> ): <span class="return-type">void|false</span>
+</h1> <section><p>Updates the cache for the given term object ID(s).</p> </section> <section><h2 id="description">Description</h2> <p>Note: Due to performance concerns, great care should be taken to only update term caches when necessary. Processing time can increase exponentially depending on both the number of passed term IDs and the number of taxonomies those terms belong to.</p> <p>Caches will only be updated for terms not already cached.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$object_ids</code><span class="type"><span class="string">string</span>|<span class="int[]">int[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Comma-separated list or array of term object IDs.</span></div></dd>
+<dt>
+<code>$object_type</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The taxonomy object type or array of the same.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">void|false</span> Void on success or if the <code>$object_ids</code> parameter is empty, false if all of the terms in <code>$object_ids</code> are already cached.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3799" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function update_object_term_cache( $object_ids, $object_type ) {
+	if ( empty( $object_ids ) ) {
+		return;
+	}
+
+	if ( ! is_array( $object_ids ) ) {
+		$object_ids = explode( ',', $object_ids );
+	}
+
+	$object_ids     = array_map( 'intval', $object_ids );
+	$non_cached_ids = array();
+
+	$taxonomies = get_object_taxonomies( $object_type );
+
+	foreach ( $taxonomies as $taxonomy ) {
+		$cache_values = wp_cache_get_multiple( (array) $object_ids, "{$taxonomy}_relationships" );
+
+		foreach ( $cache_values as $id =&gt; $value ) {
+			if ( false === $value ) {
+				$non_cached_ids[] = $id;
+			}
+		}
+	}
+
+	if ( empty( $non_cached_ids ) ) {
+		return false;
+	}
+
+	$non_cached_ids = array_unique( $non_cached_ids );
+
+	$terms = wp_get_object_terms(
+		$non_cached_ids,
+		$taxonomies,
+		array(
+			'fields'                 =&gt; 'all_with_object_id',
+			'orderby'                =&gt; 'name',
+			'update_term_meta_cache' =&gt; false,
+		)
+	);
+
+	$object_terms = array();
+	foreach ( (array) $terms as $term ) {
+		$object_terms[ $term-&gt;object_id ][ $term-&gt;taxonomy ][] = $term-&gt;term_id;
+	}
+
+	foreach ( $non_cached_ids as $id ) {
+		foreach ( $taxonomies as $taxonomy ) {
+			if ( ! isset( $object_terms[ $id ][ $taxonomy ] ) ) {
+				if ( ! isset( $object_terms[ $id ] ) ) {
+					$object_terms[ $id ] = array();
+				}
+				$object_terms[ $id ][ $taxonomy ] = array();
+			}
+		}
+	}
+
+	$cache_values = array();
+	foreach ( $object_terms as $id =&gt; $value ) {
+		foreach ( $value as $taxonomy =&gt; $terms ) {
+			$cache_values[ $taxonomy ][ $id ] = $terms;
+		}
+	}
+	foreach ( $cache_values as $taxonomy =&gt; $data ) {
+		wp_cache_add_multiple( $data, "{$taxonomy}_relationships" );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L3799">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L3799-L3864">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/update_object_term_cache" class="_attribution-link">https://developer.wordpress.org/reference/functions/update_object_term_cache</a>
+  </p>
+</div>

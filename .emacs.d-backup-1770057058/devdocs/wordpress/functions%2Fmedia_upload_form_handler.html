@@ -1,0 +1,148 @@
+<h1 class="wp-block-wporg-code-reference-title">media_upload_form_handler(): <span class="return-type">null|array|void</span>
+</h1> <section><p>Handles form submissions for the legacy media uploader.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">null|array|void</span> Array of error messages keyed by attachment ID, null or void on success.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="741" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function media_upload_form_handler() {
+	check_admin_referer( 'media-form' );
+
+	$errors = null;
+
+	if ( isset( $_POST['send'] ) ) {
+		$keys    = array_keys( $_POST['send'] );
+		$send_id = (int) reset( $keys );
+	}
+
+	if ( ! empty( $_POST['attachments'] ) ) {
+		foreach ( $_POST['attachments'] as $attachment_id =&gt; $attachment ) {
+			$post  = get_post( $attachment_id, ARRAY_A );
+			$_post = $post;
+
+			if ( ! current_user_can( 'edit_post', $attachment_id ) ) {
+				continue;
+			}
+
+			if ( isset( $attachment['post_content'] ) ) {
+				$post['post_content'] = $attachment['post_content'];
+			}
+
+			if ( isset( $attachment['post_title'] ) ) {
+				$post['post_title'] = $attachment['post_title'];
+			}
+
+			if ( isset( $attachment['post_excerpt'] ) ) {
+				$post['post_excerpt'] = $attachment['post_excerpt'];
+			}
+
+			if ( isset( $attachment['menu_order'] ) ) {
+				$post['menu_order'] = $attachment['menu_order'];
+			}
+
+			if ( isset( $send_id ) &amp;&amp; $attachment_id == $send_id ) {
+				if ( isset( $attachment['post_parent'] ) ) {
+					$post['post_parent'] = $attachment['post_parent'];
+				}
+			}
+
+			/**
+			 * Filters the attachment fields to be saved.
+			 *
+			 * @since 2.5.0
+			 *
+			 * @see wp_get_attachment_metadata()
+			 *
+			 * @param array $post       An array of post data.
+			 * @param array $attachment An array of attachment metadata.
+			 */
+			$post = apply_filters( 'attachment_fields_to_save', $post, $attachment );
+
+			if ( isset( $attachment['image_alt'] ) ) {
+				$image_alt = wp_unslash( $attachment['image_alt'] );
+
+				if ( get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) !== $image_alt ) {
+					$image_alt = wp_strip_all_tags( $image_alt, true );
+
+					// update_post_meta() expects slashed.
+					update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( $image_alt ) );
+				}
+			}
+
+			if ( isset( $post['errors'] ) ) {
+				$errors[ $attachment_id ] = $post['errors'];
+				unset( $post['errors'] );
+			}
+
+			if ( $post != $_post ) {
+				wp_update_post( $post );
+			}
+
+			foreach ( get_attachment_taxonomies( $post ) as $t ) {
+				if ( isset( $attachment[ $t ] ) ) {
+					wp_set_object_terms( $attachment_id, array_map( 'trim', preg_split( '/,+/', $attachment[ $t ] ) ), $t, false );
+				}
+			}
+		}
+	}
+
+	if ( isset( $_POST['insert-gallery'] ) || isset( $_POST['update-gallery'] ) ) {
+		?&gt;
+		&lt;script type="text/javascript"&gt;
+		var win = window.dialogArguments || opener || parent || top;
+		win.tb_remove();
+		&lt;/script&gt;
+		&lt;?php
+
+		exit;
+	}
+
+	if ( isset( $send_id ) ) {
+		$attachment = wp_unslash( $_POST['attachments'][ $send_id ] );
+		$html       = isset( $attachment['post_title'] ) ? $attachment['post_title'] : '';
+
+		if ( ! empty( $attachment['url'] ) ) {
+			$rel = '';
+
+			if ( str_contains( $attachment['url'], 'attachment_id' ) || get_attachment_link( $send_id ) === $attachment['url'] ) {
+				$rel = " rel='attachment wp-att-" . esc_attr( $send_id ) . "'";
+			}
+
+			$html = "&lt;a href='{$attachment['url']}'$rel&gt;$html&lt;/a&gt;";
+		}
+
+		/**
+		 * Filters the HTML markup for a media item sent to the editor.
+		 *
+		 * @since 2.5.0
+		 *
+		 * @see wp_get_attachment_metadata()
+		 *
+		 * @param string $html       HTML markup for a media item sent to the editor.
+		 * @param int    $send_id    The first key from the $_POST['send'] data.
+		 * @param array  $attachment Array of attachment metadata.
+		 */
+		$html = apply_filters( 'media_send_to_editor', $html, $send_id, $attachment );
+
+		return media_send_to_editor( $html );
+	}
+
+	return $errors;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L741">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L741-L864">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/attachment_fields_to_save"><span class="hook-func">apply_filters</span>( ‘attachment_fields_to_save’, <nobr><span class="arg-type">array</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$attachment</span></nobr> )</a></dt>
+<dd>
+<p>Filters the attachment fields to be saved.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/media_send_to_editor"><span class="hook-func">apply_filters</span>( ‘media_send_to_editor’, <nobr><span class="arg-type">string</span> <span class="arg-name">$html</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$send_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$attachment</span></nobr> )</a></dt>
+<dd>
+<p>Filters the HTML markup for a media item sent to the editor.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/media_upload_form_handler" class="_attribution-link">https://developer.wordpress.org/reference/functions/media_upload_form_handler</a>
+  </p>
+</div>

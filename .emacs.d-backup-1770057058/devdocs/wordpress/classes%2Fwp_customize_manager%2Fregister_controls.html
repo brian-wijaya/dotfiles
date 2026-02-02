@@ -1,0 +1,728 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Manager::register_controls()</h1> <section><p>Registers some default controls.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="5069" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function register_controls() {
+
+	/* Themes (controls are loaded via ajax) */
+
+	$this-&gt;add_panel(
+		new WP_Customize_Themes_Panel(
+			$this,
+			'themes',
+			array(
+				'title'       =&gt; $this-&gt;theme()-&gt;display( 'Name' ),
+				'description' =&gt; (
+				'&lt;p&gt;' . __( 'Looking for a theme? You can search or browse the WordPress.org theme directory, install and preview themes, then activate them right here.' ) . '&lt;/p&gt;' .
+				'&lt;p&gt;' . __( 'While previewing a new theme, you can continue to tailor things like widgets and menus, and explore theme-specific options.' ) . '&lt;/p&gt;'
+				),
+				'capability'  =&gt; 'switch_themes',
+				'priority'    =&gt; 0,
+			)
+		)
+	);
+
+	$this-&gt;add_section(
+		new WP_Customize_Themes_Section(
+			$this,
+			'installed_themes',
+			array(
+				'title'      =&gt; __( 'Installed themes' ),
+				'action'     =&gt; 'installed',
+				'capability' =&gt; 'switch_themes',
+				'panel'      =&gt; 'themes',
+				'priority'   =&gt; 0,
+			)
+		)
+	);
+
+	if ( ! is_multisite() ) {
+		$this-&gt;add_section(
+			new WP_Customize_Themes_Section(
+				$this,
+				'wporg_themes',
+				array(
+					'title'       =&gt; __( 'WordPress.org themes' ),
+					'action'      =&gt; 'wporg',
+					'filter_type' =&gt; 'remote',
+					'capability'  =&gt; 'install_themes',
+					'panel'       =&gt; 'themes',
+					'priority'    =&gt; 5,
+				)
+			)
+		);
+	}
+
+	// Themes Setting (unused - the theme is considerably more fundamental to the Customizer experience).
+	$this-&gt;add_setting(
+		new WP_Customize_Filter_Setting(
+			$this,
+			'active_theme',
+			array(
+				'capability' =&gt; 'switch_themes',
+			)
+		)
+	);
+
+	/* Site Identity */
+
+	$this-&gt;add_section(
+		'title_tagline',
+		array(
+			'title'    =&gt; __( 'Site Identity' ),
+			'priority' =&gt; 20,
+		)
+	);
+
+	$this-&gt;add_setting(
+		'blogname',
+		array(
+			'default'    =&gt; get_option( 'blogname' ),
+			'type'       =&gt; 'option',
+			'capability' =&gt; 'manage_options',
+		)
+	);
+
+	$this-&gt;add_control(
+		'blogname',
+		array(
+			'label'   =&gt; __( 'Site Title' ),
+			'section' =&gt; 'title_tagline',
+		)
+	);
+
+	$this-&gt;add_setting(
+		'blogdescription',
+		array(
+			'default'    =&gt; get_option( 'blogdescription' ),
+			'type'       =&gt; 'option',
+			'capability' =&gt; 'manage_options',
+		)
+	);
+
+	$this-&gt;add_control(
+		'blogdescription',
+		array(
+			'label'   =&gt; __( 'Tagline' ),
+			'section' =&gt; 'title_tagline',
+		)
+	);
+
+	// Add a setting to hide header text if the theme doesn't support custom headers.
+	if ( ! current_theme_supports( 'custom-header', 'header-text' ) ) {
+		$this-&gt;add_setting(
+			'header_text',
+			array(
+				'theme_supports'    =&gt; array( 'custom-logo', 'header-text' ),
+				'default'           =&gt; 1,
+				'sanitize_callback' =&gt; 'absint',
+			)
+		);
+
+		$this-&gt;add_control(
+			'header_text',
+			array(
+				'label'    =&gt; __( 'Display Site Title and Tagline' ),
+				'section'  =&gt; 'title_tagline',
+				'settings' =&gt; 'header_text',
+				'type'     =&gt; 'checkbox',
+			)
+		);
+	}
+
+	$this-&gt;add_setting(
+		'site_icon',
+		array(
+			'type'       =&gt; 'option',
+			'capability' =&gt; 'manage_options',
+			'transport'  =&gt; 'postMessage', // Previewed with JS in the Customizer controls window.
+		)
+	);
+
+	$this-&gt;add_control(
+		new WP_Customize_Site_Icon_Control(
+			$this,
+			'site_icon',
+			array(
+				'label'       =&gt; __( 'Site Icon' ),
+				'description' =&gt; sprintf(
+					/* translators: 1: pixel value for icon size. 2: pixel value for icon size. */
+					'&lt;p&gt;' . __( 'The Site Icon is what you see in browser tabs, bookmark bars, and within the WordPress mobile apps. It should be square and at least &lt;code&gt;%1$s by %2$s&lt;/code&gt; pixels.' ) . '&lt;/p&gt;',
+					512,
+					512
+				),
+				'section'     =&gt; 'title_tagline',
+				'priority'    =&gt; 60,
+				'height'      =&gt; 512,
+				'width'       =&gt; 512,
+			)
+		)
+	);
+
+	$this-&gt;add_setting(
+		'custom_logo',
+		array(
+			'theme_supports' =&gt; array( 'custom-logo' ),
+			'transport'      =&gt; 'postMessage',
+		)
+	);
+
+	$custom_logo_args = get_theme_support( 'custom-logo' );
+	$this-&gt;add_control(
+		new WP_Customize_Cropped_Image_Control(
+			$this,
+			'custom_logo',
+			array(
+				'label'         =&gt; __( 'Logo' ),
+				'section'       =&gt; 'title_tagline',
+				'priority'      =&gt; 8,
+				'height'        =&gt; isset( $custom_logo_args[0]['height'] ) ? $custom_logo_args[0]['height'] : null,
+				'width'         =&gt; isset( $custom_logo_args[0]['width'] ) ? $custom_logo_args[0]['width'] : null,
+				'flex_height'   =&gt; isset( $custom_logo_args[0]['flex-height'] ) ? $custom_logo_args[0]['flex-height'] : null,
+				'flex_width'    =&gt; isset( $custom_logo_args[0]['flex-width'] ) ? $custom_logo_args[0]['flex-width'] : null,
+				'button_labels' =&gt; array(
+					'select'       =&gt; __( 'Select logo' ),
+					'change'       =&gt; __( 'Change logo' ),
+					'remove'       =&gt; __( 'Remove' ),
+					'default'      =&gt; __( 'Default' ),
+					'placeholder'  =&gt; __( 'No logo selected' ),
+					'frame_title'  =&gt; __( 'Select logo' ),
+					'frame_button' =&gt; __( 'Choose logo' ),
+				),
+			)
+		)
+	);
+
+	$this-&gt;selective_refresh-&gt;add_partial(
+		'custom_logo',
+		array(
+			'settings'            =&gt; array( 'custom_logo' ),
+			'selector'            =&gt; '.custom-logo-link',
+			'render_callback'     =&gt; array( $this, '_render_custom_logo_partial' ),
+			'container_inclusive' =&gt; true,
+		)
+	);
+
+	/* Colors */
+
+	$this-&gt;add_section(
+		'colors',
+		array(
+			'title'    =&gt; __( 'Colors' ),
+			'priority' =&gt; 40,
+		)
+	);
+
+	$this-&gt;add_setting(
+		'header_textcolor',
+		array(
+			'theme_supports'       =&gt; array( 'custom-header', 'header-text' ),
+			'default'              =&gt; get_theme_support( 'custom-header', 'default-text-color' ),
+
+			'sanitize_callback'    =&gt; array( $this, '_sanitize_header_textcolor' ),
+			'sanitize_js_callback' =&gt; 'maybe_hash_hex_color',
+		)
+	);
+
+	// Input type: checkbox, with custom value.
+	$this-&gt;add_control(
+		'display_header_text',
+		array(
+			'settings' =&gt; 'header_textcolor',
+			'label'    =&gt; __( 'Display Site Title and Tagline' ),
+			'section'  =&gt; 'title_tagline',
+			'type'     =&gt; 'checkbox',
+			'priority' =&gt; 40,
+		)
+	);
+
+	$this-&gt;add_control(
+		new WP_Customize_Color_Control(
+			$this,
+			'header_textcolor',
+			array(
+				'label'   =&gt; __( 'Header Text Color' ),
+				'section' =&gt; 'colors',
+			)
+		)
+	);
+
+	// Input type: color, with sanitize_callback.
+	$this-&gt;add_setting(
+		'background_color',
+		array(
+			'default'              =&gt; get_theme_support( 'custom-background', 'default-color' ),
+			'theme_supports'       =&gt; 'custom-background',
+
+			'sanitize_callback'    =&gt; 'sanitize_hex_color_no_hash',
+			'sanitize_js_callback' =&gt; 'maybe_hash_hex_color',
+		)
+	);
+
+	$this-&gt;add_control(
+		new WP_Customize_Color_Control(
+			$this,
+			'background_color',
+			array(
+				'label'   =&gt; __( 'Background Color' ),
+				'section' =&gt; 'colors',
+			)
+		)
+	);
+
+	/* Custom Header */
+
+	if ( current_theme_supports( 'custom-header', 'video' ) ) {
+		$title       = __( 'Header Media' );
+		$description = '&lt;p&gt;' . __( 'If you add a video, the image will be used as a fallback while the video loads.' ) . '&lt;/p&gt;';
+
+		$width  = absint( get_theme_support( 'custom-header', 'width' ) );
+		$height = absint( get_theme_support( 'custom-header', 'height' ) );
+		if ( $width &amp;&amp; $height ) {
+			$control_description = sprintf(
+				/* translators: 1: .mp4, 2: Header size in pixels. */
+				__( 'Upload your video in %1$s format and minimize its file size for best results. Your theme recommends dimensions of %2$s pixels.' ),
+				'&lt;code&gt;.mp4&lt;/code&gt;',
+				sprintf( '&lt;strong&gt;%s &amp;times; %s&lt;/strong&gt;', $width, $height )
+			);
+		} elseif ( $width ) {
+			$control_description = sprintf(
+				/* translators: 1: .mp4, 2: Header width in pixels. */
+				__( 'Upload your video in %1$s format and minimize its file size for best results. Your theme recommends a width of %2$s pixels.' ),
+				'&lt;code&gt;.mp4&lt;/code&gt;',
+				sprintf( '&lt;strong&gt;%s&lt;/strong&gt;', $width )
+			);
+		} else {
+			$control_description = sprintf(
+				/* translators: 1: .mp4, 2: Header height in pixels. */
+				__( 'Upload your video in %1$s format and minimize its file size for best results. Your theme recommends a height of %2$s pixels.' ),
+				'&lt;code&gt;.mp4&lt;/code&gt;',
+				sprintf( '&lt;strong&gt;%s&lt;/strong&gt;', $height )
+			);
+		}
+	} else {
+		$title               = __( 'Header Image' );
+		$description         = '';
+		$control_description = '';
+	}
+
+	$this-&gt;add_section(
+		'header_image',
+		array(
+			'title'          =&gt; $title,
+			'description'    =&gt; $description,
+			'theme_supports' =&gt; 'custom-header',
+			'priority'       =&gt; 60,
+		)
+	);
+
+	$this-&gt;add_setting(
+		'header_video',
+		array(
+			'theme_supports'    =&gt; array( 'custom-header', 'video' ),
+			'transport'         =&gt; 'postMessage',
+			'sanitize_callback' =&gt; 'absint',
+			'validate_callback' =&gt; array( $this, '_validate_header_video' ),
+		)
+	);
+
+	$this-&gt;add_setting(
+		'external_header_video',
+		array(
+			'theme_supports'    =&gt; array( 'custom-header', 'video' ),
+			'transport'         =&gt; 'postMessage',
+			'sanitize_callback' =&gt; array( $this, '_sanitize_external_header_video' ),
+			'validate_callback' =&gt; array( $this, '_validate_external_header_video' ),
+		)
+	);
+
+	$this-&gt;add_setting(
+		new WP_Customize_Filter_Setting(
+			$this,
+			'header_image',
+			array(
+				'default'        =&gt; sprintf( get_theme_support( 'custom-header', 'default-image' ), get_template_directory_uri(), get_stylesheet_directory_uri() ),
+				'theme_supports' =&gt; 'custom-header',
+			)
+		)
+	);
+
+	$this-&gt;add_setting(
+		new WP_Customize_Header_Image_Setting(
+			$this,
+			'header_image_data',
+			array(
+				'theme_supports' =&gt; 'custom-header',
+			)
+		)
+	);
+
+	/*
+	 * Switch image settings to postMessage when video support is enabled since
+	 * it entails that the_custom_header_markup() will be used, and thus selective
+	 * refresh can be utilized.
+	 */
+	if ( current_theme_supports( 'custom-header', 'video' ) ) {
+		$this-&gt;get_setting( 'header_image' )-&gt;transport      = 'postMessage';
+		$this-&gt;get_setting( 'header_image_data' )-&gt;transport = 'postMessage';
+	}
+
+	$this-&gt;add_control(
+		new WP_Customize_Media_Control(
+			$this,
+			'header_video',
+			array(
+				'theme_supports'  =&gt; array( 'custom-header', 'video' ),
+				'label'           =&gt; __( 'Header Video' ),
+				'description'     =&gt; $control_description,
+				'section'         =&gt; 'header_image',
+				'mime_type'       =&gt; 'video',
+				'active_callback' =&gt; 'is_header_video_active',
+			)
+		)
+	);
+
+	$this-&gt;add_control(
+		'external_header_video',
+		array(
+			'theme_supports'  =&gt; array( 'custom-header', 'video' ),
+			'type'            =&gt; 'url',
+			'description'     =&gt; __( 'Or, enter a YouTube URL:' ),
+			'section'         =&gt; 'header_image',
+			'active_callback' =&gt; 'is_header_video_active',
+		)
+	);
+
+	$this-&gt;add_control( new WP_Customize_Header_Image_Control( $this ) );
+
+	$this-&gt;selective_refresh-&gt;add_partial(
+		'custom_header',
+		array(
+			'selector'            =&gt; '#wp-custom-header',
+			'render_callback'     =&gt; 'the_custom_header_markup',
+			'settings'            =&gt; array( 'header_video', 'external_header_video', 'header_image' ), // The image is used as a video fallback here.
+			'container_inclusive' =&gt; true,
+		)
+	);
+
+	/* Custom Background */
+
+	$this-&gt;add_section(
+		'background_image',
+		array(
+			'title'          =&gt; __( 'Background Image' ),
+			'theme_supports' =&gt; 'custom-background',
+			'priority'       =&gt; 80,
+		)
+	);
+
+	$this-&gt;add_setting(
+		'background_image',
+		array(
+			'default'           =&gt; get_theme_support( 'custom-background', 'default-image' ),
+			'theme_supports'    =&gt; 'custom-background',
+			'sanitize_callback' =&gt; array( $this, '_sanitize_background_setting' ),
+		)
+	);
+
+	$this-&gt;add_setting(
+		new WP_Customize_Background_Image_Setting(
+			$this,
+			'background_image_thumb',
+			array(
+				'theme_supports'    =&gt; 'custom-background',
+				'sanitize_callback' =&gt; array( $this, '_sanitize_background_setting' ),
+			)
+		)
+	);
+
+	$this-&gt;add_control( new WP_Customize_Background_Image_Control( $this ) );
+
+	$this-&gt;add_setting(
+		'background_preset',
+		array(
+			'default'           =&gt; get_theme_support( 'custom-background', 'default-preset' ),
+			'theme_supports'    =&gt; 'custom-background',
+			'sanitize_callback' =&gt; array( $this, '_sanitize_background_setting' ),
+		)
+	);
+
+	$this-&gt;add_control(
+		'background_preset',
+		array(
+			'label'   =&gt; _x( 'Preset', 'Background Preset' ),
+			'section' =&gt; 'background_image',
+			'type'    =&gt; 'select',
+			'choices' =&gt; array(
+				'default' =&gt; _x( 'Default', 'Default Preset' ),
+				'fill'    =&gt; __( 'Fill Screen' ),
+				'fit'     =&gt; __( 'Fit to Screen' ),
+				'repeat'  =&gt; _x( 'Repeat', 'Repeat Image' ),
+				'custom'  =&gt; _x( 'Custom', 'Custom Preset' ),
+			),
+		)
+	);
+
+	$this-&gt;add_setting(
+		'background_position_x',
+		array(
+			'default'           =&gt; get_theme_support( 'custom-background', 'default-position-x' ),
+			'theme_supports'    =&gt; 'custom-background',
+			'sanitize_callback' =&gt; array( $this, '_sanitize_background_setting' ),
+		)
+	);
+
+	$this-&gt;add_setting(
+		'background_position_y',
+		array(
+			'default'           =&gt; get_theme_support( 'custom-background', 'default-position-y' ),
+			'theme_supports'    =&gt; 'custom-background',
+			'sanitize_callback' =&gt; array( $this, '_sanitize_background_setting' ),
+		)
+	);
+
+	$this-&gt;add_control(
+		new WP_Customize_Background_Position_Control(
+			$this,
+			'background_position',
+			array(
+				'label'    =&gt; __( 'Image Position' ),
+				'section'  =&gt; 'background_image',
+				'settings' =&gt; array(
+					'x' =&gt; 'background_position_x',
+					'y' =&gt; 'background_position_y',
+				),
+			)
+		)
+	);
+
+	$this-&gt;add_setting(
+		'background_size',
+		array(
+			'default'           =&gt; get_theme_support( 'custom-background', 'default-size' ),
+			'theme_supports'    =&gt; 'custom-background',
+			'sanitize_callback' =&gt; array( $this, '_sanitize_background_setting' ),
+		)
+	);
+
+	$this-&gt;add_control(
+		'background_size',
+		array(
+			'label'   =&gt; __( 'Image Size' ),
+			'section' =&gt; 'background_image',
+			'type'    =&gt; 'select',
+			'choices' =&gt; array(
+				'auto'    =&gt; _x( 'Original', 'Original Size' ),
+				'contain' =&gt; __( 'Fit to Screen' ),
+				'cover'   =&gt; __( 'Fill Screen' ),
+			),
+		)
+	);
+
+	$this-&gt;add_setting(
+		'background_repeat',
+		array(
+			'default'           =&gt; get_theme_support( 'custom-background', 'default-repeat' ),
+			'sanitize_callback' =&gt; array( $this, '_sanitize_background_setting' ),
+			'theme_supports'    =&gt; 'custom-background',
+		)
+	);
+
+	$this-&gt;add_control(
+		'background_repeat',
+		array(
+			'label'   =&gt; __( 'Repeat Background Image' ),
+			'section' =&gt; 'background_image',
+			'type'    =&gt; 'checkbox',
+		)
+	);
+
+	$this-&gt;add_setting(
+		'background_attachment',
+		array(
+			'default'           =&gt; get_theme_support( 'custom-background', 'default-attachment' ),
+			'sanitize_callback' =&gt; array( $this, '_sanitize_background_setting' ),
+			'theme_supports'    =&gt; 'custom-background',
+		)
+	);
+
+	$this-&gt;add_control(
+		'background_attachment',
+		array(
+			'label'   =&gt; __( 'Scroll with Page' ),
+			'section' =&gt; 'background_image',
+			'type'    =&gt; 'checkbox',
+		)
+	);
+
+	/*
+	 * If the theme is using the default background callback, we can update
+	 * the background CSS using postMessage.
+	 */
+	if ( get_theme_support( 'custom-background', 'wp-head-callback' ) === '_custom_background_cb' ) {
+		foreach ( array( 'color', 'image', 'preset', 'position_x', 'position_y', 'size', 'repeat', 'attachment' ) as $prop ) {
+			$this-&gt;get_setting( 'background_' . $prop )-&gt;transport = 'postMessage';
+		}
+	}
+
+	/*
+	 * Static Front Page
+	 * See also https://core.trac.wordpress.org/ticket/19627 which introduces the static-front-page theme_support.
+	 * The following replicates behavior from options-reading.php.
+	 */
+
+	$this-&gt;add_section(
+		'static_front_page',
+		array(
+			'title'           =&gt; __( 'Homepage Settings' ),
+			'priority'        =&gt; 120,
+			'description'     =&gt; __( 'You can choose what&amp;#8217;s displayed on the homepage of your site. It can be posts in reverse chronological order (classic blog), or a fixed/static page. To set a static homepage, you first need to create two Pages. One will become the homepage, and the other will be where your posts are displayed.' ),
+			'active_callback' =&gt; array( $this, 'has_published_pages' ),
+		)
+	);
+
+	$this-&gt;add_setting(
+		'show_on_front',
+		array(
+			'default'    =&gt; get_option( 'show_on_front' ),
+			'capability' =&gt; 'manage_options',
+			'type'       =&gt; 'option',
+		)
+	);
+
+	$this-&gt;add_control(
+		'show_on_front',
+		array(
+			'label'   =&gt; __( 'Your homepage displays' ),
+			'section' =&gt; 'static_front_page',
+			'type'    =&gt; 'radio',
+			'choices' =&gt; array(
+				'posts' =&gt; __( 'Your latest posts' ),
+				'page'  =&gt; __( 'A static page' ),
+			),
+		)
+	);
+
+	$this-&gt;add_setting(
+		'page_on_front',
+		array(
+			'type'       =&gt; 'option',
+			'capability' =&gt; 'manage_options',
+		)
+	);
+
+	$this-&gt;add_control(
+		'page_on_front',
+		array(
+			'label'          =&gt; __( 'Homepage' ),
+			'section'        =&gt; 'static_front_page',
+			'type'           =&gt; 'dropdown-pages',
+			'allow_addition' =&gt; true,
+		)
+	);
+
+	$this-&gt;add_setting(
+		'page_for_posts',
+		array(
+			'type'       =&gt; 'option',
+			'capability' =&gt; 'manage_options',
+		)
+	);
+
+	$this-&gt;add_control(
+		'page_for_posts',
+		array(
+			'label'          =&gt; __( 'Posts page' ),
+			'section'        =&gt; 'static_front_page',
+			'type'           =&gt; 'dropdown-pages',
+			'allow_addition' =&gt; true,
+		)
+	);
+
+	/* Custom CSS */
+	$section_description  = '&lt;p&gt;';
+	$section_description .= __( 'Add your own CSS code here to customize the appearance and layout of your site.' );
+	$section_description .= sprintf(
+		' &lt;a href="%1$s" class="external-link" target="_blank"&gt;%2$s&lt;span class="screen-reader-text"&gt; %3$s&lt;/span&gt;&lt;/a&gt;',
+		esc_url( __( 'https://developer.wordpress.org/advanced-administration/wordpress/css/' ) ),
+		__( 'Learn more about CSS' ),
+		/* translators: Hidden accessibility text. */
+		__( '(opens in a new tab)' )
+	);
+	$section_description .= '&lt;/p&gt;';
+
+	$section_description .= '&lt;p id="editor-keyboard-trap-help-1"&gt;' . __( 'When using a keyboard to navigate:' ) . '&lt;/p&gt;';
+	$section_description .= '&lt;ul&gt;';
+	$section_description .= '&lt;li id="editor-keyboard-trap-help-2"&gt;' . __( 'In the editing area, the Tab key enters a tab character.' ) . '&lt;/li&gt;';
+	$section_description .= '&lt;li id="editor-keyboard-trap-help-3"&gt;' . __( 'To move away from this area, press the Esc key followed by the Tab key.' ) . '&lt;/li&gt;';
+	$section_description .= '&lt;li id="editor-keyboard-trap-help-4"&gt;' . __( 'Screen reader users: when in forms mode, you may need to press the Esc key twice.' ) . '&lt;/li&gt;';
+	$section_description .= '&lt;/ul&gt;';
+
+	if ( 'false' !== wp_get_current_user()-&gt;syntax_highlighting ) {
+		$section_description .= '&lt;p&gt;';
+		$section_description .= sprintf(
+			/* translators: 1: Link to user profile, 2: Additional link attributes, 3: Accessibility text. */
+			__( 'The edit field automatically highlights code syntax. You can disable this in your &lt;a href="%1$s" %2$s&gt;user profile%3$s&lt;/a&gt; to work in plain text mode.' ),
+			esc_url( get_edit_profile_url() ),
+			'class="external-link" target="_blank"',
+			sprintf(
+				'&lt;span class="screen-reader-text"&gt; %s&lt;/span&gt;',
+				/* translators: Hidden accessibility text. */
+				__( '(opens in a new tab)' )
+			)
+		);
+		$section_description .= '&lt;/p&gt;';
+	}
+
+	$section_description .= '&lt;p class="section-description-buttons"&gt;';
+	$section_description .= '&lt;button type="button" class="button-link section-description-close"&gt;' . __( 'Close' ) . '&lt;/button&gt;';
+	$section_description .= '&lt;/p&gt;';
+
+	$this-&gt;add_section(
+		'custom_css',
+		array(
+			'title'              =&gt; __( 'Additional CSS' ),
+			'priority'           =&gt; 200,
+			'description_hidden' =&gt; true,
+			'description'        =&gt; $section_description,
+		)
+	);
+
+	$custom_css_setting = new WP_Customize_Custom_CSS_Setting(
+		$this,
+		sprintf( 'custom_css[%s]', get_stylesheet() ),
+		array(
+			'capability' =&gt; 'edit_css',
+			'default'    =&gt; '',
+		)
+	);
+	$this-&gt;add_setting( $custom_css_setting );
+
+	$this-&gt;add_control(
+		new WP_Customize_Code_Editor_Control(
+			$this,
+			'custom_css',
+			array(
+				'label'       =&gt; __( 'CSS code' ),
+				'section'     =&gt; 'custom_css',
+				'settings'    =&gt; array( 'default' =&gt; $custom_css_setting-&gt;id ),
+				'code_type'   =&gt; 'text/css',
+				'input_attrs' =&gt; array(
+					'aria-describedby' =&gt; 'editor-keyboard-trap-help-1 editor-keyboard-trap-help-2 editor-keyboard-trap-help-3 editor-keyboard-trap-help-4',
+				),
+			)
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-manager.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-manager.php#L5069">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-manager.php#L5069-L5780">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_manager/register_controls" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_manager/register_controls</a>
+  </p>
+</div>

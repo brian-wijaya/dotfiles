@@ -1,0 +1,97 @@
+<h1 class="wp-block-wporg-code-reference-title">get_comment_author_link( <span class="arg-type">int|WP_Comment</span> <span class="arg-name">$comment_id</span> ): <span class="return-type">string</span>
+</h1> <section><p>Retrieves the HTML link to the URL of the author of the current comment.</p> </section> <section><h2 id="description">Description</h2> <p>Both <a href="get_comment_author_url" rel="function">get_comment_author_url()</a> and <a href="get_comment_author" rel="function">get_comment_author()</a> rely on <a href="get_comment" rel="function">get_comment()</a> , which falls back to the global comment variable if the $comment_id argument is empty.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$comment_id</code><span class="type"><span class="int">int</span>|<span class="WP_Comment"><a href="../classes/wp_comment" rel="class">WP_Comment</a></span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description"><a href="../classes/wp_comment" rel="class">WP_Comment</a> or the ID of the comment for which to get the author’s link.<br> Default current comment.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The comment author name or HTML link for author’s URL.</section> <section><h2 id="more-information">More Information</h2> <p>Displays the comment author name or HTML link of the comment author’s URL, given a comment ID.</p> <p><code>echo get_comment_author_link( $comment_ID );</code></p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="233" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_comment_author_link( $comment_id = 0 ) {
+	$comment = get_comment( $comment_id );
+
+	if ( ! empty( $comment-&gt;comment_ID ) ) {
+		$comment_id = $comment-&gt;comment_ID;
+	} elseif ( is_scalar( $comment_id ) ) {
+		$comment_id = (string) $comment_id;
+	} else {
+		$comment_id = '0';
+	}
+
+	$comment_author_url = get_comment_author_url( $comment );
+	$comment_author     = get_comment_author( $comment );
+
+	if ( empty( $comment_author_url ) || 'http://' === $comment_author_url ) {
+		$comment_author_link = $comment_author;
+	} else {
+		$rel_parts = array( 'ugc' );
+		if ( ! wp_is_internal_link( $comment_author_url ) ) {
+			$rel_parts = array_merge(
+				$rel_parts,
+				array( 'external', 'nofollow' )
+			);
+		}
+
+		/**
+		 * Filters the rel attributes of the comment author's link.
+		 *
+		 * @since 6.2.0
+		 *
+		 * @param string[]   $rel_parts An array of strings representing the rel tags
+		 *                              which will be joined into the anchor's rel attribute.
+		 * @param WP_Comment $comment   The comment object.
+		 */
+		$rel_parts = apply_filters( 'comment_author_link_rel', $rel_parts, $comment );
+
+		$rel = implode( ' ', $rel_parts );
+		$rel = esc_attr( $rel );
+		// Empty space before 'rel' is necessary for later sprintf().
+		$rel = ! empty( $rel ) ? sprintf( ' rel="%s"', $rel ) : '';
+
+		$comment_author_link = sprintf(
+			'&lt;a href="%1$s" class="url"%2$s&gt;%3$s&lt;/a&gt;',
+			$comment_author_url,
+			$rel,
+			$comment_author
+		);
+	}
+
+	/**
+	 * Filters the comment author's link for display.
+	 *
+	 * @since 1.5.0
+	 * @since 4.1.0 The `$comment_author` and `$comment_id` parameters were added.
+	 *
+	 * @param string $comment_author_link The HTML-formatted comment author link.
+	 *                                    Empty for an invalid URL.
+	 * @param string $comment_author      The comment author's username.
+	 * @param string $comment_id          The comment ID as a numeric string.
+	 */
+	return apply_filters( 'get_comment_author_link', $comment_author_link, $comment_author, $comment_id );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment-template.php#L233">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment-template.php#L233-L294">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_author_link_rel"><span class="hook-func">apply_filters</span>( ‘comment_author_link_rel’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$rel_parts</span></nobr>, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr> )</a></dt>
+<dd>
+<p>Filters the rel attributes of the comment author’s link.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_comment_author_link"><span class="hook-func">apply_filters</span>( ‘get_comment_author_link’, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_author_link</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_author</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the comment author’s link for display.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Added the ability for <code>$comment_id</code> to also accept a <a href="../classes/wp_comment" rel="class">WP_Comment</a> object.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_comment_author_link" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_comment_author_link</a>
+  </p>
+</div>

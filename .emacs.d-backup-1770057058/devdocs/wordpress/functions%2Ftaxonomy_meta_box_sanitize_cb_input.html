@@ -1,0 +1,66 @@
+<h1 class="wp-block-wporg-code-reference-title">taxonomy_meta_box_sanitize_cb_input( <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span>, <span class="arg-type">array|string</span> <span class="arg-name">$terms</span> ): <span class="return-type">array</span>
+</h1> <section><p>Sanitizes POST values from an input taxonomy metabox.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The taxonomy name.</span></div></dd>
+<dt>
+<code>$terms</code><span class="type"><span class="array">array</span>|<span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Raw term data from the <code>'tax_input'</code> field.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2244" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function taxonomy_meta_box_sanitize_cb_input( $taxonomy, $terms ) {
+	/*
+	 * Assume that a 'tax_input' string is a comma-separated list of term names.
+	 * Some languages may use a character other than a comma as a delimiter, so we standardize on
+	 * commas before parsing the list.
+	 */
+	if ( ! is_array( $terms ) ) {
+		$comma = _x( ',', 'tag delimiter' );
+		if ( ',' !== $comma ) {
+			$terms = str_replace( $comma, ',', $terms );
+		}
+		$terms = explode( ',', trim( $terms, " \n\t\r\0\x0B," ) );
+	}
+
+	$clean_terms = array();
+	foreach ( $terms as $term ) {
+		// Empty terms are invalid input.
+		if ( empty( $term ) ) {
+			continue;
+		}
+
+		$_term = get_terms(
+			array(
+				'taxonomy'   =&gt; $taxonomy,
+				'name'       =&gt; $term,
+				'fields'     =&gt; 'ids',
+				'hide_empty' =&gt; false,
+			)
+		);
+
+		if ( ! empty( $_term ) ) {
+			$clean_terms[] = (int) $_term[0];
+		} else {
+			// No existing term was found, so pass the string. A new term will be created.
+			$clean_terms[] = $term;
+		}
+	}
+
+	return $clean_terms;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/post.php#L2244">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/post.php#L2244-L2283">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/taxonomy_meta_box_sanitize_cb_input" class="_attribution-link">https://developer.wordpress.org/reference/functions/taxonomy_meta_box_sanitize_cb_input</a>
+  </p>
+</div>

@@ -1,0 +1,91 @@
+<h1 class="wp-block-wporg-code-reference-title">get_site_transient( <span class="arg-type">string</span> <span class="arg-name">$transient</span> ): <span class="return-type">mixed</span>
+</h1> <section><p>Retrieves the value of a site transient.</p> </section> <section><h2 id="description">Description</h2> <p>If the transient does not exist, does not have a value, or has expired, then the return value will be false.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="get_transient">get_transient()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$transient</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Transient name. Expected to not be SQL-escaped.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed</span> Value of transient.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2520" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_site_transient( $transient ) {
+
+	/**
+	 * Filters the value of an existing site transient before it is retrieved.
+	 *
+	 * The dynamic portion of the hook name, `$transient`, refers to the transient name.
+	 *
+	 * Returning a value other than boolean false will short-circuit retrieval and
+	 * return that value instead.
+	 *
+	 * @since 2.9.0
+	 * @since 4.4.0 The `$transient` parameter was added.
+	 *
+	 * @param mixed  $pre_site_transient The default value to return if the site transient does not exist.
+	 *                                   Any value other than false will short-circuit the retrieval
+	 *                                   of the transient, and return that value.
+	 * @param string $transient          Transient name.
+	 */
+	$pre = apply_filters( "pre_site_transient_{$transient}", false, $transient );
+
+	if ( false !== $pre ) {
+		return $pre;
+	}
+
+	if ( wp_using_ext_object_cache() || wp_installing() ) {
+		$value = wp_cache_get( $transient, 'site-transient' );
+	} else {
+		// Core transients that do not have a timeout. Listed here so querying timeouts can be avoided.
+		$no_timeout       = array( 'update_core', 'update_plugins', 'update_themes' );
+		$transient_option = '_site_transient_' . $transient;
+		if ( ! in_array( $transient, $no_timeout, true ) ) {
+			$transient_timeout = '_site_transient_timeout_' . $transient;
+			wp_prime_site_option_caches( array( $transient_option, $transient_timeout ) );
+
+			$timeout = get_site_option( $transient_timeout );
+			if ( false !== $timeout &amp;&amp; $timeout &lt; time() ) {
+				delete_site_option( $transient_option );
+				delete_site_option( $transient_timeout );
+				$value = false;
+			}
+		}
+
+		if ( ! isset( $value ) ) {
+			$value = get_site_option( $transient_option );
+		}
+	}
+
+	/**
+	 * Filters the value of an existing site transient.
+	 *
+	 * The dynamic portion of the hook name, `$transient`, refers to the transient name.
+	 *
+	 * @since 2.9.0
+	 * @since 4.4.0 The `$transient` parameter was added.
+	 *
+	 * @param mixed  $value     Value of site transient.
+	 * @param string $transient Transient name.
+	 */
+	return apply_filters( "site_transient_{$transient}", $value, $transient );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/option.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/option.php#L2520">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/option.php#L2520-L2579">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_site_transient_transient"><span class="hook-func">apply_filters</span>( “pre_site_transient_{$transient}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$pre_site_transient</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$transient</span></nobr> )</a></dt>
+<dd>
+<p>Filters the value of an existing site transient before it is retrieved.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/site_transient_transient"><span class="hook-func">apply_filters</span>( “site_transient_{$transient}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$transient</span></nobr> )</a></dt>
+<dd>
+<p>Filters the value of an existing site transient.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.9.0/">2.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_site_transient" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_site_transient</a>
+  </p>
+</div>

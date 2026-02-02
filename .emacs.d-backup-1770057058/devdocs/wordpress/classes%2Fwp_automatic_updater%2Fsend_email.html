@@ -1,0 +1,284 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Automatic_Updater::send_email( <span class="arg-type">string</span> <span class="arg-name">$type</span>, <span class="arg-type">object</span> <span class="arg-name">$core_update</span>, <span class="arg-type">mixed</span> <span class="arg-name">$result</span> = <span class="arg-default">null</span> )</h1> <section><p>Sends an email upon the completion or failure of a background core update.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The type of email to send. Can be one of <code>'success'</code>, <code>'fail'</code>, <code>'manual'</code>, <code>'critical'</code>.</span></div></dd>
+<dt>
+<code>$core_update</code><span class="type"><span class="object">object</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The update offer that was attempted.</span></div></dd>
+<dt>
+<code>$result</code><span class="type"><span class="mixed">mixed</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The result for the core update. Can be <a href="../wp_error" rel="class">WP_Error</a>.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="898" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function send_email( $type, $core_update, $result = null ) {
+	update_site_option(
+		'auto_core_update_notified',
+		array(
+			'type'      =&gt; $type,
+			'email'     =&gt; get_site_option( 'admin_email' ),
+			'version'   =&gt; $core_update-&gt;current,
+			'timestamp' =&gt; time(),
+		)
+	);
+
+	$next_user_core_update = get_preferred_from_update_core();
+
+	// If the update transient is empty, use the update we just performed.
+	if ( ! $next_user_core_update ) {
+		$next_user_core_update = $core_update;
+	}
+
+	if ( 'upgrade' === $next_user_core_update-&gt;response
+		&amp;&amp; version_compare( $next_user_core_update-&gt;version, $core_update-&gt;version, '&gt;' )
+	) {
+		$newer_version_available = true;
+	} else {
+		$newer_version_available = false;
+	}
+
+	/**
+	 * Filters whether to send an email following an automatic background core update.
+	 *
+	 * @since 3.7.0
+	 *
+	 * @param bool   $send        Whether to send the email. Default true.
+	 * @param string $type        The type of email to send. Can be one of
+	 *                            'success', 'fail', 'critical'.
+	 * @param object $core_update The update offer that was attempted.
+	 * @param mixed  $result      The result for the core update. Can be WP_Error.
+	 */
+	if ( 'manual' !== $type &amp;&amp; ! apply_filters( 'auto_core_update_send_email', true, $type, $core_update, $result ) ) {
+		return;
+	}
+
+	switch ( $type ) {
+		case 'success': // We updated.
+			/* translators: Site updated notification email subject. 1: Site title, 2: WordPress version. */
+			$subject = __( '[%1$s] Your site has updated to WordPress %2$s' );
+			break;
+
+		case 'fail':   // We tried to update but couldn't.
+		case 'manual': // We can't update (and made no attempt).
+			/* translators: Update available notification email subject. 1: Site title, 2: WordPress version. */
+			$subject = __( '[%1$s] WordPress %2$s is available. Please update!' );
+			break;
+
+		case 'critical': // We tried to update, started to copy files, then things went wrong.
+			/* translators: Site down notification email subject. 1: Site title. */
+			$subject = __( '[%1$s] URGENT: Your site may be down due to a failed update' );
+			break;
+
+		default:
+			return;
+	}
+
+	// If the auto-update is not to the latest version, say that the current version of WP is available instead.
+	$version = 'success' === $type ? $core_update-&gt;current : $next_user_core_update-&gt;current;
+	$subject = sprintf( $subject, wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ), $version );
+
+	$body = '';
+
+	switch ( $type ) {
+		case 'success':
+			$body .= sprintf(
+				/* translators: 1: Home URL, 2: WordPress version. */
+				__( 'Howdy! Your site at %1$s has been updated automatically to WordPress %2$s.' ),
+				home_url(),
+				$core_update-&gt;current
+			);
+			$body .= "\n\n";
+			if ( ! $newer_version_available ) {
+				$body .= __( 'No further action is needed on your part.' ) . ' ';
+			}
+
+			// Can only reference the About screen if their update was successful.
+			list( $about_version ) = explode( '-', $core_update-&gt;current, 2 );
+			/* translators: %s: WordPress version. */
+			$body .= sprintf( __( 'For more on version %s, see the About WordPress screen:' ), $about_version );
+			$body .= "\n" . admin_url( 'about.php' );
+
+			if ( $newer_version_available ) {
+				/* translators: %s: WordPress latest version. */
+				$body .= "\n\n" . sprintf( __( 'WordPress %s is also now available.' ), $next_user_core_update-&gt;current ) . ' ';
+				$body .= __( 'Updating is easy and only takes a few moments:' );
+				$body .= "\n" . network_admin_url( 'update-core.php' );
+			}
+
+			break;
+
+		case 'fail':
+		case 'manual':
+			$body .= sprintf(
+				/* translators: 1: Home URL, 2: WordPress version. */
+				__( 'Please update your site at %1$s to WordPress %2$s.' ),
+				home_url(),
+				$next_user_core_update-&gt;current
+			);
+
+			$body .= "\n\n";
+
+			/*
+			 * Don't show this message if there is a newer version available.
+			 * Potential for confusion, and also not useful for them to know at this point.
+			 */
+			if ( 'fail' === $type &amp;&amp; ! $newer_version_available ) {
+				$body .= __( 'An attempt was made, but your site could not be updated automatically.' ) . ' ';
+			}
+
+			$body .= __( 'Updating is easy and only takes a few moments:' );
+			$body .= "\n" . network_admin_url( 'update-core.php' );
+			break;
+
+		case 'critical':
+			if ( $newer_version_available ) {
+				$body .= sprintf(
+					/* translators: 1: Home URL, 2: WordPress version. */
+					__( 'Your site at %1$s experienced a critical failure while trying to update WordPress to version %2$s.' ),
+					home_url(),
+					$core_update-&gt;current
+				);
+			} else {
+				$body .= sprintf(
+					/* translators: 1: Home URL, 2: WordPress latest version. */
+					__( 'Your site at %1$s experienced a critical failure while trying to update to the latest version of WordPress, %2$s.' ),
+					home_url(),
+					$core_update-&gt;current
+				);
+			}
+
+			$body .= "\n\n" . __( "This means your site may be offline or broken. Don't panic; this can be fixed." );
+
+			$body .= "\n\n" . __( "Please check out your site now. It's possible that everything is working. If it says you need to update, you should do so:" );
+			$body .= "\n" . network_admin_url( 'update-core.php' );
+			break;
+	}
+
+	$critical_support = 'critical' === $type &amp;&amp; ! empty( $core_update-&gt;support_email );
+	if ( $critical_support ) {
+		// Support offer if available.
+		$body .= "\n\n" . sprintf(
+			/* translators: %s: Support email address. */
+			__( 'The WordPress team is willing to help you. Forward this email to %s and the team will work with you to make sure your site is working.' ),
+			$core_update-&gt;support_email
+		);
+	} else {
+		// Add a note about the support forums.
+		$body .= "\n\n" . __( 'If you experience any issues or need support, the volunteers in the WordPress.org support forums may be able to help.' );
+		$body .= "\n" . __( 'https://wordpress.org/support/forums/' );
+	}
+
+	// Updates are important!
+	if ( 'success' !== $type || $newer_version_available ) {
+		$body .= "\n\n" . __( 'Keeping your site updated is important for security. It also makes the internet a safer place for you and your readers.' );
+	}
+
+	if ( $critical_support ) {
+		$body .= ' ' . __( "Reach out to WordPress Core developers to ensure you'll never have this problem again." );
+	}
+
+	// If things are successful and we're now on the latest, mention plugins and themes if any are out of date.
+	if ( 'success' === $type &amp;&amp; ! $newer_version_available &amp;&amp; ( get_plugin_updates() || get_theme_updates() ) ) {
+		$body .= "\n\n" . __( 'You also have some plugins or themes with updates available. Update them now:' );
+		$body .= "\n" . network_admin_url();
+	}
+
+	$body .= "\n\n" . __( 'The WordPress Team' ) . "\n";
+
+	if ( 'critical' === $type &amp;&amp; is_wp_error( $result ) ) {
+		$body .= "\n***\n\n";
+		/* translators: %s: WordPress version. */
+		$body .= sprintf( __( 'Your site was running version %s.' ), get_bloginfo( 'version' ) );
+		$body .= ' ' . __( 'Some data that describes the error your site encountered has been put together.' );
+		$body .= ' ' . __( 'Your hosting company, support forum volunteers, or a friendly developer may be able to use this information to help you:' );
+
+		/*
+		 * If we had a rollback and we're still critical, then the rollback failed too.
+		 * Loop through all errors (the main WP_Error, the update result, the rollback result) for code, data, etc.
+		 */
+		if ( 'rollback_was_required' === $result-&gt;get_error_code() ) {
+			$errors = array( $result, $result-&gt;get_error_data()-&gt;update, $result-&gt;get_error_data()-&gt;rollback );
+		} else {
+			$errors = array( $result );
+		}
+
+		foreach ( $errors as $error ) {
+			if ( ! is_wp_error( $error ) ) {
+				continue;
+			}
+
+			$error_code = $error-&gt;get_error_code();
+			/* translators: %s: Error code. */
+			$body .= "\n\n" . sprintf( __( 'Error code: %s' ), $error_code );
+
+			if ( 'rollback_was_required' === $error_code ) {
+				continue;
+			}
+
+			if ( $error-&gt;get_error_message() ) {
+				$body .= "\n" . $error-&gt;get_error_message();
+			}
+
+			$error_data = $error-&gt;get_error_data();
+			if ( $error_data ) {
+				$body .= "\n" . implode( ', ', (array) $error_data );
+			}
+		}
+
+		$body .= "\n";
+	}
+
+	$to      = get_site_option( 'admin_email' );
+	$headers = '';
+
+	$email = compact( 'to', 'subject', 'body', 'headers' );
+
+	/**
+	 * Filters the email sent following an automatic background core update.
+	 *
+	 * @since 3.7.0
+	 *
+	 * @param array $email {
+	 *     Array of email arguments that will be passed to wp_mail().
+	 *
+	 *     @type string $to      The email recipient. An array of emails
+	 *                            can be returned, as handled by wp_mail().
+	 *     @type string $subject The email's subject.
+	 *     @type string $body    The email message body.
+	 *     @type string $headers Any email headers, defaults to no headers.
+	 * }
+	 * @param string $type        The type of email being sent. Can be one of
+	 *                            'success', 'fail', 'manual', 'critical'.
+	 * @param object $core_update The update offer that was attempted.
+	 * @param mixed  $result      The result for the core update. Can be WP_Error.
+	 */
+	$email = apply_filters( 'auto_core_update_email', $email, $type, $core_update, $result );
+
+	wp_mail( $email['to'], wp_specialchars_decode( $email['subject'] ), $email['body'], $email['headers'] );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-automatic-updater.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L898">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L898-L1142">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/auto_core_update_email"><span class="hook-func">apply_filters</span>( ‘auto_core_update_email’, <nobr><span class="arg-type">array</span> <span class="arg-name">$email</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$type</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$core_update</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$result</span></nobr> )</a></dt>
+<dd>
+<p>Filters the email sent following an automatic background core update.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/auto_core_update_send_email"><span class="hook-func">apply_filters</span>( ‘auto_core_update_send_email’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$send</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$type</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$core_update</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$result</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to send an email following an automatic background core update.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_automatic_updater/send_email" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_automatic_updater/send_email</a>
+  </p>
+</div>

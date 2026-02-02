@@ -1,0 +1,42 @@
+<h1 class="devsite-page-title" tabindex="-1"> tf.experimental.dispatch_for_api </h1> <devsite-feature-tooltip ack-key="AckCollectionsBookmarkTooltipDismiss" analytics-category="Site-Wide Custom Events" analytics-action-show="Callout Profile displayed" analytics-action-close="Callout Profile dismissed" analytics-label="Create Collection Callout" class="devsite-page-bookmark-tooltip nocontent" dismiss-button="true" id="devsite-collections-dropdown" dismiss-button-text="Dismiss" close-button-text="Got it">    </devsite-feature-tooltip> <div class="devsite-page-title-meta"><devsite-view-release-notes></devsite-view-release-notes></div>     <div itemscope itemtype="http://developers.google.com/ReferenceObject"> <meta itemprop="name" content="tf.experimental.dispatch_for_api"> <meta itemprop="path" content="Stable"> </div>   <p>Decorator that overrides the default implementation for a TensorFlow API.</p> <section class="expandable"> <h4 class="showalways" id="view-aliases" data-text="View aliases" tabindex="-1">View aliases</h4> <p> <b>Compat aliases for migration</b> </p>
+<p>See <a href="https://www.tensorflow.org/guide/migrate">Migration guide</a> for more details.</p> <p><a href="dispatch_for_api"><code translate="no" dir="ltr">tf.compat.v1.experimental.dispatch_for_api</code></a></p> </section> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">tf.experimental.dispatch_for_api(
+    api, *signatures
+)
+</pre></devsite-code> <h3 id="used-in-the-notebooks" data-text="Used in the notebooks" tabindex="-1">Used in the notebooks</h3> <table class="vertical-rules"> <thead> <tr> <th>Used in the guide</th> </tr> </thead> <tbody> <tr> <td> <ul> <li><a href="https://www.tensorflow.org/guide/extension_type">Extension types</a></li> </ul> </td> </tr> </tbody> </table> <p>The decorated function (known as the "dispatch target") will override the default implementation for the API when the API is called with parameters that match a specified type signature. Signatures are specified using dictionaries that map parameter names to type annotations. E.g., in the following example, <code translate="no" dir="ltr">masked_add</code> will be called for <a href="../math/add"><code translate="no" dir="ltr">tf.add</code></a> if both <code translate="no" dir="ltr">x</code> and <code translate="no" dir="ltr">y</code> are <code translate="no" dir="ltr">MaskedTensor</code>s:</p> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">class MaskedTensor(tf.experimental.ExtensionType):
+  values: tf.Tensor
+  mask: tf.Tensor</pre></devsite-code> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">@dispatch_for_api(tf.math.add, {'x': MaskedTensor, 'y': MaskedTensor})
+def masked_add(x, y, name=None):
+  return MaskedTensor(x.values + y.values, x.mask &amp; y.mask)</pre></devsite-code> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">mt = tf.add(MaskedTensor([1, 2], [True, False]), MaskedTensor(10, True))
+print(f"values={mt.values.numpy()}, mask={mt.mask.numpy()}")
+values=[11 12], mask=[ True False]</pre></devsite-code> <p>If multiple type signatures are specified, then the dispatch target will be called if any of the signatures match. For example, the following code registers <code translate="no" dir="ltr">masked_add</code> to be called if <code translate="no" dir="ltr">x</code> is a <code translate="no" dir="ltr">MaskedTensor</code> <em>or</em> <code translate="no" dir="ltr">y</code> is a <code translate="no" dir="ltr">MaskedTensor</code>.</p> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">@dispatch_for_api(tf.math.add, {'x': MaskedTensor}, {'y':MaskedTensor})
+def masked_add(x, y):
+  x_values = x.values if isinstance(x, MaskedTensor) else x
+  x_mask = x.mask if isinstance(x, MaskedTensor) else True
+  y_values = y.values if isinstance(y, MaskedTensor) else y
+  y_mask = y.mask if isinstance(y, MaskedTensor) else True
+  return MaskedTensor(x_values + y_values, x_mask &amp; y_mask)</pre></devsite-code> <p>The type annotations in type signatures may be type objects (e.g., <code translate="no" dir="ltr">MaskedTensor</code>), <code translate="no" dir="ltr">typing.List</code> values, or <code translate="no" dir="ltr">typing.Union</code> values. For example, the following will register <code translate="no" dir="ltr">masked_concat</code> to be called if <code translate="no" dir="ltr">values</code> is a list of <code translate="no" dir="ltr">MaskedTensor</code> values:</p> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">@dispatch_for_api(tf.concat, {'values': typing.List[MaskedTensor]})
+def masked_concat(values, axis):
+  return MaskedTensor(tf.concat([v.values for v in values], axis),
+                      tf.concat([v.mask for v in values], axis))</pre></devsite-code> <p>Each type signature must contain at least one subclass of <code translate="no" dir="ltr">tf.CompositeTensor</code> (which includes subclasses of <code translate="no" dir="ltr">tf.ExtensionType</code>), and dispatch will only be triggered if at least one type-annotated parameter contains a <code translate="no" dir="ltr">CompositeTensor</code> value. This rule avoids invoking dispatch in degenerate cases, such as the following examples:</p> <ul> <li><p><code translate="no" dir="ltr">@dispatch_for_api(tf.concat, {'values': List[MaskedTensor]})</code>: Will not dispatch to the decorated dispatch target when the user calls <code translate="no" dir="ltr">tf.concat([])</code>.</p></li> <li><p><code translate="no" dir="ltr">@dispatch_for_api(tf.add, {'x': Union[MaskedTensor, Tensor], 'y': Union[MaskedTensor, Tensor]})</code>: Will not dispatch to the decorated dispatch target when the user calls <code translate="no" dir="ltr">tf.add(tf.constant(1), tf.constant(2))</code>.</p></li> </ul> <p>The dispatch target's signature must match the signature of the API that is being overridden. In particular, parameters must have the same names, and must occur in the same order. The dispatch target may optionally elide the "name" parameter, in which case it will be wrapped with a call to <a href="../name_scope"><code translate="no" dir="ltr">tf.name_scope</code></a> when appropraite.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">api</code> </td> <td> The TensorFlow API to override. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">*signatures</code> </td> <td> Dictionaries mapping parameter names or indices to type annotations, specifying when the dispatch target should be called. In particular, the dispatch target will be called if any signature matches; and a signature matches if all of the specified parameters have types that match with the indicated type annotations. If no signatures are specified, then a signature will be read from the dispatch target function's type annotations. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A decorator that overrides the default implementation for <code translate="no" dir="ltr">api</code>. </td> </tr> 
+</table> <h4 id="registered_apis" data-text="Registered APIs" tabindex="-1">Registered APIs</h4> <p>The TensorFlow APIs that may be overridden by <code translate="no" dir="ltr">@dispatch_for_api</code> are:</p> <p>&lt;<api_list>&gt;</api_list></p>  <devsite-thumb-rating position="footer"> </devsite-thumb-rating> <div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2022 The TensorFlow Authors. All rights reserved.<br>Licensed under the Creative Commons Attribution License 4.0.<br>Code samples licensed under the Apache 2.0 License.<br>
+    <a href="https://www.tensorflow.org/api_docs/python/tf/experimental/dispatch_for_api" class="_attribution-link">https://www.tensorflow.org/api_docs/python/tf/experimental/dispatch_for_api</a>
+  </p>
+</div>

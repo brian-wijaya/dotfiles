@@ -1,0 +1,87 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_opcache_invalidate( <span class="arg-type">string</span> <span class="arg-name">$filepath</span>, <span class="arg-type">bool</span> <span class="arg-name">$force</span> = <span class="arg-default">false</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Attempts to clear the opcode cache for an individual PHP file.</p> </section> <section><h2 id="description">Description</h2> <p>This function can be called safely without having to check the file extension or availability of the OPcache extension.</p> <p>Whether or not invalidation is possible is cached to improve performance.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$filepath</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Path to the file, including extension, for which the opcode cache is to be cleared.</span></div></dd>
+<dt>
+<code>$force</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Invalidate even if the modification time is not newer than the file in cache.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if opcache was invalidated for <code>$filepath</code>, or there was nothing to invalidate.<br> False if opcache invalidation is not available, or is disabled via filter.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2697" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_opcache_invalidate( $filepath, $force = false ) {
+	static $can_invalidate = null;
+
+	/*
+	 * Check to see if WordPress is able to run `opcache_invalidate()` or not, and cache the value.
+	 *
+	 * First, check to see if the function is available to call, then if the host has restricted
+	 * the ability to run the function to avoid a PHP warning.
+	 *
+	 * `opcache.restrict_api` can specify the path for files allowed to call `opcache_invalidate()`.
+	 *
+	 * If the host has this set, check whether the path in `opcache.restrict_api` matches
+	 * the beginning of the path of the origin file.
+	 *
+	 * `$_SERVER['SCRIPT_FILENAME']` approximates the origin file's path, but `realpath()`
+	 * is necessary because `SCRIPT_FILENAME` can be a relative path when run from CLI.
+	 *
+	 * For more details, see:
+	 * - https://www.php.net/manual/en/opcache.configuration.php
+	 * - https://www.php.net/manual/en/reserved.variables.server.php
+	 * - https://core.trac.wordpress.org/ticket/36455
+	 */
+	if ( null === $can_invalidate
+		&amp;&amp; function_exists( 'opcache_invalidate' )
+		&amp;&amp; ( ! ini_get( 'opcache.restrict_api' )
+			|| stripos( realpath( $_SERVER['SCRIPT_FILENAME'] ), ini_get( 'opcache.restrict_api' ) ) === 0 )
+	) {
+		$can_invalidate = true;
+	}
+
+	// If invalidation is not available, return early.
+	if ( ! $can_invalidate ) {
+		return false;
+	}
+
+	// Verify that file to be invalidated has a PHP extension.
+	if ( '.php' !== strtolower( substr( $filepath, -4 ) ) ) {
+		return false;
+	}
+
+	/**
+	 * Filters whether to invalidate a file from the opcode cache.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param bool   $will_invalidate Whether WordPress will invalidate `$filepath`. Default true.
+	 * @param string $filepath        The path to the PHP file to invalidate.
+	 */
+	if ( apply_filters( 'wp_opcache_invalidate_file', true, $filepath ) ) {
+		return opcache_invalidate( $filepath, $force );
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/file.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/file.php#L2697">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/file.php#L2697-L2750">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_opcache_invalidate_file"><span class="hook-func">apply_filters</span>( ‘wp_opcache_invalidate_file’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$will_invalidate</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$filepath</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to invalidate a file from the opcode cache.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_opcache_invalidate" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_opcache_invalidate</a>
+  </p>
+</div>

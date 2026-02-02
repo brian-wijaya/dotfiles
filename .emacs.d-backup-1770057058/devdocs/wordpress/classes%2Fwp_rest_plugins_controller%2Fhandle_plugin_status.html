@@ -1,0 +1,61 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Plugins_Controller::handle_plugin_status( <span class="arg-type">string</span> <span class="arg-name">$plugin</span>, <span class="arg-type">string</span> <span class="arg-name">$new_status</span>, <span class="arg-type">string</span> <span class="arg-name">$current_status</span> ): <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Handle updating a plugin’s status.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$plugin</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The plugin file to update.</span></div></dd>
+<dt>
+<code>$new_status</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The plugin’s new status.</span></div></dd>
+<dt>
+<code>$current_status</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The plugin’s current status.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="734" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function handle_plugin_status( $plugin, $new_status, $current_status ) {
+	if ( 'inactive' === $new_status ) {
+		deactivate_plugins( $plugin, false, 'network-active' === $current_status );
+
+		return true;
+	}
+
+	if ( 'active' === $new_status &amp;&amp; 'network-active' === $current_status ) {
+		return true;
+	}
+
+	$network_activate = 'network-active' === $new_status;
+
+	if ( is_multisite() &amp;&amp; ! $network_activate &amp;&amp; is_network_only_plugin( $plugin ) ) {
+		return new WP_Error(
+			'rest_network_only_plugin',
+			__( 'Network only plugin must be network activated.' ),
+			array( 'status' =&gt; 400 )
+		);
+	}
+
+	$activated = activate_plugin( $plugin, '', $network_activate );
+
+	if ( is_wp_error( $activated ) ) {
+		$activated-&gt;add_data( array( 'status' =&gt; 500 ) );
+
+		return $activated;
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-plugins-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-plugins-controller.php#L734">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-plugins-controller.php#L734-L764">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_plugins_controller/handle_plugin_status" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_plugins_controller/handle_plugin_status</a>
+  </p>
+</div>

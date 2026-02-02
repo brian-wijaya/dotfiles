@@ -1,0 +1,189 @@
+<h1 id="useinfinitescroll" tabindex="-1">useInfiniteScroll </h1>
+<table class="grid grid-cols-[100px_auto] gap-2 text-sm mt-4 mb-8 items-start">
+<tr>
+<th> Category </th>
+<td><a href="../../functions#category=Sensors">Sensors</a></td>
+</tr>
+<tr>
+<th> Export Size </th>
+<td>2.86 kB</td>
+</tr>
+<tr>
+<th> Last Changed </th>
+<td>5 months ago</td>
+</tr>
+</table>
+<p>Infinite scrolling of the element.</p>
+<h2 id="usage" tabindex="-1">Usage </h2>
+<div class="language-vue">
+<pre class="shiki shiki-themes vitesse-light vitesse-dark" style="--shiki-light:#393a34;--shiki-dark:#dbd7caee;--shiki-light-bg:#ffffff;--shiki-dark-bg:#121212;" tabindex="0" dir="ltr" data-language="javascript">&lt;script setup lang="ts"&gt;
+import { useInfiniteScroll } from '@vueuse/core'
+import { ref, useTemplateRef } from 'vue'
+
+const el = useTemplateRef&lt;HTMLElement&gt;('el')
+const data = ref([1, 2, 3, 4, 5, 6])
+
+const { reset } = useInfiniteScroll(
+  el,
+  () =&gt; {
+    // load more
+    data.value.push(...moreData)
+  },
+  {
+    distance: 10,
+    canLoadMore: () =&gt; {
+      // inidicate when there is no more content to load so onLoadMore stops triggering
+      // if (noMoreContent) return false
+      return true // for demo purposes
+    },
+  }
+)
+
+function resetList() {
+  data.value = []
+  reset()
+}
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div ref="el"&gt;
+    &lt;div v-for="item in data"&gt;
+      {{ item }}
+    &lt;/div&gt;
+  &lt;/div&gt;
+  &lt;button @click="resetList()"&gt;
+    Reset
+  &lt;/button&gt;
+&lt;/template&gt;</pre>
+</div>
+<h2 id="direction" tabindex="-1">Direction </h2>
+<p>Different scroll directions require different CSS style settings:</p>
+<table tabindex="0">
+<thead><tr>
+<th>Direction</th>
+<th>Required CSS</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>
+<code>bottom</code> (default)</td>
+<td>No special settings required</td>
+</tr>
+<tr>
+<td><code>top</code></td>
+<td>
+<code>display: flex;</code><br><code>flex-direction: column-reverse;</code>
+</td>
+</tr>
+<tr>
+<td><code>left</code></td>
+<td>
+<code>display: flex;</code><br><code>flex-direction: row-reverse;</code>
+</td>
+</tr>
+<tr>
+<td><code>right</code></td>
+<td><code>display: flex;</code></td>
+</tr>
+</tbody>
+</table>
+<div class="warning custom-block">
+<strong class="custom-block-title custom-block-title-default">WARNING</strong><p>Make sure to indicate when there is no more content to load with <code>canLoadMore</code>, otherwise <code>onLoadMore</code> will trigger as long as there is space for more content.</p>
+</div>
+<h2 id="directive-usage" tabindex="-1">Directive Usage </h2>
+<blockquote><p> This function also provides a directive version via the <code>@vueuse/components</code> package. <a href="../../guide/components">Learn more about the usage</a>. </p></blockquote>
+<div class="language-vue">
+<pre class="shiki shiki-themes vitesse-light vitesse-dark" style="--shiki-light:#393a34;--shiki-dark:#dbd7caee;--shiki-light-bg:#ffffff;--shiki-dark-bg:#121212;" tabindex="0" dir="ltr" data-language="javascript">&lt;script setup lang="ts"&gt;
+import { vInfiniteScroll } from '@vueuse/components'
+import { ref } from 'vue'
+
+const data = ref([1, 2, 3, 4, 5, 6])
+
+function onLoadMore() {
+  const length = data.value.length + 1
+  data.value.push(...Array.from({ length: 5 }, (_, i) =&gt; length + i))
+}
+function canLoadMore() {
+  // inidicate when there is no more content to load so onLoadMore stops triggering
+  // if (noMoreContent) return false
+  return true // for demo purposes
+}
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;div v-infinite-scroll="onLoadMore"&gt;
+    &lt;div v-for="item in data" :key="item"&gt;
+      {{ item }}
+    &lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;!-- with options --&gt;
+  &lt;div v-infinite-scroll="[onLoadMore, { distance: 10, canLoadMore }]"&gt;
+    &lt;div v-for="item in data" :key="item"&gt;
+      {{ item }}
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/template&gt;</pre>
+</div>
+<h2 id="type-declarations" tabindex="-1">Type Declarations </h2>
+<div>
+<summary op50 italic cursor-pointer select-none>Show Type Declarations</summary><div class="language-typescript">
+<pre class="shiki shiki-themes vitesse-light vitesse-dark" style="--shiki-light:#393a34;--shiki-dark:#dbd7caee;--shiki-light-bg:#ffffff;--shiki-dark-bg:#121212;" tabindex="0" dir="ltr" data-language="javascript">type InfiniteScrollElement =
+  | HTMLElement
+  | SVGElement
+  | Window
+  | Document
+  | null
+  | undefined
+export interface UseInfiniteScrollOptions&lt;
+  T extends InfiniteScrollElement = InfiniteScrollElement,
+&gt; extends UseScrollOptions {
+  /**
+   * The minimum distance between the bottom of the element and the bottom of the viewport
+   *
+   * @default 0
+   */
+  distance?: number
+  /**
+   * The direction in which to listen the scroll.
+   *
+   * @default 'bottom'
+   */
+  direction?: "top" | "bottom" | "left" | "right"
+  /**
+   * The interval time between two load more (to avoid too many invokes).
+   *
+   * @default 100
+   */
+  interval?: number
+  /**
+   * A function that determines whether more content can be loaded for a specific element.
+   * Should return `true` if loading more content is allowed for the given element,
+   * and `false` otherwise.
+   */
+  canLoadMore?: (el: T) =&gt; boolean
+}
+/**
+ * Reactive infinite scroll.
+ *
+ * @see https://vueuse.org/useInfiniteScroll
+ */
+export declare function useInfiniteScroll&lt;T extends InfiniteScrollElement&gt;(
+  element: MaybeRefOrGetter&lt;T&gt;,
+  onLoadMore: (
+    state: UnwrapNestedRefs&lt;ReturnType&lt;typeof useScroll&gt;&gt;,
+  ) =&gt; Awaitable&lt;void&gt;,
+  options?: UseInfiniteScrollOptions&lt;T&gt;,
+): {
+  isLoading: ComputedRef&lt;boolean&gt;
+  reset(): void
+}</pre>
+</div>
+</div>
+<h2 id="source" tabindex="-1">Source </h2>
+<p><a href="https://github.com/vueuse/vueuse/blob/main/packages/core/useInfiniteScroll/index.ts" target="_blank" rel="noreferrer">Source</a> • <a href="https://github.com/vueuse/vueuse/blob/main/packages/core/useInfiniteScroll/demo.vue" target="_blank" rel="noreferrer">Demo</a> • <a href="https://github.com/vueuse/vueuse/blob/main/packages/core/useInfiniteScroll/index.md" target="_blank" rel="noreferrer">Docs</a></p><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2019-present Anthony Fu<br>Licensed under the MIT License.<br>
+    <a href="https://vueuse.org/core/useInfiniteScroll/" class="_attribution-link">https://vueuse.org/core/useInfiniteScroll/</a>
+  </p>
+</div>

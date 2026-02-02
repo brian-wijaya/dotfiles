@@ -1,0 +1,156 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_save_image_file( <span class="arg-type">string</span> <span class="arg-name">$filename</span>, <span class="arg-type">WP_Image_Editor</span> <span class="arg-name">$image</span>, <span class="arg-type">string</span> <span class="arg-name">$mime_type</span>, <span class="arg-type">int</span> <span class="arg-name">$post_id</span> ): <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a>|bool</span>
+</h1> <section><p>Saves image to file.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$filename</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Name of the file to be saved.</span></div></dd>
+<dt>
+<code>$image</code><span class="type"><span class="WP_Image_Editor"><a href="../classes/wp_image_editor" rel="class">WP_Image_Editor</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The image editor instance.</span></div></dd>
+<dt>
+<code>$mime_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The mime type of the image.</span></div></dd>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Attachment post ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a>|bool</span> Array on success or <a href="../classes/wp_error" rel="class">WP_Error</a> if the file failed to save.<br> When called with a deprecated value for the <code>$image</code> parameter, i.e. a non-<code>WP_Image_Editor</code> image resource or <code>GdImage</code> instance, the function will return true on success, false on failure.<br> <ul class="param-hash">
+<li>
+<code>path</code> <span class="type">string</span><div class="desc">Path to the image file.</div>
+</li> <li>
+<code>file</code> <span class="type">string</span><div class="desc">Name of the image file.</div>
+</li> <li>
+<code>width</code> <span class="type">int</span><div class="desc">Image width.</div>
+</li> <li>
+<code>height</code> <span class="type">int</span><div class="desc">Image height.</div>
+</li> <li>
+<code>mime-type</code> <span class="type">string</span><div class="desc">The mime type of the image.</div>
+</li> <li>
+<code>filesize</code> <span class="type">int</span><div class="desc">File size of the image.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="430" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_save_image_file( $filename, $image, $mime_type, $post_id ) {
+	if ( $image instanceof WP_Image_Editor ) {
+
+		/** This filter is documented in wp-admin/includes/image-edit.php */
+		$image = apply_filters( 'image_editor_save_pre', $image, $post_id );
+
+		/**
+		 * Filters whether to skip saving the image file.
+		 *
+		 * Returning a non-null value will short-circuit the save method,
+		 * returning that value instead.
+		 *
+		 * @since 3.5.0
+		 *
+		 * @param bool|null       $override  Value to return instead of saving. Default null.
+		 * @param string          $filename  Name of the file to be saved.
+		 * @param WP_Image_Editor $image     The image editor instance.
+		 * @param string          $mime_type The mime type of the image.
+		 * @param int             $post_id   Attachment post ID.
+		 */
+		$saved = apply_filters( 'wp_save_image_editor_file', null, $filename, $image, $mime_type, $post_id );
+
+		if ( null !== $saved ) {
+			return $saved;
+		}
+
+		return $image-&gt;save( $filename, $mime_type );
+	} else {
+		/* translators: 1: $image, 2: WP_Image_Editor */
+		_deprecated_argument( __FUNCTION__, '3.5.0', sprintf( __( '%1$s needs to be a %2$s object.' ), '$image', 'WP_Image_Editor' ) );
+
+		/** This filter is documented in wp-admin/includes/image-edit.php */
+		$image = apply_filters_deprecated( 'image_save_pre', array( $image, $post_id ), '3.5.0', 'image_editor_save_pre' );
+
+		/**
+		 * Filters whether to skip saving the image file.
+		 *
+		 * Returning a non-null value will short-circuit the save method,
+		 * returning that value instead.
+		 *
+		 * @since 2.9.0
+		 * @deprecated 3.5.0 Use <a href="../hooks/wp_save_image_editor_file">'wp_save_image_editor_file'</a> instead.
+		 *
+		 * @param bool|null        $override  Value to return instead of saving. Default null.
+		 * @param string           $filename  Name of the file to be saved.
+		 * @param resource|GdImage $image     Image resource or GdImage instance.
+		 * @param string           $mime_type The mime type of the image.
+		 * @param int              $post_id   Attachment post ID.
+		 */
+		$saved = apply_filters_deprecated(
+			'wp_save_image_file',
+			array( null, $filename, $image, $mime_type, $post_id ),
+			'3.5.0',
+			'wp_save_image_editor_file'
+		);
+
+		if ( null !== $saved ) {
+			return $saved;
+		}
+
+		switch ( $mime_type ) {
+			case 'image/jpeg':
+				/** This filter is documented in wp-includes/class-wp-image-editor.php */
+				return imagejpeg( $image, $filename, apply_filters( 'jpeg_quality', 90, 'edit_image' ) );
+			case 'image/png':
+				return imagepng( $image, $filename );
+			case 'image/gif':
+				return imagegif( $image, $filename );
+			case 'image/webp':
+				if ( function_exists( 'imagewebp' ) ) {
+					return imagewebp( $image, $filename );
+				}
+				return false;
+			case 'image/avif':
+				if ( function_exists( 'imageavif' ) ) {
+					return imageavif( $image, $filename );
+				}
+				return false;
+			default:
+				return false;
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/image-edit.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/image-edit.php#L430">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/image-edit.php#L430-L512">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/image_editor_save_pre"><span class="hook-func">apply_filters</span>( ‘image_editor_save_pre’, <nobr><span class="arg-type">WP_Image_Editor</span> <span class="arg-name">$image</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the <a href="../classes/wp_image_editor" rel="class">WP_Image_Editor</a> instance for the image to be streamed to the browser.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/image_save_pre"><span class="hook-func">apply_filters_deprecated</span>( ‘image_save_pre’, <nobr><span class="arg-type">resource|GdImage</span> <span class="arg-name">$image</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the GD image resource to be streamed to the browser.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/jpeg_quality"><span class="hook-func">apply_filters</span>( ‘jpeg_quality’, <nobr><span class="arg-type">int</span> <span class="arg-name">$quality</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Filters the JPEG compression quality for backward-compatibility.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_save_image_editor_file"><span class="hook-func">apply_filters</span>( ‘wp_save_image_editor_file’, <nobr><span class="arg-type">bool|null</span> <span class="arg-name">$override</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$filename</span></nobr>, <nobr><span class="arg-type">WP_Image_Editor</span> <span class="arg-name">$image</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$mime_type</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to skip saving the image file.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_save_image_file"><span class="hook-func">apply_filters_deprecated</span>( ‘wp_save_image_file’, <nobr><span class="arg-type">bool|null</span> <span class="arg-name">$override</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$filename</span></nobr>, <nobr><span class="arg-type">resource|GdImage</span> <span class="arg-name">$image</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$mime_type</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to skip saving the image file.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.0.0/">6.0.0</a></td>
+<td><span class="since-description">The <code>$filesize</code> value was added to the returned array.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.5.0/">3.5.0</a></td>
+<td><span class="since-description">The <code>$image</code> parameter expects a <code>WP_Image_Editor</code> instance.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.9.0/">2.9.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_save_image_file" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_save_image_file</a>
+  </p>
+</div>

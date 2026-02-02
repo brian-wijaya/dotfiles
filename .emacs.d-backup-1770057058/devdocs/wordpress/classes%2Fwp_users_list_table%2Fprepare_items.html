@@ -1,0 +1,88 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Users_List_Table::prepare_items()</h1> <section><p>Prepares the users list for display.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="83" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_items() {
+	global $role, $usersearch;
+
+	$usersearch = isset( $_REQUEST['s'] ) ? wp_unslash( trim( $_REQUEST['s'] ) ) : '';
+
+	$role = isset( $_REQUEST['role'] ) ? $_REQUEST['role'] : '';
+
+	$per_page       = ( $this-&gt;is_site_users ) ? 'site_users_network_per_page' : 'users_per_page';
+	$users_per_page = $this-&gt;get_items_per_page( $per_page );
+
+	$paged = $this-&gt;get_pagenum();
+
+	if ( 'none' === $role ) {
+		$args = array(
+			'number'  =&gt; $users_per_page,
+			'offset'  =&gt; ( $paged - 1 ) * $users_per_page,
+			'include' =&gt; wp_get_users_with_no_role( $this-&gt;site_id ),
+			'search'  =&gt; $usersearch,
+			'fields'  =&gt; 'all_with_meta',
+		);
+	} else {
+		$args = array(
+			'number' =&gt; $users_per_page,
+			'offset' =&gt; ( $paged - 1 ) * $users_per_page,
+			'role'   =&gt; $role,
+			'search' =&gt; $usersearch,
+			'fields' =&gt; 'all_with_meta',
+		);
+	}
+
+	if ( '' !== $args['search'] ) {
+		$args['search'] = '*' . $args['search'] . '*';
+	}
+
+	if ( $this-&gt;is_site_users ) {
+		$args['blog_id'] = $this-&gt;site_id;
+	}
+
+	if ( isset( $_REQUEST['orderby'] ) ) {
+		$args['orderby'] = $_REQUEST['orderby'];
+	}
+
+	if ( isset( $_REQUEST['order'] ) ) {
+		$args['order'] = $_REQUEST['order'];
+	}
+
+	/**
+	 * Filters the query arguments used to retrieve users for the current users list table.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param array $args Arguments passed to WP_User_Query to retrieve items for the current
+	 *                    users list table.
+	 */
+	$args = apply_filters( 'users_list_table_query_args', $args );
+
+	// Query the user IDs for this page.
+	$wp_user_search = new WP_User_Query( $args );
+
+	$this-&gt;items = $wp_user_search-&gt;get_results();
+
+	$this-&gt;set_pagination_args(
+		array(
+			'total_items' =&gt; $wp_user_search-&gt;get_total(),
+			'per_page'    =&gt; $users_per_page,
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-users-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-users-list-table.php#L83">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-users-list-table.php#L83-L150">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/users_list_table_query_args"><span class="hook-func">apply_filters</span>( ‘users_list_table_query_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the query arguments used to retrieve users for the current users list table.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_users_list_table/prepare_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_users_list_table/prepare_items</a>
+  </p>
+</div>

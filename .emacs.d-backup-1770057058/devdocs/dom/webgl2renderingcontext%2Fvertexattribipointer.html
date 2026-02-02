@@ -1,0 +1,79 @@
+<h1>WebGL2RenderingContext: vertexAttribIPointer() method</h1> <details class="baseline-indicator high" data-glean-toggle-open="baseline_toggle_open"> <summary>  <div class="status-title">  Baseline <span class="not-bold"> Widely available </span>   </div>    </summary> <div class="extra"> <p> This feature is well established and works across many devices and browser versions. It’s been available across browsers since ⁨September 2021⁩. </p>  <ul> <li> <a href="https://developer.mozilla.org/en-US/docs/Glossary/Baseline/Compatibility" data-glean-id="baseline_link_learn_more" target="_blank" class="learn-more"> Learn more </a> </li> <li> <a href="#browser_compatibility" data-glean-id="baseline_link_bcd_table"> See full compatibility </a> </li> <li> <a href="https://survey.alchemer.com/s3/7634825/MDN-baseline-feedback?page=%2Fen-US%2Fdocs%2FWeb%2FAPI%2FWebGL2RenderingContext%2FvertexAttribIPointer&amp;level=high" data-glean-id="baseline_link_feedback" class="feedback-link" target="_blank" rel="noreferrer"> Report feedback </a> </li> </ul> </div> </details>   <div class="notecard note"><p><strong>Note:</strong> This feature is available in <a href="../web_workers_api">Web Workers</a>.</p></div> <p>The <code>WebGL2RenderingContext.vertexAttribIPointer()</code> method of the <a href="../webgl_api">WebGL 2 API</a> specifies integer data formats and locations of vertex attributes in a vertex attributes array.</p>     <mdn-survey></mdn-survey>  <h2 id="syntax" class="heading">Syntax</h2> <div class="code-example"><pre data-language="js">vertexAttribIPointer(index, size, type, stride, offset)
+</pre></div>  <h3 id="parameters" class="heading">Parameters</h3> <dl> <dt id="index"><a href="#index"><code>index</code></a></dt> <dd> <p>A <a href="../webgl_api/types"><code>GLuint</code></a> specifying the index of the vertex attribute that is to be modified.</p> </dd> <dt id="size"><a href="#size"><code>size</code></a></dt> <dd> <p>A <a href="../webgl_api/types"><code>GLint</code></a> specifying the number of components per vertex attribute. Must be 1, 2, 3, or 4.</p> </dd> <dt id="type"><a href="#type"><code>type</code></a></dt> <dd> <p>A <a href="../webgl_api/types"><code>GLenum</code></a> specifying the data type of each component in the array. Must be one of: <code>gl.BYTE</code>, <code>gl.UNSIGNED_BYTE</code>, <code>gl.SHORT</code>, <code>gl.UNSIGNED_SHORT</code>, <code>gl.INT</code>, or <code>gl.UNSIGNED_INT</code>.</p> </dd> <dt id="stride"><a href="#stride"><code>stride</code></a></dt> <dd> <p>A <a href="../webgl_api/types"><code>GLsizei</code></a> specifying the offset in bytes between the beginning of consecutive vertex attributes.</p> </dd> <dt id="offset"><a href="#offset"><code>offset</code></a></dt> <dd> <p>A <a href="../webgl_api/types"><code>GLintptr</code></a> specifying an offset in bytes of the first component in the vertex attribute array. Must be a multiple of <code>type</code>.</p> </dd> </dl>  <h3 id="return_value" class="heading">Return value</h3> <p>None (<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/undefined"><code>undefined</code></a>).</p>  <h2 id="description" class="heading">Description</h2> <p>Very similar to <a href="../webglrenderingcontext/vertexattribpointer"><code>WebGLRenderingContext.vertexAttribPointer()</code></a>. The main difference is that while values specified by <code>vertexAttribPointer</code> are always interpreted as floating-point values in the shader (even if they were originally specified as integers in the buffer), this method allows specifying values which are interpreted as integers in the shader.</p>  <h2 id="examples" class="heading">Examples</h2> &gt;  <h3 id="linear_blend_skinning" class="heading">Linear Blend Skinning</h3> <div class="code-example"><pre data-language="js">// Describe the layout of the buffer:
+// 1. position
+gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
+gl.enableVertexAttribArray(0);
+// 2. bone weights, normalized to [0, 1]
+gl.vertexAttribPointer(1, 4, gl.UNSIGNED_BYTE, true, 20, 12);
+gl.enableVertexAttribArray(1);
+// 3. bone indices, interpreted as integer
+gl.vertexAttribIPointer(2, 4, gl.UNSIGNED_BYTE, 20, 16);
+gl.enableVertexAttribArray(2);
+
+// Connect to attributes from the vertex shader
+gl.bindAttribLocation(shaderProgram, 0, "position");
+gl.bindAttribLocation(shaderProgram, 1, "boneWeights");
+gl.bindAttribLocation(shaderProgram, 2, "boneIndices");
+</pre></div> <div class="code-example"><pre data-language="html">&lt;script id="shader-vs" type="x-shader/x-vertex"&gt;
+  #version 300 es
+
+  uniform mat4 mvMatrix;
+  uniform mat4 bones[120];
+
+  in vec3 position;
+  in vec4 boneWeights;
+  in uvec4 boneIndices;//read as 4-component unsigned integer
+
+  void main() {
+      vec4 skinnedPosition =
+          bones[boneIndices.s] * vec4(position, 1.0) * boneWeights.s +
+          bones[boneIndices.t] * vec4(position, 1.0) * boneWeights.t +
+          bones[boneIndices.p] * vec4(position, 1.0) * boneWeights.p +
+          bones[boneIndices.q] * vec4(position, 1.0) * boneWeights.q;
+      gl_Position = mvMatrix * skinnedPosition;
+  }
+&lt;/script&gt;
+</pre></div>  <h2 id="specifications" class="heading">Specifications</h2> <div class="_table"><table> <thead> <tr> <th scope="col">Specification</th> </tr> </thead> <tbody> <tr> <td><a href="https://registry.khronos.org/webgl/specs/latest/2.0/#3.7.8" rel="noopener" target="_blank">WebGL 2.0 Specification&gt;<br># 3.7.8&gt;</a></td> </tr> </tbody> </table></div>  <h2 id="browser_compatibility" class="heading">Browser compatibility</h2> <div class="_table"><table>
+<thead>
+<tr id="bct-browser-type">
+<th></th>
+<th colspan="5">Desktop</th>
+<th colspan="7">Mobile</th>
+</tr>
+<tr id="bct-browsers">
+<th></th>
+<th>Chrome</th>
+<th>Edge</th>
+<th>Firefox</th>
+<th>Opera</th>
+<th>Safari</th>
+<th>Chrome Android</th>
+<th>Firefox for Android</th>
+<th>Opera Android</th>
+<th>Safari on IOS</th>
+<th>Samsung Internet</th>
+<th>WebView Android</th>
+<th>WebView on iOS</th>
+</tr>
+</thead>
+<tbody><tr>
+<th><code>vertexAttribIPointer</code></th>
+<td class="bc-supports-yes">56</td>
+<td class="bc-supports-yes">79</td>
+<td class="bc-supports-yes">51</td>
+<td class="bc-supports-yes">43</td>
+<td class="bc-supports-yes">15</td>
+<td class="bc-supports-yes">58</td>
+<td class="bc-supports-yes">51</td>
+<td class="bc-supports-yes">43</td>
+<td class="bc-supports-yes">15</td>
+<td class="bc-supports-yes">7.0</td>
+<td class="bc-supports-yes">58</td>
+<td class="bc-supports-yes">15</td>
+</tr></tbody>
+</table></div>  <h2 id="see_also" class="heading">See also</h2> <ul> <li><a href="../webglrenderingcontext/vertexattribpointer"><code>WebGLRenderingContext.vertexAttribPointer()</code></a></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2005&ndash;2025 MDN contributors.<br>Licensed under the Creative Commons Attribution-ShareAlike License v2.5 or later.<br>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/vertexAttribIPointer" class="_attribution-link">https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext/vertexAttribIPointer</a>
+  </p>
+</div>

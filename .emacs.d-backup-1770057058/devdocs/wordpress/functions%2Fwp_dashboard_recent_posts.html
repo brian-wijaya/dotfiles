@@ -1,0 +1,115 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_dashboard_recent_posts( <span class="arg-type">array</span> <span class="arg-name">$args</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Generates Publishing Soon and Recently Published sections.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An array of query and display arguments.<br> <ul class="param-hash">
+<li>
+<code>max</code> <span class="type">int</span><div class="desc">Number of posts to display.</div>
+</li> <li>
+<code>status</code> <span class="type">string</span><div class="desc">Post status.</div>
+</li> <li>
+<code>order</code> <span class="type">string</span><div class="desc">Designates ascending (<code>'ASC'</code>) or descending (<code>'DESC'</code>) order.</div>
+</li> <li>
+<code>title</code> <span class="type">string</span><div class="desc">Section title.</div>
+</li> <li>
+<code>id</code> <span class="type">string</span><div class="desc">The container id.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> False if no posts were found. True otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="977" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_dashboard_recent_posts( $args ) {
+	$query_args = array(
+		'post_type'      =&gt; 'post',
+		'post_status'    =&gt; $args['status'],
+		'orderby'        =&gt; 'date',
+		'order'          =&gt; $args['order'],
+		'posts_per_page' =&gt; (int) $args['max'],
+		'no_found_rows'  =&gt; true,
+		'cache_results'  =&gt; true,
+		'perm'           =&gt; ( 'future' === $args['status'] ) ? 'editable' : 'readable',
+	);
+
+	/**
+	 * Filters the query arguments used for the Recent Posts widget.
+	 *
+	 * @since 4.2.0
+	 *
+	 * @param array $query_args The arguments passed to WP_Query to produce the list of posts.
+	 */
+	$query_args = apply_filters( 'dashboard_recent_posts_query_args', $query_args );
+
+	$posts = new WP_Query( $query_args );
+
+	if ( $posts-&gt;have_posts() ) {
+
+		echo '&lt;div id="' . $args['id'] . '" class="activity-block"&gt;';
+
+		echo '&lt;h3&gt;' . $args['title'] . '&lt;/h3&gt;';
+
+		echo '&lt;ul&gt;';
+
+		$today    = current_time( 'Y-m-d' );
+		$tomorrow = current_datetime()-&gt;modify( '+1 day' )-&gt;format( 'Y-m-d' );
+		$year     = current_time( 'Y' );
+
+		while ( $posts-&gt;have_posts() ) {
+			$posts-&gt;the_post();
+
+			$time = get_the_time( 'U' );
+
+			if ( gmdate( 'Y-m-d', $time ) === $today ) {
+				$relative = __( 'Today' );
+			} elseif ( gmdate( 'Y-m-d', $time ) === $tomorrow ) {
+				$relative = __( 'Tomorrow' );
+			} elseif ( gmdate( 'Y', $time ) !== $year ) {
+				/* translators: Date and time format for recent posts on the dashboard, from a different calendar year, see https://www.php.net/manual/datetime.format.php */
+				$relative = date_i18n( __( 'M jS Y' ), $time );
+			} else {
+				/* translators: Date and time format for recent posts on the dashboard, see https://www.php.net/manual/datetime.format.php */
+				$relative = date_i18n( __( 'M jS' ), $time );
+			}
+
+			// Use the post edit link for those who can edit, the permalink otherwise.
+			$recent_post_link = current_user_can( 'edit_post', get_the_ID() ) ? get_edit_post_link() : get_permalink();
+
+			$draft_or_post_title = _draft_or_post_title();
+			printf(
+				'&lt;li&gt;&lt;span&gt;%1$s&lt;/span&gt; &lt;a href="%2$s" aria-label="%3$s"&gt;%4$s&lt;/a&gt;&lt;/li&gt;',
+				/* translators: 1: Relative date, 2: Time. */
+				sprintf( _x( '%1$s, %2$s', 'dashboard' ), $relative, get_the_time() ),
+				$recent_post_link,
+				/* translators: %s: Post title. */
+				esc_attr( sprintf( __( 'Edit &amp;#8220;%s&amp;#8221;' ), $draft_or_post_title ) ),
+				$draft_or_post_title
+			);
+		}
+
+		echo '&lt;/ul&gt;';
+		echo '&lt;/div&gt;';
+
+	} else {
+		return false;
+	}
+
+	wp_reset_postdata();
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/dashboard.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/dashboard.php#L977">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/dashboard.php#L977-L1054">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/dashboard_recent_posts_query_args"><span class="hook-func">apply_filters</span>( ‘dashboard_recent_posts_query_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$query_args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the query arguments used for the Recent Posts widget.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.8.0/">3.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_dashboard_recent_posts" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_dashboard_recent_posts</a>
+  </p>
+</div>

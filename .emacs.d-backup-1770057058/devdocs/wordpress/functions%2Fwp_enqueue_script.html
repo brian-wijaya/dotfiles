@@ -1,0 +1,862 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_enqueue_script( <span class="arg-type">string</span> <span class="arg-name">$handle</span>, <span class="arg-type">string</span> <span class="arg-name">$src</span> = <span class="arg-default">”</span>, <span class="arg-type">string[]</span> <span class="arg-name">$deps</span> = <span class="arg-default">array()</span>, <span class="arg-type">string|bool|null</span> <span class="arg-name">$ver</span> = <span class="arg-default">false</span>, <span class="arg-type">array|bool</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> )</h1> <section><p>Enqueues a script.</p> </section> <section><h2 id="description">Description</h2> <p>Registers the script if <code>$src</code> provided (does NOT overwrite), and enqueues it.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="../classes/wp_dependencies/add">WP_Dependencies::add()</a></li> <li><a href="../classes/wp_dependencies/add_data">WP_Dependencies::add_data()</a></li> <li><a href="../classes/wp_dependencies/enqueue">WP_Dependencies::enqueue()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$handle</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Name of the script. Should be unique.</span></div></dd>
+<dt>
+<code>$src</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Full URL of the script, or path of the script relative to the WordPress root directory.<br> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$deps</code><span class="type"><span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">An array of registered script handles this script depends on. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$ver</code><span class="type"><span class="string">string</span>|<span class="bool">bool</span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">String specifying script version number, if it has one, which is added to the URL as a query string for cache busting purposes. If version is set to false, a version number is automatically added equal to current installed WordPress version.<br> If set to null, no version is added.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span>|<span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">An array of additional script loading strategies. <br> Otherwise, it may be a boolean in which case it determines whether the script is printed in the footer. Default false.<br> <ul class="param-hash">
+<li>
+<code>strategy</code> <span class="type">string</span><div class="desc">Optional. If provided, may be either <code>'defer'</code> or <code>'async'</code>.</div>
+</li> <li>
+<code>in_footer</code> <span class="type">bool</span><div class="desc">Optional. Whether to print the script in the footer. Default <code>'false'</code>.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="more-information">More Information</h2> <h3 id="usage">Usage</h3> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">wp_enqueue_script( $handle, $src, $deps, $ver, $args );</code></pre> <p>Links a script file to the generated page at the right time according to the script dependencies, if the script has not been already included and if all the dependencies have been registered. You could either link a script with a handle previously registered using the <tt><a title="Function Reference/wp register script" href="wp_register_script">wp_register_script()</a></tt> function, or provide this function with all the parameters necessary to link a script.</p> <p>This is the recommended method of linking JavaScript to a WordPress generated page.</p> <p>As of WordPress 6.3, the new <code>$args</code> parameter – that replaces/overloads the prior <code>$in_footer</code> parameter – can be used to specify a script loading strategy. See the sections to follow for more information.</p> <p>Supported strategies are as follows:</p> <ul class="wp-block-list"> <li>
+<strong>defer</strong> <ul class="wp-block-list"> <li>Added by specifying an array key value pair of <code>'strategy' =&gt; 'defer'</code> to the <code>$args</code> parameter.</li> <li>Scripts marked for deferred execution — via the <code>defer</code> script attribute — are only executed once the DOM tree has fully loaded (but before the <code>DOMContentLoaded</code> and window load events). Deferred scripts are executed in the same order they were printed/added in the DOM, unlike asynchronous scripts.</li> </ul> </li> <li>
+<strong>async</strong> <ul class="wp-block-list"> <li>Added by specifying an array key value pair of <code>'strategy' =&gt; 'async'</code> to the <code>$args</code> parameter.</li> <li>Scripts marked for asynchronous execution — via the <code>async</code> script attribute — are executed as soon as they are loaded by the browser. Asynchronous scripts do not have a guaranteed execution order, as script B (although added to the DOM after script A) may execute first given that it may complete loading prior to script A. Such scripts may execute either before the DOM has been fully constructed or after the <code>DOMContentLoaded</code> event.</li> </ul> </li> </ul> <p>Following is an example of specifying a loading strategy during script enqueuing:<br> </p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php line-numbers">wp_enqueue_script(
+'foo',
+'/path/to/foo.js',
+array(),
+'1.0.0',
+array(
+'strategy'  =&gt; 'defer',
+)
+);</code></pre> <p> The same approach applies when using </p> <tt><a href="wp_register_script" rel="function">wp_register_script()</a> </tt> <p>.</p> <p>When applying a loading strategy via either the <tt><a href="wp_register_script" rel="function">wp_register_script()</a> </tt> and <tt><a href="wp_enqueue_script" rel="function">wp_enqueue_script()</a> </tt> functions, the scripts dependency tree is taken into consideration and the most eligible loading strategy is applied. </p> <p>While the intended (delayed) strategy passed by the code author may not be the final one, it will never be a stricter one, thus maintaining the integrity of the dependency tree.</p> <h3 id="notes">Notes</h3> <ul class="wp-block-list"> <li>The function should be called using the <a title="Plugin API/Action Reference/wp enqueue scripts" href="https://codex.wordpress.org/Plugin_API/Action_Reference/wp_enqueue_scripts">wp_enqueue_scripts</a> action hook if you want to call it on the front-end of the site, like in the examples above. To call it on the administration screens, use the <a title="Plugin API/Action Reference/admin enqueue scripts" href="../hooks/admin_enqueue_scripts">admin_enqueue_scripts</a> action hook. For the login screen, use the <a title="Plugin API/Action Reference/login enqueue scripts" href="../hooks/login_enqueue_scripts">login_enqueue_scripts</a> action hook. Calling it outside of an action hook can lead to problems, see the <a class="external text" href="https://core.trac.wordpress.org/ticket/11526">ticket #11526</a> for details.</li> <li>If you try to register or enqueue an already registered handle with different parameters, the new parameters will be ignored. Instead, use <tt><a title="Function Reference/wp deregister script" href="wp_deregister_script">wp_deregister_script()</a></tt> and register the script again with the new parameters.</li> <li>jQuery UI Effects is <b>not</b> included with the <i>jquery-ui-core</i> handle.</li> <li>This function relies on the use of <tt><a title="Function Reference/wp head" href="wp_head">wp_head()</a></tt> and <tt><a title="Function Reference/wp footer" href="wp_footer">wp_footer()</a></tt> by the active theme. This means that it may not work with a few very old themes that do not call these functions. This is useful to keep in mind when debugging ancient themes.</li> <li>Uses: <tt>WP_Scripts::add()</tt>, <tt>WP_Scripts::add_data()</tt> and <tt>WP_Scripts::enqueue()</tt>.</li> <li>Uses global: (<tt>unknown type</tt>) <tt>$wp_scripts</tt>.</li> </ul> <h3 id="default-scripts-and-js-libraries-included-and-registered-by-wordpress">Default Scripts and JS Libraries Included and Registered by WordPress</h3> <p>By default, WordPress installation includes many popular javascript libraries and scripts commonly used by web developers besides the scripts used by WordPress itself. Some of them are listed in the table below.</p> <p>For a detailed list of names that can be used in place of the <code>$handle</code> parameter, see <a title="Function Reference/wp register script" href="wp_register_script">wp_register_script()</a>.</p> <figure class="wp-block-table"><table><tbody>
+<tr>
+<th><b>Script Name</th>
+<th><b>Handle</th>
+<th><b>Needed Dependency *</th>
+<th><b>Script version</th>
+<th><b>License</th>
+</tr>
+<tr>
+<td><a href="https://defusion.org.uk/code/javascript-image-cropper-ui-using-prototype-scriptaculous/">Image Cropper</a></td>
+<td>Image cropper (not used in core, see jcrop)</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a href="https://github.com/tapmodo/Jcrop">Jcrop</a></td>
+<td>jcrop</td>
+<td></td>
+<td>0.9.12</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://code.google.com/p/swfobject/">SWFObject</a></td>
+<td>swfobject</td>
+<td></td>
+<td>2.2-20120417</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://swfupload.org/">SWFUpload</a></td>
+<td>swfupload</td>
+<td></td>
+<td>2201-20110113</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://swfupload.org/">SWFUpload Degrade</a></td>
+<td>swfupload-degrade</td>
+<td></td>
+<td>2201</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://swfupload.org/">SWFUpload Queue</a></td>
+<td>swfupload-queue</td>
+<td></td>
+<td>2201</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://swfupload.org/">SWFUpload Handlers</a></td>
+<td>swfupload-handlers</td>
+<td></td>
+<td>2201-20110524</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jquery.com/">jQuery</a></td>
+<td>jquery</td>
+<td>json2 (for AJAX calls)</td>
+<td>3.6.0</td>
+<td>MIT + (MIT OR BSD)</td>
+</tr>
+<tr>
+<td><a href="https://plugins.jquery.com/form/">jQuery Form</a></td>
+<td>jquery-form</td>
+<td>jquery</td>
+<td>4.3.0</td>
+<td>MIT OR LGPLv3</td>
+</tr>
+<tr>
+<td><a href="https://plugins.jquery.com/color/">jQuery Color</a></td>
+<td>jquery-color</td>
+<td>jquery</td>
+<td>2.2.0</td>
+<td>MIT+CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://masonry.desandro.com/">jQuery Masonry</a></td>
+<td>jquery-masonry</td>
+<td>jquery</td>
+<td>3.1.2b</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://masonry.desandro.com/">Masonry (native Javascript)</a></td>
+<td>masonry</td>
+<td>imagesloaded</td>
+<td>4.2.2</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/">jQuery UI Core</a></td>
+<td>jquery-ui-core</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/widget/">jQuery UI Widget</a></td>
+<td>Now part of `jquery-ui-core`</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/accordion/">jQuery UI Accordion</a></td>
+<td>jquery-ui-accordion</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/autocomplete/">jQuery UI Autocomplete</a></td>
+<td>jquery-ui-autocomplete</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/button/">jQuery UI Button</a></td>
+<td>jquery-ui-button</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/datepicker/">jQuery UI Datepicker</a></td>
+<td>jquery-ui-datepicker</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/dialog/">jQuery UI Dialog</a></td>
+<td>jquery-ui-dialog</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/draggable/">jQuery UI Draggable</a></td>
+<td>jquery-ui-draggable</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/droppable/">jQuery UI Droppable</a></td>
+<td>jquery-ui-droppable</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/menu/">jQuery UI Menu</a></td>
+<td>jquery-ui-menu</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://api.jqueryui.com/mouse/">jQuery UI Mouse</a></td>
+<td>jquery-ui-mouse</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/position/">jQuery UI Position</a></td>
+<td>Now part of `jquery-ui-core`</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/progressbar/">jQuery UI Progressbar</a></td>
+<td>jquery-ui-progressbar</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/selectable/">jQuery UI Selectable</a></td>
+<td>jquery-ui-selectable</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/resizable/">jQuery UI Resizable</a></td>
+<td>jquery-ui-resizable</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/selectmenu/">jQuery UI Selectmenu</a></td>
+<td>jquery-ui-selectmenu</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/sortable/">jQuery UI Sortable</a></td>
+<td>jquery-ui-sortable</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/slider/">jQuery UI Slider</a></td>
+<td>jquery-ui-slider</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/spinner/">jQuery UI Spinner</a></td>
+<td>jquery-ui-spinner</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/tooltip/">jQuery UI Tooltips</a></td>
+<td>jquery-ui-tooltip</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/demos/tabs/">jQuery UI Tabs</a></td>
+<td>jquery-ui-tabs</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects</a></td>
+<td>jquery-effects-core</td>
+<td>jquery</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Blind</a></td>
+<td>jquery-effects-blind</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Bounce</a></td>
+<td>jquery-effects-bounce</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Clip</a></td>
+<td>jquery-effects-clip</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Drop</a></td>
+<td>jquery-effects-drop</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Explode</a></td>
+<td>jquery-effects-explode</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Fade</a></td>
+<td>jquery-effects-fade</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Fold</a></td>
+<td>jquery-effects-fold</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Highlight</a></td>
+<td>jquery-effects-highlight</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Pulsate</a></td>
+<td>jquery-effects-pulsate</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Scale</a></td>
+<td>jquery-effects-scale</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Shake</a></td>
+<td>jquery-effects-shake</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Slide</a></td>
+<td>jquery-effects-slide</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://jqueryui.com/effect/">jQuery UI Effects – Transfer</a></td>
+<td>jquery-effects-transfer</td>
+<td>jquery-effects-core</td>
+<td>1.13.1</td>
+<td>MIT + CC0 + (MIT OR GPLv2)</td>
+</tr>
+<tr>
+<td><a href="https://www.mediaelementjs.com/">MediaElement.js (WP 3.6+)</a></td>
+<td>wp-mediaelement</td>
+<td>jquery</td>
+<td>4.2.16</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a href="https://plugins.jquery.com/schedule">jQuery Schedule</a></td>
+<td>schedule</td>
+<td>jquery</td>
+<td>20m/1.0.1</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://web.archive.org/web/20111017233444/https://plugins.jquery.com/project/suggest">jQuery Suggest</a></td>
+<td>suggest</td>
+<td>jquery</td>
+<td>1.1-20110113</td>
+<td>Public domain</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://codex.wordpress.org/ThickBox">ThickBox</a></td>
+<td>thickbox</td>
+<td></td>
+<td>3.1-20121105</td>
+<td>MIT OR GPLv3</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://cherne.net/brian/resources/jquery.hoverIntent.html">jQuery HoverIntent</a></td>
+<td>hoverIntent</td>
+<td>jquery</td>
+<td>1.10.1</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a href="https://plugins.jquery.com/hotkeys">jQuery Hotkeys</a></td>
+<td>jquery-hotkeys</td>
+<td>jquery</td>
+<td>0.2.0</td>
+<td>MIT OR GPLv2</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://code.google.com/p/tw-sack/">Simple AJAX Code-Kit</a></td>
+<td>sack</td>
+<td></td>
+<td>1.6.1</td>
+<td>X11 License</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://www.alexking.org">QuickTags</a></td>
+<td>quicktags</td>
+<td></td>
+<td>1.3</td>
+<td>LGPL2.1</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://github.com/automattic/Iris">Iris (Colour picker)</a></td>
+<td>iris</td>
+<td>jquery</td>
+<td>1.1.1</td>
+<td>GPLv2</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://acko.net/dev/farbtastic">Farbtastic (deprecated)</a></td>
+<td>farbtastic</td>
+<td>jquery</td>
+<td>1.2</td>
+<td>GPLv3</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://mattkruse.com">ColorPicker (deprecated)</a></td>
+<td>colorpicker</td>
+<td>jquery</td>
+<td>v2</td>
+<td>Author’s own copyright</td>
+</tr>
+<tr>
+<td><a href="https://www.tiny.cloud/docs-4x/">Tiny MCE</a></td>
+<td>wp-tinymce</td>
+<td></td>
+<td>4.9.4</td>
+<td>LGPL2.1</td>
+</tr>
+<tr>
+<td>Autosave</td>
+<td>autosave</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>WordPress AJAX Response</td>
+<td>wp-ajax-response</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>List Manipulation</td>
+<td>wp-lists</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>WP Common</td>
+<td>common</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>WP Editor</td>
+<td>editorremov</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>WP Editor Functions</td>
+<td>editor-functions</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>AJAX Cat</td>
+<td>ajaxcat</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Categories</td>
+<td>admin-categories</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Tags</td>
+<td>admin-tags</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin custom fields</td>
+<td>admin-custom-fields</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Password Strength Meter</td>
+<td>password-strength-meter</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Comments</td>
+<td>admin-comments</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Users</td>
+<td>admin-users</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Forms</td>
+<td>admin-forms</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>XFN</td>
+<td>xfn</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Upload</td>
+<td>upload</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>PostBox</td>
+<td>postbox</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Slug</td>
+<td>slug</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Post</td>
+<td>post</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Page</td>
+<td>page</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Link</td>
+<td>link</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Comment</td>
+<td>comment</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Threaded Comments</td>
+<td>comment-reply</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Gallery</td>
+<td>admin-gallery</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Media Upload</td>
+<td>media-upload</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin widgets</td>
+<td>admin-widgets</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Word Count</td>
+<td>word-count</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Theme Preview</td>
+<td>theme-preview</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><a class="external text" href="https://github.com/douglascrockford/JSON-js">JSON for JS</a></td>
+<td>json2</td>
+<td></td>
+<td>2015-05-03</td>
+<td>Public domain</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://www.plupload.com/">Plupload Core</a></td>
+<td>plupload</td>
+<td></td>
+<td>2.1.9</td>
+<td>GPLv2</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://www.plupload.com/example_all_runtimes.php">Plupload All Runtimes</a></td>
+<td>plupload-all</td>
+<td></td>
+<td>2.1.1</td>
+<td>GPLv2</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://www.plupload.com/example_all_runtimes.php">Plupload HTML4</a></td>
+<td>plupload-html4</td>
+<td></td>
+<td>2.1.1</td>
+<td>GPLv2</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://www.plupload.com/example_all_runtimes.php">Plupload HTML5</a></td>
+<td>plupload-html5</td>
+<td></td>
+<td>2.1.1</td>
+<td>GPLv2</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://www.plupload.com/example_all_runtimes.php">Plupload Flash</a></td>
+<td>plupload-flash</td>
+<td></td>
+<td>2.1.1</td>
+<td>GPLv2</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://www.plupload.com/example_all_runtimes.php">Plupload Silverlight</a></td>
+<td>plupload-silverlight</td>
+<td></td>
+<td>2.1.1</td>
+<td>GPLv2</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://underscorejs.org/">Underscore js</a></td>
+<td>underscore</td>
+<td></td>
+<td>1.13.1</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://backbonejs.org/">Backbone js</a></td>
+<td>backbone</td>
+<td>jquery, underscore</td>
+<td>1.4.0</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://imagesloaded.desandro.com/">imagesLoaded</a></td>
+<td>imagesloaded</td>
+<td></td>
+<td>4.1.4</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a class="external text" href="https://github.com/codemirror/CodeMirror">CodeMirror</a></td>
+<td>wp-codemirror</td>
+<td></td>
+<td>5.29.1-alpha-ee20357</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td><a href="https://github.com/odyniec/imgareaselect">imgAreaSelect</a></td>
+<td>imgareaselect</td>
+<td>jquery</td>
+<td>0.9.8</td>
+<td>MIT AND GPL</td>
+</tr>
+</tbody></table></figure> <figure class="wp-block-table"><table><tbody>
+<tr><th colspan="4"><b>Removed from Core</b></th></tr>
+<tr>
+<th><b>Script Name</b></th>
+<th><b>Handle</b></th>
+<th><b>Removed Version</b></th>
+<th><b>Replaced With</b></th>
+</tr>
+<tr>
+<td><a class="external text" href="http://script.aculo.us">Scriptaculous Root</a></td>
+<td>scriptaculous-root</td>
+<td>WP 3.5</td>
+<td>Google Version</td>
+</tr>
+<tr>
+<td><a class="external text" href="http://script.aculo.us">Scriptaculous Builder</a></td>
+<td>scriptaculous-builder</td>
+<td>WP 3.5</td>
+<td>Google Version</td>
+</tr>
+<tr>
+<td><a class="external text" href="http://script.aculo.us">Scriptaculous Drag &amp; Drop</a></td>
+<td>scriptaculous-dragdrop</td>
+<td>WP 3.5</td>
+<td>Google Version</td>
+</tr>
+<tr>
+<td><a class="external text" href="http://script.aculo.us">Scriptaculous Effects</a></td>
+<td>scriptaculous-effects</td>
+<td>WP 3.5</td>
+<td>Google Version</td>
+</tr>
+<tr>
+<td><a class="external text" href="http://script.aculo.us">Scriptaculous Slider</a></td>
+<td>scriptaculous-slider</td>
+<td>WP 3.5</td>
+<td>Google Version</td>
+</tr>
+<tr>
+<td>
+<a class="external text" href="http://script.aculo.us/">Scriptaculous</a> Sound</td>
+<td>scriptaculous-sound</td>
+<td>WP 3.5</td>
+<td>Google Version</td>
+</tr>
+<tr>
+<td><a class="external text" href="http://script.aculo.us">Scriptaculous Controls</a></td>
+<td>scriptaculous-controls</td>
+<td>WP 3.5</td>
+<td>Google Version</td>
+</tr>
+<tr>
+<td><a class="external text" href="http://script.aculo.us">Scriptaculous</a></td>
+<td>scriptaculous</td>
+<td>WP 3.5</td>
+<td>Google Version</td>
+</tr>
+<tr>
+<td><a class="external text" href="http://www.prototypejs.org/">Prototype Framework</a></td>
+<td>prototype</td>
+<td>WP 3.5</td>
+<td>Google Version</td>
+</tr>
+</tbody></table></figure> <p><b>The list is far from complete.</b> For a complete list of registered files inspect <tt>$GLOBALS['wp_scripts']</tt> in the admin UI. Registered scripts might change per requested page.</p>  <p><i>* The listed dependencies are not complete.</i></p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="359" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_enqueue_script( $handle, $src = '', $deps = array(), $ver = false, $args = array() ) {
+	_wp_scripts_maybe_doing_it_wrong( __FUNCTION__, $handle );
+
+	$wp_scripts = wp_scripts();
+
+	if ( $src || ! empty( $args ) ) {
+		$_handle = explode( '?', $handle );
+		if ( ! is_array( $args ) ) {
+			$args = array(
+				'in_footer' =&gt; (bool) $args,
+			);
+		}
+
+		if ( $src ) {
+			$wp_scripts-&gt;add( $_handle[0], $src, $deps, $ver );
+		}
+		if ( ! empty( $args['in_footer'] ) ) {
+			$wp_scripts-&gt;add_data( $_handle[0], 'group', 1 );
+		}
+		if ( ! empty( $args['strategy'] ) ) {
+			$wp_scripts-&gt;add_data( $_handle[0], 'strategy', $args['strategy'] );
+		}
+	}
+
+	$wp_scripts-&gt;enqueue( $handle );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions-wp-scripts.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.wp-scripts.php#L359">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.wp-scripts.php#L359-L384">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description">The $in_footer parameter of type boolean was overloaded to be an $args parameter of type array.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_enqueue_script" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_enqueue_script</a>
+  </p>
+</div>

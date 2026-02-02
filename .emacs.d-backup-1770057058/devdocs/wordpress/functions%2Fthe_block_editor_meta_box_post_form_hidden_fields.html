@@ -1,0 +1,97 @@
+<h1 class="wp-block-wporg-code-reference-title">the_block_editor_meta_box_post_form_hidden_fields( <span class="arg-type">WP_Post</span> <span class="arg-name">$post</span> )</h1> <section><p>Renders the hidden form required for the meta boxes form.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Current post object.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2527" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function the_block_editor_meta_box_post_form_hidden_fields( $post ) {
+	$form_extra = '';
+	if ( 'auto-draft' === $post-&gt;post_status ) {
+		$form_extra .= "&lt;input type='hidden' id='auto_draft' name='auto_draft' value='1' /&gt;";
+	}
+	$form_action  = 'editpost';
+	$nonce_action = 'update-post_' . $post-&gt;ID;
+	$form_extra  .= "&lt;input type='hidden' id='post_ID' name='post_ID' value='" . esc_attr( $post-&gt;ID ) . "' /&gt;";
+	$referer      = wp_get_referer();
+	$current_user = wp_get_current_user();
+	$user_id      = $current_user-&gt;ID;
+	wp_nonce_field( $nonce_action );
+
+	/*
+	 * Some meta boxes hook into these actions to add hidden input fields in the classic post form.
+	 * For backward compatibility, we can capture the output from these actions,
+	 * and extract the hidden input fields.
+	 */
+	ob_start();
+	/** This filter is documented in wp-admin/edit-form-advanced.php */
+	do_action( 'edit_form_after_title', $post );
+	/** This filter is documented in wp-admin/edit-form-advanced.php */
+	do_action( 'edit_form_advanced', $post );
+	$classic_output = ob_get_clean();
+
+	$classic_elements = wp_html_split( $classic_output );
+	$hidden_inputs    = '';
+	foreach ( $classic_elements as $element ) {
+		if ( ! str_starts_with( $element, '&lt;input ' ) ) {
+			continue;
+		}
+
+		if ( preg_match( '/\stype=[\'"]hidden[\'"]\s/', $element ) ) {
+			echo $element;
+		}
+	}
+	?&gt;
+	&lt;input type="hidden" id="user-id" name="user_ID" value="&lt;?php echo (int) $user_id; ?&gt;" /&gt;
+	&lt;input type="hidden" id="hiddenaction" name="action" value="&lt;?php echo esc_attr( $form_action ); ?&gt;" /&gt;
+	&lt;input type="hidden" id="originalaction" name="originalaction" value="&lt;?php echo esc_attr( $form_action ); ?&gt;" /&gt;
+	&lt;input type="hidden" id="post_type" name="post_type" value="&lt;?php echo esc_attr( $post-&gt;post_type ); ?&gt;" /&gt;
+	&lt;input type="hidden" id="original_post_status" name="original_post_status" value="&lt;?php echo esc_attr( $post-&gt;post_status ); ?&gt;" /&gt;
+	&lt;input type="hidden" id="referredby" name="referredby" value="&lt;?php echo $referer ? esc_url( $referer ) : ''; ?&gt;" /&gt;
+
+	&lt;?php
+	if ( 'draft' !== get_post_status( $post ) ) {
+		wp_original_referer_field( true, 'previous' );
+	}
+	echo $form_extra;
+	wp_nonce_field( 'meta-box-order', 'meta-box-order-nonce', false );
+	wp_nonce_field( 'closedpostboxes', 'closedpostboxesnonce', false );
+	// Permalink title nonce.
+	wp_nonce_field( 'samplepermalink', 'samplepermalinknonce', false );
+
+	/**
+	 * Adds hidden input fields to the meta box save form.
+	 *
+	 * Hook into this action to print `&lt;input type="hidden" ... /&gt;` fields, which will be POSTed back to
+	 * the server when meta boxes are saved.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @param WP_Post $post The post that is being edited.
+	 */
+	do_action( 'block_editor_meta_box_hidden_fields', $post );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/post.php#L2527">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/post.php#L2527-L2592">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/block_editor_meta_box_hidden_fields"><span class="hook-func">do_action</span>( ‘block_editor_meta_box_hidden_fields’, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Adds hidden input fields to the meta box save form.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/edit_form_advanced"><span class="hook-func">do_action</span>( ‘edit_form_advanced’, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Fires after ‘normal’ context meta boxes have been output for all post types other than ‘page’.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/edit_form_after_title"><span class="hook-func">do_action</span>( ‘edit_form_after_title’, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the title field.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/the_block_editor_meta_box_post_form_hidden_fields" class="_attribution-link">https://developer.wordpress.org/reference/functions/the_block_editor_meta_box_post_form_hidden_fields</a>
+  </p>
+</div>

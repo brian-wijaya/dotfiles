@@ -1,0 +1,237 @@
+<h1>ImageDecoder</h1> <details class="baseline-indicator not" data-glean-toggle-open="baseline_toggle_open"> <summary>  <div class="status-title"> <span class="not-bold">Limited availability</span> </div>    </summary> <div class="extra"> <p>This feature is not Baseline because it does not work in some of the most widely-used browsers.</p>  <ul> <li> <a href="https://developer.mozilla.org/en-US/docs/Glossary/Baseline/Compatibility" data-glean-id="baseline_link_learn_more" target="_blank" class="learn-more"> Learn more </a> </li> <li> <a href="#browser_compatibility" data-glean-id="baseline_link_bcd_table"> See full compatibility </a> </li> <li> <a href="https://survey.alchemer.com/s3/7634825/MDN-baseline-feedback?page=%2Fen-US%2Fdocs%2FWeb%2FAPI%2FImageDecoder&amp;level=not" data-glean-id="baseline_link_feedback" class="feedback-link" target="_blank" rel="noreferrer"> Report feedback </a> </li> </ul> </div> </details>   <div class="notecard secure"><p><strong>Secure context:</strong> This feature is available only in <a href="https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts">secure contexts</a> (HTTPS), in some or all <a href="#browser_compatibility">supporting browsers</a>.</p></div> <div class="notecard note"><p><strong>Note:</strong> This feature is available in <a href="dedicatedworkerglobalscope">Dedicated Web Workers</a>.</p></div> <p>The <code>ImageDecoder</code> interface of the <a href="webcodecs_api">WebCodecs API</a> provides a way to unpack and decode encoded image data.</p>     <mdn-survey></mdn-survey>  <h2 id="constructor" class="heading">Constructor</h2> <dl> <dt id="imagedecoder"><a href="imagedecoder/imagedecoder"><code>ImageDecoder()</code></a></dt> <dd> <p>Creates a new <code>ImageDecoder</code> object.</p> </dd> </dl>  <h2 id="instance_properties" class="heading">Instance properties</h2> <dl> <dt id="imagedecoder.complete">
+<a href="imagedecoder/complete"><code>ImageDecoder.complete</code></a> <span class="badge inline readonly">Read only</span>
+</dt> <dd> <p>Returns a boolean value indicating whether encoded data is completely buffered.</p> </dd> <dt id="imagedecoder.completed">
+<a href="imagedecoder/completed"><code>ImageDecoder.completed</code></a> <span class="badge inline readonly">Read only</span>
+</dt> <dd> <p>Returns a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"><code>Promise</code></a> that resolves once <code>complete</code> is true.</p> </dd> <dt id="imagedecoder.tracks">
+<a href="imagedecoder/tracks"><code>ImageDecoder.tracks</code></a> <span class="badge inline readonly">Read only</span>
+</dt> <dd> <p>Returns an <a href="imagetracklist"><code>ImageTrackList</code></a> object listing the available tracks and providing a method for selecting a track to decode.</p> </dd> <dt id="imagedecoder.type">
+<a href="imagedecoder/type"><code>ImageDecoder.type</code></a> <span class="badge inline readonly">Read only</span>
+</dt> <dd> <p>Returns a string reflecting the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types">MIME type</a> configured during construction.</p> </dd> </dl>  <h2 id="static_methods" class="heading">Static methods</h2> <dl> <dt id="imagedecoder.istypesupported"><a href="imagedecoder/istypesupported_static"><code>ImageDecoder.isTypeSupported()</code></a></dt> <dd> <p>Indicates if the provided <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types">MIME type</a> is supported for unpacking and decoding.</p> </dd> </dl>  <h2 id="instance_methods" class="heading">Instance methods</h2> <dl> <dt id="imagedecoder.close"><a href="imagedecoder/close"><code>ImageDecoder.close()</code></a></dt> <dd> <p>Ends all pending work and releases system resources.</p> </dd> <dt id="imagedecoder.decode"><a href="imagedecoder/decode"><code>ImageDecoder.decode()</code></a></dt> <dd> <p>Enqueues a control message to decode the frame of an image.</p> </dd> <dt id="imagedecoder.reset"><a href="imagedecoder/reset"><code>ImageDecoder.reset()</code></a></dt> <dd> <p>Aborts all pending <code>decode()</code> operations.</p> </dd> </dl>  <h2 id="examples" class="heading">Examples</h2> <p>Given a <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/canvas"><code>&lt;canvas&gt;</code></a> element:</p> <div class="code-example"><pre data-language="html">&lt;canvas&gt;&lt;/canvas&gt;
+</pre></div> <p>the following code decodes and renders an animated image to that canvas:</p> <div class="code-example"><pre data-language="js">let imageDecoder = null;
+let imageIndex = 0;
+
+function renderImage(result) {
+  const canvas = document.querySelector("canvas");
+  const canvasContext = canvas.getContext("2d");
+
+  canvasContext.drawImage(result.image, 0, 0);
+
+  const track = imageDecoder.tracks.selectedTrack;
+
+  // We check complete here since `frameCount` won't be stable until all
+  // data has been received. This may cause us to receive a RangeError
+  // during the decode() call below which needs to be handled.
+  if (imageDecoder.complete) {
+    if (track.frameCount === 1) return;
+
+    if (imageIndex + 1 &gt;= track.frameCount) imageIndex = 0;
+  }
+
+  // Decode the next frame ahead of display so it's ready in time.
+  imageDecoder
+    .decode({ frameIndex: ++imageIndex })
+    .then((nextResult) =&gt;
+      setTimeout(() =&gt; {
+        renderImage(nextResult);
+      }, result.image.duration / 1000.0),
+    )
+    .catch((e) =&gt; {
+      // We can end up requesting an imageIndex past the end since
+      // we're using a ReadableStream from fetch(), when this happens
+      // just wrap around.
+      if (e instanceof RangeError) {
+        imageIndex = 0;
+        imageDecoder.decode({ frameIndex: imageIndex }).then(renderImage);
+      } else {
+        throw e;
+      }
+    });
+}
+
+function decodeImage(imageByteStream) {
+  imageDecoder = new ImageDecoder({ data: imageByteStream, type: "image/gif" });
+  imageDecoder.decode({ frameIndex: imageIndex }).then(renderImage);
+}
+
+fetch("fancy.gif").then((response) =&gt; decodeImage(response.body));
+</pre></div>  <h2 id="specifications" class="heading">Specifications</h2> <div class="_table"><table> <thead> <tr> <th scope="col">Specification</th> </tr> </thead> <tbody> <tr> <td><a href="https://w3c.github.io/webcodecs/#imagedecoder-interface" rel="noopener" target="_blank">WebCodecs&gt;<br># imagedecoder-interface&gt;</a></td> </tr> </tbody> </table></div>  <h2 id="browser_compatibility" class="heading">Browser compatibility</h2> <div class="_table"><table>
+<thead>
+<tr id="bct-browser-type">
+<th></th>
+<th colspan="5">Desktop</th>
+<th colspan="7">Mobile</th>
+</tr>
+<tr id="bct-browsers">
+<th></th>
+<th>Chrome</th>
+<th>Edge</th>
+<th>Firefox</th>
+<th>Opera</th>
+<th>Safari</th>
+<th>Chrome Android</th>
+<th>Firefox for Android</th>
+<th>Opera Android</th>
+<th>Safari on IOS</th>
+<th>Samsung Internet</th>
+<th>WebView Android</th>
+<th>WebView on iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th><code>ImageDecoder</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>ImageDecoder</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>close</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>complete</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>completed</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>decode</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>isTypeSupported_static</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>reset</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>tracks</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>type</code></th>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">80</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-yes">133</td>
+<td class="bc-supports-yes">66</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">17.0</td>
+<td class="bc-supports-yes">94</td>
+<td class="bc-supports-no">No</td>
+</tr>
+</tbody>
+</table></div><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2005&ndash;2025 MDN contributors.<br>Licensed under the Creative Commons Attribution-ShareAlike License v2.5 or later.<br>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/ImageDecoder" class="_attribution-link">https://developer.mozilla.org/en-US/docs/Web/API/ImageDecoder</a>
+  </p>
+</div>

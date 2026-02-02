@@ -1,0 +1,161 @@
+<h1 class="wp-block-wporg-code-reference-title">get_attachment_fields_to_edit( <span class="arg-type">WP_Post</span> <span class="arg-name">$post</span>, <span class="arg-type">array</span> <span class="arg-name">$errors</span> = <span class="arg-default">null</span> ): <span class="return-type">array</span>
+</h1> <section><p>Retrieves the attachment fields to edit form fields.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$errors</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1385" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_attachment_fields_to_edit( $post, $errors = null ) {
+	if ( is_int( $post ) ) {
+		$post = get_post( $post );
+	}
+
+	if ( is_array( $post ) ) {
+		$post = new WP_Post( (object) $post );
+	}
+
+	$image_url = wp_get_attachment_url( $post-&gt;ID );
+
+	$edit_post = sanitize_post( $post, 'edit' );
+
+	$form_fields = array(
+		'post_title'   =&gt; array(
+			'label' =&gt; __( 'Title' ),
+			'value' =&gt; $edit_post-&gt;post_title,
+		),
+		'image_alt'    =&gt; array(),
+		'post_excerpt' =&gt; array(
+			'label' =&gt; __( 'Caption' ),
+			'input' =&gt; 'html',
+			'html'  =&gt; wp_caption_input_textarea( $edit_post ),
+		),
+		'post_content' =&gt; array(
+			'label' =&gt; __( 'Description' ),
+			'value' =&gt; $edit_post-&gt;post_content,
+			'input' =&gt; 'textarea',
+		),
+		'url'          =&gt; array(
+			'label' =&gt; __( 'Link URL' ),
+			'input' =&gt; 'html',
+			'html'  =&gt; image_link_input_fields( $post, get_option( 'image_default_link_type' ) ),
+			'helps' =&gt; __( 'Enter a link URL or click above for presets.' ),
+		),
+		'menu_order'   =&gt; array(
+			'label' =&gt; __( 'Order' ),
+			'value' =&gt; $edit_post-&gt;menu_order,
+		),
+		'image_url'    =&gt; array(
+			'label' =&gt; __( 'File URL' ),
+			'input' =&gt; 'html',
+			'html'  =&gt; "&lt;input type='text' class='text urlfield' readonly='readonly' name='attachments[$post-&gt;ID][url]' value='" . esc_attr( $image_url ) . "' /&gt;&lt;br /&gt;",
+			'value' =&gt; wp_get_attachment_url( $post-&gt;ID ),
+			'helps' =&gt; __( 'Location of the uploaded file.' ),
+		),
+	);
+
+	foreach ( get_attachment_taxonomies( $post ) as $taxonomy ) {
+		$t = (array) get_taxonomy( $taxonomy );
+
+		if ( ! $t['public'] || ! $t['show_ui'] ) {
+			continue;
+		}
+
+		if ( empty( $t['label'] ) ) {
+			$t['label'] = $taxonomy;
+		}
+
+		if ( empty( $t['args'] ) ) {
+			$t['args'] = array();
+		}
+
+		$terms = get_object_term_cache( $post-&gt;ID, $taxonomy );
+
+		if ( false === $terms ) {
+			$terms = wp_get_object_terms( $post-&gt;ID, $taxonomy, $t['args'] );
+		}
+
+		$values = array();
+
+		foreach ( $terms as $term ) {
+			$values[] = $term-&gt;slug;
+		}
+
+		$t['value'] = implode( ', ', $values );
+
+		$form_fields[ $taxonomy ] = $t;
+	}
+
+	/*
+	 * Merge default fields with their errors, so any key passed with the error
+	 * (e.g. 'error', 'helps', 'value') will replace the default.
+	 * The recursive merge is easily traversed with array casting:
+	 * foreach ( (array) $things as $thing )
+	 */
+	$form_fields = array_merge_recursive( $form_fields, (array) $errors );
+
+	// This was formerly in image_attachment_fields_to_edit().
+	if ( str_starts_with( $post-&gt;post_mime_type, 'image' ) ) {
+		$alt = get_post_meta( $post-&gt;ID, '_wp_attachment_image_alt', true );
+
+		if ( empty( $alt ) ) {
+			$alt = '';
+		}
+
+		$form_fields['post_title']['required'] = true;
+
+		$form_fields['image_alt'] = array(
+			'value' =&gt; $alt,
+			'label' =&gt; __( 'Alternative Text' ),
+			'helps' =&gt; __( 'Alt text for the image, e.g. &amp;#8220;The Mona Lisa&amp;#8221;' ),
+		);
+
+		$form_fields['align'] = array(
+			'label' =&gt; __( 'Alignment' ),
+			'input' =&gt; 'html',
+			'html'  =&gt; image_align_input_fields( $post, get_option( 'image_default_align' ) ),
+		);
+
+		$form_fields['image-size'] = image_size_input_fields( $post, get_option( 'image_default_size', 'medium' ) );
+
+	} else {
+		unset( $form_fields['image_alt'] );
+	}
+
+	/**
+	 * Filters the attachment fields to edit.
+	 *
+	 * @since 2.5.0
+	 *
+	 * @param array   $form_fields An array of attachment form fields.
+	 * @param WP_Post $post        The WP_Post attachment object.
+	 */
+	$form_fields = apply_filters( 'attachment_fields_to_edit', $form_fields, $post );
+
+	return $form_fields;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L1385">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L1385-L1512">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/attachment_fields_to_edit"><span class="hook-func">apply_filters</span>( ‘attachment_fields_to_edit’, <nobr><span class="arg-type">array</span> <span class="arg-name">$form_fields</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters the attachment fields to edit.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_attachment_fields_to_edit" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_attachment_fields_to_edit</a>
+  </p>
+</div>

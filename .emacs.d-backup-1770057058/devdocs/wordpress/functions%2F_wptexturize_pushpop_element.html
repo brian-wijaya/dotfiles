@@ -1,0 +1,68 @@
+<h1 class="wp-block-wporg-code-reference-title">_wptexturize_pushpop_element( <span class="arg-type">string</span> <span class="arg-name">$text</span>, <span class="arg-type">string[]</span> <span class="arg-name">$stack</span>, <span class="arg-type">string[]</span> <span class="arg-name">$disabled_elements</span> )</h1> <section><p>Searches for disabled element tags. Pushes element to stack on tag open and pops on tag close.</p> </section> <section><h2 id="description">Description</h2> <p>Assumes first char of <code>$text</code> is tag opening and last char is tag closing.<br>Assumes second char of <code>$text</code> is optionally <code>/</code> to indicate closing as in <code>&lt;/html&gt;</code>.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$text</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Text to check. Must be a tag like <code>&lt;html&gt;</code> or <code>[shortcode]</code>.</span></div></dd>
+<dt>
+<code>$stack</code><span class="type"><span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array of open tag elements.</span></div></dd>
+<dt>
+<code>$disabled_elements</code><span class="type"><span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array of tag names to match against. Spaces are not allowed in tag names.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="391" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _wptexturize_pushpop_element( $text, &amp;$stack, $disabled_elements ) {
+	// Is it an opening tag or closing tag?
+	if ( isset( $text[1] ) &amp;&amp; '/' !== $text[1] ) {
+		$opening_tag = true;
+		$name_offset = 1;
+	} elseif ( 0 === count( $stack ) ) {
+		// Stack is empty. Just stop.
+		return;
+	} else {
+		$opening_tag = false;
+		$name_offset = 2;
+	}
+
+	// Parse out the tag name.
+	$space = strpos( $text, ' ' );
+	if ( false === $space ) {
+		$space = -1;
+	} else {
+		$space -= $name_offset;
+	}
+	$tag = substr( $text, $name_offset, $space );
+
+	// Handle disabled tags.
+	if ( in_array( $tag, $disabled_elements, true ) ) {
+		if ( $opening_tag ) {
+			/*
+			 * This disables texturize until we find a closing tag of our type
+			 * (e.g. &lt;pre&gt;) even if there was invalid nesting before that.
+			 *
+			 * Example: in the case &lt;pre&gt;sadsadasd&lt;/code&gt;"baba"&lt;/pre&gt;
+			 *          "baba" won't be texturized.
+			 */
+
+			array_push( $stack, $tag );
+		} elseif ( end( $stack ) === $tag ) {
+			array_pop( $stack );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/formatting.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/formatting.php#L391">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/formatting.php#L391-L429">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.9.0/">2.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_wptexturize_pushpop_element" class="_attribution-link">https://developer.wordpress.org/reference/functions/_wptexturize_pushpop_element</a>
+  </p>
+</div>

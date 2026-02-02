@@ -1,0 +1,152 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Customize_Color_Control {}</h1> <section><p>Customize Color Control class.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_customize_control">WP_Customize_Control</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_customize_color_control/__construct">WP_Customize_Color_Control::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_customize_color_control/content_template">WP_Customize_Color_Control::content_template</a></td>
+<td>Render a JS template for the content of the color picker control.</td>
+</tr>
+<tr class="">
+<td><a href="wp_customize_color_control/enqueue">WP_Customize_Color_Control::enqueue</a></td>
+<td>Enqueue scripts/styles for the color picker.</td>
+</tr>
+<tr class="">
+<td><a href="wp_customize_color_control/render_content">WP_Customize_Color_Control::render_content</a></td>
+<td>Don’t render the control content from PHP, as it’s rendered via JS on load.</td>
+</tr>
+<tr class="">
+<td><a href="wp_customize_color_control/to_json">WP_Customize_Color_Control::to_json</a></td>
+<td>Refresh the parameters passed to the JavaScript via JSON.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Customize_Color_Control extends WP_Customize_Control {
+	/**
+	 * Type.
+	 *
+	 * @var string
+	 */
+	public $type = 'color';
+
+	/**
+	 * Statuses.
+	 *
+	 * @var array
+	 */
+	public $statuses;
+
+	/**
+	 * Mode.
+	 *
+	 * @since 4.7.0
+	 * @var string
+	 */
+	public $mode = 'full';
+
+	/**
+	 * Constructor.
+	 *
+	 * @since 3.4.0
+	 *
+	 * @see WP_Customize_Control::__construct()
+	 *
+	 * @param WP_Customize_Manager $manager Customizer bootstrap instance.
+	 * @param string               $id      Control ID.
+	 * @param array                $args    Optional. Arguments to override class property defaults.
+	 *                                      See WP_Customize_Control::__construct() for information
+	 *                                      on accepted arguments. Default empty array.
+	 */
+	public function __construct( $manager, $id, $args = array() ) {
+		$this-&gt;statuses = array( '' =&gt; __( 'Default' ) );
+		parent::__construct( $manager, $id, $args );
+	}
+
+	/**
+	 * Enqueue scripts/styles for the color picker.
+	 *
+	 * @since 3.4.0
+	 */
+	public function enqueue() {
+		wp_enqueue_script( 'wp-color-picker' );
+		wp_enqueue_style( 'wp-color-picker' );
+	}
+
+	/**
+	 * Refresh the parameters passed to the JavaScript via JSON.
+	 *
+	 * @since 3.4.0
+	 * @uses WP_Customize_Control::to_json()
+	 */
+	public function to_json() {
+		parent::to_json();
+		$this-&gt;json['statuses']     = $this-&gt;statuses;
+		$this-&gt;json['defaultValue'] = $this-&gt;setting-&gt;default;
+		$this-&gt;json['mode']         = $this-&gt;mode;
+	}
+
+	/**
+	 * Don't render the control content from PHP, as it's rendered via JS on load.
+	 *
+	 * @since 3.4.0
+	 */
+	public function render_content() {}
+
+	/**
+	 * Render a JS template for the content of the color picker control.
+	 *
+	 * @since 4.1.0
+	 */
+	public function content_template() {
+		?&gt;
+		&lt;# var defaultValue = '#RRGGBB', defaultValueAttr = '',
+			isHueSlider = data.mode === 'hue';
+		if ( data.defaultValue &amp;&amp; _.isString( data.defaultValue ) &amp;&amp; ! isHueSlider ) {
+			if ( '#' !== data.defaultValue.substring( 0, 1 ) ) {
+				defaultValue = '#' + data.defaultValue;
+			} else {
+				defaultValue = data.defaultValue;
+			}
+			defaultValueAttr = ' data-default-color=' + defaultValue; // Quotes added automatically.
+		} #&gt;
+		&lt;# if ( data.label ) { #&gt;
+			&lt;span class="customize-control-title"&gt;{{{ data.label }}}&lt;/span&gt;
+		&lt;# } #&gt;
+		&lt;# if ( data.description ) { #&gt;
+			&lt;span class="description customize-control-description"&gt;{{{ data.description }}}&lt;/span&gt;
+		&lt;# } #&gt;
+		&lt;div class="customize-control-content"&gt;
+			&lt;label&gt;&lt;span class="screen-reader-text"&gt;{{{ data.label }}}&lt;/span&gt;
+			&lt;# if ( isHueSlider ) { #&gt;
+				&lt;input class="color-picker-hue" type="text" data-type="hue" /&gt;
+			&lt;# } else { #&gt;
+				&lt;input class="color-picker-hex" type="text" maxlength="7" placeholder="{{ defaultValue }}" {{ defaultValueAttr }} /&gt;
+			&lt;# } #&gt;
+			&lt;/label&gt;
+		&lt;/div&gt;
+		&lt;?php
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/customize/class-wp-customize-color-control.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/customize/class-wp-customize-color-control.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/customize/class-wp-customize-color-control.php#L17-L122">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_color_control" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_color_control</a>
+  </p>
+</div>

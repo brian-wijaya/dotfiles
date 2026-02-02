@@ -1,0 +1,380 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Session_Tokens {}</h1> <section><p>Abstract class for managing user session tokens.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_session_tokens/__construct">WP_Session_Tokens::__construct</a></td>
+<td>Protected constructor. Use the `get_instance()` method to get the instance.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/create">WP_Session_Tokens::create</a></td>
+<td>Generates a session token and attaches session information to it.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/destroy">WP_Session_Tokens::destroy</a></td>
+<td>Destroys the session with the given token.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/destroy_all">WP_Session_Tokens::destroy_all</a></td>
+<td>Destroys all sessions for a user.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/destroy_all_for_all_users">WP_Session_Tokens::destroy_all_for_all_users</a></td>
+<td>Destroys all sessions for all users.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/destroy_all_sessions">WP_Session_Tokens::destroy_all_sessions</a></td>
+<td>Destroys all sessions for the user.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/destroy_other_sessions">WP_Session_Tokens::destroy_other_sessions</a></td>
+<td>Destroys all sessions for this user, except the single session with the given verifier.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/destroy_others">WP_Session_Tokens::destroy_others</a></td>
+<td>Destroys all sessions for this user except the one with the given token (presumably the one in use).</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/drop_sessions">WP_Session_Tokens::drop_sessions</a></td>
+<td>Destroys all sessions for all users.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/get">WP_Session_Tokens::get</a></td>
+<td>Retrieves a user’s session for the given token.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/get_all">WP_Session_Tokens::get_all</a></td>
+<td>Retrieves all sessions for a user.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/get_instance">WP_Session_Tokens::get_instance</a></td>
+<td>Retrieves a session manager instance for a user.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/get_session">WP_Session_Tokens::get_session</a></td>
+<td>Retrieves a session based on its verifier (token hash).</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/get_sessions">WP_Session_Tokens::get_sessions</a></td>
+<td>Retrieves all sessions of the user.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/hash_token">WP_Session_Tokens::hash_token</a></td>
+<td>Hashes the given session token for storage.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/is_still_valid">WP_Session_Tokens::is_still_valid</a></td>
+<td>Determines whether a session is still valid, based on its expiration timestamp.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/update">WP_Session_Tokens::update</a></td>
+<td>Updates the data for the session with the given token.</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/update_session">WP_Session_Tokens::update_session</a></td>
+<td>Updates a session based on its verifier (token hash).</td>
+</tr>
+<tr class="">
+<td><a href="wp_session_tokens/verify">WP_Session_Tokens::verify</a></td>
+<td>Validates the given session token for authenticity and validity.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="16" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">abstract class WP_Session_Tokens {
+
+	/**
+	 * User ID.
+	 *
+	 * @since 4.0.0
+	 * @var int User ID.
+	 */
+	protected $user_id;
+
+	/**
+	 * Protected constructor. Use the `get_instance()` method to get the instance.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param int $user_id User whose session to manage.
+	 */
+	protected function __construct( $user_id ) {
+		$this-&gt;user_id = $user_id;
+	}
+
+	/**
+	 * Retrieves a session manager instance for a user.
+	 *
+	 * This method contains a <a href="../hooks/session_token_manager">'session_token_manager'</a> filter, allowing a plugin to swap out
+	 * the session manager for a subclass of `WP_Session_Tokens`.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param int $user_id User whose session to manage.
+	 * @return WP_Session_Tokens The session object, which is by default an instance of
+	 *                           the `WP_User_Meta_Session_Tokens` class.
+	 */
+	final public static function get_instance( $user_id ) {
+		/**
+		 * Filters the class name for the session token manager.
+		 *
+		 * @since 4.0.0
+		 *
+		 * @param string $session Name of class to use as the manager.
+		 *                        Default 'WP_User_Meta_Session_Tokens'.
+		 */
+		$manager = apply_filters( 'session_token_manager', 'WP_User_Meta_Session_Tokens' );
+		return new $manager( $user_id );
+	}
+
+	/**
+	 * Hashes the given session token for storage.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param string $token Session token to hash.
+	 * @return string A hash of the session token (a verifier).
+	 */
+	private function hash_token( $token ) {
+		// If ext/hash is not present, use sha1() instead.
+		if ( function_exists( 'hash' ) ) {
+			return hash( 'sha256', $token );
+		} else {
+			return sha1( $token );
+		}
+	}
+
+	/**
+	 * Retrieves a user's session for the given token.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param string $token Session token.
+	 * @return array|null The session, or null if it does not exist.
+	 */
+	final public function get( $token ) {
+		$verifier = $this-&gt;hash_token( $token );
+		return $this-&gt;get_session( $verifier );
+	}
+
+	/**
+	 * Validates the given session token for authenticity and validity.
+	 *
+	 * Checks that the given token is present and hasn't expired.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param string $token Token to verify.
+	 * @return bool Whether the token is valid for the user.
+	 */
+	final public function verify( $token ) {
+		$verifier = $this-&gt;hash_token( $token );
+		return (bool) $this-&gt;get_session( $verifier );
+	}
+
+	/**
+	 * Generates a session token and attaches session information to it.
+	 *
+	 * A session token is a long, random string. It is used in a cookie
+	 * to link that cookie to an expiration time and to ensure the cookie
+	 * becomes invalidated when the user logs out.
+	 *
+	 * This function generates a token and stores it with the associated
+	 * expiration time (and potentially other session information via the
+	 * <a href="../hooks/attach_session_information">'attach_session_information'</a> filter).
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param int $expiration Session expiration timestamp.
+	 * @return string Session token.
+	 */
+	final public function create( $expiration ) {
+		/**
+		 * Filters the information attached to the newly created session.
+		 *
+		 * Can be used to attach further information to a session.
+		 *
+		 * @since 4.0.0
+		 *
+		 * @param array $session Array of extra data.
+		 * @param int   $user_id User ID.
+		 */
+		$session               = apply_filters( 'attach_session_information', array(), $this-&gt;user_id );
+		$session['expiration'] = $expiration;
+
+		// IP address.
+		if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+			$session['ip'] = $_SERVER['REMOTE_ADDR'];
+		}
+
+		// User-agent.
+		if ( ! empty( $_SERVER['HTTP_USER_AGENT'] ) ) {
+			$session['ua'] = wp_unslash( $_SERVER['HTTP_USER_AGENT'] );
+		}
+
+		// Timestamp.
+		$session['login'] = time();
+
+		$token = wp_generate_password( 43, false, false );
+
+		$this-&gt;update( $token, $session );
+
+		return $token;
+	}
+
+	/**
+	 * Updates the data for the session with the given token.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param string $token Session token to update.
+	 * @param array  $session Session information.
+	 */
+	final public function update( $token, $session ) {
+		$verifier = $this-&gt;hash_token( $token );
+		$this-&gt;update_session( $verifier, $session );
+	}
+
+	/**
+	 * Destroys the session with the given token.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param string $token Session token to destroy.
+	 */
+	final public function destroy( $token ) {
+		$verifier = $this-&gt;hash_token( $token );
+		$this-&gt;update_session( $verifier, null );
+	}
+
+	/**
+	 * Destroys all sessions for this user except the one with the given token (presumably the one in use).
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param string $token_to_keep Session token to keep.
+	 */
+	final public function destroy_others( $token_to_keep ) {
+		$verifier = $this-&gt;hash_token( $token_to_keep );
+		$session  = $this-&gt;get_session( $verifier );
+		if ( $session ) {
+			$this-&gt;destroy_other_sessions( $verifier );
+		} else {
+			$this-&gt;destroy_all_sessions();
+		}
+	}
+
+	/**
+	 * Determines whether a session is still valid, based on its expiration timestamp.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param array $session Session to check.
+	 * @return bool Whether session is valid.
+	 */
+	final protected function is_still_valid( $session ) {
+		return $session['expiration'] &gt;= time();
+	}
+
+	/**
+	 * Destroys all sessions for a user.
+	 *
+	 * @since 4.0.0
+	 */
+	final public function destroy_all() {
+		$this-&gt;destroy_all_sessions();
+	}
+
+	/**
+	 * Destroys all sessions for all users.
+	 *
+	 * @since 4.0.0
+	 */
+	final public static function destroy_all_for_all_users() {
+		/** This filter is documented in wp-includes/class-wp-session-tokens.php */
+		$manager = apply_filters( 'session_token_manager', 'WP_User_Meta_Session_Tokens' );
+		call_user_func( array( $manager, 'drop_sessions' ) );
+	}
+
+	/**
+	 * Retrieves all sessions for a user.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @return array Sessions for a user.
+	 */
+	final public function get_all() {
+		return array_values( $this-&gt;get_sessions() );
+	}
+
+	/**
+	 * Retrieves all sessions of the user.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @return array Sessions of the user.
+	 */
+	abstract protected function get_sessions();
+
+	/**
+	 * Retrieves a session based on its verifier (token hash).
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param string $verifier Verifier for the session to retrieve.
+	 * @return array|null The session, or null if it does not exist.
+	 */
+	abstract protected function get_session( $verifier );
+
+	/**
+	 * Updates a session based on its verifier (token hash).
+	 *
+	 * Omitting the second argument destroys the session.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param string $verifier Verifier for the session to update.
+	 * @param array  $session  Optional. Session. Omitting this argument destroys the session.
+	 */
+	abstract protected function update_session( $verifier, $session = null );
+
+	/**
+	 * Destroys all sessions for this user, except the single session with the given verifier.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param string $verifier Verifier of the session to keep.
+	 */
+	abstract protected function destroy_other_sessions( $verifier );
+
+	/**
+	 * Destroys all sessions for the user.
+	 *
+	 * @since 4.0.0
+	 */
+	abstract protected function destroy_all_sessions();
+
+	/**
+	 * Destroys all sessions for all users.
+	 *
+	 * @since 4.0.0
+	 */
+	public static function drop_sessions() {}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-session-tokens.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-session-tokens.php#L16">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-session-tokens.php#L16-L295">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.0.0/">4.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_session_tokens" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_session_tokens</a>
+  </p>
+</div>

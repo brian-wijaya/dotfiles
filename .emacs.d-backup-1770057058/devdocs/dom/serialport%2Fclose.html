@@ -1,0 +1,84 @@
+<h1>SerialPort: close() method</h1> <details class="baseline-indicator not" data-glean-toggle-open="baseline_toggle_open"> <summary>  <div class="status-title"> <span class="not-bold">Limited availability</span> </div>    </summary> <div class="extra"> <p>This feature is not Baseline because it does not work in some of the most widely-used browsers.</p>  <ul> <li> <a href="https://developer.mozilla.org/en-US/docs/Glossary/Baseline/Compatibility" data-glean-id="baseline_link_learn_more" target="_blank" class="learn-more"> Learn more </a> </li> <li> <a href="#browser_compatibility" data-glean-id="baseline_link_bcd_table"> See full compatibility </a> </li> <li> <a href="https://survey.alchemer.com/s3/7634825/MDN-baseline-feedback?page=%2Fen-US%2Fdocs%2FWeb%2FAPI%2FSerialPort%2Fclose&amp;level=not" data-glean-id="baseline_link_feedback" class="feedback-link" target="_blank" rel="noreferrer"> Report feedback </a> </li> </ul> </div> </details>   <div class="notecard secure"><p><strong>Secure context:</strong> This feature is available only in <a href="https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts">secure contexts</a> (HTTPS), in some or all <a href="#browser_compatibility">supporting browsers</a>.</p></div> <div class="notecard experimental"><p><strong>Experimental:</strong> <strong>This is an <a href="https://developer.mozilla.org/en-US/docs/MDN/Writing_guidelines/Experimental_deprecated_obsolete#experimental">experimental technology</a></strong><br>Check the <a href="#browser_compatibility">Browser compatibility table</a> carefully before using this in production.</p></div> <div class="notecard note"><p><strong>Note:</strong> This feature is available in <a href="../dedicatedworkerglobalscope">Dedicated Web Workers</a>.</p></div> <p>The <code>SerialPort.close()</code> method of the <a href="../serialport"><code>SerialPort</code></a> interface returns a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"><code>Promise</code></a> that resolves when the port closes.</p>     <mdn-survey></mdn-survey>  <h2 id="syntax" class="heading">Syntax</h2> <div class="code-example"><pre data-language="js">close()
+</pre></div>  <h3 id="parameters" class="heading">Parameters</h3> <p>None.</p>  <h3 id="return_value" class="heading">Return value</h3> <p>A <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"><code>Promise</code></a>.</p>  <h2 id="description" class="heading">Description</h2> <p><code>close()</code> closes the serial port if previously-locked <a href="readable"><code>SerialPort.readable</code></a> and <a href="writable"><code>SerialPort.writable</code></a> members are unlocked, meaning the <code>releaseLock()</code> methods have been called for their respective reader and writer.</p> <p>However, when continuously reading data from a serial device using a loop, the associated <a href="../readablestream">readable stream</a> will always be locked until the <a href="../readablestreamdefaultreader">reader</a> encounters an error. In this case, calling <a href="../readablestreamdefaultreader/cancel"><code>reader.cancel()</code></a> will force <a href="../readablestreamdefaultreader/read"><code>reader.read()</code></a> to resolve immediately with <code>{ value: undefined, done: true }</code> allowing the loop to call <a href="../readablestreamdefaultreader/releaselock"><code>reader.releaseLock()</code></a>.</p> <div class="code-example"><pre data-language="js">// Without transform streams.
+
+let keepReading = true;
+let reader;
+
+async function readUntilClosed() {
+  while (port.readable &amp;&amp; keepReading) {
+    reader = port.readable.getReader();
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          // reader.cancel() has been called.
+          break;
+        }
+        // value is a Uint8Array.
+        console.log(value);
+      }
+    } catch (error) {
+      // Handle error...
+    } finally {
+      // Allow the serial port to be closed later.
+      reader.releaseLock();
+    }
+  }
+
+  await port.close();
+}
+
+const closedPromise = readUntilClosed();
+
+document.querySelector("button").addEventListener("click", async () =&gt; {
+  // User clicked a button to close the serial port.
+  keepReading = false;
+  // Force reader.read() to resolve immediately and subsequently
+  // call reader.releaseLock() in the loop example above.
+  reader.cancel();
+  await closedPromise;
+});
+</pre></div> <p>Closing a serial port is more complicated when using <a href="../transformstream">transform streams</a>. See <a href="https://developer.chrome.com/docs/capabilities/serial#close-port" target="_blank">Close a serial port</a> for guidance.</p>  <h2 id="specifications" class="heading">Specifications</h2> <div class="_table"><table> <thead> <tr> <th scope="col">Specification</th> </tr> </thead> <tbody> <tr> <td><a href="https://wicg.github.io/serial/#dom-serialport-close" rel="noopener" target="_blank">Web Serial API&gt;<br># dom-serialport-close&gt;</a></td> </tr> </tbody> </table></div>  <h2 id="browser_compatibility" class="heading">Browser compatibility</h2> <div class="_table"><table>
+<thead>
+<tr id="bct-browser-type">
+<th></th>
+<th colspan="5">Desktop</th>
+<th colspan="7">Mobile</th>
+</tr>
+<tr id="bct-browsers">
+<th></th>
+<th>Chrome</th>
+<th>Edge</th>
+<th>Firefox</th>
+<th>Opera</th>
+<th>Safari</th>
+<th>Chrome Android</th>
+<th>Firefox for Android</th>
+<th>Opera Android</th>
+<th>Safari on IOS</th>
+<th>Samsung Internet</th>
+<th>WebView Android</th>
+<th>WebView on iOS</th>
+</tr>
+</thead>
+<tbody><tr>
+<th><code>close</code></th>
+<td class="bc-supports-yes">89</td>
+<td class="bc-supports-yes">89</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">75</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+</tr></tbody>
+</table></div><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2005&ndash;2025 MDN contributors.<br>Licensed under the Creative Commons Attribution-ShareAlike License v2.5 or later.<br>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/SerialPort/close" class="_attribution-link">https://developer.mozilla.org/en-US/docs/Web/API/SerialPort/close</a>
+  </p>
+</div>

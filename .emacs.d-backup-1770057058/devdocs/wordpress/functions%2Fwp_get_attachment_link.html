@@ -1,0 +1,135 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_attachment_link( <span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span>, <span class="arg-type">string|int[]</span> <span class="arg-name">$size</span> = <span class="arg-default">‘thumbnail’</span>, <span class="arg-type">bool</span> <span class="arg-name">$permalink</span> = <span class="arg-default">false</span>, <span class="arg-type">bool</span> <span class="arg-name">$icon</span> = <span class="arg-default">false</span>, <span class="arg-type">string|false</span> <span class="arg-name">$text</span> = <span class="arg-default">false</span>, <span class="arg-type">array|string</span> <span class="arg-name">$attr</span> = <span class="arg-default">”</span> ): <span class="return-type">string</span>
+</h1> <section><p>Retrieves an attachment page link using an image or icon, if possible.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID or post object.</span></div></dd>
+<dt>
+<code>$size</code><span class="type"><span class="string">string</span>|<span class="int[]">int[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Image size. Accepts any registered image size name, or an array of width and height values in pixels (in that order). Default <code>'thumbnail'</code>.</span></div>
+<p class="default">Default:<code>'thumbnail'</code></p>
+</dd>
+<dt>
+<code>$permalink</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to add permalink to image. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$icon</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether the attachment is an icon. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$text</code><span class="type"><span class="string">string</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Link text to use. Activated by passing a string, false otherwise.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$attr</code><span class="type"><span class="array">array</span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array or string of attributes. </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> HTML content.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1642" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_attachment_link( $post = 0, $size = 'thumbnail', $permalink = false, $icon = false, $text = false, $attr = '' ) {
+	$_post = get_post( $post );
+
+	if ( empty( $_post ) || ( 'attachment' !== $_post-&gt;post_type ) || ! wp_get_attachment_url( $_post-&gt;ID ) ) {
+		return __( 'Missing Attachment' );
+	}
+
+	$url = wp_get_attachment_url( $_post-&gt;ID );
+
+	if ( $permalink ) {
+		$url = get_attachment_link( $_post-&gt;ID );
+	}
+
+	if ( $text ) {
+		$link_text = $text;
+	} elseif ( $size &amp;&amp; 'none' !== $size ) {
+		$link_text = wp_get_attachment_image( $_post-&gt;ID, $size, $icon, $attr );
+	} else {
+		$link_text = '';
+	}
+
+	if ( '' === trim( $link_text ) ) {
+		$link_text = $_post-&gt;post_title;
+	}
+
+	if ( '' === trim( $link_text ) ) {
+		$link_text = esc_html( pathinfo( get_attached_file( $_post-&gt;ID ), PATHINFO_FILENAME ) );
+	}
+
+	/**
+	 * Filters the list of attachment link attributes.
+	 *
+	 * @since 6.2.0
+	 *
+	 * @param array $attributes An array of attributes for the link markup,
+	 *                          keyed on the attribute name.
+	 * @param int   $id         Post ID.
+	 */
+	$attributes = apply_filters( 'wp_get_attachment_link_attributes', array( 'href' =&gt; $url ), $_post-&gt;ID );
+
+	$link_attributes = '';
+	foreach ( $attributes as $name =&gt; $value ) {
+		$value            = 'href' === $name ? esc_url( $value ) : esc_attr( $value );
+		$link_attributes .= ' ' . esc_attr( $name ) . "='" . $value . "'";
+	}
+
+	$link_html = "&lt;a$link_attributes&gt;$link_text&lt;/a&gt;";
+
+	/**
+	 * Filters a retrieved attachment page link.
+	 *
+	 * @since 2.7.0
+	 * @since 5.1.0 Added the `$attr` parameter.
+	 *
+	 * @param string       $link_html The page link HTML output.
+	 * @param int|WP_Post  $post      Post ID or object. Can be 0 for the current global post.
+	 * @param string|int[] $size      Requested image size. Can be any registered image size name, or
+	 *                                an array of width and height values in pixels (in that order).
+	 * @param bool         $permalink Whether to add permalink to image. Default false.
+	 * @param bool         $icon      Whether to include an icon.
+	 * @param string|false $text      If string, will be link text.
+	 * @param array|string $attr      Array or string of attributes.
+	 */
+	return apply_filters( 'wp_get_attachment_link', $link_html, $post, $size, $permalink, $icon, $text, $attr );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post-template.php#L1642">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post-template.php#L1642-L1706">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_get_attachment_link"><span class="hook-func">apply_filters</span>( ‘wp_get_attachment_link’, <nobr><span class="arg-type">string</span> <span class="arg-name">$link_html</span></nobr>, <nobr><span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">string|int[]</span> <span class="arg-name">$size</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$permalink</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$icon</span></nobr>, <nobr><span class="arg-type">string|false</span> <span class="arg-name">$text</span></nobr>, <nobr><span class="arg-type">array|string</span> <span class="arg-name">$attr</span></nobr> )</a></dt>
+<dd>
+<p>Filters a retrieved attachment page link.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_get_attachment_link_attributes"><span class="hook-func">apply_filters</span>( ‘wp_get_attachment_link_attributes’, <nobr><span class="arg-type">array</span> <span class="arg-name">$attributes</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of attachment link attributes.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">The <code>$post</code> parameter can now accept either a post ID or <code>WP_Post</code> object.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_attachment_link" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_attachment_link</a>
+  </p>
+</div>

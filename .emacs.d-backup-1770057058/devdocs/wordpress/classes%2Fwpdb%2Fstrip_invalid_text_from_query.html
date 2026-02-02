@@ -1,0 +1,58 @@
+<h1 class="wp-block-wporg-code-reference-title">wpdb::strip_invalid_text_from_query( <span class="arg-type">string</span> <span class="arg-name">$query</span> ): <span class="return-type">string|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Strips any invalid characters from the query.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$query</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Query to convert.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|<a href="../wp_error" rel="class">WP_Error</a></span> The converted query, or a <a href="../wp_error" rel="class">WP_Error</a> object if the conversion fails.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3697" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function strip_invalid_text_from_query( $query ) {
+	// We don't need to check the collation for queries that don't read data.
+	$trimmed_query = ltrim( $query, "\r\n\t (" );
+	if ( preg_match( '/^(?:SHOW|DESCRIBE|DESC|EXPLAIN|CREATE)\s/i', $trimmed_query ) ) {
+		return $query;
+	}
+
+	$table = $this-&gt;get_table_from_query( $query );
+	if ( $table ) {
+		$charset = $this-&gt;get_table_charset( $table );
+		if ( is_wp_error( $charset ) ) {
+			return $charset;
+		}
+
+		// We can't reliably strip text from tables containing binary/blob columns.
+		if ( 'binary' === $charset ) {
+			return $query;
+		}
+	} else {
+		$charset = $this-&gt;charset;
+	}
+
+	$data = array(
+		'value'   =&gt; $query,
+		'charset' =&gt; $charset,
+		'ascii'   =&gt; false,
+		'length'  =&gt; false,
+	);
+
+	$data = $this-&gt;strip_invalid_text( array( $data ) );
+	if ( is_wp_error( $data ) ) {
+		return $data;
+	}
+
+	return $data[0]['value'];
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wpdb.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wpdb.php#L3697">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wpdb.php#L3697-L3732">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wpdb/strip_invalid_text_from_query" class="_attribution-link">https://developer.wordpress.org/reference/classes/wpdb/strip_invalid_text_from_query</a>
+  </p>
+</div>

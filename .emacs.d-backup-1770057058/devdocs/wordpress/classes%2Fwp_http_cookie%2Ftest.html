@@ -1,0 +1,63 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Http_Cookie::test( <span class="arg-type">string</span> <span class="arg-name">$url</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Confirms that it’s OK to send this cookie to the URL checked against.</p> </section> <section><h2 id="description">Description</h2> <p>Decision is based on RFC 2109/2965, so look there for details on validity.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">URL you intend to send this cookie to</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> true if allowed, false otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="181" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function test( $url ) {
+	if ( is_null( $this-&gt;name ) ) {
+		return false;
+	}
+
+	// Expires - if expired then nothing else matters.
+	if ( isset( $this-&gt;expires ) &amp;&amp; time() &gt; $this-&gt;expires ) {
+		return false;
+	}
+
+	// Get details on the URL we're thinking about sending to.
+	$url         = parse_url( $url );
+	$url['port'] = isset( $url['port'] ) ? $url['port'] : ( 'https' === $url['scheme'] ? 443 : 80 );
+	$url['path'] = isset( $url['path'] ) ? $url['path'] : '/';
+
+	// Values to use for comparison against the URL.
+	$path   = isset( $this-&gt;path ) ? $this-&gt;path : '/';
+	$port   = isset( $this-&gt;port ) ? $this-&gt;port : null;
+	$domain = isset( $this-&gt;domain ) ? strtolower( $this-&gt;domain ) : strtolower( $url['host'] );
+	if ( false === stripos( $domain, '.' ) ) {
+		$domain .= '.local';
+	}
+
+	// Host - very basic check that the request URL ends with the domain restriction (minus leading dot).
+	$domain = ( str_starts_with( $domain, '.' ) ) ? substr( $domain, 1 ) : $domain;
+	if ( ! str_ends_with( $url['host'], $domain ) ) {
+		return false;
+	}
+
+	// Port - supports "port-lists" in the format: "80,8000,8080".
+	if ( ! empty( $port ) &amp;&amp; ! in_array( $url['port'], array_map( 'intval', explode( ',', $port ) ), true ) ) {
+		return false;
+	}
+
+	// Path - request path must start with path restriction.
+	if ( ! str_starts_with( $url['path'], $path ) ) {
+		return false;
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-http-cookie.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-http-cookie.php#L181">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-http-cookie.php#L181-L221">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_http_cookie/test" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_http_cookie/test</a>
+  </p>
+</div>

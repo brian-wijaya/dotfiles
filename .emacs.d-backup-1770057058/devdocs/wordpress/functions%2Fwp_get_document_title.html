@@ -1,0 +1,152 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_document_title(): <span class="return-type">string</span>
+</h1> <section><p>Returns document title for the current page.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Tag with the document title.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1176" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_document_title() {
+
+	/**
+	 * Filters the document title before it is generated.
+	 *
+	 * Passing a non-empty value will short-circuit wp_get_document_title(),
+	 * returning that value instead.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param string $title The document title. Default empty string.
+	 */
+	$title = apply_filters( 'pre_get_document_title', '' );
+	if ( ! empty( $title ) ) {
+		return $title;
+	}
+
+	global $page, $paged;
+
+	$title = array(
+		'title' =&gt; '',
+	);
+
+	// If it's a 404 page, use a "Page not found" title.
+	if ( is_404() ) {
+		$title['title'] = __( 'Page not found' );
+
+		// If it's a search, use a dynamic search results title.
+	} elseif ( is_search() ) {
+		/* translators: %s: Search query. */
+		$title['title'] = sprintf( __( 'Search Results for &amp;#8220;%s&amp;#8221;' ), get_search_query() );
+
+		// If on the front page, use the site title.
+	} elseif ( is_front_page() ) {
+		$title['title'] = get_bloginfo( 'name', 'display' );
+
+		// If on a post type archive, use the post type archive title.
+	} elseif ( is_post_type_archive() ) {
+		$title['title'] = post_type_archive_title( '', false );
+
+		// If on a taxonomy archive, use the term title.
+	} elseif ( is_tax() ) {
+		$title['title'] = single_term_title( '', false );
+
+		/*
+		* If we're on the blog page that is not the homepage
+		* or a single post of any post type, use the post title.
+		*/
+	} elseif ( is_home() || is_singular() ) {
+		$title['title'] = single_post_title( '', false );
+
+		// If on a category or tag archive, use the term title.
+	} elseif ( is_category() || is_tag() ) {
+		$title['title'] = single_term_title( '', false );
+
+		// If on an author archive, use the author's display name.
+	} elseif ( is_author() &amp;&amp; get_queried_object() ) {
+		$author         = get_queried_object();
+		$title['title'] = $author-&gt;display_name;
+
+		// If it's a date archive, use the date as the title.
+	} elseif ( is_year() ) {
+		$title['title'] = get_the_date( _x( 'Y', 'yearly archives date format' ) );
+
+	} elseif ( is_month() ) {
+		$title['title'] = get_the_date( _x( 'F Y', 'monthly archives date format' ) );
+
+	} elseif ( is_day() ) {
+		$title['title'] = get_the_date();
+	}
+
+	// Add a page number if necessary.
+	if ( ( $paged &gt;= 2 || $page &gt;= 2 ) &amp;&amp; ! is_404() ) {
+		/* translators: %s: Page number. */
+		$title['page'] = sprintf( __( 'Page %s' ), max( $paged, $page ) );
+	}
+
+	// Append the description or site title to give context.
+	if ( is_front_page() ) {
+		$title['tagline'] = get_bloginfo( 'description', 'display' );
+	} else {
+		$title['site'] = get_bloginfo( 'name', 'display' );
+	}
+
+	/**
+	 * Filters the separator for the document title.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param string $sep Document title separator. Default '-'.
+	 */
+	$sep = apply_filters( 'document_title_separator', '-' );
+
+	/**
+	 * Filters the parts of the document title.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param array $title {
+	 *     The document title parts.
+	 *
+	 *     @type string $title   Title of the viewed page.
+	 *     @type string $page    Optional. Page number if paginated.
+	 *     @type string $tagline Optional. Site description when on home page.
+	 *     @type string $site    Optional. Site title when not on home page.
+	 * }
+	 */
+	$title = apply_filters( 'document_title_parts', $title );
+
+	$title = implode( " $sep ", array_filter( $title ) );
+
+	/**
+	 * Filters the document title.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param string $title Document title.
+	 */
+	$title = apply_filters( 'document_title', $title );
+
+	return $title;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/general-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/general-template.php#L1176">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/general-template.php#L1176-L1297">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/document_title"><span class="hook-func">apply_filters</span>( ‘document_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$title</span></nobr> )</a></dt>
+<dd>
+<p>Filters the document title.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/document_title_parts"><span class="hook-func">apply_filters</span>( ‘document_title_parts’, <nobr><span class="arg-type">array</span> <span class="arg-name">$title</span></nobr> )</a></dt>
+<dd>
+<p>Filters the parts of the document title.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/document_title_separator"><span class="hook-func">apply_filters</span>( ‘document_title_separator’, <nobr><span class="arg-type">string</span> <span class="arg-name">$sep</span></nobr> )</a></dt>
+<dd>
+<p>Filters the separator for the document title.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_get_document_title"><span class="hook-func">apply_filters</span>( ‘pre_get_document_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$title</span></nobr> )</a></dt>
+<dd>
+<p>Filters the document title before it is generated.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_document_title" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_document_title</a>
+  </p>
+</div>

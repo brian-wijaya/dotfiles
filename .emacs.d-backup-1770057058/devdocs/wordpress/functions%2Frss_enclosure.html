@@ -1,0 +1,50 @@
+<h1 class="wp-block-wporg-code-reference-title">rss_enclosure()</h1> <section><p>Displays the rss enclosure for the current post.</p> </section> <section><h2 id="description">Description</h2> <p>Uses the global $post to check whether the post requires a password and if the user has the password for the post. If not then it will return before displaying.</p> <p>Also uses the function <a href="get_post_custom" rel="function">get_post_custom()</a> to get the post’s ‘enclosure’ metadata field and parses the value to display the enclosure(s). The enclosure(s) consist of enclosure HTML tag(s) with a URI and other attributes.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="475" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function rss_enclosure() {
+	if ( post_password_required() ) {
+		return;
+	}
+
+	foreach ( (array) get_post_custom() as $key =&gt; $val ) {
+		if ( 'enclosure' === $key ) {
+			foreach ( (array) $val as $enc ) {
+				$enclosure = explode( "\n", $enc );
+
+				if ( count( $enclosure ) &lt; 3 ) {
+					continue;
+				}
+
+				// Only get the first element, e.g. 'audio/mpeg' from 'audio/mpeg mpga mp2 mp3'.
+				$t    = preg_split( '/[ \t]/', trim( $enclosure[2] ) );
+				$type = $t[0];
+
+				/**
+				 * Filters the RSS enclosure HTML link tag for the current post.
+				 *
+				 * @since 2.2.0
+				 *
+				 * @param string $html_link_tag The HTML link tag with a URI and other attributes.
+				 */
+				echo apply_filters( 'rss_enclosure', '&lt;enclosure url="' . esc_url( trim( $enclosure[0] ) ) . '" length="' . absint( trim( $enclosure[1] ) ) . '" type="' . esc_attr( $type ) . '" /&gt;' . "\n" );
+			}
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/feed.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/feed.php#L475">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/feed.php#L475-L504">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/rss_enclosure"><span class="hook-func">apply_filters</span>( ‘rss_enclosure’, <nobr><span class="arg-type">string</span> <span class="arg-name">$html_link_tag</span></nobr> )</a></dt>
+<dd>
+<p>Filters the RSS enclosure HTML link tag for the current post.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/rss_enclosure" class="_attribution-link">https://developer.wordpress.org/reference/functions/rss_enclosure</a>
+  </p>
+</div>

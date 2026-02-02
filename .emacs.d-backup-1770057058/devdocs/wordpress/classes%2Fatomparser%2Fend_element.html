@@ -1,0 +1,61 @@
+<h1 class="wp-block-wporg-code-reference-title">AtomParser::end_element( <span class="arg-name">$parser</span>, <span class="arg-name">$name</span> )</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="275" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function end_element($parser, $name) {
+
+    $name_parts = explode(":", $name);
+    $tag        = array_pop($name_parts);
+
+    $ccount = count($this-&gt;in_content);
+
+    # if we are *in* content, then let's proceed to serialize it
+    if(!empty($this-&gt;in_content)) {
+        # if we are ending the original content element
+        # then let's finalize the content
+        if($this-&gt;in_content[0][0] == $tag &amp;&amp;
+            $this-&gt;in_content[0][1] == $this-&gt;depth) {
+            $origtype = $this-&gt;in_content[0][2];
+            array_shift($this-&gt;in_content);
+            $newcontent = array();
+            foreach($this-&gt;in_content as $c) {
+                if(count($c) == 3) {
+                    array_push($newcontent, $c[2]);
+                } else {
+                    if($this-&gt;is_xhtml || $this-&gt;is_text) {
+                        array_push($newcontent, $this-&gt;xml_escape($c));
+                    } else {
+                        array_push($newcontent, $c);
+                    }
+                }
+            }
+            if(in_array($tag, $this-&gt;ATOM_CONTENT_ELEMENTS)) {
+                $this-&gt;current-&gt;$tag = array($origtype, join('',$newcontent));
+            } else {
+                $this-&gt;current-&gt;$tag = join('',$newcontent);
+            }
+            $this-&gt;in_content = array();
+        } else if($this-&gt;in_content[$ccount-1][0] == $tag &amp;&amp;
+            $this-&gt;in_content[$ccount-1][1] == $this-&gt;depth) {
+            $this-&gt;in_content[$ccount-1][2] = substr($this-&gt;in_content[$ccount-1][2],0,-1) . "/&gt;";
+        } else {
+            # else, just finalize the current element's content
+            $endtag = $this-&gt;ns_to_prefix($name);
+            array_push($this-&gt;in_content, array($tag, $this-&gt;depth, "&lt;/$endtag[1]&gt;"));
+        }
+    }
+
+    array_shift($this-&gt;ns_contexts);
+
+    $this-&gt;depth--;
+
+    if($name == ($this-&gt;NS . ':entry')) {
+        array_push($this-&gt;feed-&gt;entries, $this-&gt;current);
+        $this-&gt;current = null;
+    }
+
+    $this-&gt;_p("end_element('$name')");
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/atomlib.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/atomlib.php#L275">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/atomlib.php#L275-L328">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/atomparser/end_element" class="_attribution-link">https://developer.wordpress.org/reference/classes/atomparser/end_element</a>
+  </p>
+</div>

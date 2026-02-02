@@ -1,0 +1,59 @@
+<h1 class="wp-block-wporg-code-reference-title">_find_post_by_old_date( <span class="arg-type">string</span> <span class="arg-name">$post_type</span> ): <span class="return-type">int</span>
+</h1> <section><p>Find the post ID for redirecting an old date.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_old_slug_redirect">wp_old_slug_redirect()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The current post type based on the query vars.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int</span> The Post ID.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1182" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _find_post_by_old_date( $post_type ) {
+	global $wpdb;
+
+	$date_query = '';
+	if ( get_query_var( 'year' ) ) {
+		$date_query .= $wpdb-&gt;prepare( ' AND YEAR(pm_date.meta_value) = %d', get_query_var( 'year' ) );
+	}
+	if ( get_query_var( 'monthnum' ) ) {
+		$date_query .= $wpdb-&gt;prepare( ' AND MONTH(pm_date.meta_value) = %d', get_query_var( 'monthnum' ) );
+	}
+	if ( get_query_var( 'day' ) ) {
+		$date_query .= $wpdb-&gt;prepare( ' AND DAYOFMONTH(pm_date.meta_value) = %d', get_query_var( 'day' ) );
+	}
+
+	$id = 0;
+	if ( $date_query ) {
+		$query        = $wpdb-&gt;prepare( "SELECT post_id FROM $wpdb-&gt;postmeta AS pm_date, $wpdb-&gt;posts WHERE ID = post_id AND post_type = %s AND meta_key = '_wp_old_date' AND post_name = %s" . $date_query, $post_type, get_query_var( 'name' ) );
+		$key          = md5( $query );
+		$last_changed = wp_cache_get_last_changed( 'posts' );
+		$cache_key    = "find_post_by_old_date:$key:$last_changed";
+		$cache        = wp_cache_get( $cache_key, 'post-queries' );
+		if ( false !== $cache ) {
+			$id = $cache;
+		} else {
+			$id = (int) $wpdb-&gt;get_var( $query );
+			if ( ! $id ) {
+				// Check to see if an old slug matches the old date.
+				$id = (int) $wpdb-&gt;get_var( $wpdb-&gt;prepare( "SELECT ID FROM $wpdb-&gt;posts, $wpdb-&gt;postmeta AS pm_slug, $wpdb-&gt;postmeta AS pm_date WHERE ID = pm_slug.post_id AND ID = pm_date.post_id AND post_type = %s AND pm_slug.meta_key = '_wp_old_slug' AND pm_slug.meta_value = %s AND pm_date.meta_key = '_wp_old_date'" . $date_query, $post_type, get_query_var( 'name' ) ) );
+			}
+			wp_cache_set( $cache_key, $id, 'post-queries' );
+		}
+	}
+
+	return $id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/query.php#L1182">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/query.php#L1182-L1216">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.3/">4.9.3</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_find_post_by_old_date" class="_attribution-link">https://developer.wordpress.org/reference/functions/_find_post_by_old_date</a>
+  </p>
+</div>

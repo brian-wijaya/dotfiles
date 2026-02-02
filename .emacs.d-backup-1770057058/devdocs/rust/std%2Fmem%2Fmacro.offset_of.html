@@ -1,0 +1,75 @@
+<h1 class="main-heading">Macro offset_of </h1>
+<pre class="rust item-decl" data-language="rust">pub macro offset_of($Container:ty, $($fields:expr)+ $(,)?) {
+    ...
+}</pre>
+<p>Expands to the offset in bytes of a field from the beginning of the given type.</p> <p>The type may be a <code>struct</code>, <code>enum</code>, <code>union</code>, or tuple.</p> <p>The field may be a nested field (<code>field1.field2</code>), but not an array index. The field must be visible to the call site.</p> <p>The offset is returned as a <a href="../primitive.usize" title="primitive usize"><code>usize</code></a>.</p> <h2 id="offsets-of-and-in-dynamically-sized-types">Offsets of, and in, dynamically sized types</h2> <p>The field’s type must be <a href="../marker/trait.sized" title="trait std::marker::Sized"><code>Sized</code></a>, but it may be located in a <a href="../../reference/dynamically-sized-types">dynamically sized</a> container. If the field type is dynamically sized, then you cannot use <code>offset_of!</code> (since the field’s alignment, and therefore its offset, may also be dynamic) and must take the offset from an actual pointer to the container instead.</p> <div class="example-wrap"><pre class="rust rust-example-rendered" data-language="rust">#[repr(C)]
+pub struct Struct&lt;T: ?Sized&gt; {
+    a: u8,
+    b: T,
+}
+
+#[derive(Debug)]
+#[repr(C, align(4))]
+struct Align4(u32);
+
+assert_eq!(mem::offset_of!(Struct&lt;dyn Debug&gt;, a), 0); // OK — Sized field
+assert_eq!(mem::offset_of!(Struct&lt;Align4&gt;, b), 4); // OK — not DST
+
+// assert_eq!(mem::offset_of!(Struct&lt;dyn Debug&gt;, b), 1);
+// ^^^ error[E0277]: ... cannot be known at compilation time
+
+// To obtain the offset of a !Sized field, examine a concrete value
+// instead of using offset_of!.
+let value: Struct&lt;Align4&gt; = Struct { a: 1, b: Align4(2) };
+let ref_unsized: &amp;Struct&lt;dyn Debug&gt; = &amp;value;
+let offset_of_b = unsafe {
+    (&amp;raw const ref_unsized.b).byte_offset_from_unsigned(ref_unsized)
+};
+assert_eq!(offset_of_b, 4);</pre></div> <p>If you need to obtain the offset of a field of a <code>!Sized</code> type, then, since the offset may depend on the particular value being stored (in particular, <code>dyn Trait</code> values have a dynamically-determined alignment), you must retrieve the offset from a specific reference or pointer, and so you cannot use <code>offset_of!</code> to work without one.</p> <h2 id="layout-is-subject-to-change">Layout is subject to change</h2> <p>Note that type layout is, in general, <a href="../../reference/type-layout">subject to change and platform-specific</a>. If layout stability is required, consider using an <a href="../../reference/type-layout#representations">explicit <code>repr</code> attribute</a>.</p> <p>Rust guarantees that the offset of a given field within a given type will not change over the lifetime of the program. However, two different compilations of the same program may result in different layouts. Also, even within a single program execution, no guarantees are made about types which are <em>similar</em> but not <em>identical</em>, e.g.:</p> <div class="example-wrap"><pre class="rust rust-example-rendered" data-language="rust">struct Wrapper&lt;T, U&gt;(T, U);
+
+type A = Wrapper&lt;u8, u8&gt;;
+type B = Wrapper&lt;u8, i8&gt;;
+
+// Not necessarily identical even though `u8` and `i8` have the same layout!
+// assert_eq!(mem::offset_of!(A, 1), mem::offset_of!(B, 1));
+
+#[repr(transparent)]
+struct U8(u8);
+
+type C = Wrapper&lt;u8, U8&gt;;
+
+// Not necessarily identical even though `u8` and `U8` have the same layout!
+// assert_eq!(mem::offset_of!(A, 1), mem::offset_of!(C, 1));
+
+struct Empty&lt;T&gt;(core::marker::PhantomData&lt;T&gt;);
+
+// Not necessarily identical even though `PhantomData` always has the same layout!
+// assert_eq!(mem::offset_of!(Empty&lt;u8&gt;, 0), mem::offset_of!(Empty&lt;i8&gt;, 0));</pre></div>
+<h2 id="unstable-features">Unstable features</h2> <p>The following unstable features expand the functionality of <code>offset_of!</code>:</p> <ul> <li>
+<a href="https://doc.rust-lang.org/unstable-book/language-features/offset-of-enum.html"><code>offset_of_enum</code></a> — allows <code>enum</code> variants to be traversed as if they were fields.</li> <li>
+<a href="https://doc.rust-lang.org/unstable-book/language-features/offset-of-slice.html"><code>offset_of_slice</code></a> — allows getting the offset of a field of type <code>[T]</code>.</li> </ul> <h2 id="examples">Examples</h2> <div class="example-wrap"><pre class="rust rust-example-rendered" data-language="rust">use std::mem;
+#[repr(C)]
+struct FieldStruct {
+    first: u8,
+    second: u16,
+    third: u8
+}
+
+assert_eq!(mem::offset_of!(FieldStruct, first), 0);
+assert_eq!(mem::offset_of!(FieldStruct, second), 2);
+assert_eq!(mem::offset_of!(FieldStruct, third), 4);
+
+#[repr(C)]
+struct NestedA {
+    b: NestedB
+}
+
+#[repr(C)]
+struct NestedB(u8);
+
+assert_eq!(mem::offset_of!(NestedA, b.0), 0);</pre></div><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2010 The Rust Project Developers<br>Licensed under the Apache License, Version 2.0 or the MIT license, at your option.<br>
+    <a href="https://doc.rust-lang.org/std/mem/macro.offset_of.html" class="_attribution-link">https://doc.rust-lang.org/std/mem/macro.offset_of.html</a>
+  </p>
+</div>

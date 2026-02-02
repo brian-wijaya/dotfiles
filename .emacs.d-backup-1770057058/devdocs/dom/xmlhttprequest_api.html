@@ -1,0 +1,542 @@
+<h1>XMLHttpRequest API</h1> <details class="baseline-indicator high" data-glean-toggle-open="baseline_toggle_open"> <summary>  <div class="status-title">  Baseline <span class="not-bold"> Widely available </span>  *  </div>    </summary> <div class="extra"> <p> This feature is well established and works across many devices and browser versions. It’s been available across browsers since ⁨July 2015⁩. </p> <p>* Some parts of this feature may have varying levels of support.</p> <ul> <li> <a href="https://developer.mozilla.org/en-US/docs/Glossary/Baseline/Compatibility" data-glean-id="baseline_link_learn_more" target="_blank" class="learn-more"> Learn more </a> </li> <li> <a href="#browser_compatibility" data-glean-id="baseline_link_bcd_table"> See full compatibility </a> </li> <li> <a href="https://survey.alchemer.com/s3/7634825/MDN-baseline-feedback?page=%2Fen-US%2Fdocs%2FWeb%2FAPI%2FXMLHttpRequest_API&amp;level=high" data-glean-id="baseline_link_feedback" class="feedback-link" target="_blank" rel="noreferrer"> Report feedback </a> </li> </ul> </div> </details>    <div class="notecard note"><p><strong>Note:</strong> This feature is available in <a href="web_workers_api">Web Workers</a>, except for <a href="service_worker_api">Service Workers</a>.</p></div> <p>The <strong>XMLHttpRequest API</strong> enables web apps to make HTTP requests to web servers and receive the responses programmatically using JavaScript. This in turn enables a website to update just part of a page with data from the server, rather than having to navigate to a whole new page. This practice is also sometimes known as <a href="https://developer.mozilla.org/en-US/docs/Glossary/AJAX">AJAX</a>.</p> <p>The <a href="fetch_api">Fetch API</a> is the more flexible and powerful replacement for the XMLHttpRequest API. The Fetch API uses <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise">promises</a> instead of events to handle asynchronous responses, integrates well with <a href="service_worker_api">service workers</a>, and supports advanced aspects of HTTP such as <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS">CORS</a>. For these reasons, the Fetch API is usually used in modern web apps instead of <a href="xmlhttprequest"><code>XMLHttpRequest</code></a>.</p>     <mdn-survey></mdn-survey>  <h2 id="concepts_and_usage" class="heading">Concepts and usage</h2> <p>The central interface in the XMLHttpRequest API is <a href="xmlhttprequest"><code>XMLHttpRequest</code></a>. To make an HTTP request:</p> <ol> <li>Create a new <code>XMLHttpRequest</code> instance by calling its <a href="xmlhttprequest/xmlhttprequest">constructor</a>.</li> <li>Initialize it by calling <a href="xmlhttprequest/open"><code>XMLHttpRequest.open()</code></a>. At this point you provide the URL for the request, the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Methods">HTTP method</a> to use, and optionally, a username and password.</li> <li>Attach event handlers to get the result of the request. For example, the <a href="xmlhttprequesteventtarget/load_event"><code>load</code></a> event is fired when the request has successfully completed, and the <a href="xmlhttprequesteventtarget/error_event"><code>error</code></a> event is fired in various error conditions.</li> <li>Send the request by calling <a href="xmlhttprequest/send"><code>XMLHttpRequest.send()</code></a>.</li> </ol> <p>For an in-depth guide to the XMLHttpRequest API, see <a href="xmlhttprequest_api/using_xmlhttprequest">Using XMLHttpRequest</a>.</p>  <h2 id="interfaces" class="heading">Interfaces</h2> <dl> <dt id="formdata"><a href="formdata"><code>FormData</code></a></dt> <dd> <p>An object representing <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/form"><code>&lt;form&gt;</code></a> fields and their values, which can be sent to a server using <a href="xmlhttprequest"><code>XMLHttpRequest</code></a> or <a href="window/fetch"><code>fetch()</code></a>.</p> </dd> <dt id="progressevent"><a href="progressevent"><code>ProgressEvent</code></a></dt> <dd> <p>A subclass of <a href="event"><code>Event</code></a> which is passed into the <a href="xmlhttprequesteventtarget/progress_event"><code>progress</code></a>, and which contains information about how much of the request has been completed.</p> </dd> <dt id="xmlhttprequest"><a href="xmlhttprequest"><code>XMLHttpRequest</code></a></dt> <dd> <p>Represents a single HTTP request.</p> </dd> <dt id="xmlhttprequesteventtarget"><a href="xmlhttprequesteventtarget"><code>XMLHttpRequestEventTarget</code></a></dt> <dd> <p>A superclass of both <a href="xmlhttprequest"><code>XMLHttpRequest</code></a> and <a href="xmlhttprequestupload"><code>XMLHttpRequestUpload</code></a>, defining the events that are available in both of those interfaces.</p> </dd> <dt id="xmlhttprequestupload"><a href="xmlhttprequestupload"><code>XMLHttpRequestUpload</code></a></dt> <dd> <p>Represents the upload process for an HTTP upload. Provides events enabling code to track the progress of an upload.</p> </dd> </dl>  <h2 id="examples" class="heading">Examples</h2> &gt;  <h3 id="fetching_json_data_from_the_server" class="heading">Fetching JSON data from the server</h3> <p>In this example we fetch a JSON file from <code>https://raw.githubusercontent.com/mdn/content/main/files/en-us/_wikihistory.json</code>, adding event listeners to show the progress of the event.</p> <h4 id="html">HTML</h4> <div class="code-example"><pre data-language="html">&lt;div class="controls"&gt;
+  &lt;button class="xhr" type="button"&gt;Click to start XHR&lt;/button&gt;
+&lt;/div&gt;
+
+&lt;textarea readonly class="event-log"&gt;&lt;/textarea&gt;
+</pre></div>  <h4 id="javascript">JavaScript</h4> <div class="code-example"><pre data-language="js">const xhrButton = document.querySelector(".xhr");
+const log = document.querySelector(".event-log");
+const url =
+  "https://raw.githubusercontent.com/mdn/content/main/files/en-us/_wikihistory.json";
+
+function handleEvent(e) {
+  log.textContent = `${log.textContent}${e.type}: ${e.loaded} bytes transferred\n`;
+}
+
+function addListeners(xhr) {
+  xhr.addEventListener("loadstart", handleEvent);
+  xhr.addEventListener("load", handleEvent);
+  xhr.addEventListener("loadend", handleEvent);
+  xhr.addEventListener("progress", handleEvent);
+  xhr.addEventListener("error", handleEvent);
+  xhr.addEventListener("abort", handleEvent);
+}
+
+xhrButton.addEventListener("click", () =&gt; {
+  log.textContent = "";
+
+  const xhr = new XMLHttpRequest();
+  xhr.open("GET", url);
+  addListeners(xhr);
+  xhr.send();
+});
+</pre></div> <h4 id="result">Result</h4> <div class="code-example"><iframe class="sample-code-frame" title="Fetching JSON data from the server sample" id="frame_fetching_json_data_from_the_server" src="about:blank" data-live-path="/en-US/docs/Web/API/XMLHttpRequest_API/" data-live-id="fetching_json_data_from_the_server" sandbox="allow-same-origin allow-scripts" loading="lazy"></iframe></div>  <h2 id="specifications" class="heading">Specifications</h2> <div class="_table"><table> <thead> <tr> <th scope="col">Specification</th> </tr> </thead> <tbody> <tr> <td><a href="https://xhr.spec.whatwg.org/" rel="noopener" target="_blank">XMLHttpRequest&gt;</a></td> </tr> </tbody> </table></div>  <h2 id="browser_compatibility" class="heading">Browser compatibility</h2> <div class="_table"><table>
+<thead>
+<tr id="bct-browser-type">
+<th></th>
+<th colspan="5">Desktop</th>
+<th colspan="7">Mobile</th>
+</tr>
+<tr id="bct-browsers">
+<th></th>
+<th>Chrome</th>
+<th>Edge</th>
+<th>Firefox</th>
+<th>Opera</th>
+<th>Safari</th>
+<th>Chrome Android</th>
+<th>Firefox for Android</th>
+<th>Opera Android</th>
+<th>Safari on IOS</th>
+<th>Samsung Internet</th>
+<th>WebView Android</th>
+<th>WebView on iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th><code>XMLHttpRequest</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">3</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>XMLHttpRequest_API</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">10.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">3</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>abort</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>abort_event</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">3.5</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1.3</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>authorization_removed_cross_origin</code></th>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">111</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">16.1</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">111</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">16.1</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">16.1</td>
+</tr>
+<tr>
+<th><code>error_event</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1.3</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>getAllResponseHeaders</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes"><details><summary>1</summary>Starting from Firefox 49, empty headers are returned as empty strings in case the preference <code>network.http.keep_empty_response_headers_as_empty_string</code> is set to <code>true</code>, defaulting to <code>false</code>. Before Firefox 49 empty headers had been ignored. Since Firefox 50 the preference defaults to <code>true</code>.</details></td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes"><details><summary>4</summary>Starting from Firefox for Android 49, empty headers are returned as empty strings in case the preference <code>network.http.keep_empty_response_headers_as_empty_string</code> is set to <code>true</code>, defaulting to <code>false</code>. Before Firefox for Android 49 empty headers had been ignored. Since Firefox for Android 50 the preference defaults to <code>true</code>.</details></td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>getResponseHeader</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes"><details><summary>1</summary>Starting from Firefox 49, empty headers are returned as empty strings in case the preference <code>network.http.keep_empty_response_headers_as_empty_string</code> is set to <code>true</code>, defaulting to <code>false</code>. Before Firefox 49 empty headers had been ignored. Since Firefox 50 the preference defaults to <code>true</code>.</details></td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes"><details><summary>4</summary>Starting from Firefox for Android 49, empty headers are returned as empty strings in case the preference <code>network.http.keep_empty_response_headers_as_empty_string</code> is set to <code>true</code>, defaulting to <code>false</code>. Before Firefox for Android 49 empty headers had been ignored. Since Firefox for Android 50 the preference defaults to <code>true</code>.</details></td>
+<td class="bc-supports-yes">10.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>load_event</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1.3</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>loadend_event</code></th>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">5</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">5</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">3</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">3</td>
+</tr>
+<tr>
+<th><code>loadstart_event</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">3.5</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1.3</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>open</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes"><details><summary>1</summary>Starting in Firefox 30, synchronous requests on the main thread have been deprecated due to their negative impact on performance and the user experience. Therefore, the <code>async</code> parameter may not be <code>false</code> except in a <code>Worker</code>.</details></td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes"><details><summary>4</summary>Starting in Firefox for Android 30, synchronous requests on the main thread have been deprecated due to their negative impact on performance and the user experience. Therefore, the <code>async</code> parameter may not be <code>false</code> except in a <code>Worker</code>.</details></td>
+<td class="bc-supports-yes">10.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>overrideMimeType</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>progress_event</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">3</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>readyState</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">10.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>readystatechange_event</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">9</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">10.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>response</code></th>
+<td class="bc-supports-yes">9</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">6</td>
+<td class="bc-supports-yes">11.6</td>
+<td class="bc-supports-yes">5.1</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">6</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">5</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">3</td>
+<td class="bc-supports-yes">5</td>
+</tr>
+<tr>
+<th><code>responseText</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">10.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>responseType</code></th>
+<td class="bc-supports-yes">31</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">6</td>
+<td class="bc-supports-yes">1812–15</td>
+<td class="bc-supports-yes">5.1</td>
+<td class="bc-supports-yes">31</td>
+<td class="bc-supports-yes">50</td>
+<td class="bc-supports-yes">1812–14</td>
+<td class="bc-supports-yes">5</td>
+<td class="bc-supports-yes">2.0</td>
+<td class="bc-supports-yes">4.4.3</td>
+<td class="bc-supports-yes">5</td>
+</tr>
+<tr>
+<th><code>responseURL</code></th>
+<td class="bc-supports-yes">37</td>
+<td class="bc-supports-yes">14</td>
+<td class="bc-supports-yes">32</td>
+<td class="bc-supports-yes">24</td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">37</td>
+<td class="bc-supports-yes">32</td>
+<td class="bc-supports-yes">24</td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">3.0</td>
+<td class="bc-supports-yes">37</td>
+<td class="bc-supports-yes">8</td>
+</tr>
+<tr>
+<th><code>responseXML</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes"><details><summary>1</summary>Before Firefox 51, an error parsing the received data added a <code>&lt;parsererror&gt;</code> node to the top of the <code>Document</code> and then returned the <code>Document</code> in whatever state it happens to be in. This was inconsistent with the specification. Starting with Firefox 51, this scenario now correctly returns <code>null</code> as per the spec.</details></td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">3</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes"><details><summary>4</summary>Before Firefox for Android 51, an error parsing the received data added a <code>&lt;parsererror&gt;</code> node to the top of the <code>Document</code> and then returned the <code>Document</code> in whatever state it happens to be in. This was inconsistent with the specification. Starting with Firefox for Android 51, this scenario now correctly returns <code>null</code> as per the spec.</details></td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>send</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">10.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>setAttributionReporting</code></th>
+<td class="bc-supports-yes">125</td>
+<td class="bc-supports-yes">125</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">111</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">125</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">83</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">27.0</td>
+<td class="bc-supports-yes">125</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>setPrivateToken</code></th>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">78</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">24.0</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>setRequestHeader</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">10.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>status</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">8</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">10.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>statusText</code></th>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1.2</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">1</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">1</td>
+</tr>
+<tr>
+<th><code>timeout</code></th>
+<td class="bc-supports-yes">29</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">1712–16</td>
+<td class="bc-supports-yes">7</td>
+<td class="bc-supports-yes">29</td>
+<td class="bc-supports-yes">14</td>
+<td class="bc-supports-yes">1812–16</td>
+<td class="bc-supports-yes">7</td>
+<td class="bc-supports-yes">2.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">7</td>
+</tr>
+<tr>
+<th><code>timeout_event</code></th>
+<td class="bc-supports-yes">29</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">16</td>
+<td class="bc-supports-yes">7</td>
+<td class="bc-supports-yes">29</td>
+<td class="bc-supports-yes">14</td>
+<td class="bc-supports-yes">16</td>
+<td class="bc-supports-yes">7</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">7</td>
+</tr>
+<tr>
+<th><code>upload</code></th>
+<td class="bc-supports-yes">2</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">3.5</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">≤12.1</td>
+<td class="bc-supports-yes">3</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">3</td>
+</tr>
+<tr>
+<th><code>withCredentials</code></th>
+<td class="bc-supports-yes">3</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes"><details><summary>3.5</summary>Starting with Firefox 11, it's no longer supported to use the <code>withCredentials</code> attribute when performing synchronous requests. Attempting to do so throws an <code>NS_ERROR_DOM_INVALID_ACCESS_ERR</code> exception.</details></td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes"><details><summary>4</summary>Starting with Firefox for Android 14, it's no longer supported to use the <code>withCredentials</code> attribute when performing synchronous requests. Attempting to do so throws an <code>NS_ERROR_DOM_INVALID_ACCESS_ERR</code> exception.</details></td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">3.2</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4.4</td>
+<td class="bc-supports-yes">3.2</td>
+</tr>
+<tr>
+<th><code>worker_support</code></th>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">12</td>
+<td class="bc-supports-yes">3.5</td>
+<td class="bc-supports-yes">10.6</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">18</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">11</td>
+<td class="bc-supports-yes">5</td>
+<td class="bc-supports-yes">1.0</td>
+<td class="bc-supports-yes">4</td>
+<td class="bc-supports-yes">5</td>
+</tr>
+</tbody>
+</table></div>  <h2 id="see_also" class="heading">See also</h2> <ul> <li><a href="fetch_api">Fetch API</a></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2005&ndash;2025 MDN contributors.<br>Licensed under the Creative Commons Attribution-ShareAlike License v2.5 or later.<br>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest_API" class="_attribution-link">https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest_API</a>
+  </p>
+</div>

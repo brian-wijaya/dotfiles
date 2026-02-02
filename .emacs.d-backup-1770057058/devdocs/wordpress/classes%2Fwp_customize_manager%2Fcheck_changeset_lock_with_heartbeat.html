@@ -1,0 +1,56 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Manager::check_changeset_lock_with_heartbeat( <span class="arg-type">array</span> <span class="arg-name">$response</span>, <span class="arg-type">array</span> <span class="arg-name">$data</span>, <span class="arg-type">string</span> <span class="arg-name">$screen_id</span> ): <span class="return-type">array</span>
+</h1> <section><p>Checks locked changeset with heartbeat API.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$response</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The Heartbeat response.</span></div></dd>
+<dt>
+<code>$data</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The $_POST data sent.</span></div></dd>
+<dt>
+<code>$screen_id</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The screen id.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The Heartbeat response.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3359" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function check_changeset_lock_with_heartbeat( $response, $data, $screen_id ) {
+	if ( isset( $data['changeset_uuid'] ) ) {
+		$changeset_post_id = $this-&gt;find_changeset_post_id( $data['changeset_uuid'] );
+	} else {
+		$changeset_post_id = $this-&gt;changeset_post_id();
+	}
+
+	if (
+		array_key_exists( 'check_changeset_lock', $data )
+		&amp;&amp; 'customize' === $screen_id
+		&amp;&amp; $changeset_post_id
+		&amp;&amp; current_user_can( get_post_type_object( 'customize_changeset' )-&gt;cap-&gt;edit_post, $changeset_post_id )
+	) {
+		$lock_user_id = wp_check_post_lock( $changeset_post_id );
+
+		if ( $lock_user_id ) {
+			$response['customize_changeset_lock_user'] = $this-&gt;get_lock_user_data( $lock_user_id );
+		} else {
+
+			// Refreshing time will ensure that the user is sitting on customizer and has not closed the customizer tab.
+			$this-&gt;refresh_changeset_lock( $changeset_post_id );
+		}
+	}
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-manager.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-manager.php#L3359">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-manager.php#L3359-L3384">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.0/">4.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_manager/check_changeset_lock_with_heartbeat" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_manager/check_changeset_lock_with_heartbeat</a>
+  </p>
+</div>

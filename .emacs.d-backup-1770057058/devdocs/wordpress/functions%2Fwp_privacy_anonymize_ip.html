@@ -1,0 +1,92 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_privacy_anonymize_ip( <span class="arg-type">string</span> <span class="arg-name">$ip_addr</span>, <span class="arg-type">bool</span> <span class="arg-name">$ipv6_fallback</span> = <span class="arg-default">false</span> ): <span class="return-type">string</span>
+</h1> <section><p>Returns an anonymized IPv4 or IPv6 address.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$ip_addr</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The IPv4 or IPv6 address to be anonymized.</span></div></dd>
+<dt>
+<code>$ipv6_fallback</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to return the original IPv6 address if the needed functions to anonymize it are not present. Default false, return <code>::</code> (unspecified address).</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The anonymized IP address.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="8158" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_privacy_anonymize_ip( $ip_addr, $ipv6_fallback = false ) {
+	if ( empty( $ip_addr ) ) {
+		return '0.0.0.0';
+	}
+
+	// Detect what kind of IP address this is.
+	$ip_prefix = '';
+	$is_ipv6   = substr_count( $ip_addr, ':' ) &gt; 1;
+	$is_ipv4   = ( 3 === substr_count( $ip_addr, '.' ) );
+
+	if ( $is_ipv6 &amp;&amp; $is_ipv4 ) {
+		// IPv6 compatibility mode, temporarily strip the IPv6 part, and treat it like IPv4.
+		$ip_prefix = '::ffff:';
+		$ip_addr   = preg_replace( '/^\[?[0-9a-f:]*:/i', '', $ip_addr );
+		$ip_addr   = str_replace( ']', '', $ip_addr );
+		$is_ipv6   = false;
+	}
+
+	if ( $is_ipv6 ) {
+		// IPv6 addresses will always be enclosed in [] if there's a port.
+		$left_bracket  = strpos( $ip_addr, '[' );
+		$right_bracket = strpos( $ip_addr, ']' );
+		$percent       = strpos( $ip_addr, '%' );
+		$netmask       = 'ffff:ffff:ffff:ffff:0000:0000:0000:0000';
+
+		// Strip the port (and [] from IPv6 addresses), if they exist.
+		if ( false !== $left_bracket &amp;&amp; false !== $right_bracket ) {
+			$ip_addr = substr( $ip_addr, $left_bracket + 1, $right_bracket - $left_bracket - 1 );
+		} elseif ( false !== $left_bracket || false !== $right_bracket ) {
+			// The IP has one bracket, but not both, so it's malformed.
+			return '::';
+		}
+
+		// Strip the reachability scope.
+		if ( false !== $percent ) {
+			$ip_addr = substr( $ip_addr, 0, $percent );
+		}
+
+		// No invalid characters should be left.
+		if ( preg_match( '/[^0-9a-f:]/i', $ip_addr ) ) {
+			return '::';
+		}
+
+		// Partially anonymize the IP by reducing it to the corresponding network ID.
+		if ( function_exists( 'inet_pton' ) &amp;&amp; function_exists( 'inet_ntop' ) ) {
+			$ip_addr = inet_ntop( inet_pton( $ip_addr ) &amp; inet_pton( $netmask ) );
+			if ( false === $ip_addr ) {
+				return '::';
+			}
+		} elseif ( ! $ipv6_fallback ) {
+			return '::';
+		}
+	} elseif ( $is_ipv4 ) {
+		// Strip any port and partially anonymize the IP.
+		$last_octet_position = strrpos( $ip_addr, '.' );
+		$ip_addr             = substr( $ip_addr, 0, $last_octet_position ) . '.0';
+	} else {
+		return '0.0.0.0';
+	}
+
+	// Restore the IPv6 prefix to compatibility mode addresses.
+	return $ip_prefix . $ip_addr;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L8158">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L8158-L8220">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.6/">4.9.6</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_privacy_anonymize_ip" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_privacy_anonymize_ip</a>
+  </p>
+</div>

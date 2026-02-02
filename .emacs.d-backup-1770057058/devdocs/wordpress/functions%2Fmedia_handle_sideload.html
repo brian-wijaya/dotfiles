@@ -1,0 +1,113 @@
+<h1 class="wp-block-wporg-code-reference-title">media_handle_sideload( <span class="arg-type">string[]</span> <span class="arg-name">$file_array</span>, <span class="arg-type">int</span> <span class="arg-name">$post_id</span>, <span class="arg-type">string</span> <span class="arg-name">$desc</span> = <span class="arg-default">null</span>, <span class="arg-type">array</span> <span class="arg-name">$post_data</span> = <span class="arg-default">array()</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Handles a side-loaded file in the same way as an uploaded file is handled by <a href="media_handle_upload" rel="function">media_handle_upload()</a> .</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file_array</code><span class="type"><span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array that represents a <code>$_FILES</code> upload array.</span></div></dd>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">The post ID the media is associated with.</span></div></dd>
+<dt>
+<code>$desc</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Description of the side-loaded file. </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$post_data</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Post data to override. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> The ID of the attachment or a <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="455" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function media_handle_sideload( $file_array, $post_id = 0, $desc = null, $post_data = array() ) {
+	$overrides = array( 'test_form' =&gt; false );
+
+	if ( isset( $post_data['post_date'] ) &amp;&amp; substr( $post_data['post_date'], 0, 4 ) &gt; 0 ) {
+		$time = $post_data['post_date'];
+	} else {
+		$post = get_post( $post_id );
+		if ( $post &amp;&amp; substr( $post-&gt;post_date, 0, 4 ) &gt; 0 ) {
+			$time = $post-&gt;post_date;
+		} else {
+			$time = current_time( 'mysql' );
+		}
+	}
+
+	$file = wp_handle_sideload( $file_array, $overrides, $time );
+
+	if ( isset( $file['error'] ) ) {
+		return new WP_Error( 'upload_error', $file['error'] );
+	}
+
+	$url     = $file['url'];
+	$type    = $file['type'];
+	$file    = $file['file'];
+	$title   = preg_replace( '/\.[^.]+$/', '', wp_basename( $file ) );
+	$content = '';
+
+	// Use image exif/iptc data for title and caption defaults if possible.
+	$image_meta = wp_read_image_metadata( $file );
+
+	if ( $image_meta ) {
+		if ( trim( $image_meta['title'] ) &amp;&amp; ! is_numeric( sanitize_title( $image_meta['title'] ) ) ) {
+			$title = $image_meta['title'];
+		}
+
+		if ( trim( $image_meta['caption'] ) ) {
+			$content = $image_meta['caption'];
+		}
+	}
+
+	if ( isset( $desc ) ) {
+		$title = $desc;
+	}
+
+	// Construct the attachment array.
+	$attachment = array_merge(
+		array(
+			'post_mime_type' =&gt; $type,
+			'guid'           =&gt; $url,
+			'post_parent'    =&gt; $post_id,
+			'post_title'     =&gt; $title,
+			'post_content'   =&gt; $content,
+		),
+		$post_data
+	);
+
+	// This should never be set as it would then overwrite an existing attachment.
+	unset( $attachment['ID'] );
+
+	// Save the attachment metadata.
+	$attachment_id = wp_insert_attachment( $attachment, $file, $post_id, true );
+
+	if ( ! is_wp_error( $attachment_id ) ) {
+		wp_update_attachment_metadata( $attachment_id, wp_generate_attachment_metadata( $attachment_id, $file ) );
+	}
+
+	return $attachment_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L455">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L455-L521">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">The <code>$post_id</code> parameter was made optional.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/media_handle_sideload" class="_attribution-link">https://developer.wordpress.org/reference/functions/media_handle_sideload</a>
+  </p>
+</div>

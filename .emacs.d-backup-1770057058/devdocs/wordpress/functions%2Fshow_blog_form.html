@@ -1,0 +1,170 @@
+<h1 class="wp-block-wporg-code-reference-title">show_blog_form( <span class="arg-type">string</span> <span class="arg-name">$blogname</span> = <span class="arg-default">”</span>, <span class="arg-type">string</span> <span class="arg-name">$blog_title</span> = <span class="arg-default">”</span>, <span class="arg-type">WP_Error|string</span> <span class="arg-name">$errors</span> = <span class="arg-default">”</span> )</h1> <section><p>Generates and displays the Sign-up and Create Site forms.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$blogname</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The new site name.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$blog_title</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The new site title.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$errors</code><span class="type"><span class="WP_Error"><a href="../classes/wp_error" rel="class">WP_Error</a></span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">A <a href="../classes/wp_error" rel="class">WP_Error</a> object containing existing errors. Defaults to empty string.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="110" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function show_blog_form( $blogname = '', $blog_title = '', $errors = '' ) {
+	if ( ! is_wp_error( $errors ) ) {
+		$errors = new WP_Error();
+	}
+
+	$current_network = get_network();
+	// Site name.
+	if ( ! is_subdomain_install() ) {
+		echo '&lt;label for="blogname"&gt;' . __( 'Site Name (subdirectory only):' ) . '&lt;/label&gt;';
+	} else {
+		echo '&lt;label for="blogname"&gt;' . __( 'Site Domain (subdomain only):' ) . '&lt;/label&gt;';
+	}
+
+	$errmsg_blogname      = $errors-&gt;get_error_message( 'blogname' );
+	$errmsg_blogname_aria = '';
+	if ( $errmsg_blogname ) {
+		$errmsg_blogname_aria = 'wp-signup-blogname-error ';
+		echo '&lt;p class="error" id="wp-signup-blogname-error"&gt;' . $errmsg_blogname . '&lt;/p&gt;';
+	}
+
+	if ( ! is_subdomain_install() ) {
+		echo '&lt;div class="wp-signup-blogname"&gt;&lt;span class="prefix_address" id="prefix-address"&gt;' . $current_network-&gt;domain . $current_network-&gt;path . '&lt;/span&gt;&lt;input name="blogname" type="text" id="blogname" value="' . esc_attr( $blogname ) . '" maxlength="60" autocomplete="off" required="required" aria-describedby="' . $errmsg_blogname_aria . 'prefix-address" /&gt;&lt;/div&gt;';
+	} else {
+		$site_domain = preg_replace( '|^www\.|', '', $current_network-&gt;domain );
+		echo '&lt;div class="wp-signup-blogname"&gt;&lt;input name="blogname" type="text" id="blogname" value="' . esc_attr( $blogname ) . '" maxlength="60" autocomplete="off" required="required" aria-describedby="' . $errmsg_blogname_aria . 'suffix-address" /&gt;&lt;span class="suffix_address" id="suffix-address"&gt;.' . esc_html( $site_domain ) . '&lt;/span&gt;&lt;/div&gt;';
+	}
+
+	if ( ! is_user_logged_in() ) {
+		if ( ! is_subdomain_install() ) {
+			$site = $current_network-&gt;domain . $current_network-&gt;path . __( 'sitename' );
+		} else {
+			$site = __( 'domain' ) . '.' . $site_domain . $current_network-&gt;path;
+		}
+
+		printf(
+			'&lt;p&gt;(&lt;strong&gt;%s&lt;/strong&gt;) %s&lt;/p&gt;',
+			/* translators: %s: Site address. */
+			sprintf( __( 'Your address will be %s.' ), $site ),
+			__( 'Must be at least 4 characters, letters and numbers only. It cannot be changed, so choose carefully!' )
+		);
+	}
+
+	// Site Title.
+	?&gt;
+	&lt;label for="blog_title"&gt;&lt;?php _e( 'Site Title:' ); ?&gt;&lt;/label&gt;
+	&lt;?php
+	$errmsg_blog_title      = $errors-&gt;get_error_message( 'blog_title' );
+	$errmsg_blog_title_aria = '';
+	if ( $errmsg_blog_title ) {
+		$errmsg_blog_title_aria = ' aria-describedby="wp-signup-blog-title-error"';
+		echo '&lt;p class="error" id="wp-signup-blog-title-error"&gt;' . $errmsg_blog_title . '&lt;/p&gt;';
+	}
+	echo '&lt;input name="blog_title" type="text" id="blog_title" value="' . esc_attr( $blog_title ) . '" required="required" autocomplete="off"' . $errmsg_blog_title_aria . ' /&gt;';
+	?&gt;
+
+	&lt;?php
+	// Site Language.
+	$languages = signup_get_available_languages();
+
+	if ( ! empty( $languages ) ) :
+		?&gt;
+		&lt;p&gt;
+			&lt;label for="site-language"&gt;&lt;?php _e( 'Site Language:' ); ?&gt;&lt;/label&gt;
+			&lt;?php
+			// Network default.
+			$lang = get_site_option( 'WPLANG' );
+
+			if ( isset( $_POST['WPLANG'] ) ) {
+				$lang = $_POST['WPLANG'];
+			}
+
+			// Use US English if the default isn't available.
+			if ( ! in_array( $lang, $languages, true ) ) {
+				$lang = '';
+			}
+
+			wp_dropdown_languages(
+				array(
+					'name'                        =&gt; 'WPLANG',
+					'id'                          =&gt; 'site-language',
+					'selected'                    =&gt; $lang,
+					'languages'                   =&gt; $languages,
+					'show_available_translations' =&gt; false,
+				)
+			);
+			?&gt;
+		&lt;/p&gt;
+		&lt;?php
+		endif; // Languages.
+
+		$blog_public_on_checked  = '';
+		$blog_public_off_checked = '';
+	if ( isset( $_POST['blog_public'] ) &amp;&amp; '0' === $_POST['blog_public'] ) {
+		$blog_public_off_checked = 'checked="checked"';
+	} else {
+		$blog_public_on_checked = 'checked="checked"';
+	}
+	?&gt;
+
+	&lt;div id="privacy"&gt;
+		&lt;fieldset class="privacy-intro"&gt;
+			&lt;legend&gt;
+				&lt;span class="label-heading"&gt;&lt;?php _e( 'Privacy:' ); ?&gt;&lt;/span&gt;
+				&lt;?php _e( 'Allow search engines to index this site.' ); ?&gt;
+			&lt;/legend&gt;
+			&lt;p class="wp-signup-radio-buttons"&gt;
+				&lt;span class="wp-signup-radio-button"&gt;
+					&lt;input type="radio" id="blog_public_on" name="blog_public" value="1" &lt;?php echo $blog_public_on_checked; ?&gt; /&gt;
+					&lt;label class="checkbox" for="blog_public_on"&gt;&lt;?php _e( 'Yes' ); ?&gt;&lt;/label&gt;
+				&lt;/span&gt;
+				&lt;span class="wp-signup-radio-button"&gt;
+					&lt;input type="radio" id="blog_public_off" name="blog_public" value="0" &lt;?php echo $blog_public_off_checked; ?&gt; /&gt;
+					&lt;label class="checkbox" for="blog_public_off"&gt;&lt;?php _e( 'No' ); ?&gt;&lt;/label&gt;
+				&lt;/span&gt;
+			&lt;/p&gt;
+		&lt;/fieldset&gt;
+	&lt;/div&gt;
+
+	&lt;?php
+	/**
+	 * Fires after the site sign-up form.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param WP_Error $errors A WP_Error object possibly containing 'blogname' or 'blog_title' errors.
+	 */
+	do_action( 'signup_blogform', $errors );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-signup.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-signup.php#L110">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-signup.php#L110-L237">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/signup_blogform"><span class="hook-func">do_action</span>( ‘signup_blogform’, <nobr><span class="arg-type">WP_Error</span> <span class="arg-name">$errors</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the site sign-up form.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/show_blog_form" class="_attribution-link">https://developer.wordpress.org/reference/functions/show_blog_form</a>
+  </p>
+</div>

@@ -1,0 +1,111 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_constrain_dimensions( <span class="arg-type">int</span> <span class="arg-name">$current_width</span>, <span class="arg-type">int</span> <span class="arg-name">$current_height</span>, <span class="arg-type">int</span> <span class="arg-name">$max_width</span>, <span class="arg-type">int</span> <span class="arg-name">$max_height</span> ): <span class="return-type">int[]</span>
+</h1> <section><p>Calculates the new dimensions for a down-sampled image.</p> </section> <section><h2 id="description">Description</h2> <p>If either width or height are empty, no constraint is applied on that dimension.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$current_width</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Current width of the image.</span></div></dd>
+<dt>
+<code>$current_height</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Current height of the image.</span></div></dd>
+<dt>
+<code>$max_width</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Max width in pixels to constrain to. Default 0.</span></div></dd>
+<dt>
+<code>$max_height</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Max height in pixels to constrain to. Default 0.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int[]</span> An array of width and height values.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">int</span><div class="desc">The width in pixels.</div>
+</li> <li>
+<code>1</code> <span class="type">int</span><div class="desc">The height in pixels.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="443" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_constrain_dimensions( $current_width, $current_height, $max_width = 0, $max_height = 0 ) {
+	if ( ! $max_width &amp;&amp; ! $max_height ) {
+		return array( $current_width, $current_height );
+	}
+
+	$width_ratio  = 1.0;
+	$height_ratio = 1.0;
+	$did_width    = false;
+	$did_height   = false;
+
+	if ( $max_width &gt; 0 &amp;&amp; $current_width &gt; 0 &amp;&amp; $current_width &gt; $max_width ) {
+		$width_ratio = $max_width / $current_width;
+		$did_width   = true;
+	}
+
+	if ( $max_height &gt; 0 &amp;&amp; $current_height &gt; 0 &amp;&amp; $current_height &gt; $max_height ) {
+		$height_ratio = $max_height / $current_height;
+		$did_height   = true;
+	}
+
+	// Calculate the larger/smaller ratios.
+	$smaller_ratio = min( $width_ratio, $height_ratio );
+	$larger_ratio  = max( $width_ratio, $height_ratio );
+
+	if ( (int) round( $current_width * $larger_ratio ) &gt; $max_width || (int) round( $current_height * $larger_ratio ) &gt; $max_height ) {
+		// The larger ratio is too big. It would result in an overflow.
+		$ratio = $smaller_ratio;
+	} else {
+		// The larger ratio fits, and is likely to be a more "snug" fit.
+		$ratio = $larger_ratio;
+	}
+
+	// Very small dimensions may result in 0, 1 should be the minimum.
+	$w = max( 1, (int) round( $current_width * $ratio ) );
+	$h = max( 1, (int) round( $current_height * $ratio ) );
+
+	/*
+	 * Sometimes, due to rounding, we'll end up with a result like this:
+	 * 465x700 in a 177x177 box is 117x176... a pixel short.
+	 * We also have issues with recursive calls resulting in an ever-changing result.
+	 * Constraining to the result of a constraint should yield the original result.
+	 * Thus we look for dimensions that are one pixel shy of the max value and bump them up.
+	 */
+
+	// Note: $did_width means it is possible $smaller_ratio == $width_ratio.
+	if ( $did_width &amp;&amp; $w === $max_width - 1 ) {
+		$w = $max_width; // Round it up.
+	}
+
+	// Note: $did_height means it is possible $smaller_ratio == $height_ratio.
+	if ( $did_height &amp;&amp; $h === $max_height - 1 ) {
+		$h = $max_height; // Round it up.
+	}
+
+	/**
+	 * Filters dimensions to constrain down-sampled images to.
+	 *
+	 * @since 4.1.0
+	 *
+	 * @param int[] $dimensions     {
+	 *     An array of width and height values.
+	 *
+	 *     @type int $0 The width in pixels.
+	 *     @type int $1 The height in pixels.
+	 * }
+	 * @param int   $current_width  The current width of the image.
+	 * @param int   $current_height The current height of the image.
+	 * @param int   $max_width      The maximum width permitted.
+	 * @param int   $max_height     The maximum height permitted.
+	 */
+	return apply_filters( 'wp_constrain_dimensions', array( $w, $h ), $current_width, $current_height, $max_width, $max_height );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/media.php#L443">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/media.php#L443-L514">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_constrain_dimensions" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_constrain_dimensions</a>
+  </p>
+</div>

@@ -1,0 +1,108 @@
+<h1 class="wp-block-wporg-code-reference-title">wpdb::get_col_length( <span class="arg-type">string</span> <span class="arg-name">$table</span>, <span class="arg-type">string</span> <span class="arg-name">$column</span> ): <span class="return-type">array|false|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Retrieves the maximum string length allowed in a given column.</p> </section> <section><h2 id="description">Description</h2> <p>The length may either be specified as a byte length or a character length.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$table</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Table name.</span></div></dd>
+<dt>
+<code>$column</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Column name.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false|<a href="../wp_error" rel="class">WP_Error</a></span> Array of column length information, false if the column has no length (for example, numeric column), <a href="../wp_error" rel="class">WP_Error</a> object if there was an error.<br> <ul class="param-hash">
+<li>
+<code>type</code> <span class="type">string</span><div class="desc">One of <code>'byte'</code> or <code>'char'</code>.</div>
+</li> <li>
+<code>length</code> <span class="type">int</span><div class="desc">The column length.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3366" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_col_length( $table, $column ) {
+	$tablekey  = strtolower( $table );
+	$columnkey = strtolower( $column );
+
+	// Skip this entirely if this isn't a MySQL database.
+	if ( empty( $this-&gt;is_mysql ) ) {
+		return false;
+	}
+
+	if ( empty( $this-&gt;col_meta[ $tablekey ] ) ) {
+		// This primes column information for us.
+		$table_charset = $this-&gt;get_table_charset( $table );
+		if ( is_wp_error( $table_charset ) ) {
+			return $table_charset;
+		}
+	}
+
+	if ( empty( $this-&gt;col_meta[ $tablekey ][ $columnkey ] ) ) {
+		return false;
+	}
+
+	$typeinfo = explode( '(', $this-&gt;col_meta[ $tablekey ][ $columnkey ]-&gt;Type );
+
+	$type = strtolower( $typeinfo[0] );
+	if ( ! empty( $typeinfo[1] ) ) {
+		$length = trim( $typeinfo[1], ')' );
+	} else {
+		$length = false;
+	}
+
+	switch ( $type ) {
+		case 'char':
+		case 'varchar':
+			return array(
+				'type'   =&gt; 'char',
+				'length' =&gt; (int) $length,
+			);
+
+		case 'binary':
+		case 'varbinary':
+			return array(
+				'type'   =&gt; 'byte',
+				'length' =&gt; (int) $length,
+			);
+
+		case 'tinyblob':
+		case 'tinytext':
+			return array(
+				'type'   =&gt; 'byte',
+				'length' =&gt; 255,        // 2^8 - 1
+			);
+
+		case 'blob':
+		case 'text':
+			return array(
+				'type'   =&gt; 'byte',
+				'length' =&gt; 65535,      // 2^16 - 1
+			);
+
+		case 'mediumblob':
+		case 'mediumtext':
+			return array(
+				'type'   =&gt; 'byte',
+				'length' =&gt; 16777215,   // 2^24 - 1
+			);
+
+		case 'longblob':
+		case 'longtext':
+			return array(
+				'type'   =&gt; 'byte',
+				'length' =&gt; 4294967295, // 2^32 - 1
+			);
+
+		default:
+			return false;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wpdb.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wpdb.php#L3366">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wpdb.php#L3366-L3442">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.1/">4.2.1</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wpdb/get_col_length" class="_attribution-link">https://developer.wordpress.org/reference/classes/wpdb/get_col_length</a>
+  </p>
+</div>

@@ -1,0 +1,275 @@
+<h1 class="wp-block-wporg-code-reference-title">feed_links_extra( <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> )</h1> <section><p>Displays the links to the extra feeds such as category feeds.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Optional arguments.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3171" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function feed_links_extra( $args = array() ) {
+	$defaults = array(
+		/* translators: Separator between site name and feed type in feed links. */
+		'separator'     =&gt; _x( '&amp;raquo;', 'feed link' ),
+		/* translators: 1: Site name, 2: Separator (raquo), 3: Post title. */
+		'singletitle'   =&gt; __( '%1$s %2$s %3$s Comments Feed' ),
+		/* translators: 1: Site name, 2: Separator (raquo), 3: Category name. */
+		'cattitle'      =&gt; __( '%1$s %2$s %3$s Category Feed' ),
+		/* translators: 1: Site name, 2: Separator (raquo), 3: Tag name. */
+		'tagtitle'      =&gt; __( '%1$s %2$s %3$s Tag Feed' ),
+		/* translators: 1: Site name, 2: Separator (raquo), 3: Term name, 4: Taxonomy singular name. */
+		'taxtitle'      =&gt; __( '%1$s %2$s %3$s %4$s Feed' ),
+		/* translators: 1: Site name, 2: Separator (raquo), 3: Author name. */
+		'authortitle'   =&gt; __( '%1$s %2$s Posts by %3$s Feed' ),
+		/* translators: 1: Site name, 2: Separator (raquo), 3: Search query. */
+		'searchtitle'   =&gt; __( '%1$s %2$s Search Results for &amp;#8220;%3$s&amp;#8221; Feed' ),
+		/* translators: 1: Site name, 2: Separator (raquo), 3: Post type name. */
+		'posttypetitle' =&gt; __( '%1$s %2$s %3$s Feed' ),
+	);
+
+	$args = wp_parse_args( $args, $defaults );
+
+	/**
+	 * Filters the extra feed links arguments.
+	 *
+	 * @since 6.7.0
+	 *
+	 * @param array $args An array of extra feed links arguments.
+	 */
+	$args = apply_filters( 'feed_links_extra_args', $args );
+
+	if ( is_singular() ) {
+		$id   = 0;
+		$post = get_post( $id );
+
+		/** This filter is documented in wp-includes/general-template.php */
+		$show_comments_feed = apply_filters( 'feed_links_show_comments_feed', true );
+
+		/**
+		 * Filters whether to display the post comments feed link.
+		 *
+		 * This filter allows to enable or disable the feed link for a singular post
+		 * in a way that is independent of <a href="../hooks/feed_links_show_comments_feed">'feed_links_show_comments_feed'</a>
+		 * (which controls the global comments feed). The result of that filter
+		 * is accepted as a parameter.
+		 *
+		 * @since 6.1.0
+		 *
+		 * @param bool $show_comments_feed Whether to display the post comments feed link. Defaults to
+		 *                                 the <a href="../hooks/feed_links_show_comments_feed">'feed_links_show_comments_feed'</a> filter result.
+		 */
+		$show_post_comments_feed = apply_filters( 'feed_links_extra_show_post_comments_feed', $show_comments_feed );
+
+		if ( $show_post_comments_feed &amp;&amp; ( comments_open() || pings_open() || $post-&gt;comment_count &gt; 0 ) ) {
+			$title = sprintf(
+				$args['singletitle'],
+				get_bloginfo( 'name' ),
+				$args['separator'],
+				the_title_attribute( array( 'echo' =&gt; false ) )
+			);
+
+			$feed_link = get_post_comments_feed_link( $post-&gt;ID );
+
+			if ( $feed_link ) {
+				$href = $feed_link;
+			}
+		}
+	} elseif ( is_post_type_archive() ) {
+		/**
+		 * Filters whether to display the post type archive feed link.
+		 *
+		 * @since 6.1.0
+		 *
+		 * @param bool $show Whether to display the post type archive feed link. Default true.
+		 */
+		$show_post_type_archive_feed = apply_filters( 'feed_links_extra_show_post_type_archive_feed', true );
+
+		if ( $show_post_type_archive_feed ) {
+			$post_type = get_query_var( 'post_type' );
+
+			if ( is_array( $post_type ) ) {
+				$post_type = reset( $post_type );
+			}
+
+			$post_type_obj = get_post_type_object( $post_type );
+
+			$title = sprintf(
+				$args['posttypetitle'],
+				get_bloginfo( 'name' ),
+				$args['separator'],
+				$post_type_obj-&gt;labels-&gt;name
+			);
+
+			$href = get_post_type_archive_feed_link( $post_type_obj-&gt;name );
+		}
+	} elseif ( is_category() ) {
+		/**
+		 * Filters whether to display the category feed link.
+		 *
+		 * @since 6.1.0
+		 *
+		 * @param bool $show Whether to display the category feed link. Default true.
+		 */
+		$show_category_feed = apply_filters( 'feed_links_extra_show_category_feed', true );
+
+		if ( $show_category_feed ) {
+			$term = get_queried_object();
+
+			if ( $term ) {
+				$title = sprintf(
+					$args['cattitle'],
+					get_bloginfo( 'name' ),
+					$args['separator'],
+					$term-&gt;name
+				);
+
+				$href = get_category_feed_link( $term-&gt;term_id );
+			}
+		}
+	} elseif ( is_tag() ) {
+		/**
+		 * Filters whether to display the tag feed link.
+		 *
+		 * @since 6.1.0
+		 *
+		 * @param bool $show Whether to display the tag feed link. Default true.
+		 */
+		$show_tag_feed = apply_filters( 'feed_links_extra_show_tag_feed', true );
+
+		if ( $show_tag_feed ) {
+			$term = get_queried_object();
+
+			if ( $term ) {
+				$title = sprintf(
+					$args['tagtitle'],
+					get_bloginfo( 'name' ),
+					$args['separator'],
+					$term-&gt;name
+				);
+
+				$href = get_tag_feed_link( $term-&gt;term_id );
+			}
+		}
+	} elseif ( is_tax() ) {
+		/**
+		 * Filters whether to display the custom taxonomy feed link.
+		 *
+		 * @since 6.1.0
+		 *
+		 * @param bool $show Whether to display the custom taxonomy feed link. Default true.
+		 */
+		$show_tax_feed = apply_filters( 'feed_links_extra_show_tax_feed', true );
+
+		if ( $show_tax_feed ) {
+			$term = get_queried_object();
+
+			if ( $term ) {
+				$tax = get_taxonomy( $term-&gt;taxonomy );
+
+				$title = sprintf(
+					$args['taxtitle'],
+					get_bloginfo( 'name' ),
+					$args['separator'],
+					$term-&gt;name,
+					$tax-&gt;labels-&gt;singular_name
+				);
+
+				$href = get_term_feed_link( $term-&gt;term_id, $term-&gt;taxonomy );
+			}
+		}
+	} elseif ( is_author() ) {
+		/**
+		 * Filters whether to display the author feed link.
+		 *
+		 * @since 6.1.0
+		 *
+		 * @param bool $show Whether to display the author feed link. Default true.
+		 */
+		$show_author_feed = apply_filters( 'feed_links_extra_show_author_feed', true );
+
+		if ( $show_author_feed ) {
+			$author_id = (int) get_query_var( 'author' );
+
+			$title = sprintf(
+				$args['authortitle'],
+				get_bloginfo( 'name' ),
+				$args['separator'],
+				get_the_author_meta( 'display_name', $author_id )
+			);
+
+			$href = get_author_feed_link( $author_id );
+		}
+	} elseif ( is_search() ) {
+		/**
+		 * Filters whether to display the search results feed link.
+		 *
+		 * @since 6.1.0
+		 *
+		 * @param bool $show Whether to display the search results feed link. Default true.
+		 */
+		$show_search_feed = apply_filters( 'feed_links_extra_show_search_feed', true );
+
+		if ( $show_search_feed ) {
+			$title = sprintf(
+				$args['searchtitle'],
+				get_bloginfo( 'name' ),
+				$args['separator'],
+				get_search_query( false )
+			);
+
+			$href = get_search_feed_link();
+		}
+	}
+
+	if ( isset( $title ) &amp;&amp; isset( $href ) ) {
+		printf(
+			'&lt;link rel="alternate" type="%s" title="%s" href="%s" /&gt;' . "\n",
+			feed_content_type(),
+			esc_attr( $title ),
+			esc_url( $href )
+		);
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/general-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/general-template.php#L3171">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/general-template.php#L3171-L3393">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/feed_links_extra_args"><span class="hook-func">apply_filters</span>( ‘feed_links_extra_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the extra feed links arguments.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/feed_links_extra_show_author_feed"><span class="hook-func">apply_filters</span>( ‘feed_links_extra_show_author_feed’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$show</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to display the author feed link.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/feed_links_extra_show_category_feed"><span class="hook-func">apply_filters</span>( ‘feed_links_extra_show_category_feed’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$show</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to display the category feed link.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/feed_links_extra_show_post_comments_feed"><span class="hook-func">apply_filters</span>( ‘feed_links_extra_show_post_comments_feed’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$show_comments_feed</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to display the post comments feed link.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/feed_links_extra_show_post_type_archive_feed"><span class="hook-func">apply_filters</span>( ‘feed_links_extra_show_post_type_archive_feed’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$show</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to display the post type archive feed link.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/feed_links_extra_show_search_feed"><span class="hook-func">apply_filters</span>( ‘feed_links_extra_show_search_feed’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$show</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to display the search results feed link.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/feed_links_extra_show_tag_feed"><span class="hook-func">apply_filters</span>( ‘feed_links_extra_show_tag_feed’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$show</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to display the tag feed link.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/feed_links_extra_show_tax_feed"><span class="hook-func">apply_filters</span>( ‘feed_links_extra_show_tax_feed’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$show</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to display the custom taxonomy feed link.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/feed_links_show_comments_feed"><span class="hook-func">apply_filters</span>( ‘feed_links_show_comments_feed’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$show</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to display the comments feed link.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/feed_links_extra" class="_attribution-link">https://developer.wordpress.org/reference/functions/feed_links_extra</a>
+  </p>
+</div>

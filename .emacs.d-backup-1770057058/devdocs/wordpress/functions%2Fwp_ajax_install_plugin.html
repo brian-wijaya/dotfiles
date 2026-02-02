@@ -1,0 +1,117 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_install_plugin()</h1> <section><p>Handles installing a plugin via AJAX.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="../classes/plugin_upgrader">Plugin_Upgrader</a></li> </ul></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="4449" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_install_plugin() {
+	check_ajax_referer( 'updates' );
+
+	if ( empty( $_POST['slug'] ) ) {
+		wp_send_json_error(
+			array(
+				'slug'         =&gt; '',
+				'errorCode'    =&gt; 'no_plugin_specified',
+				'errorMessage' =&gt; __( 'No plugin specified.' ),
+			)
+		);
+	}
+
+	$status = array(
+		'install' =&gt; 'plugin',
+		'slug'    =&gt; sanitize_key( wp_unslash( $_POST['slug'] ) ),
+	);
+
+	if ( ! current_user_can( 'install_plugins' ) ) {
+		$status['errorMessage'] = __( 'Sorry, you are not allowed to install plugins on this site.' );
+		wp_send_json_error( $status );
+	}
+
+	require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+	require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+
+	$api = plugins_api(
+		'plugin_information',
+		array(
+			'slug'   =&gt; sanitize_key( wp_unslash( $_POST['slug'] ) ),
+			'fields' =&gt; array(
+				'sections' =&gt; false,
+			),
+		)
+	);
+
+	if ( is_wp_error( $api ) ) {
+		$status['errorMessage'] = $api-&gt;get_error_message();
+		wp_send_json_error( $status );
+	}
+
+	$status['pluginName'] = $api-&gt;name;
+
+	$skin     = new WP_Ajax_Upgrader_Skin();
+	$upgrader = new Plugin_Upgrader( $skin );
+	$result   = $upgrader-&gt;install( $api-&gt;download_link );
+
+	if ( defined( 'WP_DEBUG' ) &amp;&amp; WP_DEBUG ) {
+		$status['debug'] = $skin-&gt;get_upgrade_messages();
+	}
+
+	if ( is_wp_error( $result ) ) {
+		$status['errorCode']    = $result-&gt;get_error_code();
+		$status['errorMessage'] = $result-&gt;get_error_message();
+		wp_send_json_error( $status );
+	} elseif ( is_wp_error( $skin-&gt;result ) ) {
+		$status['errorCode']    = $skin-&gt;result-&gt;get_error_code();
+		$status['errorMessage'] = $skin-&gt;result-&gt;get_error_message();
+		wp_send_json_error( $status );
+	} elseif ( $skin-&gt;get_errors()-&gt;has_errors() ) {
+		$status['errorMessage'] = $skin-&gt;get_error_messages();
+		wp_send_json_error( $status );
+	} elseif ( is_null( $result ) ) {
+		global $wp_filesystem;
+
+		$status['errorCode']    = 'unable_to_connect_to_filesystem';
+		$status['errorMessage'] = __( 'Unable to connect to the filesystem. Please confirm your credentials.' );
+
+		// Pass through the error from WP_Filesystem if one was raised.
+		if ( $wp_filesystem instanceof WP_Filesystem_Base &amp;&amp; is_wp_error( $wp_filesystem-&gt;errors ) &amp;&amp; $wp_filesystem-&gt;errors-&gt;has_errors() ) {
+			$status['errorMessage'] = esc_html( $wp_filesystem-&gt;errors-&gt;get_error_message() );
+		}
+
+		wp_send_json_error( $status );
+	}
+
+	$install_status = install_plugin_install_status( $api );
+	$pagenow        = isset( $_POST['pagenow'] ) ? sanitize_key( $_POST['pagenow'] ) : '';
+
+	// If installation request is coming from import page, do not return network activation link.
+	$plugins_url = ( 'import' === $pagenow ) ? admin_url( 'plugins.php' ) : network_admin_url( 'plugins.php' );
+
+	if ( current_user_can( 'activate_plugin', $install_status['file'] ) &amp;&amp; is_plugin_inactive( $install_status['file'] ) ) {
+		$status['activateUrl'] = add_query_arg(
+			array(
+				'_wpnonce' =&gt; wp_create_nonce( 'activate-plugin_' . $install_status['file'] ),
+				'action'   =&gt; 'activate',
+				'plugin'   =&gt; $install_status['file'],
+			),
+			$plugins_url
+		);
+	}
+
+	if ( is_multisite() &amp;&amp; current_user_can( 'manage_network_plugins' ) &amp;&amp; 'import' !== $pagenow ) {
+		$status['activateUrl'] = add_query_arg( array( 'networkwide' =&gt; 1 ), $status['activateUrl'] );
+	}
+
+	wp_send_json_success( $status );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L4449">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L4449-L4547">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_install_plugin" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_install_plugin</a>
+  </p>
+</div>

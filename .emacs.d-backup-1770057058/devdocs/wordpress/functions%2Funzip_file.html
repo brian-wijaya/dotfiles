@@ -1,0 +1,84 @@
+<h1 class="wp-block-wporg-code-reference-title">unzip_file( <span class="arg-type">string</span> <span class="arg-name">$file</span>, <span class="arg-type">string</span> <span class="arg-name">$to</span> ): <span class="return-type">true|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Unzips a specified ZIP file to a location on the filesystem via the WordPress Filesystem Abstraction.</p> </section> <section><h2 id="description">Description</h2> <p>Assumes that <a href="wp_filesystem" rel="function">WP_Filesystem()</a> has already been called and set up. Does not extract a root-level __MACOSX directory, if present.</p> <p>Attempts to increase the PHP memory limit to 256M before uncompressing. However, the most memory required shouldn’t be much larger than the archive itself.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full path and filename of ZIP archive.</span></div></dd>
+<dt>
+<code>$to</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full path on the filesystem to extract archive to.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True on success, <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1591" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function unzip_file( $file, $to ) {
+	global $wp_filesystem;
+
+	if ( ! $wp_filesystem || ! is_object( $wp_filesystem ) ) {
+		return new WP_Error( 'fs_unavailable', __( 'Could not access filesystem.' ) );
+	}
+
+	// Unzip can use a lot of memory, but not this much hopefully.
+	wp_raise_memory_limit( 'admin' );
+
+	$needed_dirs = array();
+	$to          = trailingslashit( $to );
+
+	// Determine any parent directories needed (of the upgrade directory).
+	if ( ! $wp_filesystem-&gt;is_dir( $to ) ) { // Only do parents if no children exist.
+		$path = preg_split( '![/\\\]!', untrailingslashit( $to ) );
+		for ( $i = count( $path ); $i &gt;= 0; $i-- ) {
+			if ( empty( $path[ $i ] ) ) {
+				continue;
+			}
+
+			$dir = implode( '/', array_slice( $path, 0, $i + 1 ) );
+			if ( preg_match( '!^[a-z]:$!i', $dir ) ) { // Skip it if it looks like a Windows Drive letter.
+				continue;
+			}
+
+			if ( ! $wp_filesystem-&gt;is_dir( $dir ) ) {
+				$needed_dirs[] = $dir;
+			} else {
+				break; // A folder exists, therefore we don't need to check the levels below this.
+			}
+		}
+	}
+
+	/**
+	 * Filters whether to use ZipArchive to unzip archives.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param bool $ziparchive Whether to use ZipArchive. Default true.
+	 */
+	if ( class_exists( 'ZipArchive', false ) &amp;&amp; apply_filters( 'unzip_file_use_ziparchive', true ) ) {
+		$result = _unzip_file_ziparchive( $file, $to, $needed_dirs );
+		if ( true === $result ) {
+			return $result;
+		} elseif ( is_wp_error( $result ) ) {
+			if ( 'incompatible_archive' !== $result-&gt;get_error_code() ) {
+				return $result;
+			}
+		}
+	}
+	// Fall through to PclZip if ZipArchive is not available, or encountered an error opening the file.
+	return _unzip_file_pclzip( $file, $to, $needed_dirs );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/file.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/file.php#L1591">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/file.php#L1591-L1644">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/unzip_file_use_ziparchive"><span class="hook-func">apply_filters</span>( ‘unzip_file_use_ziparchive’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$ziparchive</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to use ZipArchive to unzip archives.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/unzip_file" class="_attribution-link">https://developer.wordpress.org/reference/functions/unzip_file</a>
+  </p>
+</div>

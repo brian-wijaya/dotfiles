@@ -32,6 +32,8 @@
   (load (expand-file-name "savehist" mod))
   (load (expand-file-name "hl-todo" mod))
   (load (expand-file-name "treesitter" mod))
+  (load (expand-file-name "kotlin-ts-mode" mod))
+  (load (expand-file-name "vterm-config" mod))
   (load (expand-file-name "eglot" mod))
   (load (expand-file-name "backups" mod))
   (load (expand-file-name "helpers" mod))
@@ -53,6 +55,7 @@
   (load (expand-file-name "deepwiki" mod))
   (load (expand-file-name "elfeed" mod))
   (load (expand-file-name "vault-rag" mod))
+  (load (expand-file-name "nov" mod))
 
   ;; --- Bindings (must come after all modules define their commands) ---
   (load (expand-file-name "bindings-doom-full" mod))

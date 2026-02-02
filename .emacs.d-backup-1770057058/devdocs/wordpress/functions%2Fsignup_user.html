@@ -1,0 +1,118 @@
+<h1 class="wp-block-wporg-code-reference-title">signup_user( <span class="arg-type">string</span> <span class="arg-name">$user_name</span> = <span class="arg-default">”</span>, <span class="arg-type">string</span> <span class="arg-name">$user_email</span> = <span class="arg-default">”</span>, <span class="arg-type">WP_Error|string</span> <span class="arg-name">$errors</span> = <span class="arg-default">”</span> )</h1> <section><p>Shows a form for a visitor to sign up for a new user account.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$user_name</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The username.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$user_email</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The user’s email.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$errors</code><span class="type"><span class="WP_Error"><a href="../classes/wp_error" rel="class">WP_Error</a></span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">A <a href="../classes/wp_error" rel="class">WP_Error</a> object containing existing errors. Defaults to empty string.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="584" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function signup_user( $user_name = '', $user_email = '', $errors = '' ) {
+	global $active_signup;
+
+	if ( ! is_wp_error( $errors ) ) {
+		$errors = new WP_Error();
+	}
+
+	$signup_for = isset( $_POST['signup_for'] ) ? esc_html( $_POST['signup_for'] ) : 'blog';
+
+	$signup_user_defaults = array(
+		'user_name'  =&gt; $user_name,
+		'user_email' =&gt; $user_email,
+		'errors'     =&gt; $errors,
+	);
+
+	/**
+	 * Filters the default user variables used on the user sign-up form.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param array $signup_user_defaults {
+	 *     An array of default user variables.
+	 *
+	 *     @type string   $user_name  The user username.
+	 *     @type string   $user_email The user email address.
+	 *     @type WP_Error $errors     A WP_Error object with possible errors relevant to the sign-up user.
+	 * }
+	 */
+	$filtered_results = apply_filters( 'signup_user_init', $signup_user_defaults );
+	$user_name        = $filtered_results['user_name'];
+	$user_email       = $filtered_results['user_email'];
+	$errors           = $filtered_results['errors'];
+
+	?&gt;
+
+	&lt;h2&gt;
+	&lt;?php
+		/* translators: %s: Name of the network. */
+		printf( __( 'Get your own %s account in seconds' ), get_network()-&gt;site_name );
+	?&gt;
+	&lt;/h2&gt;
+	&lt;form id="setupform" method="post" action="wp-signup.php" novalidate="novalidate"&gt;
+		&lt;input type="hidden" name="stage" value="validate-user-signup" /&gt;
+		&lt;?php
+		/** This action is documented in wp-signup.php */
+		do_action( 'signup_hidden_fields', 'validate-user' );
+		?&gt;
+		&lt;?php show_user_form( $user_name, $user_email, $errors ); ?&gt;
+
+		&lt;?php if ( 'blog' === $active_signup ) : ?&gt;
+			&lt;input id="signupblog" type="hidden" name="signup_for" value="blog" /&gt;
+		&lt;?php elseif ( 'user' === $active_signup ) : ?&gt;
+			&lt;input id="signupblog" type="hidden" name="signup_for" value="user" /&gt;
+		&lt;?php else : ?&gt;
+			&lt;fieldset class="signup-options"&gt;
+				&lt;legend&gt;&lt;?php _e( 'Create a site or only a username:' ); ?&gt;&lt;/legend&gt;
+				&lt;p class="wp-signup-radio-buttons"&gt;
+					&lt;span class="wp-signup-radio-button"&gt;
+						&lt;input id="signupblog" type="radio" name="signup_for" value="blog" &lt;?php checked( $signup_for, 'blog' ); ?&gt; /&gt;
+						&lt;label class="checkbox" for="signupblog"&gt;&lt;?php _e( 'Gimme a site!' ); ?&gt;&lt;/label&gt;
+					&lt;/span&gt;
+					&lt;span class="wp-signup-radio-button"&gt;
+						&lt;input id="signupuser" type="radio" name="signup_for" value="user" &lt;?php checked( $signup_for, 'user' ); ?&gt; /&gt;
+						&lt;label class="checkbox" for="signupuser"&gt;&lt;?php _e( 'Just a username, please.' ); ?&gt;&lt;/label&gt;
+					&lt;/span&gt;
+				&lt;/p&gt;
+			&lt;/fieldset&gt;
+		&lt;?php endif; ?&gt;
+
+		&lt;p class="submit"&gt;&lt;input type="submit" name="submit" class="submit" value="&lt;?php esc_attr_e( 'Next' ); ?&gt;" /&gt;&lt;/p&gt;
+	&lt;/form&gt;
+	&lt;?php
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-signup.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-signup.php#L584">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-signup.php#L584-L656">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/signup_hidden_fields"><span class="hook-func">do_action</span>( ‘signup_hidden_fields’, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Fires when hidden sign-up form fields output when creating another site or user.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/signup_user_init"><span class="hook-func">apply_filters</span>( ‘signup_user_init’, <nobr><span class="arg-type">array</span> <span class="arg-name">$signup_user_defaults</span></nobr> )</a></dt>
+<dd>
+<p>Filters the default user variables used on the user sign-up form.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/signup_user" class="_attribution-link">https://developer.wordpress.org/reference/functions/signup_user</a>
+  </p>
+</div>

@@ -1,0 +1,192 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_default_packages_inline_scripts( <span class="arg-type">WP_Scripts</span> <span class="arg-name">$scripts</span> )</h1> <section><p>Adds inline scripts required for the WordPress JavaScript packages.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$scripts</code><span class="type"><span class="WP_Scripts"><a href="../classes/wp_scripts" rel="class">WP_Scripts</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description"><a href="../classes/wp_scripts" rel="class">WP_Scripts</a> object.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="340" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_default_packages_inline_scripts( $scripts ) {
+	global $wp_locale, $wpdb;
+
+	if ( isset( $scripts-&gt;registered['wp-api-fetch'] ) ) {
+		$scripts-&gt;registered['wp-api-fetch']-&gt;deps[] = 'wp-hooks';
+	}
+	$scripts-&gt;add_inline_script(
+		'wp-api-fetch',
+		sprintf(
+			'wp.apiFetch.use( wp.apiFetch.createRootURLMiddleware( "%s" ) );',
+			sanitize_url( get_rest_url() )
+		),
+		'after'
+	);
+	$scripts-&gt;add_inline_script(
+		'wp-api-fetch',
+		implode(
+			"\n",
+			array(
+				sprintf(
+					'wp.apiFetch.nonceMiddleware = wp.apiFetch.createNonceMiddleware( "%s" );',
+					wp_installing() ? '' : wp_create_nonce( 'wp_rest' )
+				),
+				'wp.apiFetch.use( wp.apiFetch.nonceMiddleware );',
+				'wp.apiFetch.use( wp.apiFetch.mediaUploadMiddleware );',
+				sprintf(
+					'wp.apiFetch.nonceEndpoint = "%s";',
+					admin_url( 'admin-ajax.php?action=rest-nonce' )
+				),
+			)
+		),
+		'after'
+	);
+
+	$meta_key     = $wpdb-&gt;get_blog_prefix() . 'persisted_preferences';
+	$user_id      = get_current_user_id();
+	$preload_data = get_user_meta( $user_id, $meta_key, true );
+	$scripts-&gt;add_inline_script(
+		'wp-preferences',
+		sprintf(
+			'( function() {
+				var serverData = %s;
+				var userId = "%d";
+				var persistenceLayer = wp.preferencesPersistence.__unstableCreatePersistenceLayer( serverData, userId );
+				var preferencesStore = wp.preferences.store;
+				wp.data.dispatch( preferencesStore ).setPersistenceLayer( persistenceLayer );
+			} ) ();',
+			wp_json_encode( $preload_data ),
+			$user_id
+		)
+	);
+
+	// Backwards compatibility - configure the old wp-data persistence system.
+	$scripts-&gt;add_inline_script(
+		'wp-data',
+		implode(
+			"\n",
+			array(
+				'( function() {',
+				'	var userId = ' . get_current_user_ID() . ';',
+				'	var storageKey = "WP_DATA_USER_" + userId;',
+				'	wp.data',
+				'		.use( wp.data.plugins.persistence, { storageKey: storageKey } );',
+				'} )();',
+			)
+		)
+	);
+
+	// Calculate the timezone abbr (EDT, PST) if possible.
+	$timezone_string = get_option( 'timezone_string', 'UTC' );
+	$timezone_abbr   = '';
+
+	if ( ! empty( $timezone_string ) ) {
+		$timezone_date = new DateTime( 'now', new DateTimeZone( $timezone_string ) );
+		$timezone_abbr = $timezone_date-&gt;format( 'T' );
+	}
+
+	$gmt_offset = get_option( 'gmt_offset', 0 );
+
+	$scripts-&gt;add_inline_script(
+		'wp-date',
+		sprintf(
+			'wp.date.setSettings( %s );',
+			wp_json_encode(
+				array(
+					'l10n'     =&gt; array(
+						'locale'        =&gt; get_user_locale(),
+						'months'        =&gt; array_values( $wp_locale-&gt;month ),
+						'monthsShort'   =&gt; array_values( $wp_locale-&gt;month_abbrev ),
+						'weekdays'      =&gt; array_values( $wp_locale-&gt;weekday ),
+						'weekdaysShort' =&gt; array_values( $wp_locale-&gt;weekday_abbrev ),
+						'meridiem'      =&gt; (object) $wp_locale-&gt;meridiem,
+						'relative'      =&gt; array(
+							/* translators: %s: Duration. */
+							'future' =&gt; __( '%s from now' ),
+							/* translators: %s: Duration. */
+							'past'   =&gt; __( '%s ago' ),
+							/* translators: One second from or to a particular datetime, e.g., "a second ago" or "a second from now". */
+							's'      =&gt; __( 'a second' ),
+							/* translators: %d: Duration in seconds from or to a particular datetime, e.g., "4 seconds ago" or "4 seconds from now". */
+							'ss'     =&gt; __( '%d seconds' ),
+							/* translators: One minute from or to a particular datetime, e.g., "a minute ago" or "a minute from now". */
+							'm'      =&gt; __( 'a minute' ),
+							/* translators: %d: Duration in minutes from or to a particular datetime, e.g., "4 minutes ago" or "4 minutes from now". */
+							'mm'     =&gt; __( '%d minutes' ),
+							/* translators: One hour from or to a particular datetime, e.g., "an hour ago" or "an hour from now". */
+							'h'      =&gt; __( 'an hour' ),
+							/* translators: %d: Duration in hours from or to a particular datetime, e.g., "4 hours ago" or "4 hours from now". */
+							'hh'     =&gt; __( '%d hours' ),
+							/* translators: One day from or to a particular datetime, e.g., "a day ago" or "a day from now". */
+							'd'      =&gt; __( 'a day' ),
+							/* translators: %d: Duration in days from or to a particular datetime, e.g., "4 days ago" or "4 days from now". */
+							'dd'     =&gt; __( '%d days' ),
+							/* translators: One month from or to a particular datetime, e.g., "a month ago" or "a month from now". */
+							'M'      =&gt; __( 'a month' ),
+							/* translators: %d: Duration in months from or to a particular datetime, e.g., "4 months ago" or "4 months from now". */
+							'MM'     =&gt; __( '%d months' ),
+							/* translators: One year from or to a particular datetime, e.g., "a year ago" or "a year from now". */
+							'y'      =&gt; __( 'a year' ),
+							/* translators: %d: Duration in years from or to a particular datetime, e.g., "4 years ago" or "4 years from now". */
+							'yy'     =&gt; __( '%d years' ),
+						),
+						'startOfWeek'   =&gt; (int) get_option( 'start_of_week', 0 ),
+					),
+					'formats'  =&gt; array(
+						/* translators: Time format, see https://www.php.net/manual/datetime.format.php */
+						'time'                =&gt; get_option( 'time_format', __( 'g:i a' ) ),
+						/* translators: Date format, see https://www.php.net/manual/datetime.format.php */
+						'date'                =&gt; get_option( 'date_format', __( 'F j, Y' ) ),
+						/* translators: Date/Time format, see https://www.php.net/manual/datetime.format.php */
+						'datetime'            =&gt; __( 'F j, Y g:i a' ),
+						/* translators: Abbreviated date/time format, see https://www.php.net/manual/datetime.format.php */
+						'datetimeAbbreviated' =&gt; __( 'M j, Y g:i a' ),
+					),
+					'timezone' =&gt; array(
+						'offset'          =&gt; (float) $gmt_offset,
+						'offsetFormatted' =&gt; str_replace( array( '.25', '.5', '.75' ), array( ':15', ':30', ':45' ), (string) $gmt_offset ),
+						'string'          =&gt; $timezone_string,
+						'abbr'            =&gt; $timezone_abbr,
+					),
+				)
+			)
+		),
+		'after'
+	);
+
+	// Loading the old editor and its config to ensure the classic block works as expected.
+	$scripts-&gt;add_inline_script(
+		'editor',
+		'window.wp.oldEditor = window.wp.editor;',
+		'after'
+	);
+
+	/*
+	 * wp-editor module is exposed as window.wp.editor.
+	 * Problem: there is quite some code expecting window.wp.oldEditor object available under window.wp.editor.
+	 * Solution: fuse the two objects together to maintain backward compatibility.
+	 * For more context, see https://github.com/WordPress/gutenberg/issues/33203.
+	 */
+	$scripts-&gt;add_inline_script(
+		'wp-editor',
+		'Object.assign( window.wp.editor, window.wp.oldEditor );',
+		'after'
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/script-loader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/script-loader.php#L340">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/script-loader.php#L340-L504">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.4.0/">6.4.0</a></td>
+<td><span class="since-description">Added relative time strings for the <code>wp-date</code> inline script output.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_default_packages_inline_scripts" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_default_packages_inline_scripts</a>
+  </p>
+</div>

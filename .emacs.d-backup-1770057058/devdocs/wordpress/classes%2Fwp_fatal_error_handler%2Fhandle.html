@@ -1,0 +1,51 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Fatal_Error_Handler::handle()</h1> <section><p>Runs the shutdown handler.</p> </section> <section><h2 id="description">Description</h2> <p>This method is registered via <code>register_shutdown_function()</code>.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="31" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function handle() {
+	if ( defined( 'WP_SANDBOX_SCRAPING' ) &amp;&amp; WP_SANDBOX_SCRAPING ) {
+		return;
+	}
+
+	// Do not trigger the fatal error handler while updates are being installed.
+	if ( wp_is_maintenance_mode() ) {
+		return;
+	}
+
+	try {
+		// Bail if no error found.
+		$error = $this-&gt;detect_error();
+		if ( ! $error ) {
+			return;
+		}
+
+		if ( ! isset( $GLOBALS['wp_locale'] ) &amp;&amp; function_exists( 'load_default_textdomain' ) ) {
+			load_default_textdomain();
+		}
+
+		$handled = false;
+
+		if ( ! is_multisite() &amp;&amp; wp_recovery_mode()-&gt;is_initialized() ) {
+			$handled = wp_recovery_mode()-&gt;handle_error( $error );
+		}
+
+		// Display the PHP error template if headers not sent.
+		if ( is_admin() || ! headers_sent() ) {
+			$this-&gt;display_error_template( $error, $handled );
+		}
+	} catch ( Exception $e ) {
+		// Catch exceptions and remain silent.
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-fatal-error-handler.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-fatal-error-handler.php#L31">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-fatal-error-handler.php#L31-L65">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_fatal_error_handler/handle" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_fatal_error_handler/handle</a>
+  </p>
+</div>

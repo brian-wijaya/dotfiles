@@ -1,0 +1,156 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_nav_menu_update_menu_items( <span class="arg-type">int|string</span> <span class="arg-name">$nav_menu_selected_id</span>, <span class="arg-type">string</span> <span class="arg-name">$nav_menu_selected_title</span> ): <span class="return-type">string[]</span>
+</h1> <section><p>Saves nav menu items.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$nav_menu_selected_id</code><span class="type"><span class="int">int</span>|<span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">ID, slug, or name of the currently-selected menu.</span></div></dd>
+<dt>
+<code>$nav_menu_selected_title</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Title of the currently-selected menu.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string[]</span> The menu updated messages.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1382" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_nav_menu_update_menu_items( $nav_menu_selected_id, $nav_menu_selected_title ) {
+	$unsorted_menu_items = wp_get_nav_menu_items(
+		$nav_menu_selected_id,
+		array(
+			'orderby'     =&gt; 'ID',
+			'output'      =&gt; ARRAY_A,
+			'output_key'  =&gt; 'ID',
+			'post_status' =&gt; 'draft,publish',
+		)
+	);
+
+	$messages   = array();
+	$menu_items = array();
+
+	// Index menu items by DB ID.
+	foreach ( $unsorted_menu_items as $_item ) {
+		$menu_items[ $_item-&gt;db_id ] = $_item;
+	}
+
+	$post_fields = array(
+		'menu-item-db-id',
+		'menu-item-object-id',
+		'menu-item-object',
+		'menu-item-parent-id',
+		'menu-item-position',
+		'menu-item-type',
+		'menu-item-title',
+		'menu-item-url',
+		'menu-item-description',
+		'menu-item-attr-title',
+		'menu-item-target',
+		'menu-item-classes',
+		'menu-item-xfn',
+	);
+
+	wp_defer_term_counting( true );
+
+	// Loop through all the menu items' POST variables.
+	if ( ! empty( $_POST['menu-item-db-id'] ) ) {
+		foreach ( (array) $_POST['menu-item-db-id'] as $_key =&gt; $k ) {
+
+			// Menu item title can't be blank.
+			if ( ! isset( $_POST['menu-item-title'][ $_key ] ) || '' === $_POST['menu-item-title'][ $_key ] ) {
+				continue;
+			}
+
+			$args = array();
+			foreach ( $post_fields as $field ) {
+				$args[ $field ] = isset( $_POST[ $field ][ $_key ] ) ? $_POST[ $field ][ $_key ] : '';
+			}
+
+			$menu_item_db_id = wp_update_nav_menu_item(
+				$nav_menu_selected_id,
+				( (int) $_POST['menu-item-db-id'][ $_key ] !== $_key ? 0 : $_key ),
+				$args
+			);
+
+			if ( is_wp_error( $menu_item_db_id ) ) {
+				$messages[] = wp_get_admin_notice(
+					$menu_item_db_id-&gt;get_error_message(),
+					array(
+						'id'                 =&gt; 'message',
+						'additional_classes' =&gt; array( 'error' ),
+					)
+				);
+			} else {
+				unset( $menu_items[ $menu_item_db_id ] );
+			}
+		}
+	}
+
+	// Remove menu items from the menu that weren't in $_POST.
+	if ( ! empty( $menu_items ) ) {
+		foreach ( array_keys( $menu_items ) as $menu_item_id ) {
+			if ( is_nav_menu_item( $menu_item_id ) ) {
+				wp_delete_post( $menu_item_id );
+			}
+		}
+	}
+
+	// Store 'auto-add' pages.
+	$auto_add        = ! empty( $_POST['auto-add-pages'] );
+	$nav_menu_option = (array) get_option( 'nav_menu_options' );
+
+	if ( ! isset( $nav_menu_option['auto_add'] ) ) {
+		$nav_menu_option['auto_add'] = array();
+	}
+
+	if ( $auto_add ) {
+		if ( ! in_array( $nav_menu_selected_id, $nav_menu_option['auto_add'], true ) ) {
+			$nav_menu_option['auto_add'][] = $nav_menu_selected_id;
+		}
+	} else {
+		$key = array_search( $nav_menu_selected_id, $nav_menu_option['auto_add'], true );
+		if ( false !== $key ) {
+			unset( $nav_menu_option['auto_add'][ $key ] );
+		}
+	}
+
+	// Remove non-existent/deleted menus.
+	$nav_menu_option['auto_add'] = array_intersect(
+		$nav_menu_option['auto_add'],
+		wp_get_nav_menus( array( 'fields' =&gt; 'ids' ) )
+	);
+
+	update_option( 'nav_menu_options', $nav_menu_option, false );
+
+	wp_defer_term_counting( false );
+
+	/** This action is documented in wp-includes/nav-menu.php */
+	do_action( 'wp_update_nav_menu', $nav_menu_selected_id );
+
+	/* translators: %s: Nav menu title. */
+	$message     = sprintf( __( '%s has been updated.' ), '&lt;strong&gt;' . $nav_menu_selected_title . '&lt;/strong&gt;' );
+	$notice_args = array(
+		'id'                 =&gt; 'message',
+		'dismissible'        =&gt; true,
+		'additional_classes' =&gt; array( 'updated' ),
+	);
+
+	$messages[] = wp_get_admin_notice( $message, $notice_args );
+
+	unset( $menu_items, $unsorted_menu_items );
+
+	return $messages;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/nav-menu.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/nav-menu.php#L1382">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/nav-menu.php#L1382-L1507">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_update_nav_menu"><span class="hook-func">do_action</span>( ‘wp_update_nav_menu’, <nobr><span class="arg-type">int</span> <span class="arg-name">$menu_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$menu_data</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a navigation menu has been successfully updated.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.6.0/">3.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_nav_menu_update_menu_items" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_nav_menu_update_menu_items</a>
+  </p>
+</div>

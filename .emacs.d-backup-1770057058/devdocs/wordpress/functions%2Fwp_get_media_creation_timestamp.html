@@ -1,0 +1,55 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_media_creation_timestamp( <span class="arg-type">array</span> <span class="arg-name">$metadata</span> ): <span class="return-type">int|false</span>
+</h1> <section><p>Parses creation date from media metadata.</p> </section> <section><h2 id="description">Description</h2> <p>The getID3 library doesn’t have a standard method for getting creation dates, so the location of this data can vary based on the MIME type.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$metadata</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The metadata returned by getID3::analyze().</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|false</span> A UNIX timestamp for the media’s creation date if available or a boolean FALSE if a timestamp could not be determined.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3777" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_media_creation_timestamp( $metadata ) {
+	$creation_date = false;
+
+	if ( empty( $metadata['fileformat'] ) ) {
+		return $creation_date;
+	}
+
+	switch ( $metadata['fileformat'] ) {
+		case 'asf':
+			if ( isset( $metadata['asf']['file_properties_object']['creation_date_unix'] ) ) {
+				$creation_date = (int) $metadata['asf']['file_properties_object']['creation_date_unix'];
+			}
+			break;
+
+		case 'matroska':
+		case 'webm':
+			if ( isset( $metadata['matroska']['comments']['creation_time'][0] ) ) {
+				$creation_date = strtotime( $metadata['matroska']['comments']['creation_time'][0] );
+			} elseif ( isset( $metadata['matroska']['info'][0]['DateUTC_unix'] ) ) {
+				$creation_date = (int) $metadata['matroska']['info'][0]['DateUTC_unix'];
+			}
+			break;
+
+		case 'quicktime':
+		case 'mp4':
+			if ( isset( $metadata['quicktime']['moov']['subatoms'][0]['creation_time_unix'] ) ) {
+				$creation_date = (int) $metadata['quicktime']['moov']['subatoms'][0]['creation_time_unix'];
+			}
+			break;
+	}
+
+	return $creation_date;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L3777">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L3777-L3809">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.0/">4.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_media_creation_timestamp" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_media_creation_timestamp</a>
+  </p>
+</div>

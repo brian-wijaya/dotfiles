@@ -1,0 +1,126 @@
+<h1 class="wp-block-wporg-code-reference-title">image_add_caption( <span class="arg-type">string</span> <span class="arg-name">$html</span>, <span class="arg-type">int</span> <span class="arg-name">$id</span>, <span class="arg-type">string</span> <span class="arg-name">$caption</span>, <span class="arg-type">string</span> <span class="arg-name">$title</span>, <span class="arg-type">string</span> <span class="arg-name">$align</span>, <span class="arg-type">string</span> <span class="arg-name">$url</span>, <span class="arg-type">string</span> <span class="arg-name">$size</span>, <span class="arg-type">string</span> <span class="arg-name">$alt</span> = <span class="arg-default">”</span> ): <span class="return-type">string</span>
+</h1> <section><p>Adds image shortcode with caption to editor.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$html</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The image HTML markup to send.</span></div></dd>
+<dt>
+<code>$id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Image attachment ID.</span></div></dd>
+<dt>
+<code>$caption</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Image caption.</span></div></dd>
+<dt>
+<code>$title</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Image title attribute (not used).</span></div></dd>
+<dt>
+<code>$align</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Image CSS alignment property.</span></div></dd>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Image source URL (not used).</span></div></dd>
+<dt>
+<code>$size</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Image size (not used).</span></div></dd>
+<dt>
+<code>$alt</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Image <code>alt</code> attribute (not used).</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The image HTML markup with caption shortcode.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="188" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function image_add_caption( $html, $id, $caption, $title, $align, $url, $size, $alt = '' ) {
+
+	/**
+	 * Filters the caption text.
+	 *
+	 * Note: If the caption text is empty, the caption shortcode will not be appended
+	 * to the image HTML when inserted into the editor.
+	 *
+	 * Passing an empty value also prevents the <a href="../hooks/image_add_caption_shortcode">'image_add_caption_shortcode'</a>
+	 * Filters from being evaluated at the end of image_add_caption().
+	 *
+	 * @since 4.1.0
+	 *
+	 * @param string $caption The original caption text.
+	 * @param int    $id      The attachment ID.
+	 */
+	$caption = apply_filters( 'image_add_caption_text', $caption, $id );
+
+	/**
+	 * Filters whether to disable captions.
+	 *
+	 * Prevents image captions from being appended to image HTML when inserted into the editor.
+	 *
+	 * @since 2.6.0
+	 *
+	 * @param bool $bool Whether to disable appending captions. Returning true from the filter
+	 *                   will disable captions. Default empty string.
+	 */
+	if ( empty( $caption ) || apply_filters( 'disable_captions', '' ) ) {
+		return $html;
+	}
+
+	$id = ( 0 &lt; (int) $id ) ? 'attachment_' . $id : '';
+
+	if ( ! preg_match( '/width=["\']([0-9]+)/', $html, $matches ) ) {
+		return $html;
+	}
+
+	$width = $matches[1];
+
+	$caption = str_replace( array( "\r\n", "\r" ), "\n", $caption );
+	$caption = preg_replace_callback( '/&lt;[a-zA-Z0-9]+(?: [^&lt;&gt;]+&gt;)*/', '_cleanup_image_add_caption', $caption );
+
+	// Convert any remaining line breaks to &lt;br /&gt;.
+	$caption = preg_replace( '/[ \n\t]*\n[ \t]*/', '&lt;br /&gt;', $caption );
+
+	$html = preg_replace( '/(class=["\'][^\'"]*)align(none|left|right|center)\s?/', '$1', $html );
+	if ( empty( $align ) ) {
+		$align = 'none';
+	}
+
+	$shcode = '' . $html . ' ' . $caption . '';
+
+	/**
+	 * Filters the image HTML markup including the caption shortcode.
+	 *
+	 * @since 2.6.0
+	 *
+	 * @param string $shcode The image HTML markup with caption shortcode.
+	 * @param string $html   The image HTML markup.
+	 */
+	return apply_filters( 'image_add_caption_shortcode', $shcode, $html );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L188">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L188-L250">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/disable_captions"><span class="hook-func">apply_filters</span>( ‘disable_captions’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$bool</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to disable captions.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/image_add_caption_shortcode"><span class="hook-func">apply_filters</span>( ‘image_add_caption_shortcode’, <nobr><span class="arg-type">string</span> <span class="arg-name">$shcode</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$html</span></nobr> )</a></dt>
+<dd>
+<p>Filters the image HTML markup including the caption shortcode.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/image_add_caption_text"><span class="hook-func">apply_filters</span>( ‘image_add_caption_text’, <nobr><span class="arg-type">string</span> <span class="arg-name">$caption</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the caption text.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/image_add_caption" class="_attribution-link">https://developer.wordpress.org/reference/functions/image_add_caption</a>
+  </p>
+</div>

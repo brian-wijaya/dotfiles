@@ -1,0 +1,67 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_list_post_revisions( <span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span>, <span class="arg-type">string</span> <span class="arg-name">$type</span> = <span class="arg-default">‘all’</span> )</h1> <section><p>Displays a list of a post’s revisions.</p> </section> <section><h2 id="description">Description</h2> <p>Can output either a UL with edit links or a TABLE with diff interface, and restore action links.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID or <a href="../classes/wp_post" rel="class">WP_Post</a> object. Default is global $post.</span></div></dd>
+<dt>
+<code>$type</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description"><code>'all'</code> (default), <code>'revision'</code> or <code>'autosave'</code></span></div>
+<p class="default">Default:<code>'all'</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1982" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_list_post_revisions( $post = 0, $type = 'all' ) {
+	$post = get_post( $post );
+
+	if ( ! $post ) {
+		return;
+	}
+
+	// $args array with (parent, format, right, left, type) deprecated since 3.6.
+	if ( is_array( $type ) ) {
+		$type = ! empty( $type['type'] ) ? $type['type'] : $type;
+		_deprecated_argument( __FUNCTION__, '3.6.0' );
+	}
+
+	$revisions = wp_get_post_revisions( $post-&gt;ID );
+
+	if ( ! $revisions ) {
+		return;
+	}
+
+	$rows = '';
+	foreach ( $revisions as $revision ) {
+		if ( ! current_user_can( 'read_post', $revision-&gt;ID ) ) {
+			continue;
+		}
+
+		$is_autosave = wp_is_post_autosave( $revision );
+		if ( ( 'revision' === $type &amp;&amp; $is_autosave ) || ( 'autosave' === $type &amp;&amp; ! $is_autosave ) ) {
+			continue;
+		}
+
+		$rows .= "\t&lt;li&gt;" . wp_post_revision_title_expanded( $revision ) . "&lt;/li&gt;\n";
+	}
+
+	echo "&lt;div class='hide-if-js'&gt;&lt;p&gt;" . __( 'JavaScript must be enabled to use this feature.' ) . "&lt;/p&gt;&lt;/div&gt;\n";
+
+	echo "&lt;ul class='post-revisions hide-if-no-js'&gt;\n";
+	echo $rows;
+	echo '&lt;/ul&gt;';
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post-template.php#L1982">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post-template.php#L1982-L2020">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_list_post_revisions" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_list_post_revisions</a>
+  </p>
+</div>

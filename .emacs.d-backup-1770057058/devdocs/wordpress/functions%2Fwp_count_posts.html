@@ -1,0 +1,95 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_count_posts( <span class="arg-type">string</span> <span class="arg-name">$type</span> = <span class="arg-default">‘post’</span>, <span class="arg-type">string</span> <span class="arg-name">$perm</span> = <span class="arg-default">”</span> ): <span class="return-type">stdClass</span>
+</h1> <section><p>Counts number of posts of a post type and if user has permissions to view.</p> </section> <section><h2 id="description">Description</h2> <p>This function provides an efficient method of finding the amount of post’s type a blog has. Another method is to count the amount of items in <a href="get_posts" rel="function">get_posts()</a> , but that method has a lot of overhead with doing so. Therefore, when developing for 2.5+, use this function instead.</p> <p>The $perm parameter checks for ‘readable’ value and if the user can read private posts, it will display that for the user that is signed in.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$type</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Post type to retrieve count. Default <code>'post'</code>.</span></div>
+<p class="default">Default:<code>'post'</code></p>
+</dd>
+<dt>
+<code>$perm</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description"><code>'readable'</code> or empty. </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">stdClass</span> An object containing the number of posts for each status, or an empty object if the post type does not exist.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3306" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_count_posts( $type = 'post', $perm = '' ) {
+	global $wpdb;
+
+	if ( ! post_type_exists( $type ) ) {
+		return new stdClass();
+	}
+
+	$cache_key = _count_posts_cache_key( $type, $perm );
+
+	$counts = wp_cache_get( $cache_key, 'counts' );
+	if ( false !== $counts ) {
+		// We may have cached this before every status was registered.
+		foreach ( get_post_stati() as $status ) {
+			if ( ! isset( $counts-&gt;{$status} ) ) {
+				$counts-&gt;{$status} = 0;
+			}
+		}
+
+		/** This filter is documented in wp-includes/post.php */
+		return apply_filters( 'wp_count_posts', $counts, $type, $perm );
+	}
+
+	$query = "SELECT post_status, COUNT( * ) AS num_posts FROM {$wpdb-&gt;posts} WHERE post_type = %s";
+
+	if ( 'readable' === $perm &amp;&amp; is_user_logged_in() ) {
+		$post_type_object = get_post_type_object( $type );
+		if ( ! current_user_can( $post_type_object-&gt;cap-&gt;read_private_posts ) ) {
+			$query .= $wpdb-&gt;prepare(
+				" AND (post_status != 'private' OR ( post_author = %d AND post_status = 'private' ))",
+				get_current_user_id()
+			);
+		}
+	}
+
+	$query .= ' GROUP BY post_status';
+
+	$results = (array) $wpdb-&gt;get_results( $wpdb-&gt;prepare( $query, $type ), ARRAY_A );
+	$counts  = array_fill_keys( get_post_stati(), 0 );
+
+	foreach ( $results as $row ) {
+		$counts[ $row['post_status'] ] = $row['num_posts'];
+	}
+
+	$counts = (object) $counts;
+	wp_cache_set( $cache_key, $counts, 'counts' );
+
+	/**
+	 * Filters the post counts by status for the current post type.
+	 *
+	 * @since 3.7.0
+	 *
+	 * @param stdClass $counts An object containing the current post_type's post
+	 *                         counts by status.
+	 * @param string   $type   Post type.
+	 * @param string   $perm   The permission to determine if the posts are 'readable'
+	 *                         by the current user.
+	 */
+	return apply_filters( 'wp_count_posts', $counts, $type, $perm );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L3306">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L3306-L3364">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_count_posts"><span class="hook-func">apply_filters</span>( ‘wp_count_posts’, <nobr><span class="arg-type">stdClass</span> <span class="arg-name">$counts</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$type</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$perm</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post counts by status for the current post type.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_count_posts" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_count_posts</a>
+  </p>
+</div>

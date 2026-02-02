@@ -25,8 +25,10 @@ RETENTION_DAYS = 90
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB - don't version huge files
 WATCH_PATHS = [Path.home()]
 EXCLUDE_PATTERNS = [
-    ".cache", ".local/share/Trash", ".git", "node_modules", ".venv",
-    "__pycache__", ".npm", ".cargo/registry", "*.pyc", "*.o", "*.so"
+    ".cache", ".local/share/Trash", ".local/share/file-versions",
+    ".local/share/time-machine", ".git", "node_modules", ".venv",
+    "__pycache__", ".npm", ".cargo/registry", "go/pkg/mod",
+    "*.pyc", "*.o", "*.so", ".wine", ".steam"
 ]
 
 
@@ -147,31 +149,100 @@ class FileWatcher(pyinotify.ProcessEvent):
         super().__init__()
         self.store = store
         self.last_save = {}  # Rate limiting: path -> last_save_time
+        self.has_version = set()  # Paths that have at least one version
+        self.last_content = {}  # Cache: path -> (content_hash, content)
         self.rate_limit = 60  # Don't save same file more than once per minute
 
     def should_save(self, path: Path) -> bool:
-        """Check if enough time has passed since last save."""
-        last_time = self.last_save.get(str(path), 0)
+        """Check if enough time has passed since last save.
+
+        NO rate limit for first version - always save on creation.
+        Rate limit only applies after first version exists.
+        """
+        path_str = str(path)
+
+        # No rate limit for first version
+        if path_str not in self.has_version:
+            self.last_save[path_str] = time.time()
+            self.has_version.add(path_str)
+            return True
+
+        # Rate limit subsequent modifications
+        last_time = self.last_save.get(path_str, 0)
         now = time.time()
         if now - last_time < self.rate_limit:
             return False
-        self.last_save[str(path)] = now
+        self.last_save[path_str] = now
         return True
+
+    def cache_content(self, path: Path):
+        """Cache file content before it's modified/deleted."""
+        try:
+            if path.exists() and path.is_file():
+                content = path.read_bytes()
+                content_hash = hashlib.sha256(content).hexdigest()
+                self.last_content[str(path)] = (content_hash, content)
+        except:
+            pass
+
+    def process_IN_CREATE(self, event):
+        """File was created - save immediately (no rate limit)."""
+        path = Path(event.pathname)
+        # Wait a moment for file to be written
+        time.sleep(0.01)
+        if self.should_save(path):
+            self.store.save_version(path, "create")
+            self.cache_content(path)
+
+    def process_IN_CLOSE_WRITE(self, event):
+        """File closed after writing - save version."""
+        path = Path(event.pathname)
+        if self.should_save(path):
+            self.store.save_version(path, "modify")
+            self.cache_content(path)
 
     def process_IN_MODIFY(self, event):
         """File was modified - save version before changes."""
         path = Path(event.pathname)
+        self.cache_content(path)  # Cache in case of rapid delete
         if self.should_save(path):
             self.store.save_version(path, "modify")
 
     def process_IN_DELETE(self, event):
-        """File was deleted - save final version."""
+        """File was deleted - save final version from cache."""
         path = Path(event.pathname)
-        self.store.save_version(path, "delete")
+        path_str = str(path)
+
+        # Try to save from cache if file is already gone
+        if path_str in self.last_content:
+            content_hash, content = self.last_content[path_str]
+            try:
+                # Save cached content
+                content_file = CONTENT_DIR / content_hash
+                if not content_file.exists():
+                    content_file.write_bytes(content)
+
+                # Record metadata
+                timestamp = datetime.now().isoformat()
+                self.store.conn.execute("""
+                    INSERT OR IGNORE INTO versions
+                    (file_path, content_hash, timestamp, file_size, operation)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (path_str, content_hash, timestamp, len(content), "delete"))
+                self.store.conn.commit()
+
+                print(f"[version] delete {path.name} ({len(content)} bytes) [cached]", flush=True)
+                del self.last_content[path_str]
+            except Exception as e:
+                print(f"[error] Failed to save cached version on delete: {e}", file=sys.stderr)
+        else:
+            # Try normal save (works if file still exists)
+            self.store.save_version(path, "delete")
 
     def process_IN_MOVED_FROM(self, event):
         """File was moved away - save version."""
         path = Path(event.pathname)
+        self.cache_content(path)
         self.store.save_version(path, "move")
 
 
@@ -189,13 +260,40 @@ def main():
     handler = FileWatcher(store)
     notifier = pyinotify.Notifier(wm, handler)
 
-    # Watch for modifications, deletions, and moves
-    mask = pyinotify.IN_MODIFY | pyinotify.IN_DELETE | pyinotify.IN_MOVED_FROM
+    # Watch for creations, modifications, deletions, and moves
+    # IN_CREATE + IN_CLOSE_WRITE catch new files immediately (100% coverage from birth)
+    # IN_MODIFY catches edits (with content caching for rapid delete protection)
+    # IN_DELETE uses cached content if file already gone
+    mask = (pyinotify.IN_CREATE | pyinotify.IN_CLOSE_WRITE |
+            pyinotify.IN_MODIFY | pyinotify.IN_DELETE | pyinotify.IN_MOVED_FROM)
+
+    # Exclude filter for watch manager
+    def should_watch(path):
+        """Check if path should be watched based on exclusion patterns."""
+        path_str = str(path)
+        for pattern in EXCLUDE_PATTERNS:
+            if pattern in path_str or Path(path_str).match(pattern):
+                return False
+        return True
+
+    # Custom exclude function for pyinotify
+    exclude_filter = pyinotify.ExcludeFilter([
+        str(Path.home() / p) for p in [
+            ".local/share/time-machine",
+            ".local/share/file-versions",
+            ".cache",
+            ".local/share/Trash",
+            "go/pkg/mod",
+            ".wine",
+            ".steam"
+        ]
+    ])
 
     for watch_path in WATCH_PATHS:
         if watch_path.exists():
-            wm.add_watch(str(watch_path), mask, rec=True, auto_add=True)
-            print(f"[daemon] Watching {watch_path} recursively", flush=True)
+            wm.add_watch(str(watch_path), mask, rec=True, auto_add=True,
+                        exclude_filter=exclude_filter)
+            print(f"[daemon] Watching {watch_path} recursively (with exclusions)", flush=True)
 
     # Run cleanup on startup
     store.cleanup_old_versions()

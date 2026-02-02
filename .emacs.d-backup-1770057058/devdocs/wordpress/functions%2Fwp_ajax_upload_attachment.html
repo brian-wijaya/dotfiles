@@ -1,0 +1,123 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_upload_attachment()</h1> <section><p>Handles uploading attachments via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2565" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_upload_attachment() {
+	check_ajax_referer( 'media-form' );
+	/*
+	 * This function does not use wp_send_json_success() / wp_send_json_error()
+	 * as the html4 Plupload handler requires a text/html Content-Type for older IE.
+	 * See https://core.trac.wordpress.org/ticket/31037
+	 */
+
+	if ( ! current_user_can( 'upload_files' ) ) {
+		echo wp_json_encode(
+			array(
+				'success' =&gt; false,
+				'data'    =&gt; array(
+					'message'  =&gt; __( 'Sorry, you are not allowed to upload files.' ),
+					'filename' =&gt; esc_html( $_FILES['async-upload']['name'] ),
+				),
+			)
+		);
+
+		wp_die();
+	}
+
+	if ( isset( $_REQUEST['post_id'] ) ) {
+		$post_id = $_REQUEST['post_id'];
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			echo wp_json_encode(
+				array(
+					'success' =&gt; false,
+					'data'    =&gt; array(
+						'message'  =&gt; __( 'Sorry, you are not allowed to attach files to this post.' ),
+						'filename' =&gt; esc_html( $_FILES['async-upload']['name'] ),
+					),
+				)
+			);
+
+			wp_die();
+		}
+	} else {
+		$post_id = null;
+	}
+
+	$post_data = ! empty( $_REQUEST['post_data'] ) ? _wp_get_allowed_postdata( _wp_translate_postdata( false, (array) $_REQUEST['post_data'] ) ) : array();
+
+	if ( is_wp_error( $post_data ) ) {
+		wp_die( $post_data-&gt;get_error_message() );
+	}
+
+	// If the context is custom header or background, make sure the uploaded file is an image.
+	if ( isset( $post_data['context'] ) &amp;&amp; in_array( $post_data['context'], array( 'custom-header', 'custom-background' ), true ) ) {
+		$wp_filetype = wp_check_filetype_and_ext( $_FILES['async-upload']['tmp_name'], $_FILES['async-upload']['name'] );
+
+		if ( ! wp_match_mime_types( 'image', $wp_filetype['type'] ) ) {
+			echo wp_json_encode(
+				array(
+					'success' =&gt; false,
+					'data'    =&gt; array(
+						'message'  =&gt; __( 'The uploaded file is not a valid image. Please try again.' ),
+						'filename' =&gt; esc_html( $_FILES['async-upload']['name'] ),
+					),
+				)
+			);
+
+			wp_die();
+		}
+	}
+
+	$attachment_id = media_handle_upload( 'async-upload', $post_id, $post_data );
+
+	if ( is_wp_error( $attachment_id ) ) {
+		echo wp_json_encode(
+			array(
+				'success' =&gt; false,
+				'data'    =&gt; array(
+					'message'  =&gt; $attachment_id-&gt;get_error_message(),
+					'filename' =&gt; esc_html( $_FILES['async-upload']['name'] ),
+				),
+			)
+		);
+
+		wp_die();
+	}
+
+	if ( isset( $post_data['context'] ) &amp;&amp; isset( $post_data['theme'] ) ) {
+		if ( 'custom-background' === $post_data['context'] ) {
+			update_post_meta( $attachment_id, '_wp_attachment_is_custom_background', $post_data['theme'] );
+		}
+
+		if ( 'custom-header' === $post_data['context'] ) {
+			update_post_meta( $attachment_id, '_wp_attachment_is_custom_header', $post_data['theme'] );
+		}
+	}
+
+	$attachment = wp_prepare_attachment_for_js( $attachment_id );
+	if ( ! $attachment ) {
+		wp_die();
+	}
+
+	echo wp_json_encode(
+		array(
+			'success' =&gt; true,
+			'data'    =&gt; $attachment,
+		)
+	);
+
+	wp_die();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L2565">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L2565-L2671">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_upload_attachment" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_upload_attachment</a>
+  </p>
+</div>

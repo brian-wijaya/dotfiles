@@ -1,0 +1,104 @@
+<h1 class="wp-block-wporg-code-reference-title">wpmu_delete_blog( <span class="arg-type">int</span> <span class="arg-name">$blog_id</span>, <span class="arg-type">bool</span> <span class="arg-name">$drop</span> = <span class="arg-default">false</span> )</h1> <section><p>Deletes a site.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$blog_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Site ID.</span></div></dd>
+<dt>
+<code>$drop</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">True if site’s database tables should be dropped. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="64" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wpmu_delete_blog( $blog_id, $drop = false ) {
+	$blog_id = (int) $blog_id;
+
+	$switch = false;
+	if ( get_current_blog_id() !== $blog_id ) {
+		$switch = true;
+		switch_to_blog( $blog_id );
+	}
+
+	$blog = get_site( $blog_id );
+
+	$current_network = get_network();
+
+	// If a full blog object is not available, do not destroy anything.
+	if ( $drop &amp;&amp; ! $blog ) {
+		$drop = false;
+	}
+
+	// Don't destroy the initial, main, or root blog.
+	if ( $drop
+		&amp;&amp; ( 1 === $blog_id || is_main_site( $blog_id )
+			|| ( $blog-&gt;path === $current_network-&gt;path &amp;&amp; $blog-&gt;domain === $current_network-&gt;domain ) )
+	) {
+		$drop = false;
+	}
+
+	$upload_path = trim( get_option( 'upload_path' ) );
+
+	// If ms_files_rewriting is enabled and upload_path is empty, wp_upload_dir is not reliable.
+	if ( $drop &amp;&amp; get_site_option( 'ms_files_rewriting' ) &amp;&amp; empty( $upload_path ) ) {
+		$drop = false;
+	}
+
+	if ( $drop ) {
+		wp_delete_site( $blog_id );
+	} else {
+		/** This action is documented in wp-includes/ms-blogs.php */
+		do_action_deprecated( 'delete_blog', array( $blog_id, false ), '5.1.0' );
+
+		$users = get_users(
+			array(
+				'blog_id' =&gt; $blog_id,
+				'fields'  =&gt; 'ids',
+			)
+		);
+
+		// Remove users from this blog.
+		if ( ! empty( $users ) ) {
+			foreach ( $users as $user_id ) {
+				remove_user_from_blog( $user_id, $blog_id );
+			}
+		}
+
+		update_blog_status( $blog_id, 'deleted', 1 );
+
+		/** This action is documented in wp-includes/ms-blogs.php */
+		do_action_deprecated( 'deleted_blog', array( $blog_id, false ), '5.1.0' );
+	}
+
+	if ( $switch ) {
+		restore_current_blog();
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ms.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ms.php#L64">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ms.php#L64-L126">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_blog"><span class="hook-func">do_action_deprecated</span>( ‘deleted_blog’, <nobr><span class="arg-type">int</span> <span class="arg-name">$site_id</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$drop</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the site is deleted from the network.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_blog"><span class="hook-func">do_action_deprecated</span>( ‘delete_blog’, <nobr><span class="arg-type">int</span> <span class="arg-name">$site_id</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$drop</span></nobr> )</a></dt>
+<dd>
+<p>Fires before a site is deleted.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td><span class="since-description">Use <a href="wp_delete_site" rel="function">wp_delete_site()</a> internally to delete the site row from the database.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wpmu_delete_blog" class="_attribution-link">https://developer.wordpress.org/reference/functions/wpmu_delete_blog</a>
+  </p>
+</div>

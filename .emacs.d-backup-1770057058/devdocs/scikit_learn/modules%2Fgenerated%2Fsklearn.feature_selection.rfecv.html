@@ -1,0 +1,366 @@
+<section id="rfecv"> <h1>RFECV</h1> <dl class="py class"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV"> <em class="property">class</em><span class="sig-prename descclassname">sklearn.feature_selection.</span><span class="sig-name descname">RFECV</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">estimator</span></em>, <em class="sig-param"><span class="o">*</span></em>, <em class="sig-param"><span class="n">step</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">min_features_to_select</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">cv</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">scoring</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">verbose</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">n_jobs</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">importance_getter</span><span class="o">=</span><span class="default_value">'auto'</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_rfe.py#L552"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Recursive feature elimination with cross-validation to select features.</p> <p>The number of features selected is tuned automatically by fitting an <a class="reference internal" href="sklearn.feature_selection.rfe#sklearn.feature_selection.RFE" title="sklearn.feature_selection.RFE"><code>RFE</code></a> selector on the different cross-validation splits (provided by the <code>cv</code> parameter). The performance of the <a class="reference internal" href="sklearn.feature_selection.rfe#sklearn.feature_selection.RFE" title="sklearn.feature_selection.RFE"><code>RFE</code></a> selector are evaluated using <code>scorer</code> for different number of selected features and aggregated together. Finally, the scores are averaged across folds and the number of features selected is set to the number of features that maximize the cross-validation score. See glossary entry for <a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-cross-validation-estimator"><span class="xref std std-term">cross-validation estimator</span></a>.</p> <p>Read more in the <a class="reference internal" href="../feature_selection#rfe"><span class="std std-ref">User Guide</span></a>.</p> <dl class="field-list"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl> <dt>
+<strong>estimator</strong><span class="classifier"><code>Estimator</code> instance</span>
+</dt>
+<dd>
+<p>A supervised learning estimator with a <code>fit</code> method that provides information about feature importance either through a <code>coef_</code> attribute or through a <code>feature_importances_</code> attribute.</p> </dd> <dt>
+<strong>step</strong><span class="classifier">int or float, default=1</span>
+</dt>
+<dd>
+<p>If greater than or equal to 1, then <code>step</code> corresponds to the (integer) number of features to remove at each iteration. If within (0.0, 1.0), then <code>step</code> corresponds to the percentage (rounded down) of features to remove at each iteration. Note that the last iteration may remove fewer than <code>step</code> features in order to reach <code>min_features_to_select</code>.</p> </dd> <dt>
+<strong>min_features_to_select</strong><span class="classifier">int, default=1</span>
+</dt>
+<dd>
+<p>The minimum number of features to be selected. This number of features will always be scored, even if the difference between the original feature count and <code>min_features_to_select</code> isn’t divisible by <code>step</code>.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 0.20.</span></p> </div> </dd> <dt>
+<strong>cv</strong><span class="classifier">int, cross-validation generator or an iterable, default=None</span>
+</dt>
+<dd>
+<p>Determines the cross-validation splitting strategy. Possible inputs for cv are:</p> <ul class="simple"> <li>None, to use the default 5-fold cross-validation,</li> <li>integer, to specify the number of folds.</li> <li>
+<a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-CV-splitter"><span class="xref std std-term">CV splitter</span></a>,</li> <li>An iterable yielding (train, test) splits as arrays of indices.</li> </ul> <p>For integer/None inputs, if <code>y</code> is binary or multiclass, <a class="reference internal" href="sklearn.model_selection.stratifiedkfold#sklearn.model_selection.StratifiedKFold" title="sklearn.model_selection.StratifiedKFold"><code>StratifiedKFold</code></a> is used. If the estimator is not a classifier or if <code>y</code> is neither binary nor multiclass, <a class="reference internal" href="sklearn.model_selection.kfold#sklearn.model_selection.KFold" title="sklearn.model_selection.KFold"><code>KFold</code></a> is used.</p> <p>Refer <a class="reference internal" href="../cross_validation#cross-validation"><span class="std std-ref">User Guide</span></a> for the various cross-validation strategies that can be used here.</p> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 0.22: </span><code>cv</code> default value of None changed from 3-fold to 5-fold.</p> </div> </dd> <dt>
+<strong>scoring</strong><span class="classifier">str, callable or None, default=None</span>
+</dt>
+<dd>
+<p>A string (see <a class="reference internal" href="../model_evaluation#scoring-parameter"><span class="std std-ref">The scoring parameter: defining model evaluation rules</span></a>) or a scorer callable object / function with signature <code>scorer(estimator, X, y)</code>.</p> </dd> <dt>
+<strong>verbose</strong><span class="classifier">int, default=0</span>
+</dt>
+<dd>
+<p>Controls verbosity of output.</p> </dd> <dt>
+<strong>n_jobs</strong><span class="classifier">int or None, default=None</span>
+</dt>
+<dd>
+<p>Number of cores to run in parallel while fitting across folds. <code>None</code> means 1 unless in a <a class="reference external" href="https://joblib.readthedocs.io/en/latest/generated/joblib.parallel_backend.html#joblib.parallel_backend" title="(in joblib v1.5.dev0)"><code>joblib.parallel_backend</code></a> context. <code>-1</code> means using all processors. See <a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-n_jobs"><span class="xref std std-term">Glossary</span></a> for more details.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 0.18.</span></p> </div> </dd> <dt>
+<strong>importance_getter</strong><span class="classifier">str or callable, default=’auto’</span>
+</dt>
+<dd>
+<p>If ‘auto’, uses the feature importance either through a <code>coef_</code> or <code>feature_importances_</code> attributes of estimator.</p> <p>Also accepts a string that specifies an attribute name/path for extracting feature importance. For example, give <code>regressor_.coef_</code> in case of <a class="reference internal" href="sklearn.compose.transformedtargetregressor#sklearn.compose.TransformedTargetRegressor" title="sklearn.compose.TransformedTargetRegressor"><code>TransformedTargetRegressor</code></a> or <code>named_steps.clf.feature_importances_</code> in case of <a class="reference internal" href="sklearn.pipeline.pipeline#sklearn.pipeline.Pipeline" title="sklearn.pipeline.Pipeline"><code>Pipeline</code></a> with its last step named <code>clf</code>.</p> <p>If <code>callable</code>, overrides the default feature importance getter. The callable is passed with the fitted estimator and it should return importance for each feature.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 0.24.</span></p> </div> </dd> </dl> </dd> <dt class="field-even">Attributes<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl> <dt>
+<a class="reference internal" href="#sklearn.feature_selection.RFECV.classes_" title="sklearn.feature_selection.RFECV.classes_"><code>classes_</code></a><span class="classifier">ndarray of shape (n_classes,)</span>
+</dt>
+<dd>
+<p>Classes labels available when <code>estimator</code> is a classifier.</p> </dd> <dt>
+<strong>estimator_</strong><span class="classifier"><code>Estimator</code> instance</span>
+</dt>
+<dd>
+<p>The fitted estimator used to select features.</p> </dd> <dt>
+<strong>cv_results_</strong><span class="classifier">dict of ndarrays</span>
+</dt>
+<dd>
+<p>All arrays (values of the dictionary) are sorted in ascending order by the number of features used (i.e., the first element of the array represents the models that used the least number of features, while the last element represents the models that used all available features).</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 1.0.</span></p> </div> <p>This dictionary contains the following keys:</p> <dl> <dt>split(k)_test_score<span class="classifier">ndarray of shape (n_subsets_of_features,)</span>
+</dt>
+<dd>
+<p>The cross-validation scores across (k)th fold.</p> </dd> <dt>mean_test_score<span class="classifier">ndarray of shape (n_subsets_of_features,)</span>
+</dt>
+<dd>
+<p>Mean of scores over the folds.</p> </dd> <dt>std_test_score<span class="classifier">ndarray of shape (n_subsets_of_features,)</span>
+</dt>
+<dd>
+<p>Standard deviation of scores over the folds.</p> </dd> <dt>n_features<span class="classifier">ndarray of shape (n_subsets_of_features,)</span>
+</dt>
+<dd>
+<p>Number of features used at each step.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 1.5.</span></p> </div> </dd> </dl> </dd> <dt>
+<strong>n_features_</strong><span class="classifier">int</span>
+</dt>
+<dd>
+<p>The number of selected features with cross-validation.</p> </dd> <dt>
+<strong>n_features_in_</strong><span class="classifier">int</span>
+</dt>
+<dd>
+<p>Number of features seen during <a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-fit"><span class="xref std std-term">fit</span></a>. Only defined if the underlying estimator exposes such an attribute when fit.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 0.24.</span></p> </div> </dd> <dt>
+<strong>feature_names_in_</strong><span class="classifier">ndarray of shape (<code>n_features_in_</code>,)</span>
+</dt>
+<dd>
+<p>Names of features seen during <a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-fit"><span class="xref std std-term">fit</span></a>. Defined only when <code>X</code> has feature names that are all strings.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 1.0.</span></p> </div> </dd> <dt>
+<strong>ranking_</strong><span class="classifier">narray of shape (n_features,)</span>
+</dt>
+<dd>
+<p>The feature ranking, such that <code>ranking_[i]</code> corresponds to the ranking position of the i-th feature. Selected (i.e., estimated best) features are assigned rank 1.</p> </dd> <dt>
+<strong>support_</strong><span class="classifier">ndarray of shape (n_features,)</span>
+</dt>
+<dd>
+<p>The mask of selected features.</p> </dd> </dl> </dd> </dl> <div class="admonition seealso"> <p class="admonition-title">See also</p> <dl class="simple"> <dt><a class="reference internal" href="sklearn.feature_selection.rfe#sklearn.feature_selection.RFE" title="sklearn.feature_selection.RFE"><code>RFE</code></a></dt>
+<dd>
+<p>Recursive feature elimination.</p> </dd> </dl> </div> <h4 class="rubric">Notes</h4> <p>The size of all values in <code>cv_results_</code> is equal to <code>ceil((n_features - min_features_to_select) / step) + 1</code>, where step is the number of features removed at each iteration.</p> <p>Allows NaN/Inf in the input if the underlying estimator does as well.</p> <h4 class="rubric">References</h4> <div role="list" class="citation-list"> <div class="citation" id="r6f4d61ceb411-1" role="doc-biblioentry"> <span class="label"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></span> <p>Guyon, I., Weston, J., Barnhill, S., &amp; Vapnik, V., “Gene selection for cancer classification using support vector machines”, Mach. Learn., 46(1-3), 389–422, 2002.</p> </div> </div> <h4 class="rubric">Examples</h4> <p>The following example shows how to retrieve the a-priori not known 5 informative features in the Friedman #1 dataset.</p> <pre data-language="python">&gt;&gt;&gt; from sklearn.datasets import make_friedman1
+&gt;&gt;&gt; from sklearn.feature_selection import RFECV
+&gt;&gt;&gt; from sklearn.svm import SVR
+&gt;&gt;&gt; X, y = make_friedman1(n_samples=50, n_features=10, random_state=0)
+&gt;&gt;&gt; estimator = SVR(kernel="linear")
+&gt;&gt;&gt; selector = RFECV(estimator, step=1, cv=5)
+&gt;&gt;&gt; selector = selector.fit(X, y)
+&gt;&gt;&gt; selector.support_
+array([ True,  True,  True,  True,  True, False, False, False, False,
+       False])
+&gt;&gt;&gt; selector.ranking_
+array([1, 1, 1, 1, 1, 6, 4, 3, 2, 5])
+</pre> <dl class="py property"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.classes_"> <em class="property">property</em><span class="sig-name descname">classes_</span>
+</dt> <dd>
+<p>Classes labels available when <code>estimator</code> is a classifier.</p> <dl class="field-list simple"> <dt class="field-odd">Returns<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>ndarray of shape (n_classes,)</dt>
+ </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.decision_function"> <span class="sig-name descname">decision_function</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_rfe.py#L453"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Compute the decision function of <code>X</code>.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>X</strong><span class="classifier">{array-like or sparse matrix} of shape (n_samples, n_features)</span>
+</dt>
+<dd>
+<p>The input samples. Internally, it will be converted to <code>dtype=np.float32</code> and if a sparse matrix is provided to a sparse <code>csr_matrix</code>.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>score</strong><span class="classifier">array, shape = [n_samples, n_classes] or [n_samples]</span>
+</dt>
+<dd>
+<p>The decision function of the input samples. The order of the classes corresponds to that in the attribute <a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-classes_"><span class="xref std std-term">classes_</span></a>. Regression and binary classification produce an array of shape [n_samples].</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.fit"> <span class="sig-name descname">fit</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">y</span></em>, <em class="sig-param"><span class="o">*</span></em>, <em class="sig-param"><span class="n">groups</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">params</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_rfe.py#L768"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Fit the RFE model and automatically tune the number of selected features.</p> <dl class="field-list"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl> <dt>
+<strong>X</strong><span class="classifier">{array-like, sparse matrix} of shape (n_samples, n_features)</span>
+</dt>
+<dd>
+<p>Training vector, where <code>n_samples</code> is the number of samples and <code>n_features</code> is the total number of features.</p> </dd> <dt>
+<strong>y</strong><span class="classifier">array-like of shape (n_samples,)</span>
+</dt>
+<dd>
+<p>Target values (integers for classification, real numbers for regression).</p> </dd> <dt>
+<strong>groups</strong><span class="classifier">array-like of shape (n_samples,) or None, default=None</span>
+</dt>
+<dd>
+<p>Group labels for the samples used while splitting the dataset into train/test set. Only used in conjunction with a “Group” <a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-cv"><span class="xref std std-term">cv</span></a> instance (e.g., <a class="reference internal" href="sklearn.model_selection.groupkfold#sklearn.model_selection.GroupKFold" title="sklearn.model_selection.GroupKFold"><code>GroupKFold</code></a>).</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 0.20.</span></p> </div> </dd> <dt>
+<strong>**params</strong><span class="classifier">dict of str -&gt; object</span>
+</dt>
+<dd>
+<p>Parameters passed to the <code>fit</code> method of the estimator, the scorer, and the CV splitter.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 1.6: </span>Only available if <code>enable_metadata_routing=True</code>, which can be set by using <code>sklearn.set_config(enable_metadata_routing=True)</code>. See <a class="reference internal" href="https://scikit-learn.org/1.6/metadata_routing.html#metadata-routing"><span class="std std-ref">Metadata Routing User Guide</span></a> for more details.</p> </div> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>self</strong><span class="classifier">object</span>
+</dt>
+<dd>
+<p>Fitted estimator.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.fit_transform"> <span class="sig-name descname">fit_transform</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">y</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">fit_params</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/base.py#L863"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Fit to data, then transform it.</p> <p>Fits transformer to <code>X</code> and <code>y</code> with optional parameters <code>fit_params</code> and returns a transformed version of <code>X</code>.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>X</strong><span class="classifier">array-like of shape (n_samples, n_features)</span>
+</dt>
+<dd>
+<p>Input samples.</p> </dd> <dt>
+<strong>y</strong><span class="classifier">array-like of shape (n_samples,) or (n_samples, n_outputs), default=None</span>
+</dt>
+<dd>
+<p>Target values (None for unsupervised transformations).</p> </dd> <dt>
+<strong>**fit_params</strong><span class="classifier">dict</span>
+</dt>
+<dd>
+<p>Additional fit parameters.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>X_new</strong><span class="classifier">ndarray array of shape (n_samples, n_features_new)</span>
+</dt>
+<dd>
+<p>Transformed array.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.get_feature_names_out"> <span class="sig-name descname">get_feature_names_out</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_features</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_base.py#L174"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Mask feature names according to selected features.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>input_features</strong><span class="classifier">array-like of str or None, default=None</span>
+</dt>
+<dd>
+<p>Input features.</p> <ul class="simple"> <li>If <code>input_features</code> is <code>None</code>, then <code>feature_names_in_</code> is used as feature names in. If <code>feature_names_in_</code> is not defined, then the following input feature names are generated: <code>["x0", "x1", ..., "x(n_features_in_ - 1)"]</code>.</li> <li>If <code>input_features</code> is an array-like, then <code>input_features</code> must match <code>feature_names_in_</code> if <code>feature_names_in_</code> is defined.</li> </ul> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>feature_names_out</strong><span class="classifier">ndarray of str objects</span>
+</dt>
+<dd>
+<p>Transformed feature names.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.get_metadata_routing"> <span class="sig-name descname">get_metadata_routing</span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_rfe.py#L950"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Get metadata routing of this object.</p> <p>Please check <a class="reference internal" href="https://scikit-learn.org/1.6/metadata_routing.html#metadata-routing"><span class="std std-ref">User Guide</span></a> on how the routing mechanism works.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 1.6.</span></p> </div> <dl class="field-list simple"> <dt class="field-odd">Returns<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>routing</strong><span class="classifier">MetadataRouter</span>
+</dt>
+<dd>
+<p>A <a class="reference internal" href="sklearn.utils.metadata_routing.metadatarouter#sklearn.utils.metadata_routing.MetadataRouter" title="sklearn.utils.metadata_routing.MetadataRouter"><code>MetadataRouter</code></a> encapsulating routing information.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.get_params"> <span class="sig-name descname">get_params</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">deep</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/base.py#L231"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Get parameters for this estimator.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>deep</strong><span class="classifier">bool, default=True</span>
+</dt>
+<dd>
+<p>If True, will return the parameters for this estimator and contained subobjects that are estimators.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>params</strong><span class="classifier">dict</span>
+</dt>
+<dd>
+<p>Parameter names mapped to their values.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.get_support"> <span class="sig-name descname">get_support</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_base.py#L52"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Get a mask, or integer index, of the features selected.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>indices</strong><span class="classifier">bool, default=False</span>
+</dt>
+<dd>
+<p>If True, the return value will be an array of integers, rather than a boolean mask.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>support</strong><span class="classifier">array</span>
+</dt>
+<dd>
+<p>An index that selects the retained features from a feature vector. If <code>indices</code> is False, this is a boolean array of shape [# input features], in which an element is True iff its corresponding feature is selected for retention. If <code>indices</code> is True, this is an integer array of shape [# output features] whose values are indices into the input feature vector.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.inverse_transform"> <span class="sig-name descname">inverse_transform</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_base.py#L134"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Reverse the transformation operation.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>X</strong><span class="classifier">array of shape [n_samples, n_selected_features]</span>
+</dt>
+<dd>
+<p>The input samples.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>X_r</strong><span class="classifier">array of shape [n_samples, n_original_features]</span>
+</dt>
+<dd>
+<p><code>X</code> with columns of zeros inserted where features would have been removed by <a class="reference internal" href="#sklearn.feature_selection.RFECV.transform" title="sklearn.feature_selection.RFECV.transform"><code>transform</code></a>.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.predict"> <span class="sig-name descname">predict</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">predict_params</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_rfe.py#L372"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Reduce X to the selected features and predict using the estimator.</p> <dl class="field-list"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl> <dt>
+<strong>X</strong><span class="classifier">array of shape [n_samples, n_features]</span>
+</dt>
+<dd>
+<p>The input samples.</p> </dd> <dt>
+<strong>**predict_params</strong><span class="classifier">dict</span>
+</dt>
+<dd>
+<p>Parameters to route to the <code>predict</code> method of the underlying estimator.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 1.6: </span>Only available if <code>enable_metadata_routing=True</code>, which can be set by using <code>sklearn.set_config(enable_metadata_routing=True)</code>. See <a class="reference internal" href="https://scikit-learn.org/1.6/metadata_routing.html#metadata-routing"><span class="std std-ref">Metadata Routing User Guide</span></a> for more details.</p> </div> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>y</strong><span class="classifier">array of shape [n_samples]</span>
+</dt>
+<dd>
+<p>The predicted target values.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.predict_log_proba"> <span class="sig-name descname">predict_log_proba</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_rfe.py#L495"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Predict class log-probabilities for X.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>X</strong><span class="classifier">array of shape [n_samples, n_features]</span>
+</dt>
+<dd>
+<p>The input samples.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>p</strong><span class="classifier">array of shape (n_samples, n_classes)</span>
+</dt>
+<dd>
+<p>The class log-probabilities of the input samples. The order of the classes corresponds to that in the attribute <a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-classes_"><span class="xref std std-term">classes_</span></a>.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.predict_proba"> <span class="sig-name descname">predict_proba</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_rfe.py#L475"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Predict class probabilities for X.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>X</strong><span class="classifier">{array-like or sparse matrix} of shape (n_samples, n_features)</span>
+</dt>
+<dd>
+<p>The input samples. Internally, it will be converted to <code>dtype=np.float32</code> and if a sparse matrix is provided to a sparse <code>csr_matrix</code>.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>p</strong><span class="classifier">array of shape (n_samples, n_classes)</span>
+</dt>
+<dd>
+<p>The class probabilities of the input samples. The order of the classes corresponds to that in the attribute <a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-classes_"><span class="xref std std-term">classes_</span></a>.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.score"> <span class="sig-name descname">score</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">y</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">score_params</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_rfe.py#L914"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Score using the <code>scoring</code> option on the given test data and labels.</p> <dl class="field-list"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl> <dt>
+<strong>X</strong><span class="classifier">array-like of shape (n_samples, n_features)</span>
+</dt>
+<dd>
+<p>Test samples.</p> </dd> <dt>
+<strong>y</strong><span class="classifier">array-like of shape (n_samples,)</span>
+</dt>
+<dd>
+<p>True labels for X.</p> </dd> <dt>
+<strong>**score_params</strong><span class="classifier">dict</span>
+</dt>
+<dd>
+<p>Parameters to pass to the <code>score</code> method of the underlying scorer.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 1.6: </span>Only available if <code>enable_metadata_routing=True</code>, which can be set by using <code>sklearn.set_config(enable_metadata_routing=True)</code>. See <a class="reference internal" href="https://scikit-learn.org/1.6/metadata_routing.html#metadata-routing"><span class="std std-ref">Metadata Routing User Guide</span></a> for more details.</p> </div> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>score</strong><span class="classifier">float</span>
+</dt>
+<dd>
+<p>Score of self.predict(X) w.r.t. y defined by <code>scoring</code>.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.set_output"> <span class="sig-name descname">set_output</span><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span></em>, <em class="sig-param"><span class="n">transform</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/utils/_set_output.py#L392"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Set output container.</p> <p>See <a class="reference internal" href="../../auto_examples/miscellaneous/plot_set_output#sphx-glr-auto-examples-miscellaneous-plot-set-output-py"><span class="std std-ref">Introducing the set_output API</span></a> for an example on how to use the API.</p> <dl class="field-list"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl> <dt>
+<strong>transform</strong><span class="classifier">{“default”, “pandas”, “polars”}, default=None</span>
+</dt>
+<dd>
+<p>Configure output of <code>transform</code> and <code>fit_transform</code>.</p> <ul class="simple"> <li>
+<code>"default"</code>: Default output format of a transformer</li> <li>
+<code>"pandas"</code>: DataFrame output</li> <li>
+<code>"polars"</code>: Polars output</li> <li>
+<code>None</code>: Transform configuration is unchanged</li> </ul> <div class="versionadded"> <p><span class="versionmodified added">Added in version 1.4: </span><code>"polars"</code> option was added.</p> </div> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>self</strong><span class="classifier">estimator instance</span>
+</dt>
+<dd>
+<p>Estimator instance.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.set_params"> <span class="sig-name descname">set_params</span><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">params</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/base.py#L255"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Set the parameters of this estimator.</p> <p>The method works on simple estimators as well as on nested objects (such as <a class="reference internal" href="sklearn.pipeline.pipeline#sklearn.pipeline.Pipeline" title="sklearn.pipeline.Pipeline"><code>Pipeline</code></a>). The latter have parameters of the form <code>&lt;component&gt;__&lt;parameter&gt;</code> so that it’s possible to update each component of a nested object.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>**params</strong><span class="classifier">dict</span>
+</dt>
+<dd>
+<p>Estimator parameters.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>self</strong><span class="classifier">estimator instance</span>
+</dt>
+<dd>
+<p>Estimator instance.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_selection.RFECV.transform"> <span class="sig-name descname">transform</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_selection/_base.py#L87"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Reduce X to the selected features.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>X</strong><span class="classifier">array of shape [n_samples, n_features]</span>
+</dt>
+<dd>
+<p>The input samples.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>X_r</strong><span class="classifier">array of shape [n_samples, n_selected_features]</span>
+</dt>
+<dd>
+<p>The input samples with only the selected features.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> </dd>
+</dl> <section id="gallery-examples"> <h2>Gallery examples</h2> <div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="A Recursive Feature Elimination (RFE) example with automatic tuning of the number of features selected with cross-validation.">
+<img alt="" src="data:image/png;base64,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"> <p><a class="reference internal" href="../../auto_examples/feature_selection/plot_rfe_with_cross_validation#sphx-glr-auto-examples-feature-selection-plot-rfe-with-cross-validation-py"><span class="std std-ref">Recursive feature elimination with cross-validation</span></a></p>  </div></div></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2007&ndash;2025 The scikit-learn developers<br>Licensed under the 3-clause BSD License.<br>
+    <a href="https://scikit-learn.org/1.6/modules/generated/sklearn.feature_selection.RFECV.html" class="_attribution-link">https://scikit-learn.org/1.6/modules/generated/sklearn.feature_selection.RFECV.html</a>
+  </p>
+</div>

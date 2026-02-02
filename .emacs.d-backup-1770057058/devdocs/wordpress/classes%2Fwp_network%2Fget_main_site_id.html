@@ -1,0 +1,85 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Network::get_main_site_id(): <span class="return-type">int</span>
+</h1> <section><p>Returns the main site ID for the network.</p> </section> <section><h2 id="description">Description</h2> <p>Internal method used by the magic getter for the ‘blog_id’ and ‘site_id’ properties.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">int</span> The ID of the main site.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="219" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function get_main_site_id() {
+	/**
+	 * Filters the main site ID.
+	 *
+	 * Returning a positive integer will effectively short-circuit the function.
+	 *
+	 * @since 4.9.0
+	 *
+	 * @param int|null   $main_site_id If a positive integer is returned, it is interpreted as the main site ID.
+	 * @param WP_Network $network      The network object for which the main site was detected.
+	 */
+	$main_site_id = (int) apply_filters( 'pre_get_main_site_id', null, $this );
+
+	if ( 0 &lt; $main_site_id ) {
+		return $main_site_id;
+	}
+
+	if ( 0 &lt; (int) $this-&gt;blog_id ) {
+		return (int) $this-&gt;blog_id;
+	}
+
+	if ( ( defined( 'DOMAIN_CURRENT_SITE' ) &amp;&amp; defined( 'PATH_CURRENT_SITE' )
+		&amp;&amp; DOMAIN_CURRENT_SITE === $this-&gt;domain &amp;&amp; PATH_CURRENT_SITE === $this-&gt;path )
+		|| ( defined( 'SITE_ID_CURRENT_SITE' ) &amp;&amp; (int) SITE_ID_CURRENT_SITE === $this-&gt;id )
+	) {
+		if ( defined( 'BLOG_ID_CURRENT_SITE' ) ) {
+			$this-&gt;blog_id = (string) BLOG_ID_CURRENT_SITE;
+
+			return (int) $this-&gt;blog_id;
+		}
+
+		if ( defined( 'BLOGID_CURRENT_SITE' ) ) { // Deprecated.
+			$this-&gt;blog_id = (string) BLOGID_CURRENT_SITE;
+
+			return (int) $this-&gt;blog_id;
+		}
+	}
+
+	$site = get_site();
+	if ( $site-&gt;domain === $this-&gt;domain &amp;&amp; $site-&gt;path === $this-&gt;path ) {
+		$main_site_id = (int) $site-&gt;id;
+	} else {
+
+		$main_site_id = get_network_option( $this-&gt;id, 'main_site' );
+		if ( false === $main_site_id ) {
+			$_sites       = get_sites(
+				array(
+					'fields'     =&gt; 'ids',
+					'number'     =&gt; 1,
+					'domain'     =&gt; $this-&gt;domain,
+					'path'       =&gt; $this-&gt;path,
+					'network_id' =&gt; $this-&gt;id,
+				)
+			);
+			$main_site_id = ! empty( $_sites ) ? array_shift( $_sites ) : 0;
+
+			update_network_option( $this-&gt;id, 'main_site', $main_site_id );
+		}
+	}
+
+	$this-&gt;blog_id = (string) $main_site_id;
+
+	return (int) $this-&gt;blog_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-network.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-network.php#L219">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-network.php#L219-L282">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/pre_get_main_site_id"><span class="hook-func">apply_filters</span>( ‘pre_get_main_site_id’, <nobr><span class="arg-type">int|null</span> <span class="arg-name">$main_site_id</span></nobr>, <nobr><span class="arg-type">WP_Network</span> <span class="arg-name">$network</span></nobr> )</a></dt>
+<dd>
+<p>Filters the main site ID.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.0/">4.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_network/get_main_site_id" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_network/get_main_site_id</a>
+  </p>
+</div>

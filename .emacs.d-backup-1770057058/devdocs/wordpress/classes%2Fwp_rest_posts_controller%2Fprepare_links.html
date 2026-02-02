@@ -1,0 +1,129 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Posts_Controller::prepare_links( <span class="arg-type">WP_Post</span> <span class="arg-name">$post</span> ): <span class="return-type">array</span>
+</h1> <section><p>Prepares links for the request.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Links for the given post.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2134" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function prepare_links( $post ) {
+	// Entity meta.
+	$links = array(
+		'self'       =&gt; array(
+			'href' =&gt; rest_url( rest_get_route_for_post( $post-&gt;ID ) ),
+		),
+		'collection' =&gt; array(
+			'href' =&gt; rest_url( rest_get_route_for_post_type_items( $this-&gt;post_type ) ),
+		),
+		'about'      =&gt; array(
+			'href' =&gt; rest_url( 'wp/v2/types/' . $this-&gt;post_type ),
+		),
+	);
+
+	if ( ( in_array( $post-&gt;post_type, array( 'post', 'page' ), true ) || post_type_supports( $post-&gt;post_type, 'author' ) )
+		&amp;&amp; ! empty( $post-&gt;post_author ) ) {
+		$links['author'] = array(
+			'href'       =&gt; rest_url( 'wp/v2/users/' . $post-&gt;post_author ),
+			'embeddable' =&gt; true,
+		);
+	}
+
+	if ( in_array( $post-&gt;post_type, array( 'post', 'page' ), true ) || post_type_supports( $post-&gt;post_type, 'comments' ) ) {
+		$replies_url = rest_url( 'wp/v2/comments' );
+		$replies_url = add_query_arg( 'post', $post-&gt;ID, $replies_url );
+
+		$links['replies'] = array(
+			'href'       =&gt; $replies_url,
+			'embeddable' =&gt; true,
+		);
+	}
+
+	if ( in_array( $post-&gt;post_type, array( 'post', 'page' ), true ) || post_type_supports( $post-&gt;post_type, 'revisions' ) ) {
+		$revisions       = wp_get_latest_revision_id_and_total_count( $post-&gt;ID );
+		$revisions_count = ! is_wp_error( $revisions ) ? $revisions['count'] : 0;
+		$revisions_base  = sprintf( '/%s/%s/%d/revisions', $this-&gt;namespace, $this-&gt;rest_base, $post-&gt;ID );
+
+		$links['version-history'] = array(
+			'href'  =&gt; rest_url( $revisions_base ),
+			'count' =&gt; $revisions_count,
+		);
+
+		if ( $revisions_count &gt; 0 ) {
+			$links['predecessor-version'] = array(
+				'href' =&gt; rest_url( $revisions_base . '/' . $revisions['latest_id'] ),
+				'id'   =&gt; $revisions['latest_id'],
+			);
+		}
+	}
+
+	$post_type_obj = get_post_type_object( $post-&gt;post_type );
+
+	if ( $post_type_obj-&gt;hierarchical &amp;&amp; ! empty( $post-&gt;post_parent ) ) {
+		$links['up'] = array(
+			'href'       =&gt; rest_url( rest_get_route_for_post( $post-&gt;post_parent ) ),
+			'embeddable' =&gt; true,
+		);
+	}
+
+	// If we have a featured media, add that.
+	$featured_media = get_post_thumbnail_id( $post-&gt;ID );
+	if ( $featured_media ) {
+		$image_url = rest_url( rest_get_route_for_post( $featured_media ) );
+
+		$links['https://api.w.org/featuredmedia'] = array(
+			'href'       =&gt; $image_url,
+			'embeddable' =&gt; true,
+		);
+	}
+
+	if ( ! in_array( $post-&gt;post_type, array( 'attachment', 'nav_menu_item', 'revision' ), true ) ) {
+		$attachments_url = rest_url( rest_get_route_for_post_type_items( 'attachment' ) );
+		$attachments_url = add_query_arg( 'parent', $post-&gt;ID, $attachments_url );
+
+		$links['https://api.w.org/attachment'] = array(
+			'href' =&gt; $attachments_url,
+		);
+	}
+
+	$taxonomies = get_object_taxonomies( $post-&gt;post_type );
+
+	if ( ! empty( $taxonomies ) ) {
+		$links['https://api.w.org/term'] = array();
+
+		foreach ( $taxonomies as $tax ) {
+			$taxonomy_route = rest_get_route_for_taxonomy_items( $tax );
+
+			// Skip taxonomies that are not public.
+			if ( empty( $taxonomy_route ) ) {
+				continue;
+			}
+			$terms_url = add_query_arg(
+				'post',
+				$post-&gt;ID,
+				rest_url( $taxonomy_route )
+			);
+
+			$links['https://api.w.org/term'][] = array(
+				'href'       =&gt; $terms_url,
+				'taxonomy'   =&gt; $tax,
+				'embeddable' =&gt; true,
+			);
+		}
+	}
+
+	return $links;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php#L2134">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php#L2134-L2240">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_posts_controller/prepare_links" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_posts_controller/prepare_links</a>
+  </p>
+</div>

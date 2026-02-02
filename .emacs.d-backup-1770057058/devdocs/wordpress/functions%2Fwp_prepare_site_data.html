@@ -1,0 +1,90 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_prepare_site_data( <span class="arg-type">array</span> <span class="arg-name">$data</span>, <span class="arg-type">array</span> <span class="arg-name">$defaults</span>, <span class="arg-type">WP_Site|null</span> <span class="arg-name">$old_site</span> = <span class="arg-default">null</span> ): <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Prepares site data for insertion or update in the database.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$data</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Associative array of site data passed to the respective function.<br> See <a href="wp_insert_site">wp_insert_site()</a> for the possibly included data.</span></div></dd>
+<dt>
+<code>$defaults</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Site data defaults to parse $data against.</span></div></dd>
+<dt>
+<code>$old_site</code><span class="type"><span class="WP_Site"><a href="../classes/wp_site" rel="class">WP_Site</a></span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Old site object if an update, or null if an insertion.<br> </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Site data ready for a database transaction, or <a href="../classes/wp_error" rel="class">WP_Error</a> in case a validation error occurred.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="464" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_prepare_site_data( $data, $defaults, $old_site = null ) {
+
+	// Maintain backward-compatibility with `$site_id` as network ID.
+	if ( isset( $data['site_id'] ) ) {
+		if ( ! empty( $data['site_id'] ) &amp;&amp; empty( $data['network_id'] ) ) {
+			$data['network_id'] = $data['site_id'];
+		}
+		unset( $data['site_id'] );
+	}
+
+	/**
+	 * Filters passed site data in order to normalize it.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param array $data Associative array of site data passed to the respective function.
+	 *                    See <a href="wp_insert_site">wp_insert_site()</a> for the possibly included data.
+	 */
+	$data = apply_filters( 'wp_normalize_site_data', $data );
+
+	$allowed_data_fields = array( 'domain', 'path', 'network_id', 'registered', 'last_updated', 'public', 'archived', 'mature', 'spam', 'deleted', 'lang_id' );
+	$data                = array_intersect_key( wp_parse_args( $data, $defaults ), array_flip( $allowed_data_fields ) );
+
+	$errors = new WP_Error();
+
+	/**
+	 * Fires when data should be validated for a site prior to inserting or updating in the database.
+	 *
+	 * Plugins should amend the `$errors` object via its `WP_Error::add()` method.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param WP_Error     $errors   Error object to add validation errors to.
+	 * @param array        $data     Associative array of complete site data. See <a href="wp_insert_site">wp_insert_site()</a>
+	 *                               for the included data.
+	 * @param WP_Site|null $old_site The old site object if the data belongs to a site being updated,
+	 *                               or null if it is a new site being inserted.
+	 */
+	do_action( 'wp_validate_site_data', $errors, $data, $old_site );
+
+	if ( ! empty( $errors-&gt;errors ) ) {
+		return $errors;
+	}
+
+	// Prepare for database.
+	$data['site_id'] = $data['network_id'];
+	unset( $data['network_id'] );
+
+	return $data;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-site.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-site.php#L464">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-site.php#L464-L513">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_normalize_site_data"><span class="hook-func">apply_filters</span>( ‘wp_normalize_site_data’, <nobr><span class="arg-type">array</span> <span class="arg-name">$data</span></nobr> )</a></dt>
+<dd>
+<p>Filters passed site data in order to normalize it.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_validate_site_data"><span class="hook-func">do_action</span>( ‘wp_validate_site_data’, <nobr><span class="arg-type">WP_Error</span> <span class="arg-name">$errors</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$data</span></nobr>, <nobr><span class="arg-type">WP_Site|null</span> <span class="arg-name">$old_site</span></nobr> )</a></dt>
+<dd>
+<p>Fires when data should be validated for a site prior to inserting or updating in the database.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_prepare_site_data" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_prepare_site_data</a>
+  </p>
+</div>

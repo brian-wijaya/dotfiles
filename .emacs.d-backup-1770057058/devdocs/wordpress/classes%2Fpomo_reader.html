@@ -1,0 +1,199 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> POMO_Reader {}</h1>  <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="pomo_reader/__construct">POMO_Reader::__construct</a></td>
+<td>PHP5 constructor.</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/close">POMO_Reader::close</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/is_resource">POMO_Reader::is_resource</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/pomo_reader">POMO_Reader::POMO_Reader</a></td>
+<td>PHP4 constructor. — <span class="deprecated-method">deprecated</span>
+</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/pos">POMO_Reader::pos</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/readint32">POMO_Reader::readint32</a></td>
+<td>Reads a 32bit Integer from the Stream</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/readint32array">POMO_Reader::readint32array</a></td>
+<td>Reads an array of 32-bit Integers from the Stream</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/setendian">POMO_Reader::setEndian</a></td>
+<td>Sets the endianness of the file.</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/str_split">POMO_Reader::str_split</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/strlen">POMO_Reader::strlen</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="pomo_reader/substr">POMO_Reader::substr</a></td>
+<td>–</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="13" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class POMO_Reader {
+
+	public $endian = 'little';
+	public $_pos;
+	public $is_overloaded;
+
+	/**
+	 * PHP5 constructor.
+	 */
+	public function __construct() {
+		if ( function_exists( 'mb_substr' )
+			&amp;&amp; ( (int) ini_get( 'mbstring.func_overload' ) &amp; 2 ) // phpcs:ignore PHPCompatibility.IniDirectives.RemovedIniDirectives.mbstring_func_overloadDeprecated
+		) {
+			$this-&gt;is_overloaded = true;
+		} else {
+			$this-&gt;is_overloaded = false;
+		}
+
+		$this-&gt;_pos = 0;
+	}
+
+	/**
+	 * PHP4 constructor.
+	 *
+	 * @deprecated 5.4.0 Use __construct() instead.
+	 *
+	 * @see POMO_Reader::__construct()
+	 */
+	public function POMO_Reader() {
+		_deprecated_constructor( self::class, '5.4.0', static::class );
+		self::__construct();
+	}
+
+	/**
+	 * Sets the endianness of the file.
+	 *
+	 * @param string $endian Set the endianness of the file. Accepts 'big', or 'little'.
+	 */
+	public function setEndian( $endian ) { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid
+		$this-&gt;endian = $endian;
+	}
+
+	/**
+	 * Reads a 32bit Integer from the Stream
+	 *
+	 * @return mixed The integer, corresponding to the next 32 bits from
+	 *  the stream of false if there are not enough bytes or on error
+	 */
+	public function readint32() {
+		$bytes = $this-&gt;read( 4 );
+		if ( 4 !== $this-&gt;strlen( $bytes ) ) {
+			return false;
+		}
+		$endian_letter = ( 'big' === $this-&gt;endian ) ? 'N' : 'V';
+		$int           = unpack( $endian_letter, $bytes );
+		return reset( $int );
+	}
+
+	/**
+	 * Reads an array of 32-bit Integers from the Stream
+	 *
+	 * @param int $count How many elements should be read
+	 * @return mixed Array of integers or false if there isn't
+	 *  enough data or on error
+	 */
+	public function readint32array( $count ) {
+		$bytes = $this-&gt;read( 4 * $count );
+		if ( 4 * $count !== $this-&gt;strlen( $bytes ) ) {
+			return false;
+		}
+		$endian_letter = ( 'big' === $this-&gt;endian ) ? 'N' : 'V';
+		return unpack( $endian_letter . $count, $bytes );
+	}
+
+	/**
+	 * @param string $input_string
+	 * @param int    $start
+	 * @param int    $length
+	 * @return string
+	 */
+	public function substr( $input_string, $start, $length ) {
+		if ( $this-&gt;is_overloaded ) {
+			return mb_substr( $input_string, $start, $length, 'ascii' );
+		} else {
+			return substr( $input_string, $start, $length );
+		}
+	}
+
+	/**
+	 * @param string $input_string
+	 * @return int
+	 */
+	public function strlen( $input_string ) {
+		if ( $this-&gt;is_overloaded ) {
+			return mb_strlen( $input_string, 'ascii' );
+		} else {
+			return strlen( $input_string );
+		}
+	}
+
+	/**
+	 * @param string $input_string
+	 * @param int    $chunk_size
+	 * @return array
+	 */
+	public function str_split( $input_string, $chunk_size ) {
+		if ( ! function_exists( 'str_split' ) ) {
+			$length = $this-&gt;strlen( $input_string );
+			$out    = array();
+			for ( $i = 0; $i &lt; $length; $i += $chunk_size ) {
+				$out[] = $this-&gt;substr( $input_string, $i, $chunk_size );
+			}
+			return $out;
+		} else {
+			return str_split( $input_string, $chunk_size );
+		}
+	}
+
+	/**
+	 * @return int
+	 */
+	public function pos() {
+		return $this-&gt;_pos;
+	}
+
+	/**
+	 * @return true
+	 */
+	public function is_resource() {
+		return true;
+	}
+
+	/**
+	 * @return true
+	 */
+	public function close() {
+		return true;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/pomo/streams.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/pomo/streams.php#L13">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/pomo/streams.php#L13-L151">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/pomo_reader" class="_attribution-link">https://developer.wordpress.org/reference/classes/pomo_reader</a>
+  </p>
+</div>

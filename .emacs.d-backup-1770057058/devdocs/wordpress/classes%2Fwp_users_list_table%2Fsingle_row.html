@@ -1,0 +1,262 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Users_List_Table::single_row( <span class="arg-type">WP_User</span> <span class="arg-name">$user_object</span>, <span class="arg-type">string</span> <span class="arg-name">$style</span> = <span class="arg-default">”</span>, <span class="arg-type">string</span> <span class="arg-name">$role</span> = <span class="arg-default">”</span>, <span class="arg-type">int</span> <span class="arg-name">$numposts</span> ): <span class="return-type">string</span>
+</h1> <section><p>Generates HTML for a single row on the users.php admin panel.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$user_object</code><span class="type"><span class="WP_User"><a href="../wp_user" rel="class">WP_User</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The current user object.</span></div></dd>
+<dt>
+<code>$style</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Deprecated. Not used.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$role</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Deprecated. Not used.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$numposts</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Post count to display for this user. Defaults to zero, as in, a new user has made zero posts.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Output for a single row.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="433" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function single_row( $user_object, $style = '', $role = '', $numposts = 0 ) {
+	if ( ! ( $user_object instanceof WP_User ) ) {
+		$user_object = get_userdata( (int) $user_object );
+	}
+	$user_object-&gt;filter = 'display';
+	$email               = $user_object-&gt;user_email;
+
+	if ( $this-&gt;is_site_users ) {
+		$url = "site-users.php?id={$this-&gt;site_id}&amp;amp;";
+	} else {
+		$url = 'users.php?';
+	}
+
+	$user_roles = $this-&gt;get_role_list( $user_object );
+
+	// Set up the hover actions for this user.
+	$actions     = array();
+	$checkbox    = '';
+	$super_admin = '';
+
+	if ( is_multisite() &amp;&amp; current_user_can( 'manage_network_users' ) ) {
+		if ( in_array( $user_object-&gt;user_login, get_super_admins(), true ) ) {
+			$super_admin = ' &amp;mdash; ' . __( 'Super Admin' );
+		}
+	}
+
+	// Check if the user for this row is editable.
+	if ( current_user_can( 'list_users' ) ) {
+		// Set up the user editing link.
+		$edit_link = esc_url(
+			add_query_arg(
+				'wp_http_referer',
+				urlencode( wp_unslash( $_SERVER['REQUEST_URI'] ) ),
+				get_edit_user_link( $user_object-&gt;ID )
+			)
+		);
+
+		if ( current_user_can( 'edit_user', $user_object-&gt;ID ) ) {
+			$edit            = "&lt;strong&gt;&lt;a href=\"{$edit_link}\"&gt;{$user_object-&gt;user_login}&lt;/a&gt;{$super_admin}&lt;/strong&gt;&lt;br /&gt;";
+			$actions['edit'] = '&lt;a href="' . $edit_link . '"&gt;' . __( 'Edit' ) . '&lt;/a&gt;';
+		} else {
+			$edit = "&lt;strong&gt;{$user_object-&gt;user_login}{$super_admin}&lt;/strong&gt;&lt;br /&gt;";
+		}
+
+		if ( ! is_multisite()
+			&amp;&amp; get_current_user_id() !== $user_object-&gt;ID
+			&amp;&amp; current_user_can( 'delete_user', $user_object-&gt;ID )
+		) {
+			$actions['delete'] = "&lt;a class='submitdelete' href='" . wp_nonce_url( "users.php?action=delete&amp;amp;user=$user_object-&gt;ID", 'bulk-users' ) . "'&gt;" . __( 'Delete' ) . '&lt;/a&gt;';
+		}
+
+		if ( is_multisite()
+			&amp;&amp; current_user_can( 'remove_user', $user_object-&gt;ID )
+		) {
+			$actions['remove'] = "&lt;a class='submitdelete' href='" . wp_nonce_url( $url . "action=remove&amp;amp;user=$user_object-&gt;ID", 'bulk-users' ) . "'&gt;" . __( 'Remove' ) . '&lt;/a&gt;';
+		}
+
+		// Add a link to the user's author archive, if not empty.
+		$author_posts_url = get_author_posts_url( $user_object-&gt;ID );
+		if ( $author_posts_url ) {
+			$actions['view'] = sprintf(
+				'&lt;a href="%s" aria-label="%s"&gt;%s&lt;/a&gt;',
+				esc_url( $author_posts_url ),
+				/* translators: %s: Author's display name. */
+				esc_attr( sprintf( __( 'View posts by %s' ), $user_object-&gt;display_name ) ),
+				__( 'View' )
+			);
+		}
+
+		// Add a link to send the user a reset password link by email.
+		if ( get_current_user_id() !== $user_object-&gt;ID
+			&amp;&amp; current_user_can( 'edit_user', $user_object-&gt;ID )
+			&amp;&amp; true === wp_is_password_reset_allowed_for_user( $user_object )
+		) {
+			$actions['resetpassword'] = "&lt;a class='resetpassword' href='" . wp_nonce_url( "users.php?action=resetpassword&amp;amp;users=$user_object-&gt;ID", 'bulk-users' ) . "'&gt;" . __( 'Send password reset' ) . '&lt;/a&gt;';
+		}
+
+		/**
+		 * Filters the action links displayed under each user in the Users list table.
+		 *
+		 * @since 2.8.0
+		 *
+		 * @param string[] $actions     An array of action links to be displayed.
+		 *                              Default 'Edit', 'Delete' for single site, and
+		 *                              'Edit', 'Remove' for Multisite.
+		 * @param WP_User  $user_object WP_User object for the currently listed user.
+		 */
+		$actions = apply_filters( 'user_row_actions', $actions, $user_object );
+
+		// Role classes.
+		$role_classes = esc_attr( implode( ' ', array_keys( $user_roles ) ) );
+
+		// Set up the checkbox (because the user is editable, otherwise it's empty).
+		$checkbox = sprintf(
+			'&lt;input type="checkbox" name="users[]" id="user_%1$s" class="%2$s" value="%1$s" /&gt;' .
+			'&lt;label for="user_%1$s"&gt;&lt;span class="screen-reader-text"&gt;%3$s&lt;/span&gt;&lt;/label&gt;',
+			$user_object-&gt;ID,
+			$role_classes,
+			/* translators: Hidden accessibility text. %s: User login. */
+			sprintf( __( 'Select %s' ), $user_object-&gt;user_login )
+		);
+
+	} else {
+		$edit = "&lt;strong&gt;{$user_object-&gt;user_login}{$super_admin}&lt;/strong&gt;";
+	}
+
+	$avatar = get_avatar( $user_object-&gt;ID, 32 );
+
+	// Comma-separated list of user roles.
+	$roles_list = implode( ', ', $user_roles );
+
+	$row = "&lt;tr id='user-$user_object-&gt;ID'&gt;";
+
+	list( $columns, $hidden, $sortable, $primary ) = $this-&gt;get_column_info();
+
+	foreach ( $columns as $column_name =&gt; $column_display_name ) {
+		$classes = "$column_name column-$column_name";
+		if ( $primary === $column_name ) {
+			$classes .= ' has-row-actions column-primary';
+		}
+		if ( 'posts' === $column_name ) {
+			$classes .= ' num'; // Special case for that column.
+		}
+
+		if ( in_array( $column_name, $hidden, true ) ) {
+			$classes .= ' hidden';
+		}
+
+		$data = 'data-colname="' . esc_attr( wp_strip_all_tags( $column_display_name ) ) . '"';
+
+		$attributes = "class='$classes' $data";
+
+		if ( 'cb' === $column_name ) {
+			$row .= "&lt;th scope='row' class='check-column'&gt;$checkbox&lt;/th&gt;";
+		} else {
+			$row .= "&lt;td $attributes&gt;";
+			switch ( $column_name ) {
+				case 'username':
+					$row .= "$avatar $edit";
+					break;
+				case 'name':
+					if ( $user_object-&gt;first_name &amp;&amp; $user_object-&gt;last_name ) {
+						$row .= sprintf(
+							/* translators: 1: User's first name, 2: Last name. */
+							_x( '%1$s %2$s', 'Display name based on first name and last name' ),
+							$user_object-&gt;first_name,
+							$user_object-&gt;last_name
+						);
+					} elseif ( $user_object-&gt;first_name ) {
+						$row .= $user_object-&gt;first_name;
+					} elseif ( $user_object-&gt;last_name ) {
+						$row .= $user_object-&gt;last_name;
+					} else {
+						$row .= sprintf(
+							'&lt;span aria-hidden="true"&gt;&amp;#8212;&lt;/span&gt;&lt;span class="screen-reader-text"&gt;%s&lt;/span&gt;',
+							/* translators: Hidden accessibility text. */
+							_x( 'Unknown', 'name' )
+						);
+					}
+					break;
+				case 'email':
+					$row .= "&lt;a href='" . esc_url( "mailto:$email" ) . "'&gt;$email&lt;/a&gt;";
+					break;
+				case 'role':
+					$row .= esc_html( $roles_list );
+					break;
+				case 'posts':
+					if ( $numposts &gt; 0 ) {
+						$row .= sprintf(
+							'&lt;a href="%s" class="edit"&gt;&lt;span aria-hidden="true"&gt;%s&lt;/span&gt;&lt;span class="screen-reader-text"&gt;%s&lt;/span&gt;&lt;/a&gt;',
+							"edit.php?author={$user_object-&gt;ID}",
+							$numposts,
+							sprintf(
+								/* translators: Hidden accessibility text. %s: Number of posts. */
+								_n( '%s post by this author', '%s posts by this author', $numposts ),
+								number_format_i18n( $numposts )
+							)
+						);
+					} else {
+						$row .= 0;
+					}
+					break;
+				default:
+					/**
+					 * Filters the display output of custom columns in the Users list table.
+					 *
+					 * @since 2.8.0
+					 *
+					 * @param string $output      Custom column output. Default empty.
+					 * @param string $column_name Column name.
+					 * @param int    $user_id     ID of the currently-listed user.
+					 */
+					$row .= apply_filters( 'manage_users_custom_column', '', $column_name, $user_object-&gt;ID );
+			}
+
+			if ( $primary === $column_name ) {
+				$row .= $this-&gt;row_actions( $actions );
+			}
+			$row .= '&lt;/td&gt;';
+		}
+	}
+	$row .= '&lt;/tr&gt;';
+
+	return $row;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-users-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-users-list-table.php#L433">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-users-list-table.php#L433-L637">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/manage_users_custom_column"><span class="hook-func">apply_filters</span>( ‘manage_users_custom_column’, <nobr><span class="arg-type">string</span> <span class="arg-name">$output</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$column_name</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$user_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the display output of custom columns in the Users list table.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/user_row_actions"><span class="hook-func">apply_filters</span>( ‘user_row_actions’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$actions</span></nobr>, <nobr><span class="arg-type">WP_User</span> <span class="arg-name">$user_object</span></nobr> )</a></dt>
+<dd>
+<p>Filters the action links displayed under each user in the Users list table.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">The <code>$role</code> parameter was deprecated.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td><span class="since-description">The <code>$style</code> parameter was deprecated.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_users_list_table/single_row" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_users_list_table/single_row</a>
+  </p>
+</div>

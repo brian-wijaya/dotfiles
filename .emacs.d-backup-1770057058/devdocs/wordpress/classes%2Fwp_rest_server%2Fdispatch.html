@@ -1,0 +1,93 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Server::dispatch( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span>
+</h1> <section><p>Matches the request to a callback and call it.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Request to attempt dispatching.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span> Response returned by the callback.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1062" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function dispatch( $request ) {
+	$this-&gt;dispatching_requests[] = $request;
+
+	/**
+	 * Filters the pre-calculated result of a REST API dispatch request.
+	 *
+	 * Allow hijacking the request before dispatching by returning a non-empty. The returned value
+	 * will be used to serve the request instead.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param mixed           $result  Response to replace the requested version with. Can be anything
+	 *                                 a normal endpoint can return, or null to not hijack the request.
+	 * @param WP_REST_Server  $server  Server instance.
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 */
+	$result = apply_filters( 'rest_pre_dispatch', null, $this, $request );
+
+	if ( ! empty( $result ) ) {
+
+		// Normalize to either WP_Error or WP_REST_Response...
+		$result = rest_ensure_response( $result );
+
+		// ...then convert WP_Error across.
+		if ( is_wp_error( $result ) ) {
+			$result = $this-&gt;error_to_response( $result );
+		}
+
+		array_pop( $this-&gt;dispatching_requests );
+		return $result;
+	}
+
+	$error   = null;
+	$matched = $this-&gt;match_request_to_handler( $request );
+
+	if ( is_wp_error( $matched ) ) {
+		$response = $this-&gt;error_to_response( $matched );
+		array_pop( $this-&gt;dispatching_requests );
+		return $response;
+	}
+
+	list( $route, $handler ) = $matched;
+
+	if ( ! is_callable( $handler['callback'] ) ) {
+		$error = new WP_Error(
+			'rest_invalid_handler',
+			__( 'The handler for the route is invalid.' ),
+			array( 'status' =&gt; 500 )
+		);
+	}
+
+	if ( ! is_wp_error( $error ) ) {
+		$check_required = $request-&gt;has_valid_params();
+		if ( is_wp_error( $check_required ) ) {
+			$error = $check_required;
+		} else {
+			$check_sanitized = $request-&gt;sanitize_params();
+			if ( is_wp_error( $check_sanitized ) ) {
+				$error = $check_sanitized;
+			}
+		}
+	}
+
+	$response = $this-&gt;respond_to_request( $request, $route, $handler, $error );
+	array_pop( $this-&gt;dispatching_requests );
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/class-wp-rest-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/class-wp-rest-server.php#L1062">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/class-wp-rest-server.php#L1062-L1128">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_pre_dispatch"><span class="hook-func">apply_filters</span>( ‘rest_pre_dispatch’, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$result</span></nobr>, <nobr><span class="arg-type">WP_REST_Server</span> <span class="arg-name">$server</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Filters the pre-calculated result of a REST API dispatch request.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_server/dispatch" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_server/dispatch</a>
+  </p>
+</div>

@@ -1,0 +1,128 @@
+<h1 class="wp-block-wporg-code-reference-title">update_meta_cache( <span class="arg-type">string</span> <span class="arg-name">$meta_type</span>, <span class="arg-type">string|int[]</span> <span class="arg-name">$object_ids</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Updates the metadata cache for the specified objects.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$meta_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Type of object metadata is for. Accepts <code>'post'</code>, <code>'comment'</code>, <code>'term'</code>, <code>'user'</code>, or any other object type with an associated meta table.</span></div></dd>
+<dt>
+<code>$object_ids</code><span class="type"><span class="string">string</span>|<span class="int[]">int[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array or comma delimited list of object IDs to update cache for.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> Metadata cache for the specified objects, or false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1112" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function update_meta_cache( $meta_type, $object_ids ) {
+	global $wpdb;
+
+	if ( ! $meta_type || ! $object_ids ) {
+		return false;
+	}
+
+	$table = _get_meta_table( $meta_type );
+	if ( ! $table ) {
+		return false;
+	}
+
+	$column = sanitize_key( $meta_type . '_id' );
+
+	if ( ! is_array( $object_ids ) ) {
+		$object_ids = preg_replace( '|[^0-9,]|', '', $object_ids );
+		$object_ids = explode( ',', $object_ids );
+	}
+
+	$object_ids = array_map( 'intval', $object_ids );
+
+	/**
+	 * Short-circuits updating the metadata cache of a specific type.
+	 *
+	 * The dynamic portion of the hook name, `$meta_type`, refers to the meta object type
+	 * (post, comment, term, user, or any other type with an associated meta table).
+	 * Returning a non-null value will effectively short-circuit the function.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `update_post_metadata_cache`
+	 *  - `update_comment_metadata_cache`
+	 *  - `update_term_metadata_cache`
+	 *  - `update_user_metadata_cache`
+	 *
+	 * @since 5.0.0
+	 *
+	 * @param mixed $check      Whether to allow updating the meta cache of the given type.
+	 * @param int[] $object_ids Array of object IDs to update the meta cache for.
+	 */
+	$check = apply_filters( "update_{$meta_type}_metadata_cache", null, $object_ids );
+	if ( null !== $check ) {
+		return (bool) $check;
+	}
+
+	$cache_key      = $meta_type . '_meta';
+	$non_cached_ids = array();
+	$cache          = array();
+	$cache_values   = wp_cache_get_multiple( $object_ids, $cache_key );
+
+	foreach ( $cache_values as $id =&gt; $cached_object ) {
+		if ( false === $cached_object ) {
+			$non_cached_ids[] = $id;
+		} else {
+			$cache[ $id ] = $cached_object;
+		}
+	}
+
+	if ( empty( $non_cached_ids ) ) {
+		return $cache;
+	}
+
+	// Get meta info.
+	$id_list   = implode( ',', $non_cached_ids );
+	$id_column = ( 'user' === $meta_type ) ? 'umeta_id' : 'meta_id';
+
+	$meta_list = $wpdb-&gt;get_results( "SELECT $column, meta_key, meta_value FROM $table WHERE $column IN ($id_list) ORDER BY $id_column ASC", ARRAY_A );
+
+	if ( ! empty( $meta_list ) ) {
+		foreach ( $meta_list as $metarow ) {
+			$mpid = (int) $metarow[ $column ];
+			$mkey = $metarow['meta_key'];
+			$mval = $metarow['meta_value'];
+
+			// Force subkeys to be array type.
+			if ( ! isset( $cache[ $mpid ] ) || ! is_array( $cache[ $mpid ] ) ) {
+				$cache[ $mpid ] = array();
+			}
+			if ( ! isset( $cache[ $mpid ][ $mkey ] ) || ! is_array( $cache[ $mpid ][ $mkey ] ) ) {
+				$cache[ $mpid ][ $mkey ] = array();
+			}
+
+			// Add a value to the current pid/key.
+			$cache[ $mpid ][ $mkey ][] = $mval;
+		}
+	}
+
+	$data = array();
+	foreach ( $non_cached_ids as $id ) {
+		if ( ! isset( $cache[ $id ] ) ) {
+			$cache[ $id ] = array();
+		}
+		$data[ $id ] = $cache[ $id ];
+	}
+	wp_cache_add_multiple( $data, $cache_key );
+
+	return $cache;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/meta.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/meta.php#L1112">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/meta.php#L1112-L1209">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/update_meta_type_metadata_cache"><span class="hook-func">apply_filters</span>( “update_{$meta_type}_metadata_cache”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$check</span></nobr>, <nobr><span class="arg-type">int[]</span> <span class="arg-name">$object_ids</span></nobr> )</a></dt>
+<dd>
+<p>Short-circuits updating the metadata cache of a specific type.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.9.0/">2.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/update_meta_cache" class="_attribution-link">https://developer.wordpress.org/reference/functions/update_meta_cache</a>
+  </p>
+</div>

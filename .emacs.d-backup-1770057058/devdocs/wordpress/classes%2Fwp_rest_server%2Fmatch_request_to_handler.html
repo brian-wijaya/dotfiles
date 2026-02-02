@@ -1,0 +1,94 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Server::match_request_to_handler( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type">array|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Matches a request object to its handler.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The request object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../wp_error" rel="class">WP_Error</a></span> The route and request handler on success or a <a href="../wp_error" rel="class">WP_Error</a> instance if no handler was found.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1152" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function match_request_to_handler( $request ) {
+	$method = $request-&gt;get_method();
+	$path   = $request-&gt;get_route();
+
+	$with_namespace = array();
+
+	foreach ( $this-&gt;get_namespaces() as $namespace ) {
+		if ( str_starts_with( trailingslashit( ltrim( $path, '/' ) ), $namespace ) ) {
+			$with_namespace[] = $this-&gt;get_routes( $namespace );
+		}
+	}
+
+	if ( $with_namespace ) {
+		$routes = array_merge( ...$with_namespace );
+	} else {
+		$routes = $this-&gt;get_routes();
+	}
+
+	foreach ( $routes as $route =&gt; $handlers ) {
+		$match = preg_match( '@^' . $route . '$@i', $path, $matches );
+
+		if ( ! $match ) {
+			continue;
+		}
+
+		$args = array();
+
+		foreach ( $matches as $param =&gt; $value ) {
+			if ( ! is_int( $param ) ) {
+				$args[ $param ] = $value;
+			}
+		}
+
+		foreach ( $handlers as $handler ) {
+			$callback = $handler['callback'];
+
+			// Fallback to GET method if no HEAD method is registered.
+			$checked_method = $method;
+			if ( 'HEAD' === $method &amp;&amp; empty( $handler['methods']['HEAD'] ) ) {
+				$checked_method = 'GET';
+			}
+			if ( empty( $handler['methods'][ $checked_method ] ) ) {
+				continue;
+			}
+
+			if ( ! is_callable( $callback ) ) {
+				return array( $route, $handler );
+			}
+
+			$request-&gt;set_url_params( $args );
+			$request-&gt;set_attributes( $handler );
+
+			$defaults = array();
+
+			foreach ( $handler['args'] as $arg =&gt; $options ) {
+				if ( isset( $options['default'] ) ) {
+					$defaults[ $arg ] = $options['default'];
+				}
+			}
+
+			$request-&gt;set_default_params( $defaults );
+
+			return array( $route, $handler );
+		}
+	}
+
+	return new WP_Error(
+		'rest_no_route',
+		__( 'No route was found matching the URL and request method.' ),
+		array( 'status' =&gt; 404 )
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/class-wp-rest-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/class-wp-rest-server.php#L1152">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/class-wp-rest-server.php#L1152-L1223">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_server/match_request_to_handler" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_server/match_request_to_handler</a>
+  </p>
+</div>

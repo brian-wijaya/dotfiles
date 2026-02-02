@@ -1,0 +1,97 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Terms_List_Table::_rows( <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span>, <span class="arg-type">array</span> <span class="arg-name">$terms</span>, <span class="arg-type">array</span> <span class="arg-name">$children</span>, <span class="arg-type">int</span> <span class="arg-name">$start</span>, <span class="arg-type">int</span> <span class="arg-name">$per_page</span>, <span class="arg-type">int</span> <span class="arg-name">$count</span>, <span class="arg-type">int</span> <span class="arg-name">$parent_term</span>, <span class="arg-type">int</span> <span class="arg-name">$level</span> )</h1>  <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$terms</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$children</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$start</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$per_page</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$count</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$parent_term</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$level</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="274" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function _rows( $taxonomy, $terms, &amp;$children, $start, $per_page, &amp;$count, $parent_term = 0, $level = 0 ) {
+
+	$end = $start + $per_page;
+
+	foreach ( $terms as $key =&gt; $term ) {
+
+		if ( $count &gt;= $end ) {
+			break;
+		}
+
+		if ( $term-&gt;parent !== $parent_term &amp;&amp; empty( $_REQUEST['s'] ) ) {
+			continue;
+		}
+
+		// If the page starts in a subtree, print the parents.
+		if ( $count === $start &amp;&amp; $term-&gt;parent &gt; 0 &amp;&amp; empty( $_REQUEST['s'] ) ) {
+			$my_parents = array();
+			$parent_ids = array();
+			$p          = $term-&gt;parent;
+
+			while ( $p ) {
+				$my_parent    = get_term( $p, $taxonomy );
+				$my_parents[] = $my_parent;
+				$p            = $my_parent-&gt;parent;
+
+				if ( in_array( $p, $parent_ids, true ) ) { // Prevent parent loops.
+					break;
+				}
+
+				$parent_ids[] = $p;
+			}
+
+			unset( $parent_ids );
+
+			$num_parents = count( $my_parents );
+
+			while ( $my_parent = array_pop( $my_parents ) ) {
+				echo "\t";
+				$this-&gt;single_row( $my_parent, $level - $num_parents );
+				--$num_parents;
+			}
+		}
+
+		if ( $count &gt;= $start ) {
+			echo "\t";
+			$this-&gt;single_row( $term, $level );
+		}
+
+		++$count;
+
+		unset( $terms[ $key ] );
+
+		if ( isset( $children[ $term-&gt;term_id ] ) &amp;&amp; empty( $_REQUEST['s'] ) ) {
+			$this-&gt;_rows( $taxonomy, $terms, $children, $start, $per_page, $count, $term-&gt;term_id, $level + 1 );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-terms-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-terms-list-table.php#L274">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-terms-list-table.php#L274-L330">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_terms_list_table/_rows" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_terms_list_table/_rows</a>
+  </p>
+</div>

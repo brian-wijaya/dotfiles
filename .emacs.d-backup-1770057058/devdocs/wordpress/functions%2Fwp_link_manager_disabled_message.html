@@ -1,0 +1,65 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_link_manager_disabled_message()</h1> <section><p>Outputs the ‘disabled’ message for the WordPress Link Manager.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="331" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_link_manager_disabled_message() {
+	global $pagenow;
+
+	if ( ! in_array( $pagenow, array( 'link-manager.php', 'link-add.php', 'link.php' ), true ) ) {
+		return;
+	}
+
+	add_filter( 'pre_option_link_manager_enabled', '__return_true', 100 );
+	$really_can_manage_links = current_user_can( 'manage_links' );
+	remove_filter( 'pre_option_link_manager_enabled', '__return_true', 100 );
+
+	if ( $really_can_manage_links ) {
+		$plugins = get_plugins();
+
+		if ( empty( $plugins['link-manager/link-manager.php'] ) ) {
+			if ( current_user_can( 'install_plugins' ) ) {
+				$install_url = wp_nonce_url(
+					self_admin_url( 'update.php?action=install-plugin&amp;plugin=link-manager' ),
+					'install-plugin_link-manager'
+				);
+
+				wp_die(
+					sprintf(
+						/* translators: %s: A link to install the Link Manager plugin. */
+						__( 'If you are looking to use the link manager, please install the &lt;a href="%s"&gt;Link Manager plugin&lt;/a&gt;.' ),
+						esc_url( $install_url )
+					)
+				);
+			}
+		} elseif ( is_plugin_inactive( 'link-manager/link-manager.php' ) ) {
+			if ( current_user_can( 'activate_plugins' ) ) {
+				$activate_url = wp_nonce_url(
+					self_admin_url( 'plugins.php?action=activate&amp;plugin=link-manager/link-manager.php' ),
+					'activate-plugin_link-manager/link-manager.php'
+				);
+
+				wp_die(
+					sprintf(
+						/* translators: %s: A link to activate the Link Manager plugin. */
+						__( 'Please activate the &lt;a href="%s"&gt;Link Manager plugin&lt;/a&gt; to use the link manager.' ),
+						esc_url( $activate_url )
+					)
+				);
+			}
+		}
+	}
+
+	wp_die( __( 'Sorry, you are not allowed to edit the links for this site.' ) );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/bookmark.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/bookmark.php#L331">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/bookmark.php#L331-L379">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.5.0/">3.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_link_manager_disabled_message" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_link_manager_disabled_message</a>
+  </p>
+</div>

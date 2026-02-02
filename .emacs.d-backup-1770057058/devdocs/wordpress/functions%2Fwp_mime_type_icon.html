@@ -1,0 +1,190 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_mime_type_icon( <span class="arg-type">string|int</span> <span class="arg-name">$mime</span>, <span class="arg-type">string</span> <span class="arg-name">$preferred_ext</span> = <span class="arg-default">‘.png’</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Retrieves the icon for a MIME type or attachment.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$mime</code><span class="type"><span class="string">string</span>|<span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">MIME type or attachment ID.</span></div></dd>
+<dt>
+<code>$preferred_ext</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">File format to prefer in return. Default <code>'.png'</code>.</span></div>
+<p class="default">Default:<code>'.png'</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> Icon, false otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="7043" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_mime_type_icon( $mime = 0, $preferred_ext = '.png' ) {
+	if ( ! is_numeric( $mime ) ) {
+		$icon = wp_cache_get( "mime_type_icon_$mime" );
+	}
+
+	// Check if preferred file format variable is present and is a validly formatted file extension.
+	if ( ! empty( $preferred_ext ) &amp;&amp; is_string( $preferred_ext ) &amp;&amp; ! str_starts_with( $preferred_ext, '.' ) ) {
+		$preferred_ext = '.' . strtolower( $preferred_ext );
+	}
+
+	$post_id = 0;
+	if ( empty( $icon ) ) {
+		$post_mimes = array();
+		if ( is_numeric( $mime ) ) {
+			$mime = (int) $mime;
+			$post = get_post( $mime );
+			if ( $post ) {
+				$post_id = (int) $post-&gt;ID;
+				$file    = get_attached_file( $post_id );
+				$ext     = preg_replace( '/^.+?\.([^.]+)$/', '$1', $file );
+				if ( ! empty( $ext ) ) {
+					$post_mimes[] = $ext;
+					$ext_type     = wp_ext2type( $ext );
+					if ( $ext_type ) {
+						$post_mimes[] = $ext_type;
+					}
+				}
+				$mime = $post-&gt;post_mime_type;
+			} else {
+				$mime = 0;
+			}
+		} else {
+			$post_mimes[] = $mime;
+		}
+
+		$icon_files = wp_cache_get( 'icon_files' );
+
+		if ( ! is_array( $icon_files ) ) {
+			/**
+			 * Filters the icon directory path.
+			 *
+			 * @since 2.0.0
+			 *
+			 * @param string $path Icon directory absolute path.
+			 */
+			$icon_dir = apply_filters( 'icon_dir', ABSPATH . WPINC . '/images/media' );
+
+			/**
+			 * Filters the icon directory URI.
+			 *
+			 * @since 2.0.0
+			 *
+			 * @param string $uri Icon directory URI.
+			 */
+			$icon_dir_uri = apply_filters( 'icon_dir_uri', includes_url( 'images/media' ) );
+
+			/**
+			 * Filters the array of icon directory URIs.
+			 *
+			 * @since 2.5.0
+			 *
+			 * @param string[] $uris Array of icon directory URIs keyed by directory absolute path.
+			 */
+			$dirs       = apply_filters( 'icon_dirs', array( $icon_dir =&gt; $icon_dir_uri ) );
+			$icon_files = array();
+			$all_icons  = array();
+			while ( $dirs ) {
+				$keys = array_keys( $dirs );
+				$dir  = array_shift( $keys );
+				$uri  = array_shift( $dirs );
+				$dh   = opendir( $dir );
+				if ( $dh ) {
+					while ( false !== $file = readdir( $dh ) ) {
+						$file = wp_basename( $file );
+						if ( str_starts_with( $file, '.' ) ) {
+							continue;
+						}
+
+						$ext = strtolower( substr( $file, -4 ) );
+						if ( ! in_array( $ext, array( '.svg', '.png', '.gif', '.jpg' ), true ) ) {
+							if ( is_dir( "$dir/$file" ) ) {
+								$dirs[ "$dir/$file" ] = "$uri/$file";
+							}
+							continue;
+						}
+						$all_icons[ "$dir/$file" ] = "$uri/$file";
+						if ( $ext === $preferred_ext ) {
+							$icon_files[ "$dir/$file" ] = "$uri/$file";
+						}
+					}
+					closedir( $dh );
+				}
+			}
+			// If directory only contained icons of a non-preferred format, return those.
+			if ( empty( $icon_files ) ) {
+				$icon_files = $all_icons;
+			}
+			wp_cache_add( 'icon_files', $icon_files, 'default', 600 );
+		}
+
+		$types = array();
+		// Icon wp_basename - extension = MIME wildcard.
+		foreach ( $icon_files as $file =&gt; $uri ) {
+			$types[ preg_replace( '/^([^.]*).*$/', '$1', wp_basename( $file ) ) ] =&amp; $icon_files[ $file ];
+		}
+
+		if ( ! empty( $mime ) ) {
+			$post_mimes[] = substr( $mime, 0, strpos( $mime, '/' ) );
+			$post_mimes[] = substr( $mime, strpos( $mime, '/' ) + 1 );
+			$post_mimes[] = str_replace( '/', '_', $mime );
+		}
+
+		$matches            = wp_match_mime_types( array_keys( $types ), $post_mimes );
+		$matches['default'] = array( 'default' );
+
+		foreach ( $matches as $match =&gt; $wilds ) {
+			foreach ( $wilds as $wild ) {
+				if ( ! isset( $types[ $wild ] ) ) {
+					continue;
+				}
+
+				$icon = $types[ $wild ];
+				if ( ! is_numeric( $mime ) ) {
+					wp_cache_add( "mime_type_icon_$mime", $icon );
+				}
+				break 2;
+			}
+		}
+	}
+
+	/**
+	 * Filters the mime type icon.
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param string $icon    Path to the mime type icon.
+	 * @param string $mime    Mime type.
+	 * @param int    $post_id Attachment ID. Will equal 0 if the function passed
+	 *                        the mime type.
+	 */
+	return apply_filters( 'wp_mime_type_icon', $icon, $mime, $post_id );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L7043">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L7043-L7184">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/icon_dir"><span class="hook-func">apply_filters</span>( ‘icon_dir’, <nobr><span class="arg-type">string</span> <span class="arg-name">$path</span></nobr> )</a></dt>
+<dd>
+<p>Filters the icon directory path.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/icon_dirs"><span class="hook-func">apply_filters</span>( ‘icon_dirs’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$uris</span></nobr> )</a></dt>
+<dd>
+<p>Filters the array of icon directory URIs.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/icon_dir_uri"><span class="hook-func">apply_filters</span>( ‘icon_dir_uri’, <nobr><span class="arg-type">string</span> <span class="arg-name">$uri</span></nobr> )</a></dt>
+<dd>
+<p>Filters the icon directory URI.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_mime_type_icon"><span class="hook-func">apply_filters</span>( ‘wp_mime_type_icon’, <nobr><span class="arg-type">string</span> <span class="arg-name">$icon</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$mime</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the mime type icon.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.5.0/">6.5.0</a></td>
+<td><span class="since-description">Added the <code>$preferred_ext</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_mime_type_icon" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_mime_type_icon</a>
+  </p>
+</div>

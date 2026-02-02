@@ -1,0 +1,115 @@
+<h1 class="wp-block-wporg-code-reference-title">_wp_make_subsizes( <span class="arg-type">array</span> <span class="arg-name">$new_sizes</span>, <span class="arg-type">string</span> <span class="arg-name">$file</span>, <span class="arg-type">array</span> <span class="arg-name">$image_meta</span>, <span class="arg-type">int</span> <span class="arg-name">$attachment_id</span> ): <span class="return-type">array</span>
+</h1> <section><p>Low-level function to create image sub-sizes.</p> </section> <section><h2 id="description">Description</h2> <p>Updates the image meta after each sub-size is created.<br>Errors are stored in the returned image metadata array.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$new_sizes</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array defining what sizes to create.</span></div></dd>
+<dt>
+<code>$file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full path to the image file.</span></div></dd>
+<dt>
+<code>$image_meta</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The attachment meta data array.</span></div></dd>
+<dt>
+<code>$attachment_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Attachment ID to process.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The attachment meta data with updated <code>sizes</code> array. Includes an array of errors encountered while resizing.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="444" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _wp_make_subsizes( $new_sizes, $file, $image_meta, $attachment_id ) {
+	if ( empty( $image_meta ) || ! is_array( $image_meta ) ) {
+		// Not an image attachment.
+		return array();
+	}
+
+	// Check if any of the new sizes already exist.
+	if ( isset( $image_meta['sizes'] ) &amp;&amp; is_array( $image_meta['sizes'] ) ) {
+		foreach ( $image_meta['sizes'] as $size_name =&gt; $size_meta ) {
+			/*
+			 * Only checks "size name" so we don't override existing images even if the dimensions
+			 * don't match the currently defined size with the same name.
+			 * To change the behavior, unset changed/mismatched sizes in the `sizes` array in image meta.
+			 */
+			if ( array_key_exists( $size_name, $new_sizes ) ) {
+				unset( $new_sizes[ $size_name ] );
+			}
+		}
+	} else {
+		$image_meta['sizes'] = array();
+	}
+
+	if ( empty( $new_sizes ) ) {
+		// Nothing to do...
+		return $image_meta;
+	}
+
+	/*
+	 * Sort the image sub-sizes in order of priority when creating them.
+	 * This ensures there is an appropriate sub-size the user can access immediately
+	 * even when there was an error and not all sub-sizes were created.
+	 */
+	$priority = array(
+		'medium'       =&gt; null,
+		'large'        =&gt; null,
+		'thumbnail'    =&gt; null,
+		'medium_large' =&gt; null,
+	);
+
+	$new_sizes = array_filter( array_merge( $priority, $new_sizes ) );
+
+	$editor = wp_get_image_editor( $file );
+
+	if ( is_wp_error( $editor ) ) {
+		// The image cannot be edited.
+		return $image_meta;
+	}
+
+	// If stored EXIF data exists, rotate the source image before creating sub-sizes.
+	if ( ! empty( $image_meta['image_meta'] ) ) {
+		$rotated = $editor-&gt;maybe_exif_rotate();
+
+		if ( is_wp_error( $rotated ) ) {
+			// TODO: Log errors.
+		}
+	}
+
+	if ( method_exists( $editor, 'make_subsize' ) ) {
+		foreach ( $new_sizes as $new_size_name =&gt; $new_size_data ) {
+			$new_size_meta = $editor-&gt;make_subsize( $new_size_data );
+
+			if ( is_wp_error( $new_size_meta ) ) {
+				// TODO: Log errors.
+			} else {
+				// Save the size meta value.
+				$image_meta['sizes'][ $new_size_name ] = $new_size_meta;
+				wp_update_attachment_metadata( $attachment_id, $image_meta );
+			}
+		}
+	} else {
+		// Fall back to `$editor-&gt;multi_resize()`.
+		$created_sizes = $editor-&gt;multi_resize( $new_sizes );
+
+		if ( ! empty( $created_sizes ) ) {
+			$image_meta['sizes'] = array_merge( $image_meta['sizes'], $created_sizes );
+			wp_update_attachment_metadata( $attachment_id, $image_meta );
+		}
+	}
+
+	return $image_meta;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/image.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/image.php#L444">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/image.php#L444-L524">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_wp_make_subsizes" class="_attribution-link">https://developer.wordpress.org/reference/functions/_wp_make_subsizes</a>
+  </p>
+</div>

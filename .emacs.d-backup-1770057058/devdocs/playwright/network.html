@@ -1,0 +1,178 @@
+<header><h1>Network</h1></header><h2 id="introduction">Introduction<a href="#introduction" aria-label="Direct link to Introduction" title="Direct link to Introduction">​</a>
+</h2> <p>Playwright provides APIs to <strong>monitor</strong> and <strong>modify</strong> browser network traffic, both HTTP and HTTPS. Any requests that a page does, including <a href="https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest" target="_blank" rel="noopener noreferrer">XHRs</a> and <a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API" target="_blank" rel="noopener noreferrer">fetch</a> requests, can be tracked, modified and handled.</p> <h2 id="mock-apis">Mock APIs<a href="#mock-apis" aria-label="Direct link to Mock APIs" title="Direct link to Mock APIs">​</a>
+</h2> <p>Check out our <a href="mock">API mocking guide</a> to learn more on how to</p> <ul> <li>mock API requests and never hit the API</li> <li>perform the API request and modify the response</li> <li>use HAR files to mock network requests.</li> </ul> <h2 id="network-mocking">Network mocking<a href="#network-mocking" aria-label="Direct link to Network mocking" title="Direct link to Network mocking">​</a>
+</h2> <p>You don't have to configure anything to mock network requests. Just define a custom <a title="Route" href="api/class-route">Route</a> that mocks network for a browser context.</p> <pre tabindex="0" data-language="javascript">import { test, expect } from '@playwright/test';
+
+test.beforeEach(async ({ context }) =&gt; {
+  // Block any css requests for each test in this file.
+  await context.route(/.css$/, route =&gt; route.abort());
+});
+
+test('loads page without css', async ({ page }) =&gt; {
+  await page.goto('https://playwright.dev');
+  // ... test goes here
+});</pre> <p>Alternatively, you can use <a href="api/class-page#page-route">page.route()</a> to mock network in a single page.</p> <pre tabindex="0" data-language="javascript">import { test, expect } from '@playwright/test';
+
+test('loads page without images', async ({ page }) =&gt; {
+  // Block png and jpeg images.
+  await page.route(/(png|jpeg)$/, route =&gt; route.abort());
+
+  await page.goto('https://playwright.dev');
+  // ... test goes here
+});</pre> <h2 id="http-authentication">HTTP Authentication<a href="#http-authentication" aria-label="Direct link to HTTP Authentication" title="Direct link to HTTP Authentication">​</a>
+</h2> <p>Perform HTTP Authentication.</p> <div>
+<ul role="tablist" aria-orientation="horizontal">
+<li role="tab" tabindex="0" aria-selected="true">Test</li>
+<li role="tab" tabindex="-1" aria-selected="false">Library</li>
+</ul>
+<div>
+<div role="tabpanel"><pre tabindex="0" data-language="javascript">import { defineConfig } from '@playwright/test';
+export default defineConfig({
+  use: {
+    httpCredentials: {
+      username: 'bill',
+      password: 'pa55w0rd',
+    }
+  }
+});</pre></div>
+<div role="tabpanel" hidden><pre tabindex="0" data-language="javascript">const context = await browser.newContext({
+  httpCredentials: {
+    username: 'bill',
+    password: 'pa55w0rd',
+  },
+});
+const page = await context.newPage();
+await page.goto('https://example.com');</pre></div>
+</div>
+</div> <h2 id="http-proxy">HTTP Proxy<a href="#http-proxy" aria-label="Direct link to HTTP Proxy" title="Direct link to HTTP Proxy">​</a>
+</h2> <p>You can configure pages to load over the HTTP(S) proxy or SOCKSv5. Proxy can be either set globally for the entire browser, or for each browser context individually.</p> <p>You can optionally specify username and password for HTTP(S) proxy, you can also specify hosts to bypass the <a href="api/class-browser#browser-new-context-option-proxy">proxy</a> for.</p> <p>Here is an example of a global proxy:</p> <div>
+<ul role="tablist" aria-orientation="horizontal">
+<li role="tab" tabindex="0" aria-selected="true">Test</li>
+<li role="tab" tabindex="-1" aria-selected="false">Library</li>
+</ul>
+<div>
+<div role="tabpanel"><pre tabindex="0" data-language="javascript">import { defineConfig } from '@playwright/test';
+export default defineConfig({
+  use: {
+    proxy: {
+      server: 'http://myproxy.com:3128',
+      username: 'usr',
+      password: 'pwd'
+    }
+  }
+});</pre></div>
+<div role="tabpanel" hidden><pre tabindex="0" data-language="javascript">const browser = await chromium.launch({
+  proxy: {
+    server: 'http://myproxy.com:3128',
+    username: 'usr',
+    password: 'pwd'
+  }
+});</pre></div>
+</div>
+</div> <p>Its also possible to specify it per context:</p> <div>
+<ul role="tablist" aria-orientation="horizontal">
+<li role="tab" tabindex="0" aria-selected="true">Test</li>
+<li role="tab" tabindex="-1" aria-selected="false">Library</li>
+</ul>
+<div>
+<div role="tabpanel"><pre tabindex="0" data-language="javascript">import { test, expect } from '@playwright/test';
+
+test('should use custom proxy on a new context', async ({ browser }) =&gt; {
+  const context = await browser.newContext({
+    proxy: {
+      server: 'http://myproxy.com:3128',
+    }
+  });
+  const page = await context.newPage();
+
+  await context.close();
+});</pre></div>
+<div role="tabpanel" hidden><pre tabindex="0" data-language="javascript">const browser = await chromium.launch();
+const context = await browser.newContext({
+  proxy: { server: 'http://myproxy.com:3128' }
+});</pre></div>
+</div>
+</div> <h2 id="network-events">Network events<a href="#network-events" aria-label="Direct link to Network events" title="Direct link to Network events">​</a>
+</h2> <p>You can monitor all the <a title="Request" href="api/class-request">Request</a>s and <a title="Response" href="api/class-response">Response</a>s:</p> <pre tabindex="0" data-language="javascript">// Subscribe to 'request' and 'response' events.
+page.on('request', request =&gt; console.log('&gt;&gt;', request.method(), request.url()));
+page.on('response', response =&gt; console.log('&lt;&lt;', response.status(), response.url()));
+
+await page.goto('https://example.com');</pre> <p>Or wait for a network response after the button click with <a href="api/class-page#page-wait-for-response">page.waitForResponse()</a>:</p> <pre tabindex="0" data-language="javascript">// Use a glob URL pattern. Note no await.
+const responsePromise = page.waitForResponse('**/api/fetch_data');
+await page.getByText('Update').click();
+const response = await responsePromise;</pre> <h4 id="variations">Variations<a href="#variations" aria-label="Direct link to Variations" title="Direct link to Variations">​</a>
+</h4> <p>Wait for <a title="Response" href="api/class-response">Response</a>s with <a href="api/class-page#page-wait-for-response">page.waitForResponse()</a></p> <pre tabindex="0" data-language="javascript">// Use a RegExp. Note no await.
+const responsePromise = page.waitForResponse(/\.jpeg$/);
+await page.getByText('Update').click();
+const response = await responsePromise;
+
+// Use a predicate taking a Response object. Note no await.
+const responsePromise = page.waitForResponse(response =&gt; response.url().includes(token));
+await page.getByText('Update').click();
+const response = await responsePromise;</pre> <h2 id="handle-requests">Handle requests<a href="#handle-requests" aria-label="Direct link to Handle requests" title="Direct link to Handle requests">​</a>
+</h2> <pre tabindex="0" data-language="javascript">await page.route('**/api/fetch_data', route =&gt; route.fulfill({
+  status: 200,
+  body: testData,
+}));
+await page.goto('https://example.com');</pre> <p>You can mock API endpoints via handling the network requests in your Playwright script.</p> <h4 id="variations-1">Variations<a href="#variations-1" aria-label="Direct link to Variations" title="Direct link to Variations">​</a>
+</h4> <p>Set up route on the entire browser context with <a href="api/class-browsercontext#browser-context-route">browserContext.route()</a> or page with <a href="api/class-page#page-route">page.route()</a>. It will apply to popup windows and opened links.</p> <pre tabindex="0" data-language="javascript">await browserContext.route('**/api/login', route =&gt; route.fulfill({
+  status: 200,
+  body: 'accept',
+}));
+await page.goto('https://example.com');</pre> <h2 id="modify-requests">Modify requests<a href="#modify-requests" aria-label="Direct link to Modify requests" title="Direct link to Modify requests">​</a>
+</h2> <pre tabindex="0" data-language="javascript">// Delete header
+await page.route('**/*', async route =&gt; {
+  const headers = route.request().headers();
+  delete headers['X-Secret'];
+  await route.continue({ headers });
+});
+
+// Continue requests as POST.
+await page.route('**/*', route =&gt; route.continue({ method: 'POST' }));</pre> <p>You can continue requests with modifications. Example above removes an HTTP header from the outgoing requests.</p> <h2 id="abort-requests">Abort requests<a href="#abort-requests" aria-label="Direct link to Abort requests" title="Direct link to Abort requests">​</a>
+</h2> <p>You can abort requests using <a href="api/class-page#page-route">page.route()</a> and <a href="api/class-route#route-abort">route.abort()</a>.</p> <pre tabindex="0" data-language="javascript">await page.route('**/*.{png,jpg,jpeg}', route =&gt; route.abort());
+
+// Abort based on the request type
+await page.route('**/*', route =&gt; {
+  return route.request().resourceType() === 'image' ? route.abort() : route.continue();
+});</pre> <h2 id="modify-responses">Modify responses<a href="#modify-responses" aria-label="Direct link to Modify responses" title="Direct link to Modify responses">​</a>
+</h2> <p>To modify a response use <a title="APIRequestContext" href="api/class-apirequestcontext">APIRequestContext</a> to get the original response and then pass the response to <a href="api/class-route#route-fulfill">route.fulfill()</a>. You can override individual fields on the response via options:</p> <pre tabindex="0" data-language="javascript">await page.route('**/title.html', async route =&gt; {
+  // Fetch original response.
+  const response = await route.fetch();
+  // Add a prefix to the title.
+  let body = await response.text();
+  body = body.replace('&lt;title&gt;', '&lt;title&gt;My prefix:');
+  await route.fulfill({
+    // Pass all fields from the response.
+    response,
+    // Override response body.
+    body,
+    // Force content type to be html.
+    headers: {
+      ...response.headers(),
+      'content-type': 'text/html'
+    }
+  });
+});</pre> <h2 id="glob-url-patterns">Glob URL patterns<a href="#glob-url-patterns" aria-label="Direct link to Glob URL patterns" title="Direct link to Glob URL patterns">​</a>
+</h2> <p>Playwright uses simplified glob patterns for URL matching in network interception methods like <a href="api/class-page#page-route">page.route()</a> or <a href="api/class-page#page-wait-for-response">page.waitForResponse()</a>. These patterns support basic wildcards:</p> <ol> <li>Asterisks: <ul> <li>A single <code>*</code> matches any characters except <code>/</code>
+</li> <li>A double <code>**</code> matches any characters including <code>/</code>
+</li> </ul> </li> <li>Question mark <code>?</code> matches only question mark <code>?</code>. If you want to match any character, use <code>*</code> instead.</li> <li>Curly braces <code>{}</code> can be used to match a list of options separated by commas <code>,</code>
+</li> <li>Backslash <code>\</code> can be used to escape any of special characters (note to escape backslash itself as <code>\\</code>)</li> </ol> <p>Examples:</p> <ul> <li>
+<code>https://example.com/*.js</code> matches <code>https://example.com/file.js</code> but not <code>https://example.com/path/file.js</code>
+</li> <li>
+<code>https://example.com/?page=1</code> matches <code>https://example.com/?page=1</code> but not <code>https://example.com</code>
+</li> <li>
+<code>**/*.js</code> matches both <code>https://example.com/file.js</code> and <code>https://example.com/path/file.js</code>
+</li> <li>
+<code>**/*.{png,jpg,jpeg}</code> matches all image requests</li> </ul> <p>Important notes:</p> <ul> <li>The glob pattern must match the entire URL, not just a part of it.</li> <li>When using globs for URL matching, consider the full URL structure, including the protocol and path separators.</li> <li>For more complex matching requirements, consider using <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp" target="_blank" rel="noopener noreferrer" title="RegExp">RegExp</a> instead of glob patterns.</li> </ul> <h2 id="websockets">WebSockets<a href="#websockets" aria-label="Direct link to WebSockets" title="Direct link to WebSockets">​</a>
+</h2> <p>Playwright supports <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API" target="_blank" rel="noopener noreferrer">WebSockets</a> inspection, mocking and modifying out of the box. See our <a href="mock#mock-websockets">API mocking guide</a> to learn how to mock WebSockets.</p> <p>Every time a WebSocket is created, the <a href="api/class-page#page-event-web-socket">page.on('websocket')</a> event is fired. This event contains the <a title="WebSocket" href="api/class-websocket">WebSocket</a> instance for further web socket frames inspection:</p> <pre tabindex="0" data-language="javascript">page.on('websocket', ws =&gt; {
+  console.log(`WebSocket opened: ${ws.url()}&gt;`);
+  ws.on('framesent', event =&gt; console.log(event.payload));
+  ws.on('framereceived', event =&gt; console.log(event.payload));
+  ws.on('close', () =&gt; console.log('WebSocket closed'));
+});</pre> <h2 id="missing-network-events-and-service-workers">Missing Network Events and Service Workers<a href="#missing-network-events-and-service-workers" aria-label="Direct link to Missing Network Events and Service Workers" title="Direct link to Missing Network Events and Service Workers">​</a>
+</h2> <p>Playwright's built-in <a href="api/class-browsercontext#browser-context-route">browserContext.route()</a> and <a href="api/class-page#page-route">page.route()</a> allow your tests to natively route requests and perform mocking and interception.</p> <p>If you're using Playwright's native <a href="api/class-browsercontext#browser-context-route">browserContext.route()</a> and <a href="api/class-page#page-route">page.route()</a>, and it appears network events are missing, disable Service Workers by setting <a href="api/class-browser#browser-new-context-option-service-workers">serviceWorkers</a> to <code>'block'</code>.</p> <p>It might be that you are using a mock tool such as Mock Service Worker (MSW). While this tool works out of the box for mocking responses, it adds its own Service Worker that takes over the network requests, hence making them invisible to <a href="api/class-browsercontext#browser-context-route">browserContext.route()</a> and <a href="api/class-page#page-route">page.route()</a>. If you are interested in both network testing and mocking, consider using built-in <a href="api/class-browsercontext#browser-context-route">browserContext.route()</a> and <a href="api/class-page#page-route">page.route()</a> for <a href="#handle-requests">response mocking</a>.</p>  <p>If you're interested in not solely using Service Workers for testing and network mocking, but in routing and listening for requests made by Service Workers themselves, please see <a href="service-workers">this guide</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+          &copy; 2025 Microsoft<br>Licensed under the Apache License, Version 2.0.<br>
+    <a href="https://playwright.dev/docs/network" class="_attribution-link">https://playwright.dev/docs/network</a>
+  </p>
+</div>

@@ -1,0 +1,111 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_remove_object_terms( <span class="arg-type">int</span> <span class="arg-name">$object_id</span>, <span class="arg-type">string|int|array</span> <span class="arg-name">$terms</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span> ): <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Removes term(s) associated with a given object.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$object_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The ID of the object from which the terms will be removed.</span></div></dd>
+<dt>
+<code>$terms</code><span class="type"><span class="string">string</span>|<span class="int">int</span>|<span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The slug(s) or ID(s) of the term(s) to remove.</span></div></dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Taxonomy name.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True on success, false or <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2986" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_remove_object_terms( $object_id, $terms, $taxonomy ) {
+	global $wpdb;
+
+	$object_id = (int) $object_id;
+
+	if ( ! taxonomy_exists( $taxonomy ) ) {
+		return new WP_Error( 'invalid_taxonomy', __( 'Invalid taxonomy.' ) );
+	}
+
+	if ( ! is_array( $terms ) ) {
+		$terms = array( $terms );
+	}
+
+	$tt_ids = array();
+
+	foreach ( (array) $terms as $term ) {
+		if ( '' === trim( $term ) ) {
+			continue;
+		}
+
+		$term_info = term_exists( $term, $taxonomy );
+		if ( ! $term_info ) {
+			// Skip if a non-existent term ID is passed.
+			if ( is_int( $term ) ) {
+				continue;
+			}
+		}
+
+		if ( is_wp_error( $term_info ) ) {
+			return $term_info;
+		}
+
+		$tt_ids[] = $term_info['term_taxonomy_id'];
+	}
+
+	if ( $tt_ids ) {
+		$in_tt_ids = "'" . implode( "', '", $tt_ids ) . "'";
+
+		/**
+		 * Fires immediately before an object-term relationship is deleted.
+		 *
+		 * @since 2.9.0
+		 * @since 4.7.0 Added the `$taxonomy` parameter.
+		 *
+		 * @param int    $object_id Object ID.
+		 * @param array  $tt_ids    An array of term taxonomy IDs.
+		 * @param string $taxonomy  Taxonomy slug.
+		 */
+		do_action( 'delete_term_relationships', $object_id, $tt_ids, $taxonomy );
+
+		$deleted = $wpdb-&gt;query( $wpdb-&gt;prepare( "DELETE FROM $wpdb-&gt;term_relationships WHERE object_id = %d AND term_taxonomy_id IN ($in_tt_ids)", $object_id ) );
+
+		wp_cache_delete( $object_id, $taxonomy . '_relationships' );
+		wp_cache_set_terms_last_changed();
+
+		/**
+		 * Fires immediately after an object-term relationship is deleted.
+		 *
+		 * @since 2.9.0
+		 * @since 4.7.0 Added the `$taxonomy` parameter.
+		 *
+		 * @param int    $object_id Object ID.
+		 * @param array  $tt_ids    An array of term taxonomy IDs.
+		 * @param string $taxonomy  Taxonomy slug.
+		 */
+		do_action( 'deleted_term_relationships', $object_id, $tt_ids, $taxonomy );
+
+		wp_update_term_count( $tt_ids, $taxonomy );
+
+		return (bool) $deleted;
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L2986">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L2986-L3059">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_term_relationships"><span class="hook-func">do_action</span>( ‘deleted_term_relationships’, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$tt_ids</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after an object-term relationship is deleted.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_term_relationships"><span class="hook-func">do_action</span>( ‘delete_term_relationships’, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$tt_ids</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before an object-term relationship is deleted.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.6.0/">3.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_remove_object_terms" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_remove_object_terms</a>
+  </p>
+</div>

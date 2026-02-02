@@ -1,0 +1,84 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_validate_site_data( <span class="arg-type">WP_Error</span> <span class="arg-name">$errors</span>, <span class="arg-type">array</span> <span class="arg-name">$data</span>, <span class="arg-type">WP_Site|null</span> <span class="arg-name">$old_site</span> = <span class="arg-default">null</span> )</h1> <section><p>Validates data for a site prior to inserting or updating in the database.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$errors</code><span class="type"><span class="WP_Error"><a href="../classes/wp_error" rel="class">WP_Error</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Error object, passed by reference. Will contain validation errors if any occurred.</span></div></dd>
+<dt>
+<code>$data</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Associative array of complete site data. See <a href="wp_insert_site">wp_insert_site()</a> for the included data.</span></div></dd>
+<dt>
+<code>$old_site</code><span class="type"><span class="WP_Site"><a href="../classes/wp_site" rel="class">WP_Site</a></span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The old site object if the data belongs to a site being updated, or null if it is a new site being inserted.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="575" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_validate_site_data( $errors, $data, $old_site = null ) {
+	// A domain must always be present.
+	if ( empty( $data['domain'] ) ) {
+		$errors-&gt;add( 'site_empty_domain', __( 'Site domain must not be empty.' ) );
+	}
+
+	// A path must always be present.
+	if ( empty( $data['path'] ) ) {
+		$errors-&gt;add( 'site_empty_path', __( 'Site path must not be empty.' ) );
+	}
+
+	// A network ID must always be present.
+	if ( empty( $data['network_id'] ) ) {
+		$errors-&gt;add( 'site_empty_network_id', __( 'Site network ID must be provided.' ) );
+	}
+
+	// Both registration and last updated dates must always be present and valid.
+	$date_fields = array( 'registered', 'last_updated' );
+	foreach ( $date_fields as $date_field ) {
+		if ( empty( $data[ $date_field ] ) ) {
+			$errors-&gt;add( 'site_empty_' . $date_field, __( 'Both registration and last updated dates must be provided.' ) );
+			break;
+		}
+
+		// Allow '0000-00-00 00:00:00', although it be stripped out at this point.
+		if ( '0000-00-00 00:00:00' !== $data[ $date_field ] ) {
+			$month      = substr( $data[ $date_field ], 5, 2 );
+			$day        = substr( $data[ $date_field ], 8, 2 );
+			$year       = substr( $data[ $date_field ], 0, 4 );
+			$valid_date = wp_checkdate( $month, $day, $year, $data[ $date_field ] );
+			if ( ! $valid_date ) {
+				$errors-&gt;add( 'site_invalid_' . $date_field, __( 'Both registration and last updated dates must be valid dates.' ) );
+				break;
+			}
+		}
+	}
+
+	if ( ! empty( $errors-&gt;errors ) ) {
+		return;
+	}
+
+	// If a new site, or domain/path/network ID have changed, ensure uniqueness.
+	if ( ! $old_site
+		|| $data['domain'] !== $old_site-&gt;domain
+		|| $data['path'] !== $old_site-&gt;path
+		|| $data['network_id'] !== $old_site-&gt;network_id
+	) {
+		if ( domain_exists( $data['domain'], $data['path'], $data['network_id'] ) ) {
+			$errors-&gt;add( 'site_taken', __( 'Sorry, that site already exists!' ) );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-site.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-site.php#L575">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-site.php#L575-L626">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_validate_site_data" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_validate_site_data</a>
+  </p>
+</div>

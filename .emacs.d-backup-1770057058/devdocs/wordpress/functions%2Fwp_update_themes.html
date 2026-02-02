@@ -1,0 +1,282 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_update_themes( <span class="arg-type">array</span> <span class="arg-name">$extra_stats</span> = <span class="arg-default">array()</span> )</h1> <section><p>Checks for available updates to themes based on the latest versions hosted on WordPress.org.</p> </section> <section><h2 id="description">Description</h2> <p>Despite its name this function does not actually perform any updates, it only checks for available updates.</p> <p>A list of all themes installed is sent to WP, along with the site locale.</p> <p>Checks against the WordPress server at api.wordpress.org. Will only check if WordPress isn’t installing.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$extra_stats</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Extra statistics to report to the WordPress.org API.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="587" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_update_themes( $extra_stats = array() ) {
+	if ( wp_installing() ) {
+		return;
+	}
+
+	$installed_themes = wp_get_themes();
+	$translations     = wp_get_installed_translations( 'themes' );
+
+	$last_update = get_site_transient( 'update_themes' );
+
+	if ( ! is_object( $last_update ) ) {
+		$last_update = new stdClass();
+	}
+
+	$themes  = array();
+	$checked = array();
+	$request = array();
+
+	// Put slug of active theme into request.
+	$request['active'] = get_option( 'stylesheet' );
+
+	foreach ( $installed_themes as $theme ) {
+		$checked[ $theme-&gt;get_stylesheet() ] = $theme-&gt;get( 'Version' );
+
+		$themes[ $theme-&gt;get_stylesheet() ] = array(
+			'Name'       =&gt; $theme-&gt;get( 'Name' ),
+			'Title'      =&gt; $theme-&gt;get( 'Name' ),
+			'Version'    =&gt; $theme-&gt;get( 'Version' ),
+			'Author'     =&gt; $theme-&gt;get( 'Author' ),
+			'Author URI' =&gt; $theme-&gt;get( 'AuthorURI' ),
+			'UpdateURI'  =&gt; $theme-&gt;get( 'UpdateURI' ),
+			'Template'   =&gt; $theme-&gt;get_template(),
+			'Stylesheet' =&gt; $theme-&gt;get_stylesheet(),
+		);
+	}
+
+	$doing_cron = wp_doing_cron();
+
+	// Check for update on a different schedule, depending on the page.
+	switch ( current_filter() ) {
+		case 'upgrader_process_complete':
+			$timeout = 0;
+			break;
+		case 'load-update-core.php':
+			$timeout = MINUTE_IN_SECONDS;
+			break;
+		case 'load-themes.php':
+		case 'load-update.php':
+			$timeout = HOUR_IN_SECONDS;
+			break;
+		default:
+			if ( $doing_cron ) {
+				$timeout = 2 * HOUR_IN_SECONDS;
+			} else {
+				$timeout = 12 * HOUR_IN_SECONDS;
+			}
+	}
+
+	$time_not_changed = isset( $last_update-&gt;last_checked ) &amp;&amp; $timeout &gt; ( time() - $last_update-&gt;last_checked );
+
+	if ( $time_not_changed &amp;&amp; ! $extra_stats ) {
+		$theme_changed = false;
+
+		foreach ( $checked as $slug =&gt; $v ) {
+			if ( ! isset( $last_update-&gt;checked[ $slug ] ) || (string) $last_update-&gt;checked[ $slug ] !== (string) $v ) {
+				$theme_changed = true;
+			}
+		}
+
+		if ( isset( $last_update-&gt;response ) &amp;&amp; is_array( $last_update-&gt;response ) ) {
+			foreach ( $last_update-&gt;response as $slug =&gt; $update_details ) {
+				if ( ! isset( $checked[ $slug ] ) ) {
+					$theme_changed = true;
+					break;
+				}
+			}
+		}
+
+		// Bail if we've checked recently and if nothing has changed.
+		if ( ! $theme_changed ) {
+			return;
+		}
+	}
+
+	// Update last_checked for current to prevent multiple blocking requests if request hangs.
+	$last_update-&gt;last_checked = time();
+	set_site_transient( 'update_themes', $last_update );
+
+	$request['themes'] = $themes;
+
+	$locales = array_values( get_available_languages() );
+
+	/**
+	 * Filters the locales requested for theme translations.
+	 *
+	 * @since 3.7.0
+	 * @since 4.5.0 The default value of the `$locales` parameter changed to include all locales.
+	 *
+	 * @param string[] $locales Theme locales. Default is all available locales of the site.
+	 */
+	$locales = apply_filters( 'themes_update_check_locales', $locales );
+	$locales = array_unique( $locales );
+
+	if ( $doing_cron ) {
+		$timeout = 30; // 30 seconds.
+	} else {
+		// Three seconds, plus one extra second for every 10 themes.
+		$timeout = 3 + (int) ( count( $themes ) / 10 );
+	}
+
+	$options = array(
+		'timeout'    =&gt; $timeout,
+		'body'       =&gt; array(
+			'themes'       =&gt; wp_json_encode( $request ),
+			'translations' =&gt; wp_json_encode( $translations ),
+			'locale'       =&gt; wp_json_encode( $locales ),
+		),
+		'user-agent' =&gt; 'WordPress/' . wp_get_wp_version() . '; ' . home_url( '/' ),
+	);
+
+	if ( $extra_stats ) {
+		$options['body']['update_stats'] = wp_json_encode( $extra_stats );
+	}
+
+	$url      = 'https://api.wordpress.org/themes/update-check/1.1/';
+	$http_url = $url;
+	$ssl      = wp_http_supports( array( 'ssl' ) );
+
+	if ( $ssl ) {
+		$url = set_url_scheme( $url, 'https' );
+	}
+
+	$raw_response = wp_remote_post( $url, $options );
+
+	if ( $ssl &amp;&amp; is_wp_error( $raw_response ) ) {
+		wp_trigger_error(
+			__FUNCTION__,
+			sprintf(
+				/* translators: %s: Support forums URL. */
+				__( 'An unexpected error occurred. Something may be wrong with WordPress.org or this server&amp;#8217;s configuration. If you continue to have problems, please try the &lt;a href="%s"&gt;support forums&lt;/a&gt;.' ),
+				__( 'https://wordpress.org/support/forums/' )
+			) . ' ' . __( '(WordPress could not establish a secure connection to WordPress.org. Please contact your server administrator.)' ),
+			headers_sent() || WP_DEBUG ? E_USER_WARNING : E_USER_NOTICE
+		);
+		$raw_response = wp_remote_post( $http_url, $options );
+	}
+
+	if ( is_wp_error( $raw_response ) || 200 !== wp_remote_retrieve_response_code( $raw_response ) ) {
+		return;
+	}
+
+	$new_update               = new stdClass();
+	$new_update-&gt;last_checked = time();
+	$new_update-&gt;checked      = $checked;
+
+	$response = json_decode( wp_remote_retrieve_body( $raw_response ), true );
+
+	if ( is_array( $response ) ) {
+		$new_update-&gt;response     = $response['themes'];
+		$new_update-&gt;no_update    = $response['no_update'];
+		$new_update-&gt;translations = $response['translations'];
+	}
+
+	// Support updates for any themes using the `Update URI` header field.
+	foreach ( $themes as $theme_stylesheet =&gt; $theme_data ) {
+		if ( ! $theme_data['UpdateURI'] || isset( $new_update-&gt;response[ $theme_stylesheet ] ) ) {
+			continue;
+		}
+
+		$hostname = wp_parse_url( sanitize_url( $theme_data['UpdateURI'] ), PHP_URL_HOST );
+
+		/**
+		 * Filters the update response for a given theme hostname.
+		 *
+		 * The dynamic portion of the hook name, `$hostname`, refers to the hostname
+		 * of the URI specified in the `Update URI` header field.
+		 *
+		 * @since 6.1.0
+		 *
+		 * @param array|false $update {
+		 *     The theme update data with the latest details. Default false.
+		 *
+		 *     @type string $id           Optional. ID of the theme for update purposes, should be a URI
+		 *                                specified in the `Update URI` header field.
+		 *     @type string $theme        Directory name of the theme.
+		 *     @type string $version      The version of the theme.
+		 *     @type string $url          The URL for details of the theme.
+		 *     @type string $package      Optional. The update ZIP for the theme.
+		 *     @type string $tested       Optional. The version of WordPress the theme is tested against.
+		 *     @type string $requires_php Optional. The version of PHP which the theme requires.
+		 *     @type bool   $autoupdate   Optional. Whether the theme should automatically update.
+		 *     @type array  $translations {
+		 *         Optional. List of translation updates for the theme.
+		 *
+		 *         @type string $language   The language the translation update is for.
+		 *         @type string $version    The version of the theme this translation is for.
+		 *                                  This is not the version of the language file.
+		 *         @type string $updated    The update timestamp of the translation file.
+		 *                                  Should be a date in the `YYYY-MM-DD HH:MM:SS` format.
+		 *         @type string $package    The ZIP location containing the translation update.
+		 *         @type string $autoupdate Whether the translation should be automatically installed.
+		 *     }
+		 * }
+		 * @param array       $theme_data       Theme headers.
+		 * @param string      $theme_stylesheet Theme stylesheet.
+		 * @param string[]    $locales          Installed locales to look up translations for.
+		 */
+		$update = apply_filters( "update_themes_{$hostname}", false, $theme_data, $theme_stylesheet, $locales );
+
+		if ( ! $update ) {
+			continue;
+		}
+
+		$update = (object) $update;
+
+		// Is it valid? We require at least a version.
+		if ( ! isset( $update-&gt;version ) ) {
+			continue;
+		}
+
+		// This should remain constant.
+		$update-&gt;id = $theme_data['UpdateURI'];
+
+		// WordPress needs the version field specified as 'new_version'.
+		if ( ! isset( $update-&gt;new_version ) ) {
+			$update-&gt;new_version = $update-&gt;version;
+		}
+
+		// Handle any translation updates.
+		if ( ! empty( $update-&gt;translations ) ) {
+			foreach ( $update-&gt;translations as $translation ) {
+				if ( isset( $translation['language'], $translation['package'] ) ) {
+					$translation['type'] = 'theme';
+					$translation['slug'] = isset( $update-&gt;theme ) ? $update-&gt;theme : $update-&gt;id;
+
+					$new_update-&gt;translations[] = $translation;
+				}
+			}
+		}
+
+		unset( $new_update-&gt;no_update[ $theme_stylesheet ], $new_update-&gt;response[ $theme_stylesheet ] );
+
+		if ( version_compare( $update-&gt;new_version, $theme_data['Version'], '&gt;' ) ) {
+			$new_update-&gt;response[ $theme_stylesheet ] = (array) $update;
+		} else {
+			$new_update-&gt;no_update[ $theme_stylesheet ] = (array) $update;
+		}
+	}
+
+	set_site_transient( 'update_themes', $new_update );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/update.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/update.php#L587">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/update.php#L587-L837">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/themes_update_check_locales"><span class="hook-func">apply_filters</span>( ‘themes_update_check_locales’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$locales</span></nobr> )</a></dt>
+<dd>
+<p>Filters the locales requested for theme translations.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/update_themes_hostname"><span class="hook-func">apply_filters</span>( “update_themes_{$hostname}”, <nobr><span class="arg-type">array|false</span> <span class="arg-name">$update</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$theme_data</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$theme_stylesheet</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$locales</span></nobr> )</a></dt>
+<dd>
+<p>Filters the update response for a given theme hostname.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_update_themes" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_update_themes</a>
+  </p>
+</div>

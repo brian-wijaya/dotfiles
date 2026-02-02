@@ -1,0 +1,118 @@
+<h1 class="wp-block-wporg-code-reference-title">_WP_Editors::wp_link_query( <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Performs post queries for internal linking.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of link query arguments.<br> <ul class="param-hash">
+<li>
+<code>pagenum</code> <span class="type">int</span><div class="desc">Page number. Default 1.</div>
+</li> <li>
+<code>s</code> <span class="type">string</span><div class="desc">Search keywords.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> $results { An array of associative arrays of query results, false if there are none.<br> @type array …$0 { @type int $ID Post ID.<br> @type string $title The trimmed, escaped post title.<br> @type string $permalink Post permalink.<br> @type string $info A <code>'Y/m/d'</code>-formatted date for <code>'post'</code> post type, the <code>'singular_name'</code> post type label otherwise.<br> } }</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1781" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function wp_link_query( $args = array() ) {
+	$pts      = get_post_types( array( 'public' =&gt; true ), 'objects' );
+	$pt_names = array_keys( $pts );
+
+	$query = array(
+		'post_type'              =&gt; $pt_names,
+		'suppress_filters'       =&gt; true,
+		'update_post_term_cache' =&gt; false,
+		'update_post_meta_cache' =&gt; false,
+		'post_status'            =&gt; 'publish',
+		'posts_per_page'         =&gt; 20,
+	);
+
+	$args['pagenum'] = isset( $args['pagenum'] ) ? absint( $args['pagenum'] ) : 1;
+
+	if ( isset( $args['s'] ) ) {
+		$query['s'] = $args['s'];
+	}
+
+	$query['offset'] = $args['pagenum'] &gt; 1 ? $query['posts_per_page'] * ( $args['pagenum'] - 1 ) : 0;
+
+	/**
+	 * Filters the link query arguments.
+	 *
+	 * Allows modification of the link query arguments before querying.
+	 *
+	 * @see WP_Query for a full list of arguments
+	 *
+	 * @since 3.7.0
+	 *
+	 * @param array $query An array of WP_Query arguments.
+	 */
+	$query = apply_filters( 'wp_link_query_args', $query );
+
+	// Do main query.
+	$get_posts = new WP_Query();
+	$posts     = $get_posts-&gt;query( $query );
+
+	// Build results.
+	$results = array();
+	foreach ( $posts as $post ) {
+		if ( 'post' === $post-&gt;post_type ) {
+			$info = mysql2date( __( 'Y/m/d' ), $post-&gt;post_date );
+		} else {
+			$info = $pts[ $post-&gt;post_type ]-&gt;labels-&gt;singular_name;
+		}
+
+		$results[] = array(
+			'ID'        =&gt; $post-&gt;ID,
+			'title'     =&gt; trim( esc_html( strip_tags( get_the_title( $post ) ) ) ),
+			'permalink' =&gt; get_permalink( $post-&gt;ID ),
+			'info'      =&gt; $info,
+		);
+	}
+
+	/**
+	 * Filters the link query results.
+	 *
+	 * Allows modification of the returned link query results.
+	 *
+	 * @since 3.7.0
+	 *
+	 * @see 'wp_link_query_args' filter
+	 *
+	 * @param array $results {
+	 *     An array of associative arrays of query results.
+	 *
+	 *     @type array ...$0 {
+	 *         @type int    $ID        Post ID.
+	 *         @type string $title     The trimmed, escaped post title.
+	 *         @type string $permalink Post permalink.
+	 *         @type string $info      A 'Y/m/d'-formatted date for 'post' post type,
+	 *                                 the 'singular_name' post type label otherwise.
+	 *     }
+	 * }
+	 * @param array $query  An array of WP_Query arguments.
+	 */
+	$results = apply_filters( 'wp_link_query', $results, $query );
+
+	return ! empty( $results ) ? $results : false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-editor.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-editor.php#L1781">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-editor.php#L1781-L1861">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/wp_link_query"><span class="hook-func">apply_filters</span>( ‘wp_link_query’, <nobr><span class="arg-type">array</span> <span class="arg-name">$results</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$query</span></nobr> )</a></dt>
+<dd>
+<p>Filters the link query results.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/wp_link_query_args"><span class="hook-func">apply_filters</span>( ‘wp_link_query_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$query</span></nobr> )</a></dt>
+<dd>
+<p>Filters the link query arguments.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/_wp_editors/wp_link_query" class="_attribution-link">https://developer.wordpress.org/reference/classes/_wp_editors/wp_link_query</a>
+  </p>
+</div>

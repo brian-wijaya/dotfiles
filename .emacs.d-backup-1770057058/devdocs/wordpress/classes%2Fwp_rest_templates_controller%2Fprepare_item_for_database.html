@@ -1,0 +1,114 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Templates_Controller::prepare_item_for_database( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type">stdClass|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Prepares a single template for create or update.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Request object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">stdClass|<a href="../wp_error" rel="class">WP_Error</a></span> Changes to pass to wp_update_post.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="570" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function prepare_item_for_database( $request ) {
+	$template = $request['id'] ? get_block_template( $request['id'], $this-&gt;post_type ) : null;
+	$changes  = new stdClass();
+	if ( null === $template ) {
+		$changes-&gt;post_type   = $this-&gt;post_type;
+		$changes-&gt;post_status = 'publish';
+		$changes-&gt;tax_input   = array(
+			'wp_theme' =&gt; isset( $request['theme'] ) ? $request['theme'] : get_stylesheet(),
+		);
+	} elseif ( 'custom' !== $template-&gt;source ) {
+		$changes-&gt;post_name   = $template-&gt;slug;
+		$changes-&gt;post_type   = $this-&gt;post_type;
+		$changes-&gt;post_status = 'publish';
+		$changes-&gt;tax_input   = array(
+			'wp_theme' =&gt; $template-&gt;theme,
+		);
+		$changes-&gt;meta_input  = array(
+			'origin' =&gt; $template-&gt;source,
+		);
+	} else {
+		$changes-&gt;post_name   = $template-&gt;slug;
+		$changes-&gt;ID          = $template-&gt;wp_id;
+		$changes-&gt;post_status = 'publish';
+	}
+	if ( isset( $request['content'] ) ) {
+		if ( is_string( $request['content'] ) ) {
+			$changes-&gt;post_content = $request['content'];
+		} elseif ( isset( $request['content']['raw'] ) ) {
+			$changes-&gt;post_content = $request['content']['raw'];
+		}
+	} elseif ( null !== $template &amp;&amp; 'custom' !== $template-&gt;source ) {
+		$changes-&gt;post_content = $template-&gt;content;
+	}
+	if ( isset( $request['title'] ) ) {
+		if ( is_string( $request['title'] ) ) {
+			$changes-&gt;post_title = $request['title'];
+		} elseif ( ! empty( $request['title']['raw'] ) ) {
+			$changes-&gt;post_title = $request['title']['raw'];
+		}
+	} elseif ( null !== $template &amp;&amp; 'custom' !== $template-&gt;source ) {
+		$changes-&gt;post_title = $template-&gt;title;
+	}
+	if ( isset( $request['description'] ) ) {
+		$changes-&gt;post_excerpt = $request['description'];
+	} elseif ( null !== $template &amp;&amp; 'custom' !== $template-&gt;source ) {
+		$changes-&gt;post_excerpt = $template-&gt;description;
+	}
+
+	if ( 'wp_template' === $this-&gt;post_type &amp;&amp; isset( $request['is_wp_suggestion'] ) ) {
+		$changes-&gt;meta_input     = wp_parse_args(
+			array(
+				'is_wp_suggestion' =&gt; $request['is_wp_suggestion'],
+			),
+			$changes-&gt;meta_input = array()
+		);
+	}
+
+	if ( 'wp_template_part' === $this-&gt;post_type ) {
+		if ( isset( $request['area'] ) ) {
+			$changes-&gt;tax_input['wp_template_part_area'] = _filter_block_template_part_area( $request['area'] );
+		} elseif ( null !== $template &amp;&amp; 'custom' !== $template-&gt;source &amp;&amp; $template-&gt;area ) {
+			$changes-&gt;tax_input['wp_template_part_area'] = _filter_block_template_part_area( $template-&gt;area );
+		} elseif ( empty( $template-&gt;area ) ) {
+			$changes-&gt;tax_input['wp_template_part_area'] = WP_TEMPLATE_PART_AREA_UNCATEGORIZED;
+		}
+	}
+
+	if ( ! empty( $request['author'] ) ) {
+		$post_author = (int) $request['author'];
+
+		if ( get_current_user_id() !== $post_author ) {
+			$user_obj = get_userdata( $post_author );
+
+			if ( ! $user_obj ) {
+				return new WP_Error(
+					'rest_invalid_author',
+					__( 'Invalid author ID.' ),
+					array( 'status' =&gt; 400 )
+				);
+			}
+		}
+
+		$changes-&gt;post_author = $post_author;
+	}
+
+	/** This filter is documented in wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php */
+	return apply_filters( "rest_pre_insert_{$this-&gt;post_type}", $changes, $request );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php#L570">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php#L570-L657">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_pre_insert_this-post_type"><span class="hook-func">apply_filters</span>( “rest_pre_insert_{$this-&gt;post_type}”, <nobr><span class="arg-type">stdClass</span> <span class="arg-name">$prepared_post</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Filters a post before it is inserted via the REST API.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_templates_controller/prepare_item_for_database" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_templates_controller/prepare_item_for_database</a>
+  </p>
+</div>

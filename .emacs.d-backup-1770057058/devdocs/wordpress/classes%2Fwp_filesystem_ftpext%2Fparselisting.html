@@ -1,0 +1,134 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Filesystem_FTPext::parselisting( <span class="arg-type">string</span> <span class="arg-name">$line</span> ): <span class="return-type">array</span>
+</h1>  <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$line</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Array of file information.<br> <ul class="param-hash">
+<li>
+<code>name</code> <span class="type">string</span><div class="desc">Name of the file or directory.</div>
+</li> <li>
+<code>perms</code> <span class="type">string</span><div class="desc">*nix representation of permissions.</div>
+</li> <li>
+<code>permsn</code> <span class="type">string</span><div class="desc">Octal representation of permissions.</div>
+</li> <li>
+<code>number</code> <span class="type">string|false</span><div class="desc">File number as a string, or false if not available.</div>
+</li> <li>
+<code>owner</code> <span class="type">string|false</span><div class="desc">Owner name or ID, or false if not available.</div>
+</li> <li>
+<code>group</code> <span class="type">string|false</span><div class="desc">File permissions group, or false if not available.</div>
+</li> <li>
+<code>size</code> <span class="type">string|false</span><div class="desc">Size of file in bytes as a string, or false if not available.</div>
+</li> <li>
+<code>lastmodunix</code> <span class="type">string|false</span><div class="desc">Last modified unix timestamp as a string, or false if not available.</div>
+</li> <li>
+<code>lastmod</code> <span class="type">string|false</span><div class="desc">Last modified month (3 letters) and day (without leading 0), or false if not available.</div>
+</li> <li>
+<code>time</code> <span class="type">string|false</span><div class="desc">Last modified time, or false if not available.</div>
+</li> <li>
+<code>type</code> <span class="type">string</span><div class="desc">Type of resource. <code>'f'</code> for file, <code>'d'</code> for directory, <code>'l'</code> for link.</div>
+</li> <li>
+<code>files</code> <span class="type">array|false</span><div class="desc">If a directory and <code>$recursive</code> is true, contains another array of files.<br> False if unable to list directory contents.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="624" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function parselisting( $line ) {
+	static $is_windows = null;
+
+	if ( is_null( $is_windows ) ) {
+		$is_windows = stripos( ftp_systype( $this-&gt;link ), 'win' ) !== false;
+	}
+
+	if ( $is_windows &amp;&amp; preg_match( '/([0-9]{2})-([0-9]{2})-([0-9]{2}) +([0-9]{2}):([0-9]{2})(AM|PM) +([0-9]+|&lt;DIR&gt;) +(.+)/', $line, $lucifer ) ) {
+		$b = array();
+
+		if ( $lucifer[3] &lt; 70 ) {
+			$lucifer[3] += 2000;
+		} else {
+			$lucifer[3] += 1900; // 4-digit year fix.
+		}
+
+		$b['isdir'] = ( '&lt;DIR&gt;' === $lucifer[7] );
+
+		if ( $b['isdir'] ) {
+			$b['type'] = 'd';
+		} else {
+			$b['type'] = 'f';
+		}
+
+		$b['size']   = $lucifer[7];
+		$b['month']  = $lucifer[1];
+		$b['day']    = $lucifer[2];
+		$b['year']   = $lucifer[3];
+		$b['hour']   = $lucifer[4];
+		$b['minute'] = $lucifer[5];
+		$b['time']   = mktime( $lucifer[4] + ( strcasecmp( $lucifer[6], 'PM' ) === 0 ? 12 : 0 ), $lucifer[5], 0, $lucifer[1], $lucifer[2], $lucifer[3] );
+		$b['am/pm']  = $lucifer[6];
+		$b['name']   = $lucifer[8];
+	} elseif ( ! $is_windows ) {
+		$lucifer = preg_split( '/[ ]/', $line, 9, PREG_SPLIT_NO_EMPTY );
+
+		if ( $lucifer ) {
+			// echo $line."\n";
+			$lcount = count( $lucifer );
+
+			if ( $lcount &lt; 8 ) {
+				return '';
+			}
+
+			$b           = array();
+			$b['isdir']  = 'd' === $lucifer[0][0];
+			$b['islink'] = 'l' === $lucifer[0][0];
+
+			if ( $b['isdir'] ) {
+				$b['type'] = 'd';
+			} elseif ( $b['islink'] ) {
+				$b['type'] = 'l';
+			} else {
+				$b['type'] = 'f';
+			}
+
+			$b['perms']  = $lucifer[0];
+			$b['permsn'] = $this-&gt;getnumchmodfromh( $b['perms'] );
+			$b['number'] = $lucifer[1];
+			$b['owner']  = $lucifer[2];
+			$b['group']  = $lucifer[3];
+			$b['size']   = $lucifer[4];
+
+			if ( 8 === $lcount ) {
+				sscanf( $lucifer[5], '%d-%d-%d', $b['year'], $b['month'], $b['day'] );
+				sscanf( $lucifer[6], '%d:%d', $b['hour'], $b['minute'] );
+
+				$b['time'] = mktime( $b['hour'], $b['minute'], 0, $b['month'], $b['day'], $b['year'] );
+				$b['name'] = $lucifer[7];
+			} else {
+				$b['month'] = $lucifer[5];
+				$b['day']   = $lucifer[6];
+
+				if ( preg_match( '/([0-9]{2}):([0-9]{2})/', $lucifer[7], $l2 ) ) {
+					$b['year']   = gmdate( 'Y' );
+					$b['hour']   = $l2[1];
+					$b['minute'] = $l2[2];
+				} else {
+					$b['year']   = $lucifer[7];
+					$b['hour']   = 0;
+					$b['minute'] = 0;
+				}
+
+				$b['time'] = strtotime( sprintf( '%d %s %d %02d:%02d', $b['day'], $b['month'], $b['year'], $b['hour'], $b['minute'] ) );
+				$b['name'] = $lucifer[8];
+			}
+		}
+	}
+
+	// Replace symlinks formatted as "source -&gt; target" with just the source name.
+	if ( isset( $b['islink'] ) &amp;&amp; $b['islink'] ) {
+		$b['name'] = preg_replace( '/(\s*-&gt;\s*.*)$/', '', $b['name'] );
+	}
+
+	return $b;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-filesystem-ftpext.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-filesystem-ftpext.php#L624">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-filesystem-ftpext.php#L624-L719">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_filesystem_ftpext/parselisting" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_filesystem_ftpext/parselisting</a>
+  </p>
+</div>

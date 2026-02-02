@@ -1,0 +1,68 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Privacy_Requests_Table::prepare_items()</h1> <section><p>Prepares items to output.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="362" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_items() {
+	$this-&gt;items    = array();
+	$posts_per_page = $this-&gt;get_items_per_page( $this-&gt;request_type . '_requests_per_page' );
+	$args           = array(
+		'post_type'      =&gt; $this-&gt;post_type,
+		'post_name__in'  =&gt; array( $this-&gt;request_type ),
+		'posts_per_page' =&gt; $posts_per_page,
+		'offset'         =&gt; isset( $_REQUEST['paged'] ) ? max( 0, absint( $_REQUEST['paged'] ) - 1 ) * $posts_per_page : 0,
+		'post_status'    =&gt; 'any',
+		's'              =&gt; isset( $_REQUEST['s'] ) ? sanitize_text_field( $_REQUEST['s'] ) : '',
+	);
+
+	$orderby_mapping = array(
+		'requester' =&gt; 'post_title',
+		'requested' =&gt; 'post_date',
+	);
+
+	if ( isset( $_REQUEST['orderby'] ) &amp;&amp; isset( $orderby_mapping[ $_REQUEST['orderby'] ] ) ) {
+		$args['orderby'] = $orderby_mapping[ $_REQUEST['orderby'] ];
+	}
+
+	if ( isset( $_REQUEST['order'] ) &amp;&amp; in_array( strtoupper( $_REQUEST['order'] ), array( 'ASC', 'DESC' ), true ) ) {
+		$args['order'] = strtoupper( $_REQUEST['order'] );
+	}
+
+	if ( ! empty( $_REQUEST['filter-status'] ) ) {
+		$filter_status       = isset( $_REQUEST['filter-status'] ) ? sanitize_text_field( $_REQUEST['filter-status'] ) : '';
+		$args['post_status'] = $filter_status;
+	}
+
+	$requests_query = new WP_Query( $args );
+	$requests       = $requests_query-&gt;posts;
+
+	foreach ( $requests as $request ) {
+		$this-&gt;items[] = wp_get_user_request( $request-&gt;ID );
+	}
+
+	$this-&gt;items = array_filter( $this-&gt;items );
+
+	$this-&gt;set_pagination_args(
+		array(
+			'total_items' =&gt; $requests_query-&gt;found_posts,
+			'per_page'    =&gt; $posts_per_page,
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-privacy-requests-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-privacy-requests-table.php#L362">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-privacy-requests-table.php#L362-L407">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td><span class="since-description">Added support for column sorting.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.6/">4.9.6</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_privacy_requests_table/prepare_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_privacy_requests_table/prepare_items</a>
+  </p>
+</div>

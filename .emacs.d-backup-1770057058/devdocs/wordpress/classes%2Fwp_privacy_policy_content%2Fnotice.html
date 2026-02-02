@@ -1,0 +1,88 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Privacy_Policy_Content::notice( <span class="arg-type">WP_Post|null</span> <span class="arg-name">$post</span> = <span class="arg-default">null</span> )</h1> <section><p>Adds a notice with a link to the guide when editing the privacy policy page.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../wp_post" rel="class">WP_Post</a></span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The currently edited post. </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="314" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function notice( $post = null ) {
+	if ( is_null( $post ) ) {
+		global $post;
+	} else {
+		$post = get_post( $post );
+	}
+
+	if ( ! ( $post instanceof WP_Post ) ) {
+		return;
+	}
+
+	if ( ! current_user_can( 'manage_privacy_options' ) ) {
+		return;
+	}
+
+	$current_screen = get_current_screen();
+	$policy_page_id = (int) get_option( 'wp_page_for_privacy_policy' );
+
+	if ( 'post' !== $current_screen-&gt;base || $policy_page_id !== $post-&gt;ID ) {
+		return;
+	}
+
+	$message = __( 'Need help putting together your new Privacy Policy page? Check out our guide for recommendations on what content to include, along with policies suggested by your plugins and theme.' );
+	$url     = esc_url( admin_url( 'options-privacy.php?tab=policyguide' ) );
+	$label   = __( 'View Privacy Policy Guide.' );
+
+	if ( get_current_screen()-&gt;is_block_editor() ) {
+		wp_enqueue_script( 'wp-notices' );
+		$action = array(
+			'url'   =&gt; $url,
+			'label' =&gt; $label,
+		);
+		wp_add_inline_script(
+			'wp-notices',
+			sprintf(
+				'wp.data.dispatch( "core/notices" ).createWarningNotice( "%s", { actions: [ %s ], isDismissible: false } )',
+				$message,
+				wp_json_encode( $action )
+			),
+			'after'
+		);
+	} else {
+		$message .= sprintf(
+			' &lt;a href="%s" target="_blank"&gt;%s &lt;span class="screen-reader-text"&gt;%s&lt;/span&gt;&lt;/a&gt;',
+			$url,
+			$label,
+			/* translators: Hidden accessibility text. */
+			__( '(opens in a new tab)' )
+		);
+		wp_admin_notice(
+			$message,
+			array(
+				'type'               =&gt; 'warning',
+				'additional_classes' =&gt; array( 'inline', 'wp-pp-notice' ),
+			)
+		);
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-privacy-policy-content.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-privacy-policy-content.php#L314">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-privacy-policy-content.php#L314-L371">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td><span class="since-description">The <code>$post</code> parameter was made optional.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.6/">4.9.6</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_privacy_policy_content/notice" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_privacy_policy_content/notice</a>
+  </p>
+</div>

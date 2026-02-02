@@ -1,0 +1,68 @@
+<h1 class="wp-block-wporg-code-reference-title">wpdb::parse_db_host( <span class="arg-type">string</span> <span class="arg-name">$host</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Parses the DB_HOST setting to interpret it for mysqli_real_connect().</p> </section> <section><h2 id="description">Description</h2> <p>mysqli_real_connect() doesn’t support the host param including a port or socket like mysql_connect() does. This duplicates how mysql_connect() detects a port and/or socket file.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$host</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The DB_HOST setting to parse.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> Array containing the host, the port, the socket and whether it is an IPv6 address, in that order.<br> False if the host couldn’t be parsed.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">string</span><div class="desc">Host name.</div>
+</li> <li>
+<code>1</code> <span class="type">string|null</span><div class="desc">Port.</div>
+</li> <li>
+<code>2</code> <span class="type">string|null</span><div class="desc">Socket.</div>
+</li> <li>
+<code>3</code> <span class="type">bool</span><div class="desc">Whether it is an IPv6 address.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2065" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function parse_db_host( $host ) {
+	$socket  = null;
+	$is_ipv6 = false;
+
+	// First peel off the socket parameter from the right, if it exists.
+	$socket_pos = strpos( $host, ':/' );
+	if ( false !== $socket_pos ) {
+		$socket = substr( $host, $socket_pos + 1 );
+		$host   = substr( $host, 0, $socket_pos );
+	}
+
+	/*
+	 * We need to check for an IPv6 address first.
+	 * An IPv6 address will always contain at least two colons.
+	 */
+	if ( substr_count( $host, ':' ) &gt; 1 ) {
+		$pattern = '#^(?:\[)?(?P&lt;host&gt;[0-9a-fA-F:]+)(?:\]:(?P&lt;port&gt;[\d]+))?#';
+		$is_ipv6 = true;
+	} else {
+		// We seem to be dealing with an IPv4 address.
+		$pattern = '#^(?P&lt;host&gt;[^:/]*)(?::(?P&lt;port&gt;[\d]+))?#';
+	}
+
+	$matches = array();
+	$result  = preg_match( $pattern, $host, $matches );
+
+	if ( 1 !== $result ) {
+		// Couldn't parse the address, bail.
+		return false;
+	}
+
+	$host = ! empty( $matches['host'] ) ? $matches['host'] : '';
+	// MySQLi port cannot be a string; must be null or an integer.
+	$port = ! empty( $matches['port'] ) ? absint( $matches['port'] ) : null;
+
+	return array( $host, $port, $socket, $is_ipv6 );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wpdb.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wpdb.php#L2065">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wpdb.php#L2065-L2101">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.0/">4.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wpdb/parse_db_host" class="_attribution-link">https://developer.wordpress.org/reference/classes/wpdb/parse_db_host</a>
+  </p>
+</div>

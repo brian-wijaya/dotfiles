@@ -1,0 +1,537 @@
+<h1 class="devsite-page-title" tabindex="-1"> tf.keras.Model </h1> <devsite-feature-tooltip ack-key="AckCollectionsBookmarkTooltipDismiss" analytics-category="Site-Wide Custom Events" analytics-action-show="Callout Profile displayed" analytics-action-close="Callout Profile dismissed" analytics-label="Create Collection Callout" class="devsite-page-bookmark-tooltip nocontent" dismiss-button="true" id="devsite-collections-dropdown" dismiss-button-text="Dismiss" close-button-text="Got it">    </devsite-feature-tooltip> <div class="devsite-page-title-meta"><devsite-view-release-notes></devsite-view-release-notes></div>     <div itemscope itemtype="http://developers.google.com/ReferenceObject"> <meta itemprop="name" content="tf.keras.Model"> <meta itemprop="path" content="Stable"> <meta itemprop="property" content="__init__"> <meta itemprop="property" content="compile"> <meta itemprop="property" content="compile_from_config"> <meta itemprop="property" content="compiled_loss"> <meta itemprop="property" content="compute_loss"> <meta itemprop="property" content="compute_metrics"> <meta itemprop="property" content="evaluate"> <meta itemprop="property" content="export"> <meta itemprop="property" content="fit"> <meta itemprop="property" content="from_config"> <meta itemprop="property" content="get_compile_config"> <meta itemprop="property" content="get_layer"> <meta itemprop="property" content="get_metrics_result"> <meta itemprop="property" content="load_weights"> <meta itemprop="property" content="loss"> <meta itemprop="property" content="make_predict_function"> <meta itemprop="property" content="make_test_function"> <meta itemprop="property" content="make_train_function"> <meta itemprop="property" content="predict"> <meta itemprop="property" content="predict_on_batch"> <meta itemprop="property" content="predict_step"> <meta itemprop="property" content="reset_metrics"> <meta itemprop="property" content="save"> <meta itemprop="property" content="save_weights"> <meta itemprop="property" content="stateless_compute_loss"> <meta itemprop="property" content="summary"> <meta itemprop="property" content="symbolic_call"> <meta itemprop="property" content="test_on_batch"> <meta itemprop="property" content="test_step"> <meta itemprop="property" content="to_json"> <meta itemprop="property" content="train_on_batch"> <meta itemprop="property" content="train_step"> </div>   <p>A model grouping layers into an object with training/inference features.</p> <p>Inherits From: <a href="layer"><code translate="no" dir="ltr">Layer</code></a>, <a href="operation"><code translate="no" dir="ltr">Operation</code></a></p> <section class="expandable"> <h4 class="showalways" id="view-aliases" data-text="View aliases" tabindex="-1">View aliases</h4> <p> <b>Main aliases</b> </p>
+<p><a href="model"><code translate="no" dir="ltr">tf.keras.models.Model</code></a></p> <b>Compat aliases for migration</b> <p>See <a href="https://www.tensorflow.org/guide/migrate">Migration guide</a> for more details.</p> <p><a href="model"><code translate="no" dir="ltr">tf.compat.v1.keras.Model</code></a></p> </section> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">tf.keras.Model(
+    *args, **kwargs
+)
+</pre></devsite-code> <h3 id="used-in-the-notebooks" data-text="Used in the notebooks" tabindex="-1">Used in the notebooks</h3> <table class="vertical-rules"> <thead> <tr> <th>Used in the guide</th> <th>Used in the tutorials</th> </tr> </thead> <tbody> <tr> <td> <ul> <li><a href="https://www.tensorflow.org/guide/migrate/model_mapping">Use TF1.x models in TF2 workflows</a></li> <li><a href="https://www.tensorflow.org/guide/migrate/migrating_feature_columns">Migrate `tf.feature_column`s to Keras preprocessing layers</a></li> <li><a href="https://www.tensorflow.org/guide/migrate/migration_debugging">Debug a TensorFlow 2 migrated training pipeline</a></li> <li><a href="https://www.tensorflow.org/guide/intro_to_modules">Introduction to modules, layers, and models</a></li> <li><a href="https://www.tensorflow.org/guide/basic_training_loops">Basic training loops</a></li> </ul> </td> <td> <ul> <li><a href="https://www.tensorflow.org/tutorials/structured_data/time_series">Time series forecasting</a></li> <li><a href="https://www.tensorflow.org/tutorials/load_data/pandas_dataframe">Load a pandas DataFrame</a></li> <li><a href="https://www.tensorflow.org/tutorials/distribute/parameter_server_training">Parameter server training with ParameterServerStrategy</a></li> <li><a href="https://www.tensorflow.org/tutorials/generative/autoencoder">Intro to Autoencoders</a></li> <li><a href="https://www.tensorflow.org/tutorials/generative/data_compression">Learned data compression</a></li> </ul> </td> </tr> </tbody> </table> <p>There are three ways to instantiate a <code translate="no" dir="ltr">Model</code>:</p> <h2 id="with_the_functional_api" data-text='With the "Functional API"' tabindex="-1">With the "Functional API"</h2> <p>You start from <code translate="no" dir="ltr">Input</code>, you chain layer calls to specify the model's forward pass, and finally you create your model from inputs and outputs:</p> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">inputs = keras.Input(shape=(37,))
+x = keras.layers.Dense(32, activation="relu")(inputs)
+outputs = keras.layers.Dense(5, activation="softmax")(x)
+model = keras.Model(inputs=inputs, outputs=outputs)
+</pre></devsite-code><blockquote class="note">
+<strong>Note:</strong><span> Only dicts, lists, and tuples of input tensors are supported. Nested inputs are not supported (e.g. lists of list or dicts of dict).</span>
+</blockquote> <p>A new Functional API model can also be created by using the intermediate tensors. This enables you to quickly extract sub-components of the model.</p> <h4 id="example" data-text="Example:" tabindex="-1">Example:</h4> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">inputs = keras.Input(shape=(None, None, 3))
+processed = keras.layers.RandomCrop(width=128, height=128)(inputs)
+conv = keras.layers.Conv2D(filters=32, kernel_size=3)(processed)
+pooling = keras.layers.GlobalAveragePooling2D()(conv)
+feature = keras.layers.Dense(10)(pooling)
+
+full_model = keras.Model(inputs, feature)
+backbone = keras.Model(processed, conv)
+activations = keras.Model(conv, feature)
+</pre></devsite-code> <p>Note that the <code translate="no" dir="ltr">backbone</code> and <code translate="no" dir="ltr">activations</code> models are not created with <a href="input"><code translate="no" dir="ltr">keras.Input</code></a> objects, but with the tensors that originate from <a href="input"><code translate="no" dir="ltr">keras.Input</code></a> objects. Under the hood, the layers and weights will be shared across these models, so that user can train the <code translate="no" dir="ltr">full_model</code>, and use <code translate="no" dir="ltr">backbone</code> or <code translate="no" dir="ltr">activations</code> to do feature extraction. The inputs and outputs of the model can be nested structures of tensors as well, and the created models are standard Functional API models that support all the existing APIs.</p> <h2 id="by_subclassing_the_model_class" data-text="By subclassing the Model class" tabindex="-1">By subclassing the <code translate="no" dir="ltr">Model</code> class</h2> <p>In that case, you should define your layers in <code translate="no" dir="ltr">__init__()</code> and you should implement the model's forward pass in <code translate="no" dir="ltr">call()</code>.</p> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">class MyModel(keras.Model):
+    def __init__(self):
+        super().__init__()
+        self.dense1 = keras.layers.Dense(32, activation="relu")
+        self.dense2 = keras.layers.Dense(5, activation="softmax")
+
+    def call(self, inputs):
+        x = self.dense1(inputs)
+        return self.dense2(x)
+
+model = MyModel()
+</pre></devsite-code> <p>If you subclass <code translate="no" dir="ltr">Model</code>, you can optionally have a <code translate="no" dir="ltr">training</code> argument (boolean) in <code translate="no" dir="ltr">call()</code>, which you can use to specify a different behavior in training and inference:</p> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">class MyModel(keras.Model):
+    def __init__(self):
+        super().__init__()
+        self.dense1 = keras.layers.Dense(32, activation="relu")
+        self.dense2 = keras.layers.Dense(5, activation="softmax")
+        self.dropout = keras.layers.Dropout(0.5)
+
+    def call(self, inputs, training=False):
+        x = self.dense1(inputs)
+        x = self.dropout(x, training=training)
+        return self.dense2(x)
+
+model = MyModel()
+</pre></devsite-code> <p>Once the model is created, you can config the model with losses and metrics with <code translate="no" dir="ltr">model.compile()</code>, train the model with <code translate="no" dir="ltr">model.fit()</code>, or use the model to do prediction with <code translate="no" dir="ltr">model.predict()</code>.</p> <h2 id="with_the_sequential_class" data-text="With the Sequential class" tabindex="-1">With the <code translate="no" dir="ltr">Sequential</code> class</h2> <p>In addition, <a href="sequential"><code translate="no" dir="ltr">keras.Sequential</code></a> is a special case of model where the model is purely a stack of single-input, single-output layers.</p> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">model = keras.Sequential([
+    keras.Input(shape=(None, None, 3)),
+    keras.layers.Conv2D(filters=32, kernel_size=3),
+])
+</pre></devsite-code>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Attributes</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">compiled_metrics</code> </td> <td> 
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">distribute_reduction_method</code> </td> <td> 
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">distribute_strategy</code> </td> <td> 
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">input</code> </td> <td> Retrieves the input tensor(s) of a symbolic operation. <p>Only returns the tensor(s) corresponding to the <em>first time</em> the operation was called. </p>
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">jit_compile</code> </td> <td> 
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">layers</code> </td> <td> 
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">metrics_names</code> </td> <td> 
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">output</code> </td> <td> Retrieves the output tensor(s) of a layer. <p>Only returns the tensor(s) corresponding to the <em>first time</em> the operation was called. </p>
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">run_eagerly</code> </td> <td> 
+</td> </tr> </table> <h2 id="methods" data-text="Methods" tabindex="-1">Methods</h2> <h3 id="compile" data-text="compile" tabindex="-1"><code translate="no" dir="ltr">compile</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/trainers/trainer.py#L29-L193">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">compile(
+    optimizer='rmsprop',
+    loss=None,
+    loss_weights=None,
+    metrics=None,
+    weighted_metrics=None,
+    run_eagerly=False,
+    steps_per_execution=1,
+    jit_compile='auto',
+    auto_scale_loss=True
+)
+</pre></devsite-code> <p>Configures the model for training.</p> <h4 id="example_2" data-text="Example:" tabindex="-1">Example:</h4> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">model.compile(
+    optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+    loss=keras.losses.BinaryCrossentropy(),
+    metrics=[
+        keras.metrics.BinaryAccuracy(),
+        keras.metrics.FalseNegatives(),
+    ],
+)
+</pre></devsite-code>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">optimizer</code> </td> <td> String (name of optimizer) or optimizer instance. See <a href="optimizers"><code translate="no" dir="ltr">keras.optimizers</code></a>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">loss</code> </td> <td> Loss function. May be a string (name of loss function), or a <a href="loss"><code translate="no" dir="ltr">keras.losses.Loss</code></a> instance. See <a href="losses"><code translate="no" dir="ltr">keras.losses</code></a>. A loss function is any callable with the signature <code translate="no" dir="ltr">loss = fn(y_true, y_pred)</code>, where <code translate="no" dir="ltr">y_true</code> are the ground truth values, and <code translate="no" dir="ltr">y_pred</code> are the model's predictions. <code translate="no" dir="ltr">y_true</code> should have shape <code translate="no" dir="ltr">(batch_size, d0, .. dN)</code> (except in the case of sparse loss functions such as sparse categorical crossentropy which expects integer arrays of shape <code translate="no" dir="ltr">(batch_size, d0, .. dN-1)</code>). <code translate="no" dir="ltr">y_pred</code> should have shape <code translate="no" dir="ltr">(batch_size, d0, .. dN)</code>. The loss function should return a float tensor. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">loss_weights</code> </td> <td> Optional list or dictionary specifying scalar coefficients (Python floats) to weight the loss contributions of different model outputs. The loss value that will be minimized by the model will then be the <em>weighted sum</em> of all individual losses, weighted by the <code translate="no" dir="ltr">loss_weights</code> coefficients. If a list, it is expected to have a 1:1 mapping to the model's outputs. If a dict, it is expected to map output names (strings) to scalar coefficients. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">metrics</code> </td> <td> List of metrics to be evaluated by the model during training and testing. Each of this can be a string (name of a built-in function), function or a <a href="metric"><code translate="no" dir="ltr">keras.metrics.Metric</code></a> instance. See <a href="metrics"><code translate="no" dir="ltr">keras.metrics</code></a>. Typically you will use <code translate="no" dir="ltr">metrics=['accuracy']</code>. A function is any callable with the signature <code translate="no" dir="ltr">result = fn(y_true, _pred)</code>. To specify different metrics for different outputs of a multi-output model, you could also pass a dictionary, such as <code translate="no" dir="ltr">metrics={'a':'accuracy', 'b':['accuracy', 'mse']}</code>. You can also pass a list to specify a metric or a list of metrics for each output, such as <code translate="no" dir="ltr">metrics=[['accuracy'], ['accuracy', 'mse']]</code> or <code translate="no" dir="ltr">metrics=['accuracy', ['accuracy', 'mse']]</code>. When you pass the strings 'accuracy' or 'acc', we convert this to one of <a href="metrics/binaryaccuracy"><code translate="no" dir="ltr">keras.metrics.BinaryAccuracy</code></a>, <a href="metrics/categoricalaccuracy"><code translate="no" dir="ltr">keras.metrics.CategoricalAccuracy</code></a>, <a href="metrics/sparsecategoricalaccuracy"><code translate="no" dir="ltr">keras.metrics.SparseCategoricalAccuracy</code></a> based on the shapes of the targets and of the model output. A similar conversion is done for the strings <code translate="no" dir="ltr">"crossentropy"</code> and <code translate="no" dir="ltr">"ce"</code> as well. The metrics passed here are evaluated without sample weighting; if you would like sample weighting to apply, you can specify your metrics via the <code translate="no" dir="ltr">weighted_metrics</code> argument instead. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">weighted_metrics</code> </td> <td> List of metrics to be evaluated and weighted by <code translate="no" dir="ltr">sample_weight</code> or <code translate="no" dir="ltr">class_weight</code> during training and testing. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">run_eagerly</code> </td> <td> Bool. If <code translate="no" dir="ltr">True</code>, this model's forward pass will never be compiled. It is recommended to leave this as <code translate="no" dir="ltr">False</code> when training (for best performance), and to set it to <code translate="no" dir="ltr">True</code> when debugging. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">steps_per_execution</code> </td> <td> Int. The number of batches to run during each a single compiled function call. Running multiple batches inside a single compiled function call can greatly improve performance on TPUs or small models with a large Python overhead. At most, one full epoch will be run each execution. If a number larger than the size of the epoch is passed, the execution will be truncated to the size of the epoch. Note that if <code translate="no" dir="ltr">steps_per_execution</code> is set to <code translate="no" dir="ltr">N</code>, <a href="callbacks/callback#on_batch_begin"><code translate="no" dir="ltr">Callback.on_batch_begin</code></a> and <a href="callbacks/callback#on_batch_end"><code translate="no" dir="ltr">Callback.on_batch_end</code></a> methods will only be called every <code translate="no" dir="ltr">N</code> batches (i.e. before/after each compiled function execution). Not supported with the PyTorch backend. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">jit_compile</code> </td> <td> Bool or <code translate="no" dir="ltr">"auto"</code>. Whether to use XLA compilation when compiling a model. For <code translate="no" dir="ltr">jax</code> and <code translate="no" dir="ltr">tensorflow</code> backends, <code translate="no" dir="ltr">jit_compile="auto"</code> enables XLA compilation if the model supports it, and disabled otherwise. For <code translate="no" dir="ltr">torch</code> backend, <code translate="no" dir="ltr">"auto"</code> will default to eager execution and <code translate="no" dir="ltr">jit_compile=True</code> will run with <code translate="no" dir="ltr">torch.compile</code> with the <code translate="no" dir="ltr">"inductor"</code> backend. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">auto_scale_loss</code> </td> <td> Bool. If <code translate="no" dir="ltr">True</code> and the model dtype policy is <code translate="no" dir="ltr">"mixed_float16"</code>, the passed optimizer will be automatically wrapped in a <code translate="no" dir="ltr">LossScaleOptimizer</code>, which will dynamically scale the loss to prevent underflow. </td> </tr> </table> <h3 id="compile_from_config" data-text="compile_from_config" tabindex="-1"><code translate="no" dir="ltr">compile_from_config</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/trainers/trainer.py#L848-L874">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">compile_from_config(
+    config
+)
+</pre></devsite-code> <p>Compiles the model with the information given in config.</p> <p>This method uses the information in the config (optimizer, loss, metrics, etc.) to compile the model.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">config</code> </td> <td> Dict containing information for compiling the model. </td> </tr> </table> <h3 id="compiled_loss" data-text="compiled_loss" tabindex="-1"><code translate="no" dir="ltr">compiled_loss</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L600-L609">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">compiled_loss(
+    y, y_pred, sample_weight=None, regularization_losses=None
+)
+</pre></devsite-code> <h3 id="compute_loss" data-text="compute_loss" tabindex="-1"><code translate="no" dir="ltr">compute_loss</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/trainers/trainer.py#L258-L331">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">compute_loss(
+    x=None, y=None, y_pred=None, sample_weight=None
+)
+</pre></devsite-code> <p>Compute the total loss, validate it, and return it.</p> <p>Subclasses can optionally override this method to provide custom loss computation logic.</p> <h4 id="example_3" data-text="Example:" tabindex="-1">Example:</h4> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">class MyModel(Model):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loss_tracker = metrics.Mean(name='loss')
+
+    def compute_loss(self, x, y, y_pred, sample_weight):
+        loss = ops.means((y_pred - y) ** 2)
+        loss += ops.sum(self.losses)
+        self.loss_tracker.update_state(loss)
+        return loss
+
+    def reset_metrics(self):
+        self.loss_tracker.reset_state()
+
+    @property
+    def metrics(self):
+        return [self.loss_tracker]
+
+inputs = layers.Input(shape=(10,), name='my_input')
+outputs = layers.Dense(10)(inputs)
+model = MyModel(inputs, outputs)
+model.add_loss(ops.sum(outputs))
+
+optimizer = SGD()
+model.compile(optimizer, loss='mse', steps_per_execution=10)
+dataset = ...
+model.fit(dataset, epochs=2, steps_per_epoch=10)
+print(f"Custom loss: {model.loss_tracker.result()}")
+</pre></devsite-code>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">x</code> </td> <td> Input data. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">y</code> </td> <td> Target data. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">y_pred</code> </td> <td> Predictions returned by the model (output of <code translate="no" dir="ltr">model(x)</code>) </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">sample_weight</code> </td> <td> Sample weights for weighting the loss function. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> The total loss as a scalar tensor, or <code translate="no" dir="ltr">None</code> if no loss results (which is the case when called by <a href="model#test_step"><code translate="no" dir="ltr">Model.test_step</code></a>). </td> </tr> 
+</table> <h3 id="compute_metrics" data-text="compute_metrics" tabindex="-1"><code translate="no" dir="ltr">compute_metrics</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/trainers/trainer.py#L375-L413">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">compute_metrics(
+    x, y, y_pred, sample_weight=None
+)
+</pre></devsite-code> <p>Update metric states and collect all metrics to be returned.</p> <p>Subclasses can optionally override this method to provide custom metric updating and collection logic.</p> <h4 id="example_4" data-text="Example:" tabindex="-1">Example:</h4> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">class MyModel(Sequential):
+    def compute_metrics(self, x, y, y_pred, sample_weight):
+        # This super call updates `self.compiled_metrics` and returns
+        # results for all metrics listed in `self.metrics`.
+        metric_results = super().compute_metrics(
+            x, y, y_pred, sample_weight)
+
+        # Note that `self.custom_metric` is not listed
+        # in `self.metrics`.
+        self.custom_metric.update_state(x, y, y_pred, sample_weight)
+        metric_results['metric_name'] = self.custom_metric.result()
+        return metric_results
+</pre></devsite-code>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">x</code> </td> <td> Input data. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">y</code> </td> <td> Target data. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">y_pred</code> </td> <td> Predictions returned by the model output of <code translate="no" dir="ltr">model.call(x)</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">sample_weight</code> </td> <td> Sample weights for weighting the loss function. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A <code translate="no" dir="ltr">dict</code> containing values that will be passed to <a href="callbacks/callbacklist#on_train_batch_end"><code translate="no" dir="ltr">keras.callbacks.CallbackList.on_train_batch_end()</code></a>. Typically, the values of the metrics listed in <code translate="no" dir="ltr">self.metrics</code> are returned. </td> </tr> <tr> <td> <code translate="no" dir="ltr">Example</code> </td> <td> <code translate="no" dir="ltr">{'loss': 0.2, 'accuracy': 0.7}</code>. </td> </tr> </table> <h3 id="evaluate" data-text="evaluate" tabindex="-1"><code translate="no" dir="ltr">evaluate</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L371-L435">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">evaluate(
+    x=None,
+    y=None,
+    batch_size=None,
+    verbose='auto',
+    sample_weight=None,
+    steps=None,
+    callbacks=None,
+    return_dict=False,
+    **kwargs
+)
+</pre></devsite-code> <p>Returns the loss value &amp; metrics values for the model in test mode.</p> <p>Computation is done in batches (see the <code translate="no" dir="ltr">batch_size</code> arg.)</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">x</code> </td> <td> Input data. It could be: <ul> <li>A NumPy array (or array-like), or a list of arrays (in case the model has multiple inputs).</li> <li>A tensor, or a list of tensors (in case the model has multiple inputs).</li> <li>A dict mapping input names to the corresponding array/tensors, if the model has named inputs.</li> <li>A <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a>. Should return a tuple of either <code translate="no" dir="ltr">(inputs, targets)</code> or <code translate="no" dir="ltr">(inputs, targets, sample_weights)</code>.</li> <li>A generator or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> returning <code translate="no" dir="ltr">(inputs, targets)</code> or <code translate="no" dir="ltr">(inputs, targets, sample_weights)</code>. </li>
+</ul>
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">y</code> </td> <td> Target data. Like the input data <code translate="no" dir="ltr">x</code>, it could be either NumPy array(s) or backend-native tensor(s). If <code translate="no" dir="ltr">x</code> is a <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a> or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> instance, <code translate="no" dir="ltr">y</code> should not be specified (since targets will be obtained from the iterator/dataset). </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">batch_size</code> </td> <td> Integer or <code translate="no" dir="ltr">None</code>. Number of samples per batch of computation. If unspecified, <code translate="no" dir="ltr">batch_size</code> will default to 32. Do not specify the <code translate="no" dir="ltr">batch_size</code> if your data is in the form of a dataset, generators, or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> instances (since they generate batches). </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">verbose</code> </td> <td> <code translate="no" dir="ltr">"auto"</code>, 0, 1, or 2. Verbosity mode. 0 = silent, 1 = progress bar, 2 = single line. <code translate="no" dir="ltr">"auto"</code> becomes 1 for most cases. Note that the progress bar is not particularly useful when logged to a file, so <code translate="no" dir="ltr">verbose=2</code> is recommended when not running interactively (e.g. in a production environment). Defaults to <code translate="no" dir="ltr">"auto"</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">sample_weight</code> </td> <td> Optional NumPy array of weights for the test samples, used for weighting the loss function. You can either pass a flat (1D) NumPy array with the same length as the input samples (1:1 mapping between weights and samples), or in the case of temporal data, you can pass a 2D array with shape <code translate="no" dir="ltr">(samples, sequence_length)</code>, to apply a different weight to every timestep of every sample. This argument is not supported when <code translate="no" dir="ltr">x</code> is a dataset, instead pass sample weights as the third element of <code translate="no" dir="ltr">x</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">steps</code> </td> <td> Integer or <code translate="no" dir="ltr">None</code>. Total number of steps (batches of samples) before declaring the evaluation round finished. Ignored with the default value of <code translate="no" dir="ltr">None</code>. If <code translate="no" dir="ltr">x</code> is a <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a> and <code translate="no" dir="ltr">steps</code> is <code translate="no" dir="ltr">None</code>, evaluation will run until the dataset is exhausted. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">callbacks</code> </td> <td> List of <a href="callbacks/callback"><code translate="no" dir="ltr">keras.callbacks.Callback</code></a> instances. List of callbacks to apply during evaluation. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">return_dict</code> </td> <td> If <code translate="no" dir="ltr">True</code>, loss and metric results are returned as a dict, with each key being the name of the metric. If <code translate="no" dir="ltr">False</code>, they are returned as a list. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> Scalar test loss (if the model has a single output and no metrics) or list of scalars (if the model has multiple outputs and/or metrics). The attribute <code translate="no" dir="ltr">model.metrics_names</code> will give you the display labels for the scalar outputs. </td> </tr> 
+</table> <h3 id="export" data-text="export" tabindex="-1"><code translate="no" dir="ltr">export</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/models/model.py#L452-L488">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">export(
+    filepath, format='tf_saved_model'
+)
+</pre></devsite-code> <p>Create a TF SavedModel artifact for inference.</p> <blockquote class="note">
+<strong>Note:</strong><span> This can currently only be used with the TensorFlow or JAX backends.</span>
+</blockquote> <p>This method lets you export a model to a lightweight SavedModel artifact that contains the model's forward pass only (its <code translate="no" dir="ltr">call()</code> method) and can be served via e.g. TF-Serving. The forward pass is registered under the name <code translate="no" dir="ltr">serve()</code> (see example below).</p> <p>The original code of the model (including any custom layers you may have used) is <em>no longer</em> necessary to reload the artifact -- it is entirely standalone.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">filepath</code> </td> <td> <code translate="no" dir="ltr">str</code> or <code translate="no" dir="ltr">pathlib.Path</code> object. Path where to save the artifact. </td> </tr> </table> <h4 id="example_5" data-text="Example:" tabindex="-1">Example:</h4> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp"># Create the artifact
+model.export("path/to/location")
+
+# Later, in a different process / environment...
+reloaded_artifact = tf.saved_model.load("path/to/location")
+predictions = reloaded_artifact.serve(input_data)
+</pre></devsite-code> <p>If you would like to customize your serving endpoints, you can use the lower-level <a href="export/exportarchive"><code translate="no" dir="ltr">keras.export.ExportArchive</code></a> class. The <code translate="no" dir="ltr">export()</code> method relies on <code translate="no" dir="ltr">ExportArchive</code> internally.</p> <h3 id="fit" data-text="fit" tabindex="-1"><code translate="no" dir="ltr">fit</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L236-L369">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">fit(
+    x=None,
+    y=None,
+    batch_size=None,
+    epochs=1,
+    verbose='auto',
+    callbacks=None,
+    validation_split=0.0,
+    validation_data=None,
+    shuffle=True,
+    class_weight=None,
+    sample_weight=None,
+    initial_epoch=0,
+    steps_per_epoch=None,
+    validation_steps=None,
+    validation_batch_size=None,
+    validation_freq=1
+)
+</pre></devsite-code> <p>Trains the model for a fixed number of epochs (dataset iterations).</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">x</code> </td> <td> Input data. It could be: <ul> <li>A NumPy array (or array-like), or a list of arrays (in case the model has multiple inputs).</li> <li>A tensor, or a list of tensors (in case the model has multiple inputs).</li> <li>A dict mapping input names to the corresponding array/tensors, if the model has named inputs.</li> <li>A <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a>. Should return a tuple of either <code translate="no" dir="ltr">(inputs, targets)</code> or <code translate="no" dir="ltr">(inputs, targets, sample_weights)</code>.</li> <li>A <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> returning <code translate="no" dir="ltr">(inputs, targets)</code> or <code translate="no" dir="ltr">(inputs, targets, sample_weights)</code>. </li>
+</ul>
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">y</code> </td> <td> Target data. Like the input data <code translate="no" dir="ltr">x</code>, it could be either NumPy array(s) or backend-native tensor(s). If <code translate="no" dir="ltr">x</code> is a dataset, generator, or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> instance, <code translate="no" dir="ltr">y</code> should not be specified (since targets will be obtained from <code translate="no" dir="ltr">x</code>). </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">batch_size</code> </td> <td> Integer or <code translate="no" dir="ltr">None</code>. Number of samples per gradient update. If unspecified, <code translate="no" dir="ltr">batch_size</code> will default to 32. Do not specify the <code translate="no" dir="ltr">batch_size</code> if your data is in the form of datasets, generators, or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> instances (since they generate batches). </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">epochs</code> </td> <td> Integer. Number of epochs to train the model. An epoch is an iteration over the entire <code translate="no" dir="ltr">x</code> and <code translate="no" dir="ltr">y</code> data provided (unless the <code translate="no" dir="ltr">steps_per_epoch</code> flag is set to something other than None). Note that in conjunction with <code translate="no" dir="ltr">initial_epoch</code>, <code translate="no" dir="ltr">epochs</code> is to be understood as "final epoch". The model is not trained for a number of iterations given by <code translate="no" dir="ltr">epochs</code>, but merely until the epoch of index <code translate="no" dir="ltr">epochs</code> is reached. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">verbose</code> </td> <td> <code translate="no" dir="ltr">"auto"</code>, 0, 1, or 2. Verbosity mode. 0 = silent, 1 = progress bar, 2 = one line per epoch. "auto" becomes 1 for most cases. Note that the progress bar is not particularly useful when logged to a file, so <code translate="no" dir="ltr">verbose=2</code> is recommended when not running interactively (e.g., in a production environment). Defaults to <code translate="no" dir="ltr">"auto"</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">callbacks</code> </td> <td> List of <a href="callbacks/callback"><code translate="no" dir="ltr">keras.callbacks.Callback</code></a> instances. List of callbacks to apply during training. See <a href="callbacks"><code translate="no" dir="ltr">keras.callbacks</code></a>. Note <a href="callbacks/progbarlogger"><code translate="no" dir="ltr">keras.callbacks.ProgbarLogger</code></a> and <a href="callbacks/history"><code translate="no" dir="ltr">keras.callbacks.History</code></a> callbacks are created automatically and need not be passed to <code translate="no" dir="ltr">model.fit()</code>. <a href="callbacks/progbarlogger"><code translate="no" dir="ltr">keras.callbacks.ProgbarLogger</code></a> is created or not based on the <code translate="no" dir="ltr">verbose</code> argument in <code translate="no" dir="ltr">model.fit()</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">validation_split</code> </td> <td> Float between 0 and 1. Fraction of the training data to be used as validation data. The model will set apart this fraction of the training data, will not train on it, and will evaluate the loss and any model metrics on this data at the end of each epoch. The validation data is selected from the last samples in the <code translate="no" dir="ltr">x</code> and <code translate="no" dir="ltr">y</code> data provided, before shuffling. This argument is not supported when <code translate="no" dir="ltr">x</code> is a dataset, generator or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> instance. If both <code translate="no" dir="ltr">validation_data</code> and <code translate="no" dir="ltr">validation_split</code> are provided, <code translate="no" dir="ltr">validation_data</code> will override <code translate="no" dir="ltr">validation_split</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">validation_data</code> </td> <td> Data on which to evaluate the loss and any model metrics at the end of each epoch. The model will not be trained on this data. Thus, note the fact that the validation loss of data provided using <code translate="no" dir="ltr">validation_split</code> or <code translate="no" dir="ltr">validation_data</code> is not affected by regularization layers like noise and dropout. <code translate="no" dir="ltr">validation_data</code> will override <code translate="no" dir="ltr">validation_split</code>. It could be: <li>A tuple <code translate="no" dir="ltr">(x_val, y_val)</code> of NumPy arrays or tensors.</li> <li>A tuple <code translate="no" dir="ltr">(x_val, y_val, val_sample_weights)</code> of NumPy arrays.</li> <li>A <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a>.</li> <li>A Python generator or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> returning <code translate="no" dir="ltr">(inputs, targets)</code> or <code translate="no" dir="ltr">(inputs, targets, sample_weights)</code>. </li>
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">shuffle</code> </td> <td> Boolean, whether to shuffle the training data before each epoch. This argument is ignored when <code translate="no" dir="ltr">x</code> is a generator or a <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">class_weight</code> </td> <td> Optional dictionary mapping class indices (integers) to a weight (float) value, used for weighting the loss function (during training only). This can be useful to tell the model to "pay more attention" to samples from an under-represented class. When <code translate="no" dir="ltr">class_weight</code> is specified and targets have a rank of 2 or greater, either <code translate="no" dir="ltr">y</code> must be one-hot encoded, or an explicit final dimension of <code translate="no" dir="ltr">1</code> must be included for sparse class labels. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">sample_weight</code> </td> <td> Optional NumPy array of weights for the training samples, used for weighting the loss function (during training only). You can either pass a flat (1D) NumPy array with the same length as the input samples (1:1 mapping between weights and samples), or in the case of temporal data, you can pass a 2D array with shape <code translate="no" dir="ltr">(samples, sequence_length)</code>, to apply a different weight to every timestep of every sample. This argument is not supported when <code translate="no" dir="ltr">x</code> is a dataset, generator, or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> instance, instead provide the sample_weights as the third element of <code translate="no" dir="ltr">x</code>. Note that sample weighting does not apply to metrics specified via the <code translate="no" dir="ltr">metrics</code> argument in <code translate="no" dir="ltr">compile()</code>. To apply sample weighting to your metrics, you can specify them via the <code translate="no" dir="ltr">weighted_metrics</code> in <code translate="no" dir="ltr">compile()</code> instead. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">initial_epoch</code> </td> <td> Integer. Epoch at which to start training (useful for resuming a previous training run). </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">steps_per_epoch</code> </td> <td> Integer or <code translate="no" dir="ltr">None</code>. Total number of steps (batches of samples) before declaring one epoch finished and starting the next epoch. When training with input tensors such as backend-native tensors, the default <code translate="no" dir="ltr">None</code> is equal to the number of samples in your dataset divided by the batch size, or 1 if that cannot be determined. If <code translate="no" dir="ltr">x</code> is a <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a>, and <code translate="no" dir="ltr">steps_per_epoch</code> is <code translate="no" dir="ltr">None</code>, the epoch will run until the input dataset is exhausted. When passing an infinitely repeating dataset, you must specify the <code translate="no" dir="ltr">steps_per_epoch</code> argument. If <code translate="no" dir="ltr">steps_per_epoch=-1</code> the training will run indefinitely with an infinitely repeating dataset. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">validation_steps</code> </td> <td> Only relevant if <code translate="no" dir="ltr">validation_data</code> is provided. Total number of steps (batches of samples) to draw before stopping when performing validation at the end of every epoch. If <code translate="no" dir="ltr">validation_steps</code> is <code translate="no" dir="ltr">None</code>, validation will run until the <code translate="no" dir="ltr">validation_data</code> dataset is exhausted. In the case of an infinitely repeated dataset, it will run into an infinite loop. If <code translate="no" dir="ltr">validation_steps</code> is specified and only part of the dataset will be consumed, the evaluation will start from the beginning of the dataset at each epoch. This ensures that the same validation samples are used every time. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">validation_batch_size</code> </td> <td> Integer or <code translate="no" dir="ltr">None</code>. Number of samples per validation batch. If unspecified, will default to <code translate="no" dir="ltr">batch_size</code>. Do not specify the <code translate="no" dir="ltr">validation_batch_size</code> if your data is in the form of datasets or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> instances (since they generate batches). </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">validation_freq</code> </td> <td> Only relevant if validation data is provided. Specifies how many training epochs to run before a new validation run is performed, e.g. <code translate="no" dir="ltr">validation_freq=2</code> runs validation every 2 epochs. </td> </tr> </table> <p>Unpacking behavior for iterator-like inputs: A common pattern is to pass an iterator like object such as a <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a> or a <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> to <code translate="no" dir="ltr">fit()</code>, which will in fact yield not only features (<code translate="no" dir="ltr">x</code>) but optionally targets (<code translate="no" dir="ltr">y</code>) and sample weights (<code translate="no" dir="ltr">sample_weight</code>). Keras requires that the output of such iterator-likes be unambiguous. The iterator should return a tuple of length 1, 2, or 3, where the optional second and third elements will be used for <code translate="no" dir="ltr">y</code> and <code translate="no" dir="ltr">sample_weight</code> respectively. Any other type provided will be wrapped in a length-one tuple, effectively treating everything as <code translate="no" dir="ltr">x</code>. When yielding dicts, they should still adhere to the top-level tuple structure, e.g. <code translate="no" dir="ltr">({"x0": x0, "x1": x1}, y)</code>. Keras will not attempt to separate features, targets, and weights from the keys of a single dict. A notable unsupported data type is the <code translate="no" dir="ltr">namedtuple</code>. The reason is that it behaves like both an ordered datatype (tuple) and a mapping datatype (dict). So given a namedtuple of the form: <code translate="no" dir="ltr">namedtuple("example_tuple", ["y", "x"])</code> it is ambiguous whether to reverse the order of the elements when interpreting the value. Even worse is a tuple of the form: <code translate="no" dir="ltr">namedtuple("other_tuple", ["x", "y", "z"])</code> where it is unclear if the tuple was intended to be unpacked into <code translate="no" dir="ltr">x</code>, <code translate="no" dir="ltr">y</code>, and <code translate="no" dir="ltr">sample_weight</code> or passed through as a single element to <code translate="no" dir="ltr">x</code>.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A <code translate="no" dir="ltr">History</code> object. Its <code translate="no" dir="ltr">History.history</code> attribute is a record of training loss values and metrics values at successive epochs, as well as validation loss values and validation metrics values (if applicable). </td> </tr> 
+</table> <h3 id="from_config" data-text="from_config" tabindex="-1"><code translate="no" dir="ltr">from_config</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/models/model.py#L490-L543">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">@classmethod
+from_config(
+    config, custom_objects=None
+)
+</pre></devsite-code> <p>Creates a layer from its config.</p> <p>This method is the reverse of <code translate="no" dir="ltr">get_config</code>, capable of instantiating the same layer from the config dictionary. It does not handle layer connectivity (handled by Network), nor weights (handled by <code translate="no" dir="ltr">set_weights</code>).</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">config</code> </td> <td> A Python dictionary, typically the output of get_config. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A layer instance. </td> </tr> 
+</table> <h3 id="get_compile_config" data-text="get_compile_config" tabindex="-1"><code translate="no" dir="ltr">get_compile_config</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/trainers/trainer.py#L836-L846">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">get_compile_config()
+</pre></devsite-code> <p>Returns a serialized config with information for compiling the model.</p> <p>This method returns a config dictionary containing all the information (optimizer, loss, metrics, etc.) with which the model was compiled.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A dict containing information for compiling the model. </td> </tr> 
+</table> <h3 id="get_layer" data-text="get_layer" tabindex="-1"><code translate="no" dir="ltr">get_layer</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/models/model.py#L175-L214">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">get_layer(
+    name=None, index=None
+)
+</pre></devsite-code> <p>Retrieves a layer based on either its name (unique) or index.</p> <p>If <code translate="no" dir="ltr">name</code> and <code translate="no" dir="ltr">index</code> are both provided, <code translate="no" dir="ltr">index</code> will take precedence. Indices are based on order of horizontal graph traversal (bottom-up).</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">name</code> </td> <td> String, name of layer. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">index</code> </td> <td> Integer, index of layer. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A layer instance. </td> </tr> 
+</table> <h3 id="get_metrics_result" data-text="get_metrics_result" tabindex="-1"><code translate="no" dir="ltr">get_metrics_result</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/trainers/trainer.py#L415-L432">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">get_metrics_result()
+</pre></devsite-code> <p>Returns the model's metrics values as a dict.</p> <p>If any of the metric result is a dict (containing multiple metrics), each of them gets added to the top level returned dict of this method.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A <code translate="no" dir="ltr">dict</code> containing values of the metrics listed in <code translate="no" dir="ltr">self.metrics</code>. </td> </tr> <tr> <td> <code translate="no" dir="ltr">Example</code> </td> <td> <code translate="no" dir="ltr">{'loss': 0.2, 'accuracy': 0.7}</code>. </td> </tr> </table> <h3 id="load_weights" data-text="load_weights" tabindex="-1"><code translate="no" dir="ltr">load_weights</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/models/model.py#L320-L349">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">load_weights(
+    filepath, skip_mismatch=False, **kwargs
+)
+</pre></devsite-code> <p>Load weights from a file saved via <code translate="no" dir="ltr">save_weights()</code>.</p> <p>Weights are loaded based on the network's topology. This means the architecture should be the same as when the weights were saved. Note that layers that don't have weights are not taken into account in the topological ordering, so adding or removing layers is fine as long as they don't have weights.</p> <p><strong>Partial weight loading</strong></p> <p>If you have modified your model, for instance by adding a new layer (with weights) or by changing the shape of the weights of a layer, you can choose to ignore errors and continue loading by setting <code translate="no" dir="ltr">skip_mismatch=True</code>. In this case any layer with mismatching weights will be skipped. A warning will be displayed for each skipped layer.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">filepath</code> </td> <td> String, path to the weights file to load. It can either be a <code translate="no" dir="ltr">.weights.h5</code> file or a legacy <code translate="no" dir="ltr">.h5</code> weights file. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">skip_mismatch</code> </td> <td> Boolean, whether to skip loading of layers where there is a mismatch in the number of weights, or a mismatch in the shape of the weights. </td> </tr> </table> <h3 id="loss" data-text="loss" tabindex="-1"><code translate="no" dir="ltr">loss</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L611-L618">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">loss(
+    y, y_pred, sample_weight=None
+)
+</pre></devsite-code> <h3 id="make_predict_function" data-text="make_predict_function" tabindex="-1"><code translate="no" dir="ltr">make_predict_function</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L187-L234">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">make_predict_function(
+    force=False
+)
+</pre></devsite-code> <h3 id="make_test_function" data-text="make_test_function" tabindex="-1"><code translate="no" dir="ltr">make_test_function</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L143-L185">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">make_test_function(
+    force=False
+)
+</pre></devsite-code> <h3 id="make_train_function" data-text="make_train_function" tabindex="-1"><code translate="no" dir="ltr">make_train_function</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L97-L141">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">make_train_function(
+    force=False
+)
+</pre></devsite-code> <h3 id="predict" data-text="predict" tabindex="-1"><code translate="no" dir="ltr">predict</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L437-L513">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">predict(
+    x, batch_size=None, verbose='auto', steps=None, callbacks=None
+)
+</pre></devsite-code> <p>Generates output predictions for the input samples.</p> <p>Computation is done in batches. This method is designed for batch processing of large numbers of inputs. It is not intended for use inside of loops that iterate over your data and process small numbers of inputs at a time.</p> <p>For small numbers of inputs that fit in one batch, directly use <code translate="no" dir="ltr">__call__()</code> for faster execution, e.g., <code translate="no" dir="ltr">model(x)</code>, or <code translate="no" dir="ltr">model(x, training=False)</code> if you have layers such as <code translate="no" dir="ltr">BatchNormalization</code> that behave differently during inference.</p> <blockquote class="note">
+<strong>Note:</strong><span> See <a href="https://keras.io/getting_started/faq/#whats-the-difference-between-model-methods-predict-and-call">this FAQ entry</a> for more details about the difference between <code translate="no" dir="ltr">Model</code> methods <code translate="no" dir="ltr">predict()</code> and <code translate="no" dir="ltr">__call__()</code>.</span>
+</blockquote>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">x</code> </td> <td> Input samples. It could be: <ul> <li>A NumPy array (or array-like), or a list of arrays (in case the model has multiple inputs).</li> <li>A tensor, or a list of tensors (in case the model has multiple inputs).</li> <li>A <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a>.</li> <li>A <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> instance. </li>
+</ul>
+</td> </tr>
+<tr> <td> <code translate="no" dir="ltr">batch_size</code> </td> <td> Integer or <code translate="no" dir="ltr">None</code>. Number of samples per batch. If unspecified, <code translate="no" dir="ltr">batch_size</code> will default to 32. Do not specify the <code translate="no" dir="ltr">batch_size</code> if your data is in the form of dataset, generators, or <a href="utils/pydataset"><code translate="no" dir="ltr">keras.utils.PyDataset</code></a> instances (since they generate batches). </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">verbose</code> </td> <td> <code translate="no" dir="ltr">"auto"</code>, 0, 1, or 2. Verbosity mode. 0 = silent, 1 = progress bar, 2 = single line. <code translate="no" dir="ltr">"auto"</code> becomes 1 for most cases. Note that the progress bar is not particularly useful when logged to a file, so <code translate="no" dir="ltr">verbose=2</code> is recommended when not running interactively (e.g. in a production environment). Defaults to <code translate="no" dir="ltr">"auto"</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">steps</code> </td> <td> Total number of steps (batches of samples) before declaring the prediction round finished. Ignored with the default value of <code translate="no" dir="ltr">None</code>. If <code translate="no" dir="ltr">x</code> is a <a href="../data/dataset"><code translate="no" dir="ltr">tf.data.Dataset</code></a> and <code translate="no" dir="ltr">steps</code> is <code translate="no" dir="ltr">None</code>, <code translate="no" dir="ltr">predict()</code> will run until the input dataset is exhausted. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">callbacks</code> </td> <td> List of <a href="callbacks/callback"><code translate="no" dir="ltr">keras.callbacks.Callback</code></a> instances. List of callbacks to apply during prediction. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> NumPy array(s) of predictions. </td> </tr> 
+</table> <h3 id="predict_on_batch" data-text="predict_on_batch" tabindex="-1"><code translate="no" dir="ltr">predict_on_batch</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L565-L571">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">predict_on_batch(
+    x
+)
+</pre></devsite-code> <p>Returns predictions for a single batch of samples.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">x</code> </td> <td> Input data. It must be array-like. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> NumPy array(s) of predictions. </td> </tr> 
+</table> <h3 id="predict_step" data-text="predict_step" tabindex="-1"><code translate="no" dir="ltr">predict_step</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L89-L95">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">predict_step(
+    data
+)
+</pre></devsite-code> <h3 id="reset_metrics" data-text="reset_metrics" tabindex="-1"><code translate="no" dir="ltr">reset_metrics</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/trainers/trainer.py#L254-L256">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">reset_metrics()
+</pre></devsite-code> <h3 id="save" data-text="save" tabindex="-1"><code translate="no" dir="ltr">save</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/models/model.py#L266-L305">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">save(
+    filepath, overwrite=True, **kwargs
+)
+</pre></devsite-code> <p>Saves a model as a <code translate="no" dir="ltr">.keras</code> file.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">filepath</code> </td> <td> <code translate="no" dir="ltr">str</code> or <code translate="no" dir="ltr">pathlib.Path</code> object. Path where to save the model. Must end in <code translate="no" dir="ltr">.keras</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">overwrite</code> </td> <td> Whether we should overwrite any existing model at the target location, or instead ask the user via an interactive prompt. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">save_format</code> </td> <td> The <code translate="no" dir="ltr">save_format</code> argument is deprecated in Keras 3. Format to use, as a string. Only the <code translate="no" dir="ltr">"keras"</code> format is supported at this time. </td> </tr> </table> <h4 id="example_6" data-text="Example:" tabindex="-1">Example:</h4> 
+<devsite-code><pre class="devsite-click-to-copy" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">model = keras.Sequential(
+    [
+        keras.layers.Dense(5, input_shape=(3,)),
+        keras.layers.Softmax(),
+    ],
+)
+model.save("model.keras")
+loaded_model = keras.saving.load_model("model.keras")
+x = keras.random.uniform((10, 3))
+assert np.allclose(model.predict(x), loaded_model.predict(x))
+</pre></devsite-code> <p>Note that <code translate="no" dir="ltr">model.save()</code> is an alias for <code translate="no" dir="ltr">keras.saving.save_model()</code>.</p> <p>The saved <code translate="no" dir="ltr">.keras</code> file contains:</p> <ul> <li>The model's configuration (architecture)</li> <li>The model's weights</li> <li>The model's optimizer's state (if any)</li> </ul> <p>Thus models can be reinstantiated in the exact same state.</p> <h3 id="save_weights" data-text="save_weights" tabindex="-1"><code translate="no" dir="ltr">save_weights</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/models/model.py#L307-L318">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">save_weights(
+    filepath, overwrite=True
+)
+</pre></devsite-code> <p>Saves all layer weights to a <code translate="no" dir="ltr">.weights.h5</code> file.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">filepath</code> </td> <td> <code translate="no" dir="ltr">str</code> or <code translate="no" dir="ltr">pathlib.Path</code> object. Path where to save the model. Must end in <code translate="no" dir="ltr">.weights.h5</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">overwrite</code> </td> <td> Whether we should overwrite any existing model at the target location, or instead ask the user via an interactive prompt. </td> </tr> </table> <h3 id="stateless_compute_loss" data-text="stateless_compute_loss" tabindex="-1"><code translate="no" dir="ltr">stateless_compute_loss</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/trainers/trainer.py#L333-L373">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">stateless_compute_loss(
+    trainable_variables,
+    non_trainable_variables,
+    metrics_variables,
+    x=None,
+    y=None,
+    y_pred=None,
+    sample_weight=None
+)
+</pre></devsite-code> <h3 id="summary" data-text="summary" tabindex="-1"><code translate="no" dir="ltr">summary</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/models/model.py#L216-L264">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">summary(
+    line_length=None,
+    positions=None,
+    print_fn=None,
+    expand_nested=False,
+    show_trainable=False,
+    layer_range=None
+)
+</pre></devsite-code> <p>Prints a string summary of the network.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">line_length</code> </td> <td> Total length of printed lines (e.g. set this to adapt the display to different terminal window sizes). </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">positions</code> </td> <td> Relative or absolute positions of log elements in each line. If not provided, becomes <code translate="no" dir="ltr">[0.3, 0.6, 0.70, 1.]</code>. Defaults to <code translate="no" dir="ltr">None</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">print_fn</code> </td> <td> Print function to use. By default, prints to <code translate="no" dir="ltr">stdout</code>. If <code translate="no" dir="ltr">stdout</code> doesn't work in your environment, change to <code translate="no" dir="ltr">print</code>. It will be called on each line of the summary. You can set it to a custom function in order to capture the string summary. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">expand_nested</code> </td> <td> Whether to expand the nested models. Defaults to <code translate="no" dir="ltr">False</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">show_trainable</code> </td> <td> Whether to show if a layer is trainable. Defaults to <code translate="no" dir="ltr">False</code>. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">layer_range</code> </td> <td> a list or tuple of 2 strings, which is the starting layer name and ending layer name (both inclusive) indicating the range of layers to be printed in summary. It also accepts regex patterns instead of exact name. In such case, start predicate will be the first element it matches to <code translate="no" dir="ltr">layer_range[0]</code> and the end predicate will be the last element it matches to <code translate="no" dir="ltr">layer_range[1]</code>. By default <code translate="no" dir="ltr">None</code> which considers all layers of model. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Raises</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">ValueError</code> </td> <td> if <code translate="no" dir="ltr">summary()</code> is called before the model is built. </td> </tr> </table> <h3 id="symbolic_call" data-text="symbolic_call" tabindex="-1"><code translate="no" dir="ltr">symbolic_call</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/ops/operation.py#L58-L70">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">symbolic_call(
+    *args, **kwargs
+)
+</pre></devsite-code> <h3 id="test_on_batch" data-text="test_on_batch" tabindex="-1"><code translate="no" dir="ltr">test_on_batch</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L546-L563">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">test_on_batch(
+    x, y=None, sample_weight=None, return_dict=False
+)
+</pre></devsite-code> <p>Test the model on a single batch of samples.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">x</code> </td> <td> Input data. Must be array-like. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">y</code> </td> <td> Target data. Must be array-like. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">sample_weight</code> </td> <td> Optional array of the same length as x, containing weights to apply to the model's loss for each sample. In the case of temporal data, you can pass a 2D array with shape <code translate="no" dir="ltr">(samples, sequence_length)</code>, to apply a different weight to every timestep of every sample. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">return_dict</code> </td> <td> If <code translate="no" dir="ltr">True</code>, loss and metric results are returned as a dict, with each key being the name of the metric. If <code translate="no" dir="ltr">False</code>, they are returned as a list. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A scalar loss value (when no metrics and <code translate="no" dir="ltr">return_dict=False</code>), a list of loss and metric values (if there are metrics and <code translate="no" dir="ltr">return_dict=False</code>), or a dict of metric and loss values (if <code translate="no" dir="ltr">return_dict=True</code>). </td> </tr> 
+</table> <h3 id="test_step" data-text="test_step" tabindex="-1"><code translate="no" dir="ltr">test_step</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L75-L87">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">test_step(
+    data
+)
+</pre></devsite-code> <h3 id="to_json" data-text="to_json" tabindex="-1"><code translate="no" dir="ltr">to_json</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/models/model.py#L434-L450">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">to_json(
+    **kwargs
+)
+</pre></devsite-code> <p>Returns a JSON string containing the network configuration.</p> <p>To load a network from a JSON save file, use <a href="models/model_from_json"><code translate="no" dir="ltr">keras.models.model_from_json(json_string, custom_objects={...})</code></a>.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">**kwargs</code> </td> <td> Additional keyword arguments to be passed to <code translate="no" dir="ltr">json.dumps()</code>. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A JSON string. </td> </tr> 
+</table> <h3 id="train_on_batch" data-text="train_on_batch" tabindex="-1"><code translate="no" dir="ltr">train_on_batch</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L515-L544">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">train_on_batch(
+    x, y=None, sample_weight=None, class_weight=None, return_dict=False
+)
+</pre></devsite-code> <p>Runs a single gradient update on a single batch of data.</p>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Args</th></tr> 
+<tr> <td> <code translate="no" dir="ltr">x</code> </td> <td> Input data. Must be array-like. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">y</code> </td> <td> Target data. Must be array-like. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">sample_weight</code> </td> <td> Optional array of the same length as x, containing weights to apply to the model's loss for each sample. In the case of temporal data, you can pass a 2D array with shape <code translate="no" dir="ltr">(samples, sequence_length)</code>, to apply a different weight to every timestep of every sample. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">class_weight</code> </td> <td> Optional dictionary mapping class indices (integers) to a weight (float) to apply to the model's loss for the samples from this class during training. This can be useful to tell the model to "pay more attention" to samples from an under-represented class. When <code translate="no" dir="ltr">class_weight</code> is specified and targets have a rank of 2 or greater, either <code translate="no" dir="ltr">y</code> must be one-hot encoded, or an explicit final dimension of 1 must be included for sparse class labels. </td> </tr>
+<tr> <td> <code translate="no" dir="ltr">return_dict</code> </td> <td> If <code translate="no" dir="ltr">True</code>, loss and metric results are returned as a dict, with each key being the name of the metric. If <code translate="no" dir="ltr">False</code>, they are returned as a list. </td> </tr> </table>  
+<table class="responsive fixed orange"> <colgroup>
+<col width="214px">
+<col>
+</colgroup> <tr><th colspan="2">Returns</th></tr> <tr class="alt"> <td colspan="2"> A scalar loss value (when no metrics and <code translate="no" dir="ltr">return_dict=False</code>), a list of loss and metric values (if there are metrics and <code translate="no" dir="ltr">return_dict=False</code>), or a dict of metric and loss values (if <code translate="no" dir="ltr">return_dict=True</code>). </td> </tr> 
+</table> <h3 id="train_step" data-text="train_step" tabindex="-1"><code translate="no" dir="ltr">train_step</code></h3> <p><a target="_blank" class="external" href="https://github.com/keras-team/keras/tree/v3.3.3/keras/src/backend/tensorflow/trainer.py#L45-L73">View source</a></p> 
+<devsite-code><pre class="devsite-click-to-copy tfo-signature-link" translate="no" dir="ltr" is-upgraded syntax="Python" data-language="cpp">train_step(
+    data
+)
+</pre></devsite-code>  <devsite-thumb-rating position="footer"> </devsite-thumb-rating> <div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2022 The TensorFlow Authors. All rights reserved.<br>Licensed under the Creative Commons Attribution License 4.0.<br>Code samples licensed under the Apache 2.0 License.<br>
+    <a href="https://www.tensorflow.org/api_docs/python/tf/keras/Model" class="_attribution-link">https://www.tensorflow.org/api_docs/python/tf/keras/Model</a>
+  </p>
+</div>

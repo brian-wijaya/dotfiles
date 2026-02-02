@@ -1,0 +1,116 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_redirect( <span class="arg-type">string</span> <span class="arg-name">$location</span>, <span class="arg-type">int</span> <span class="arg-name">$status</span> = <span class="arg-default">302</span>, <span class="arg-type">string|false</span> <span class="arg-name">$x_redirect_by</span> = <span class="arg-default">‘WordPress’</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Redirects to another page.</p> </section> <section><h2 id="description">Description</h2> <p>Note: <a href="wp_redirect" rel="function">wp_redirect()</a> does not exit automatically, and should almost always be followed by a call to <code>exit;</code>:</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">wp_redirect( $url );
+exit;</code></pre> <p>Exiting can also be selectively manipulated by using <a href="wp_redirect" rel="function">wp_redirect()</a> as a conditional in conjunction with the <a href="../hooks/wp_redirect">‘wp_redirect’</a> and <a href="../hooks/wp_redirect_status">‘wp_redirect_status’</a> filters:</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">if ( wp_redirect( $url ) ) {
+    exit;
+}</code></pre></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$location</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The path or URL to redirect to.</span></div></dd>
+<dt>
+<code>$status</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">HTTP response status code to use. Default <code>'302'</code> (Moved Temporarily).</span></div>
+<p class="default">Default:<code>302</code></p>
+</dd>
+<dt>
+<code>$x_redirect_by</code><span class="type"><span class="string">string</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The application doing the redirect or false to omit. Default <code>'WordPress'</code>.</span></div>
+<p class="default">Default:<code>'WordPress'</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> False if the redirect was canceled, true otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1385" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_redirect( $location, $status = 302, $x_redirect_by = 'WordPress' ) {
+	global $is_IIS;
+
+	/**
+	 * Filters the redirect location.
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param string $location The path or URL to redirect to.
+	 * @param int    $status   The HTTP response status code to use.
+	 */
+	$location = apply_filters( 'wp_redirect', $location, $status );
+
+	/**
+	 * Filters the redirect HTTP response status code to use.
+	 *
+	 * @since 2.3.0
+	 *
+	 * @param int    $status   The HTTP response status code to use.
+	 * @param string $location The path or URL to redirect to.
+	 */
+	$status = apply_filters( 'wp_redirect_status', $status, $location );
+
+	if ( ! $location ) {
+		return false;
+	}
+
+	if ( $status &lt; 300 || 399 &lt; $status ) {
+		wp_die( __( 'HTTP redirect status code must be a redirection code, 3xx.' ) );
+	}
+
+	$location = wp_sanitize_redirect( $location );
+
+	if ( ! $is_IIS &amp;&amp; 'cgi-fcgi' !== PHP_SAPI ) {
+		status_header( $status ); // This causes problems on IIS and some FastCGI setups.
+	}
+
+	/**
+	 * Filters the X-Redirect-By header.
+	 *
+	 * Allows applications to identify themselves when they're doing a redirect.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param string|false $x_redirect_by The application doing the redirect or false to omit the header.
+	 * @param int          $status        Status code to use.
+	 * @param string       $location      The path to redirect to.
+	 */
+	$x_redirect_by = apply_filters( 'x_redirect_by', $x_redirect_by, $status, $location );
+	if ( is_string( $x_redirect_by ) ) {
+		header( "X-Redirect-By: $x_redirect_by" );
+	}
+
+	header( "Location: $location", true, $status );
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/pluggable.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/pluggable.php#L1385">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/pluggable.php#L1385-L1441">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_redirect"><span class="hook-func">apply_filters</span>( ‘wp_redirect’, <nobr><span class="arg-type">string</span> <span class="arg-name">$location</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$status</span></nobr> )</a></dt>
+<dd>
+<p>Filters the redirect location.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_redirect_status"><span class="hook-func">apply_filters</span>( ‘wp_redirect_status’, <nobr><span class="arg-type">int</span> <span class="arg-name">$status</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$location</span></nobr> )</a></dt>
+<dd>
+<p>Filters the redirect HTTP response status code to use.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/x_redirect_by"><span class="hook-func">apply_filters</span>( ‘x_redirect_by’, <nobr><span class="arg-type">string|false</span> <span class="arg-name">$x_redirect_by</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$status</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$location</span></nobr> )</a></dt>
+<dd>
+<p>Filters the X-Redirect-By header.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.4.0/">5.4.0</a></td>
+<td><span class="since-description">On invalid status codes, <a href="wp_die" rel="function">wp_die()</a> is called.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td><span class="since-description">The <code>$x_redirect_by</code> parameter was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.1/">1.5.1</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_redirect" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_redirect</a>
+  </p>
+</div>

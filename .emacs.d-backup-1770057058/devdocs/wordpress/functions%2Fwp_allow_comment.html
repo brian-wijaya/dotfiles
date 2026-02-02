@@ -1,0 +1,201 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_allow_comment( <span class="arg-type">array</span> <span class="arg-name">$commentdata</span>, <span class="arg-type">bool</span> <span class="arg-name">$wp_error</span> = <span class="arg-default">false</span> ): <span class="return-type">int|string|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Validates whether this comment is allowed to be made.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$commentdata</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Contains information on the comment.</span></div></dd>
+<dt>
+<code>$wp_error</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc">
+<span class="description">When true, a disallowed comment will result in the function returning a <a href="../classes/wp_error" rel="class">WP_Error</a> object, rather than executing <a href="wp_die" rel="function">wp_die()</a> .<br> </span><details class="extended-description"><summary>More Arguments from wp_die( … $args )</summary><span class="description">Arguments to control behavior. If <code>$args</code> is an integer, then it is treated as the response code. <br> <ul class="param-hash">
+<li>
+<code>response</code> <span class="type">int</span><div class="desc">The HTTP response code. Default 200 for Ajax requests, 500 otherwise.</div>
+</li> <li>
+<code>link_url</code> <span class="type">string</span><div class="desc">A URL to include a link to. Only works in combination with $link_text.<br> Default empty string.</div>
+</li> <li>
+<code>link_text</code> <span class="type">string</span><div class="desc">A label for the link to include. Only works in combination with $link_url.<br> Default empty string.</div>
+</li> <li>
+<code>back_link</code> <span class="type">bool</span><div class="desc">Whether to include a link to go back. Default false.</div>
+</li> <li>
+<code>text_direction</code> <span class="type">string</span><div class="desc">The text direction. This is only useful internally, when WordPress is still loading and the site’s locale is not set up yet. Accepts <code>'rtl'</code> and <code>'ltr'</code>.<br> Default is the value of <a href="is_rtl" rel="function">is_rtl()</a> .</div>
+</li> <li>
+<code>charset</code> <span class="type">string</span><div class="desc">Character set of the HTML output. Default <code>'utf-8'</code>.</div>
+</li> <li>
+<code>code</code> <span class="type">string</span><div class="desc">Error code to use. Default is <code>'wp_die'</code>, or the main error code if $message is a <a href="../classes/wp_error" rel="class">WP_Error</a>.</div>
+</li> <li>
+<code>exit</code> <span class="type">bool</span><div class="desc">Whether to exit the process after completion. Default true.</div>
+</li> </ul> </span></details>
+</div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|string|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Allowed comments return the approval status (<code>0|1|<code>'spam'</code>|<code>'trash'</code></code>).<br> If <code>$wp_error</code> is true, disallowed comments return a <a href="../classes/wp_error" rel="class">WP_Error</a>.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="654" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_allow_comment( $commentdata, $wp_error = false ) {
+	global $wpdb;
+
+	/*
+	 * Simple duplicate check.
+	 * expected_slashed ($comment_post_ID, $comment_author, $comment_author_email, $comment_content)
+	 */
+	$dupe = $wpdb-&gt;prepare(
+		"SELECT comment_ID FROM $wpdb-&gt;comments WHERE comment_post_ID = %d AND comment_parent = %s AND comment_approved != 'trash' AND ( comment_author = %s ",
+		wp_unslash( $commentdata['comment_post_ID'] ),
+		wp_unslash( $commentdata['comment_parent'] ),
+		wp_unslash( $commentdata['comment_author'] )
+	);
+	if ( $commentdata['comment_author_email'] ) {
+		$dupe .= $wpdb-&gt;prepare(
+			'AND comment_author_email = %s ',
+			wp_unslash( $commentdata['comment_author_email'] )
+		);
+	}
+	$dupe .= $wpdb-&gt;prepare(
+		') AND comment_content = %s LIMIT 1',
+		wp_unslash( $commentdata['comment_content'] )
+	);
+
+	$dupe_id = $wpdb-&gt;get_var( $dupe );
+
+	/**
+	 * Filters the ID, if any, of the duplicate comment found when creating a new comment.
+	 *
+	 * Return an empty value from this filter to allow what WP considers a duplicate comment.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param int   $dupe_id     ID of the comment identified as a duplicate.
+	 * @param array $commentdata Data for the comment being created.
+	 */
+	$dupe_id = apply_filters( 'duplicate_comment_id', $dupe_id, $commentdata );
+
+	if ( $dupe_id ) {
+		/**
+		 * Fires immediately after a duplicate comment is detected.
+		 *
+		 * @since 3.0.0
+		 *
+		 * @param array $commentdata Comment data.
+		 */
+		do_action( 'comment_duplicate_trigger', $commentdata );
+
+		/**
+		 * Filters duplicate comment error message.
+		 *
+		 * @since 5.2.0
+		 *
+		 * @param string $comment_duplicate_message Duplicate comment error message.
+		 */
+		$comment_duplicate_message = apply_filters( 'comment_duplicate_message', __( 'Duplicate comment detected; it looks as though you&amp;#8217;ve already said that!' ) );
+
+		if ( $wp_error ) {
+			return new WP_Error( 'comment_duplicate', $comment_duplicate_message, 409 );
+		} else {
+			if ( wp_doing_ajax() ) {
+				die( $comment_duplicate_message );
+			}
+
+			wp_die( $comment_duplicate_message, 409 );
+		}
+	}
+
+	/**
+	 * Fires immediately before a comment is marked approved.
+	 *
+	 * Allows checking for comment flooding.
+	 *
+	 * @since 2.3.0
+	 * @since 4.7.0 The `$avoid_die` parameter was added.
+	 * @since 5.5.0 The `$avoid_die` parameter was renamed to `$wp_error`.
+	 *
+	 * @param string $comment_author_ip    Comment author's IP address.
+	 * @param string $comment_author_email Comment author's email.
+	 * @param string $comment_date_gmt     GMT date the comment was posted.
+	 * @param bool   $wp_error             Whether to return a WP_Error object instead of executing
+	 *                                     wp_die() or die() if a comment flood is occurring.
+	 */
+	do_action(
+		'check_comment_flood',
+		$commentdata['comment_author_IP'],
+		$commentdata['comment_author_email'],
+		$commentdata['comment_date_gmt'],
+		$wp_error
+	);
+
+	/**
+	 * Filters whether a comment is part of a comment flood.
+	 *
+	 * The default check is wp_check_comment_flood(). See check_comment_flood_db().
+	 *
+	 * @since 4.7.0
+	 * @since 5.5.0 The `$avoid_die` parameter was renamed to `$wp_error`.
+	 *
+	 * @param bool   $is_flood             Is a comment flooding occurring? Default false.
+	 * @param string $comment_author_ip    Comment author's IP address.
+	 * @param string $comment_author_email Comment author's email.
+	 * @param string $comment_date_gmt     GMT date the comment was posted.
+	 * @param bool   $wp_error             Whether to return a WP_Error object instead of executing
+	 *                                     wp_die() or die() if a comment flood is occurring.
+	 */
+	$is_flood = apply_filters(
+		'wp_is_comment_flood',
+		false,
+		$commentdata['comment_author_IP'],
+		$commentdata['comment_author_email'],
+		$commentdata['comment_date_gmt'],
+		$wp_error
+	);
+
+	if ( $is_flood ) {
+		/** This filter is documented in wp-includes/comment-template.php */
+		$comment_flood_message = apply_filters( 'comment_flood_message', __( 'You are posting comments too quickly. Slow down.' ) );
+
+		return new WP_Error( 'comment_flood', $comment_flood_message, 429 );
+	}
+
+	return wp_check_comment_data( $commentdata );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment.php#L654">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment.php#L654-L777">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/check_comment_flood"><span class="hook-func">do_action</span>( ‘check_comment_flood’, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_author_ip</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_author_email</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_date_gmt</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$wp_error</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before a comment is marked approved.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_duplicate_message"><span class="hook-func">apply_filters</span>( ‘comment_duplicate_message’, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_duplicate_message</span></nobr> )</a></dt>
+<dd>
+<p>Filters duplicate comment error message.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_duplicate_trigger"><span class="hook-func">do_action</span>( ‘comment_duplicate_trigger’, <nobr><span class="arg-type">array</span> <span class="arg-name">$commentdata</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a duplicate comment is detected.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_flood_message"><span class="hook-func">apply_filters</span>( ‘comment_flood_message’, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_flood_message</span></nobr> )</a></dt>
+<dd>
+<p>Filters the comment flood error message.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/duplicate_comment_id"><span class="hook-func">apply_filters</span>( ‘duplicate_comment_id’, <nobr><span class="arg-type">int</span> <span class="arg-name">$dupe_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$commentdata</span></nobr> )</a></dt>
+<dd>
+<p>Filters the ID, if any, of the duplicate comment found when creating a new comment.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_is_comment_flood"><span class="hook-func">apply_filters</span>( ‘wp_is_comment_flood’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$is_flood</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_author_ip</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_author_email</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_date_gmt</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$wp_error</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether a comment is part of a comment flood.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">The <code>$avoid_die</code> parameter was renamed to <code>$wp_error</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td><span class="since-description">The <code>$avoid_die</code> parameter was added, allowing the function to return a <a href="../classes/wp_error" rel="class">WP_Error</a> object instead of dying.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_allow_comment" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_allow_comment</a>
+  </p>
+</div>

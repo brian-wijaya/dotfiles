@@ -1,0 +1,149 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_parse_embed()</h1> <section><p>Applies Ajax handlers to a string.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3746" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_parse_embed() {
+	global $post, $wp_embed, $content_width;
+
+	if ( empty( $_POST['shortcode'] ) ) {
+		wp_send_json_error();
+	}
+
+	$post_id = isset( $_POST['post_ID'] ) ? (int) $_POST['post_ID'] : 0;
+
+	if ( $post_id &gt; 0 ) {
+		$post = get_post( $post_id );
+
+		if ( ! $post || ! current_user_can( 'edit_post', $post-&gt;ID ) ) {
+			wp_send_json_error();
+		}
+		setup_postdata( $post );
+	} elseif ( ! current_user_can( 'edit_posts' ) ) { // See WP_oEmbed_Controller::get_proxy_item_permissions_check().
+		wp_send_json_error();
+	}
+
+	$shortcode = wp_unslash( $_POST['shortcode'] );
+
+	preg_match( '/' . get_shortcode_regex() . '/s', $shortcode, $matches );
+	$atts = shortcode_parse_atts( $matches[3] );
+
+	if ( ! empty( $matches[5] ) ) {
+		$url = $matches[5];
+	} elseif ( ! empty( $atts['src'] ) ) {
+		$url = $atts['src'];
+	} else {
+		$url = '';
+	}
+
+	$parsed                         = false;
+	$wp_embed-&gt;return_false_on_fail = true;
+
+	if ( 0 === $post_id ) {
+		/*
+		 * Refresh oEmbeds cached outside of posts that are past their TTL.
+		 * Posts are excluded because they have separate logic for refreshing
+		 * their post meta caches. See WP_Embed::cache_oembed().
+		 */
+		$wp_embed-&gt;usecache = false;
+	}
+
+	if ( is_ssl() &amp;&amp; str_starts_with( $url, 'http://' ) ) {
+		/*
+		 * Admin is ssl and the user pasted non-ssl URL.
+		 * Check if the provider supports ssl embeds and use that for the preview.
+		 */
+		$ssl_shortcode = preg_replace( '%^(\\]*\\])http://%i', '$1https://', $shortcode );
+		$parsed        = $wp_embed-&gt;run_shortcode( $ssl_shortcode );
+
+		if ( ! $parsed ) {
+			$no_ssl_support = true;
+		}
+	}
+
+	// Set $content_width so any embeds fit in the destination iframe.
+	if ( isset( $_POST['maxwidth'] ) &amp;&amp; is_numeric( $_POST['maxwidth'] ) &amp;&amp; $_POST['maxwidth'] &gt; 0 ) {
+		if ( ! isset( $content_width ) ) {
+			$content_width = (int) $_POST['maxwidth'];
+		} else {
+			$content_width = min( $content_width, (int) $_POST['maxwidth'] );
+		}
+	}
+
+	if ( $url &amp;&amp; ! $parsed ) {
+		$parsed = $wp_embed-&gt;run_shortcode( $shortcode );
+	}
+
+	if ( ! $parsed ) {
+		wp_send_json_error(
+			array(
+				'type'    =&gt; 'not-embeddable',
+				/* translators: %s: URL that could not be embedded. */
+				'message' =&gt; sprintf( __( '%s failed to embed.' ), '&lt;code&gt;' . esc_html( $url ) . '&lt;/code&gt;' ),
+			)
+		);
+	}
+
+	if ( has_shortcode( $parsed, 'audio' ) || has_shortcode( $parsed, 'video' ) ) {
+		$styles     = '';
+		$mce_styles = wpview_media_sandbox_styles();
+
+		foreach ( $mce_styles as $style ) {
+			$styles .= sprintf( '&lt;link rel="stylesheet" href="%s" /&gt;', $style );
+		}
+
+		$html = do_shortcode( $parsed );
+
+		global $wp_scripts;
+
+		if ( ! empty( $wp_scripts ) ) {
+			$wp_scripts-&gt;done = array();
+		}
+
+		ob_start();
+		wp_print_scripts( array( 'mediaelement-vimeo', 'wp-mediaelement' ) );
+		$scripts = ob_get_clean();
+
+		$parsed = $styles . $html . $scripts;
+	}
+
+	if ( ! empty( $no_ssl_support ) || ( is_ssl() &amp;&amp; ( preg_match( '%&lt;(iframe|script|embed) [^&gt;]*src="http://%', $parsed ) ||
+		preg_match( '%&lt;link [^&gt;]*href="http://%', $parsed ) ) ) ) {
+		// Admin is ssl and the embed is not. Iframes, scripts, and other "active content" will be blocked.
+		wp_send_json_error(
+			array(
+				'type'    =&gt; 'not-ssl',
+				'message' =&gt; __( 'This preview is unavailable in the editor.' ),
+			)
+		);
+	}
+
+	$return = array(
+		'body' =&gt; $parsed,
+		'attr' =&gt; $wp_embed-&gt;last_attr,
+	);
+
+	if ( str_contains( $parsed, 'class="wp-embedded-content' ) ) {
+		if ( defined( 'SCRIPT_DEBUG' ) &amp;&amp; SCRIPT_DEBUG ) {
+			$script_src = includes_url( 'js/wp-embed.js' );
+		} else {
+			$script_src = includes_url( 'js/wp-embed.min.js' );
+		}
+
+		$return['head']    = '&lt;script src="' . $script_src . '"&gt;&lt;/script&gt;';
+		$return['sandbox'] = true;
+	}
+
+	wp_send_json_success( $return );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L3746">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L3746-L3878">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.0.0/">4.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_parse_embed" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_parse_embed</a>
+  </p>
+</div>

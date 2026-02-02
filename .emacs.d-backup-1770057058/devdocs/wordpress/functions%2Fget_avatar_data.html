@@ -1,0 +1,269 @@
+<h1 class="wp-block-wporg-code-reference-title">get_avatar_data( <span class="arg-type">mixed</span> <span class="arg-name">$id_or_email</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">null</span> ): <span class="return-type">array</span>
+</h1> <section><p>Retrieves default data about the avatar.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$id_or_email</code><span class="type"><span class="mixed">mixed</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The avatar to retrieve. Accepts a user ID, Gravatar MD5 hash, user email, <a href="../classes/wp_user" rel="class">WP_User</a> object, <a href="../classes/wp_post" rel="class">WP_Post</a> object, or <a href="../classes/wp_comment" rel="class">WP_Comment</a> object.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Arguments to use instead of the default arguments.<br> <ul class="param-hash">
+<li>
+<code>size</code> <span class="type">int</span><div class="desc">Height and width of the avatar in pixels. Default 96.</div>
+</li> <li>
+<code>height</code> <span class="type">int</span><div class="desc">Display height of the avatar in pixels. Defaults to $size.</div>
+</li> <li>
+<code>width</code> <span class="type">int</span><div class="desc">Display width of the avatar in pixels. Defaults to $size.</div>
+</li> <li>
+<code>default</code> <span class="type">string</span><div class="desc">URL for the default image or a default type. Accepts:<br> <ul>
+<li>
+<code>'404'</code> (return a 404 instead of a default image)</li> <li>
+<code>'retro'</code> (a 8-bit arcade-style pixelated face)</li> <li>
+<code>'robohash'</code> (a robot)</li> <li>
+<code>'monsterid'</code> (a monster)</li> <li>
+<code>'wavatar'</code> (a cartoon face)</li> <li>
+<code>'identicon'</code> (the "quilt", a geometric pattern)</li> <li>
+<code>'mystery'</code>, <code>'mm'</code>, or <code>'mysteryman'</code> (The Oyster Man)</li> <li>
+<code>'blank'</code> (transparent GIF)</li> <li>
+<code>'gravatar_default'</code> (the Gravatar logo) Default is the value of the <code>'avatar_default'</code> option, with a fallback of <code>'mystery'</code>.</li>
+</ul>
+</div>
+</li> <li>
+<code>force_default</code> <span class="type">bool</span><div class="desc">Whether to always show the default image, never the Gravatar.<br> Default false.</div>
+</li> <li>
+<code>rating</code> <span class="type">string</span><div class="desc">What rating to display avatars up to. Accepts:<br> <ul>
+<li>
+<code>'G'</code> (suitable for all audiences)</li> <li>
+<code>'PG'</code> (possibly offensive, usually for audiences 13 and above)</li> <li>
+<code>'R'</code> (intended for adult audiences above 17)</li> <li>
+<code>'X'</code> (even more mature than above) Default is the value of the <code>'avatar_rating'</code> option.</li>
+</ul>
+</div>
+</li> <li>
+<code>scheme</code> <span class="type">string</span><div class="desc">URL scheme to use. See <a href="set_url_scheme" rel="function">set_url_scheme()</a> for accepted values.<br> For Gravatars this setting is ignored and HTTPS is used to avoid unnecessary redirects. The setting is retained for systems using the <a href="../hooks/pre_get_avatar_data">'pre_get_avatar_data'</a> filter to customize avatars.<br> </div>
+</li> <li>
+<code>processed_args</code> <span class="type">array</span><div class="desc">When the function returns, the value will be the processed/sanitized $args plus a "found_avatar" guess. Pass as a reference. </div>
+</li> <li>
+<code>extra_attr</code> <span class="type">string</span><div class="desc">HTML attributes to insert in the IMG element. Is not sanitized.<br> Default empty.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Along with the arguments passed in <code>$args</code>, this will contain a couple of extra arguments.<br> <ul class="param-hash">
+<li>
+<code>found_avatar</code> <span class="type">bool</span><div class="desc">True if an avatar was found for this user, false or not set if none was found.</div>
+</li> <li>
+<code>url</code> <span class="type">string|false</span><div class="desc">The URL of the avatar that was found, or false.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="4403" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_avatar_data( $id_or_email, $args = null ) {
+	$args = wp_parse_args(
+		$args,
+		array(
+			'size'           =&gt; 96,
+			'height'         =&gt; null,
+			'width'          =&gt; null,
+			'default'        =&gt; get_option( 'avatar_default', 'mystery' ),
+			'force_default'  =&gt; false,
+			'rating'         =&gt; get_option( 'avatar_rating' ),
+			'scheme'         =&gt; null,
+			'processed_args' =&gt; null, // If used, should be a reference.
+			'extra_attr'     =&gt; '',
+		)
+	);
+
+	if ( is_numeric( $args['size'] ) ) {
+		$args['size'] = absint( $args['size'] );
+		if ( ! $args['size'] ) {
+			$args['size'] = 96;
+		}
+	} else {
+		$args['size'] = 96;
+	}
+
+	if ( is_numeric( $args['height'] ) ) {
+		$args['height'] = absint( $args['height'] );
+		if ( ! $args['height'] ) {
+			$args['height'] = $args['size'];
+		}
+	} else {
+		$args['height'] = $args['size'];
+	}
+
+	if ( is_numeric( $args['width'] ) ) {
+		$args['width'] = absint( $args['width'] );
+		if ( ! $args['width'] ) {
+			$args['width'] = $args['size'];
+		}
+	} else {
+		$args['width'] = $args['size'];
+	}
+
+	if ( empty( $args['default'] ) ) {
+		$args['default'] = get_option( 'avatar_default', 'mystery' );
+	}
+
+	switch ( $args['default'] ) {
+		case 'mm':
+		case 'mystery':
+		case 'mysteryman':
+			$args['default'] = 'mm';
+			break;
+		case 'gravatar_default':
+			$args['default'] = false;
+			break;
+	}
+
+	$args['force_default'] = (bool) $args['force_default'];
+
+	$args['rating'] = strtolower( $args['rating'] );
+
+	$args['found_avatar'] = false;
+
+	/**
+	 * Filters whether to retrieve the avatar URL early.
+	 *
+	 * Passing a non-null value in the 'url' member of the return array will
+	 * effectively short circuit get_avatar_data(), passing the value through
+	 * the <a href="../hooks/get_avatar_data">'get_avatar_data'</a> filter and returning early.
+	 *
+	 * @since 4.2.0
+	 *
+	 * @param array $args        Arguments passed to get_avatar_data(), after processing.
+	 * @param mixed $id_or_email The avatar to retrieve. Accepts a user ID, Gravatar MD5 hash,
+	 *                           user email, WP_User object, WP_Post object, or WP_Comment object.
+	 */
+	$args = apply_filters( 'pre_get_avatar_data', $args, $id_or_email );
+
+	if ( isset( $args['url'] ) ) {
+		/** This filter is documented in wp-includes/link-template.php */
+		return apply_filters( 'get_avatar_data', $args, $id_or_email );
+	}
+
+	$email_hash = '';
+	$user       = false;
+	$email      = false;
+
+	if ( is_object( $id_or_email ) &amp;&amp; isset( $id_or_email-&gt;comment_ID ) ) {
+		$id_or_email = get_comment( $id_or_email );
+	}
+
+	// Process the user identifier.
+	if ( is_numeric( $id_or_email ) ) {
+		$user = get_user_by( 'id', absint( $id_or_email ) );
+	} elseif ( is_string( $id_or_email ) ) {
+		if ( str_contains( $id_or_email, '@md5.gravatar.com' ) ) {
+			// MD5 hash.
+			list( $email_hash ) = explode( '@', $id_or_email );
+		} else {
+			// Email address.
+			$email = $id_or_email;
+		}
+	} elseif ( $id_or_email instanceof WP_User ) {
+		// User object.
+		$user = $id_or_email;
+	} elseif ( $id_or_email instanceof WP_Post ) {
+		// Post object.
+		$user = get_user_by( 'id', (int) $id_or_email-&gt;post_author );
+	} elseif ( $id_or_email instanceof WP_Comment ) {
+		if ( ! is_avatar_comment_type( get_comment_type( $id_or_email ) ) ) {
+			$args['url'] = false;
+			/** This filter is documented in wp-includes/link-template.php */
+			return apply_filters( 'get_avatar_data', $args, $id_or_email );
+		}
+
+		if ( ! empty( $id_or_email-&gt;user_id ) ) {
+			$user = get_user_by( 'id', (int) $id_or_email-&gt;user_id );
+		}
+		if ( ( ! $user || is_wp_error( $user ) ) &amp;&amp; ! empty( $id_or_email-&gt;comment_author_email ) ) {
+			$email = $id_or_email-&gt;comment_author_email;
+		}
+	}
+
+	if ( ! $email_hash ) {
+		if ( $user ) {
+			$email = $user-&gt;user_email;
+		}
+
+		if ( $email ) {
+			$email_hash = md5( strtolower( trim( $email ) ) );
+		}
+	}
+
+	if ( $email_hash ) {
+		$args['found_avatar'] = true;
+	}
+
+	$url_args = array(
+		's' =&gt; $args['size'],
+		'd' =&gt; $args['default'],
+		'f' =&gt; $args['force_default'] ? 'y' : false,
+		'r' =&gt; $args['rating'],
+	);
+
+	/*
+	 * Gravatars are always served over HTTPS.
+	 *
+	 * The Gravatar website redirects HTTP requests to HTTPS URLs so always
+	 * use the HTTPS scheme to avoid unnecessary redirects.
+	 */
+	$url = 'https://secure.gravatar.com/avatar/' . $email_hash;
+
+	$url = add_query_arg(
+		rawurlencode_deep( array_filter( $url_args ) ),
+		$url
+	);
+
+	/**
+	 * Filters the avatar URL.
+	 *
+	 * @since 4.2.0
+	 *
+	 * @param string $url         The URL of the avatar.
+	 * @param mixed  $id_or_email The avatar to retrieve. Accepts a user ID, Gravatar MD5 hash,
+	 *                            user email, WP_User object, WP_Post object, or WP_Comment object.
+	 * @param array  $args        Arguments passed to get_avatar_data(), after processing.
+	 */
+	$args['url'] = apply_filters( 'get_avatar_url', $url, $id_or_email, $args );
+
+	/**
+	 * Filters the avatar data.
+	 *
+	 * @since 4.2.0
+	 *
+	 * @param array $args        Arguments passed to get_avatar_data(), after processing.
+	 * @param mixed $id_or_email The avatar to retrieve. Accepts a user ID, Gravatar MD5 hash,
+	 *                           user email, WP_User object, WP_Post object, or WP_Comment object.
+	 */
+	return apply_filters( 'get_avatar_data', $args, $id_or_email );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/link-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/link-template.php#L4403">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/link-template.php#L4403-L4583">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_avatar_data"><span class="hook-func">apply_filters</span>( ‘get_avatar_data’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$id_or_email</span></nobr> )</a></dt>
+<dd>
+<p>Filters the avatar data.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_avatar_url"><span class="hook-func">apply_filters</span>( ‘get_avatar_url’, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$id_or_email</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the avatar URL.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_get_avatar_data"><span class="hook-func">apply_filters</span>( ‘pre_get_avatar_data’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$id_or_email</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to retrieve the avatar URL early.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.7.0/">6.7.0</a></td>
+<td><span class="since-description">Gravatar URLs always use HTTPS.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_avatar_data" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_avatar_data</a>
+  </p>
+</div>

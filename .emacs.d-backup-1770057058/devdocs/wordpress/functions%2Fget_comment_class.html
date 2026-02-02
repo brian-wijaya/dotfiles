@@ -1,0 +1,130 @@
+<h1 class="wp-block-wporg-code-reference-title">get_comment_class( <span class="arg-type">string|string[]</span> <span class="arg-name">$css_class</span> = <span class="arg-default">”</span>, <span class="arg-type">int|WP_Comment</span> <span class="arg-name">$comment_id</span> = <span class="arg-default">null</span>, <span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span> = <span class="arg-default">null</span> ): <span class="return-type">string[]</span>
+</h1> <section><p>Returns the classes for the comment div as an array.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$css_class</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">One or more classes to add to the class list.<br> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$comment_id</code><span class="type"><span class="int">int</span>|<span class="WP_Comment"><a href="../classes/wp_comment" rel="class">WP_Comment</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Comment ID or <a href="../classes/wp_comment" rel="class">WP_Comment</a> object. Default current comment.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Post ID or <a href="../classes/wp_post" rel="class">WP_Post</a> object. Default current post.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string[]</span> An array of classes.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="520" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_comment_class( $css_class = '', $comment_id = null, $post = null ) {
+	global $comment_alt, $comment_depth, $comment_thread_alt;
+
+	$classes = array();
+
+	$comment = get_comment( $comment_id );
+	if ( ! $comment ) {
+		return $classes;
+	}
+
+	// Get the comment type (comment, trackback).
+	$classes[] = ( empty( $comment-&gt;comment_type ) ) ? 'comment' : $comment-&gt;comment_type;
+
+	// Add classes for comment authors that are registered users.
+	$user = $comment-&gt;user_id ? get_userdata( $comment-&gt;user_id ) : false;
+	if ( $user ) {
+		$classes[] = 'byuser';
+		$classes[] = 'comment-author-' . sanitize_html_class( $user-&gt;user_nicename, $comment-&gt;user_id );
+		// For comment authors who are the author of the post.
+		$_post = get_post( $post );
+		if ( $_post ) {
+			if ( $comment-&gt;user_id === $_post-&gt;post_author ) {
+				$classes[] = 'bypostauthor';
+			}
+		}
+	}
+
+	if ( empty( $comment_alt ) ) {
+		$comment_alt = 0;
+	}
+	if ( empty( $comment_depth ) ) {
+		$comment_depth = 1;
+	}
+	if ( empty( $comment_thread_alt ) ) {
+		$comment_thread_alt = 0;
+	}
+
+	if ( $comment_alt % 2 ) {
+		$classes[] = 'odd';
+		$classes[] = 'alt';
+	} else {
+		$classes[] = 'even';
+	}
+
+	++$comment_alt;
+
+	// Alt for top-level comments.
+	if ( 1 === $comment_depth ) {
+		if ( $comment_thread_alt % 2 ) {
+			$classes[] = 'thread-odd';
+			$classes[] = 'thread-alt';
+		} else {
+			$classes[] = 'thread-even';
+		}
+		++$comment_thread_alt;
+	}
+
+	$classes[] = "depth-$comment_depth";
+
+	if ( ! empty( $css_class ) ) {
+		if ( ! is_array( $css_class ) ) {
+			$css_class = preg_split( '#\s+#', $css_class );
+		}
+		$classes = array_merge( $classes, $css_class );
+	}
+
+	$classes = array_map( 'esc_attr', $classes );
+
+	/**
+	 * Filters the returned CSS classes for the current comment.
+	 *
+	 * @since 2.7.0
+	 *
+	 * @param string[]    $classes    An array of comment classes.
+	 * @param string[]    $css_class  An array of additional classes added to the list.
+	 * @param string      $comment_id The comment ID as a numeric string.
+	 * @param WP_Comment  $comment    The comment object.
+	 * @param int|WP_Post $post       The post ID or WP_Post object.
+	 */
+	return apply_filters( 'comment_class', $classes, $css_class, $comment-&gt;comment_ID, $comment, $post );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment-template.php#L520">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment-template.php#L520-L600">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_class"><span class="hook-func">apply_filters</span>( ‘comment_class’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$classes</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$css_class</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_id</span></nobr>, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr>, <nobr><span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters the returned CSS classes for the current comment.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Added the ability for <code>$comment_id</code> to also accept a <a href="../classes/wp_comment" rel="class">WP_Comment</a> object.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_comment_class" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_comment_class</a>
+  </p>
+</div>

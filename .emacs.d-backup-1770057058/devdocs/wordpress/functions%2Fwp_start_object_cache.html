@@ -1,0 +1,120 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_start_object_cache()</h1> <section><p>Starts the WordPress object cache.</p> </section> <section><h2 id="description">Description</h2> <p>If an object-cache.php file exists in the wp-content directory, it uses that drop-in as an external object cache.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="804" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_start_object_cache() {
+	global $wp_filter;
+	static $first_init = true;
+
+	// Only perform the following checks once.
+
+	/**
+	 * Filters whether to enable loading of the object-cache.php drop-in.
+	 *
+	 * This filter runs before it can be used by plugins. It is designed for non-web
+	 * runtimes. If false is returned, object-cache.php will never be loaded.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param bool $enable_object_cache Whether to enable loading object-cache.php (if present).
+	 *                                  Default true.
+	 */
+	if ( $first_init &amp;&amp; apply_filters( 'enable_loading_object_cache_dropin', true ) ) {
+		if ( ! function_exists( 'wp_cache_init' ) ) {
+			/*
+			 * This is the normal situation. First-run of this function. No
+			 * caching backend has been loaded.
+			 *
+			 * We try to load a custom caching backend, and then, if it
+			 * results in a wp_cache_init() function existing, we note
+			 * that an external object cache is being used.
+			 */
+			if ( file_exists( WP_CONTENT_DIR . '/object-cache.php' ) ) {
+				require_once WP_CONTENT_DIR . '/object-cache.php';
+
+				if ( function_exists( 'wp_cache_init' ) ) {
+					wp_using_ext_object_cache( true );
+				}
+
+				// Re-initialize any hooks added manually by object-cache.php.
+				if ( $wp_filter ) {
+					$wp_filter = WP_Hook::build_preinitialized_hooks( $wp_filter );
+				}
+			}
+		} elseif ( ! wp_using_ext_object_cache() &amp;&amp; file_exists( WP_CONTENT_DIR . '/object-cache.php' ) ) {
+			/*
+			 * Sometimes advanced-cache.php can load object-cache.php before
+			 * this function is run. This breaks the function_exists() check
+			 * above and can result in wp_using_ext_object_cache() returning
+			 * false when actually an external cache is in use.
+			 */
+			wp_using_ext_object_cache( true );
+		}
+	}
+
+	if ( ! wp_using_ext_object_cache() ) {
+		require_once ABSPATH . WPINC . '/cache.php';
+	}
+
+	require_once ABSPATH . WPINC . '/cache-compat.php';
+
+	/*
+	 * If cache supports reset, reset instead of init if already
+	 * initialized. Reset signals to the cache that global IDs
+	 * have changed and it may need to update keys and cleanup caches.
+	 */
+	if ( ! $first_init &amp;&amp; function_exists( 'wp_cache_switch_to_blog' ) ) {
+		wp_cache_switch_to_blog( get_current_blog_id() );
+	} elseif ( function_exists( 'wp_cache_init' ) ) {
+		wp_cache_init();
+	}
+
+	if ( function_exists( 'wp_cache_add_global_groups' ) ) {
+		wp_cache_add_global_groups(
+			array(
+				'blog-details',
+				'blog-id-cache',
+				'blog-lookup',
+				'blog_meta',
+				'global-posts',
+				'image_editor',
+				'networks',
+				'network-queries',
+				'sites',
+				'site-details',
+				'site-options',
+				'site-queries',
+				'site-transient',
+				'theme_files',
+				'translation_files',
+				'rss',
+				'users',
+				'user-queries',
+				'user_meta',
+				'useremail',
+				'userlogins',
+				'userslugs',
+			)
+		);
+
+		wp_cache_add_non_persistent_groups( array( 'counts', 'plugins', 'theme_json' ) );
+	}
+
+	$first_init = false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/load.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/load.php#L804">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/load.php#L804-L903">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/enable_loading_object_cache_dropin"><span class="hook-func">apply_filters</span>( ‘enable_loading_object_cache_dropin’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$enable_object_cache</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to enable loading of the object-cache.php drop-in.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_start_object_cache" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_start_object_cache</a>
+  </p>
+</div>

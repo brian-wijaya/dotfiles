@@ -6,24 +6,20 @@
   ;; Use dirvish globally (replaces dired)
   (dirvish-override-dired-mode 1)
 
-  ;; Layout: parent | current | preview
-  (setq dirvish-default-layout '(0 0.4 0.6))
+  ;; Layout: parent | current | preview (1:3:5 ratio recommended)
+  (setq dirvish-default-layout '(1 0.3 0.5))
 
-  ;; Attributes shown in file list
+  ;; Attributes shown in file list - simplified to reduce visual clutter
   (setq dirvish-attributes
-        '(hl-line subtree-state nerd-icons collapse git-msg file-time file-size))
+        '(hl-line nerd-icons file-size))
 
   ;; Preview settings
   (setq dirvish-preview-dispatchers
         '(image gif video audio epub archive pdf))
 
-  ;; Header line shows path breadcrumb
-  (setq dirvish-header-line-format
-        '(:left (path) :right (free-space)))
-
-  ;; Mode line
-  (setq dirvish-mode-line-format
-        '(:left (sort symlink) :right (omit yank index)))
+  ;; Use built-in mode line instead of custom dirvish mode line
+  (setq dirvish-mode-line-format nil)
+  (setq dirvish-header-line-format nil)
 
   ;; Quick access paths
   (setq dirvish-quick-access-entries
@@ -44,7 +40,10 @@
   (define-key dirvish-mode-map (kbd "F")   'dirvish-layout-toggle)
   (define-key dirvish-mode-map (kbd "/")   'dirvish-narrow)
   (define-key dirvish-mode-map (kbd "h")   'dired-up-directory)
-  (define-key dirvish-mode-map (kbd "l")   'dired-find-file))
+  (define-key dirvish-mode-map (kbd "l")   'dired-find-file)
+  ;; History navigation (matches neovim jump list)
+  (define-key dirvish-mode-map (kbd "H")   'dired-hist-go-back)
+  (define-key dirvish-mode-map (kbd "L")   'dired-hist-go-forward))
 
 ;; nerd-icons-dired for file icons (dirvish uses this)
 (use-package nerd-icons-dired
@@ -53,3 +52,9 @@
 
 (provide 'dirvish)
 ;;; dirvish.el ends here
+
+;; dired-hist for history navigation
+(use-package dired-hist
+  :demand t
+  :config
+  (dired-hist-mode 1))

@@ -1,0 +1,104 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Site_Health::should_suggest_persistent_object_cache(): <span class="return-type">bool</span>
+</h1> <section><p>Determines whether to suggest using a persistent object cache.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> Whether to suggest using a persistent object cache.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3513" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function should_suggest_persistent_object_cache() {
+	global $wpdb;
+
+	/**
+	 * Filters whether to suggest use of a persistent object cache and bypass default threshold checks.
+	 *
+	 * Using this filter allows to override the default logic, effectively short-circuiting the method.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param bool|null $suggest Boolean to short-circuit, for whether to suggest using a persistent object cache.
+	 *                           Default null.
+	 */
+	$short_circuit = apply_filters( 'site_status_should_suggest_persistent_object_cache', null );
+	if ( is_bool( $short_circuit ) ) {
+		return $short_circuit;
+	}
+
+	if ( is_multisite() ) {
+		return true;
+	}
+
+	/**
+	 * Filters the thresholds used to determine whether to suggest the use of a persistent object cache.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param int[] $thresholds The list of threshold numbers keyed by threshold name.
+	 */
+	$thresholds = apply_filters(
+		'site_status_persistent_object_cache_thresholds',
+		array(
+			'alloptions_count' =&gt; 500,
+			'alloptions_bytes' =&gt; 100000,
+			'comments_count'   =&gt; 1000,
+			'options_count'    =&gt; 1000,
+			'posts_count'      =&gt; 1000,
+			'terms_count'      =&gt; 1000,
+			'users_count'      =&gt; 1000,
+		)
+	);
+
+	$alloptions = wp_load_alloptions();
+
+	if ( $thresholds['alloptions_count'] &lt; count( $alloptions ) ) {
+		return true;
+	}
+
+	if ( $thresholds['alloptions_bytes'] &lt; strlen( serialize( $alloptions ) ) ) {
+		return true;
+	}
+
+	$table_names = implode( "','", array( $wpdb-&gt;comments, $wpdb-&gt;options, $wpdb-&gt;posts, $wpdb-&gt;terms, $wpdb-&gt;users ) );
+
+	// With InnoDB the `TABLE_ROWS` are estimates, which are accurate enough and faster to retrieve than individual `COUNT()` queries.
+	$results = $wpdb-&gt;get_results(
+		$wpdb-&gt;prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- This query cannot use interpolation.
+			"SELECT TABLE_NAME AS 'table', TABLE_ROWS AS 'rows', SUM(data_length + index_length) as 'bytes' FROM information_schema.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME IN ('$table_names') GROUP BY TABLE_NAME;",
+			DB_NAME
+		),
+		OBJECT_K
+	);
+
+	$threshold_map = array(
+		'comments_count' =&gt; $wpdb-&gt;comments,
+		'options_count'  =&gt; $wpdb-&gt;options,
+		'posts_count'    =&gt; $wpdb-&gt;posts,
+		'terms_count'    =&gt; $wpdb-&gt;terms,
+		'users_count'    =&gt; $wpdb-&gt;users,
+	);
+
+	foreach ( $threshold_map as $threshold =&gt; $table ) {
+		if ( $thresholds[ $threshold ] &lt;= $results[ $table ]-&gt;rows ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-site-health.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-site-health.php#L3513">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-site-health.php#L3513-L3592">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/site_status_persistent_object_cache_thresholds"><span class="hook-func">apply_filters</span>( ‘site_status_persistent_object_cache_thresholds’, <nobr><span class="arg-type">int[]</span> <span class="arg-name">$thresholds</span></nobr> )</a></dt>
+<dd>
+<p>Filters the thresholds used to determine whether to suggest the use of a persistent object cache.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/site_status_should_suggest_persistent_object_cache"><span class="hook-func">apply_filters</span>( ‘site_status_should_suggest_persistent_object_cache’, <nobr><span class="arg-type">bool|null</span> <span class="arg-name">$suggest</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to suggest use of a persistent object cache and bypass default threshold checks.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_site_health/should_suggest_persistent_object_cache" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_site_health/should_suggest_persistent_object_cache</a>
+  </p>
+</div>

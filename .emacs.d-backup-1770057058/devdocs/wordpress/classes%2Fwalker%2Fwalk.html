@@ -1,0 +1,112 @@
+<h1 class="wp-block-wporg-code-reference-title">Walker::walk( <span class="arg-type">array</span> <span class="arg-name">$elements</span>, <span class="arg-type">int</span> <span class="arg-name">$max_depth</span>, <span class="arg-type">mixed</span> <span class="arg-name">$args</span> ): <span class="return-type">string</span>
+</h1> <section><p>Displays array of elements hierarchically.</p> </section> <section><h2 id="description">Description</h2> <p>Does not assume any existing order of elements.</p> <p>$max_depth = -1 means flatly display every element.<br>$max_depth = 0 means display all levels.<br>$max_depth &gt; 0 specifies the number of display levels.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$elements</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An array of elements.</span></div></dd>
+<dt>
+<code>$max_depth</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The maximum hierarchical depth.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="mixed">mixed</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Optional additional arguments.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The hierarchical item output.</section> <section><h2 id="more-information">More Information</h2> <p>This method can be used to initialize the <tt><a href="../walker">Walker</a></tt> class. It takes an array of elements ordered so that children occur below their parents. The <tt>$max_depth</tt> parameter is an integer that specifies how deep into the tree structure the walker should render. By default, the <code>$max_depth</code> argument uses <code>0</code>, which will render every item in every branch, with no depth limit. You can also specify <b><tt>-1</tt></b> to render all objects as a “flattened” single-dimensional list. Any other number will limit the depth that <a href="../walker">Walker</a> will render in any branch. Any <i>additional</i> arguments passed to this method will be passed unchanged to the other methods.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="194" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function walk( $elements, $max_depth, ...$args ) {
+	$output = '';
+
+	$max_depth = (int) $max_depth;
+
+	// Invalid parameter or nothing to walk.
+	if ( $max_depth &lt; -1 || empty( $elements ) ) {
+		return $output;
+	}
+
+	$parent_field = $this-&gt;db_fields['parent'];
+
+	// Flat display.
+	if ( -1 === $max_depth ) {
+		$empty_array = array();
+		foreach ( $elements as $e ) {
+			$this-&gt;display_element( $e, $empty_array, 1, 0, $args, $output );
+		}
+		return $output;
+	}
+
+	/*
+	 * Need to display in hierarchical order.
+	 * Separate elements into two buckets: top level and children elements.
+	 * Children_elements is two dimensional array. Example:
+	 * Children_elements[10][] contains all sub-elements whose parent is 10.
+	 */
+	$top_level_elements = array();
+	$children_elements  = array();
+	foreach ( $elements as $e ) {
+		if ( empty( $e-&gt;$parent_field ) ) {
+			$top_level_elements[] = $e;
+		} else {
+			$children_elements[ $e-&gt;$parent_field ][] = $e;
+		}
+	}
+
+	/*
+	 * When none of the elements is top level.
+	 * Assume the first one must be root of the sub elements.
+	 */
+	if ( empty( $top_level_elements ) ) {
+
+		$first = array_slice( $elements, 0, 1 );
+		$root  = $first[0];
+
+		$top_level_elements = array();
+		$children_elements  = array();
+		foreach ( $elements as $e ) {
+			if ( $root-&gt;$parent_field === $e-&gt;$parent_field ) {
+				$top_level_elements[] = $e;
+			} else {
+				$children_elements[ $e-&gt;$parent_field ][] = $e;
+			}
+		}
+	}
+
+	foreach ( $top_level_elements as $e ) {
+		$this-&gt;display_element( $e, $children_elements, $max_depth, 0, $args, $output );
+	}
+
+	/*
+	 * If we are displaying all levels, and remaining children_elements is not empty,
+	 * then we got orphans, which should be displayed regardless.
+	 */
+	if ( ( 0 === $max_depth ) &amp;&amp; count( $children_elements ) &gt; 0 ) {
+		$empty_array = array();
+		foreach ( $children_elements as $orphans ) {
+			foreach ( $orphans as $op ) {
+				$this-&gt;display_element( $op, $empty_array, 1, 0, $args, $output );
+			}
+		}
+	}
+
+	return $output;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-walker.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-walker.php#L194">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-walker.php#L194-L269">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">Formalized the existing <code>...$args</code> parameter by adding it to the function signature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/walker/walk" class="_attribution-link">https://developer.wordpress.org/reference/classes/walker/walk</a>
+  </p>
+</div>

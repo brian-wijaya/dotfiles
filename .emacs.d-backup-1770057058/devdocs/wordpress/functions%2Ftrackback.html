@@ -1,0 +1,59 @@
+<h1 class="wp-block-wporg-code-reference-title">trackback( <span class="arg-type">string</span> <span class="arg-name">$trackback_url</span>, <span class="arg-type">string</span> <span class="arg-name">$title</span>, <span class="arg-type">string</span> <span class="arg-name">$excerpt</span>, <span class="arg-type">int</span> <span class="arg-name">$post_id</span> ): <span class="return-type">int|false|void</span>
+</h1> <section><p>Sends a Trackback.</p> </section> <section><h2 id="description">Description</h2> <p>Updates database when sending trackback to prevent duplicates.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$trackback_url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">URL to send trackbacks.</span></div></dd>
+<dt>
+<code>$title</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Title of post.</span></div></dd>
+<dt>
+<code>$excerpt</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Excerpt of post.</span></div></dd>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|false|void</span> Database query from update.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3209" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function trackback( $trackback_url, $title, $excerpt, $post_id ) {
+	global $wpdb;
+
+	if ( empty( $trackback_url ) ) {
+		return;
+	}
+
+	$options            = array();
+	$options['timeout'] = 10;
+	$options['body']    = array(
+		'title'     =&gt; $title,
+		'url'       =&gt; get_permalink( $post_id ),
+		'blog_name' =&gt; get_option( 'blogname' ),
+		'excerpt'   =&gt; $excerpt,
+	);
+
+	$response = wp_safe_remote_post( $trackback_url, $options );
+
+	if ( is_wp_error( $response ) ) {
+		return;
+	}
+
+	$wpdb-&gt;query( $wpdb-&gt;prepare( "UPDATE $wpdb-&gt;posts SET pinged = CONCAT(pinged, '\n', %s) WHERE ID = %d", $trackback_url, $post_id ) );
+	return $wpdb-&gt;query( $wpdb-&gt;prepare( "UPDATE $wpdb-&gt;posts SET to_ping = TRIM(REPLACE(to_ping, %s, '')) WHERE ID = %d", $trackback_url, $post_id ) );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment.php#L3209">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment.php#L3209-L3233">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/0.71/">0.71</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/trackback" class="_attribution-link">https://developer.wordpress.org/reference/functions/trackback</a>
+  </p>
+</div>

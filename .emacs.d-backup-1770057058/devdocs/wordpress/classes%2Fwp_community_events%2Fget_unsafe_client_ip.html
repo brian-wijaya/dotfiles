@@ -1,0 +1,57 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Community_Events::get_unsafe_client_ip(): <span class="return-type">string|false</span>
+</h1> <section><p>Determines the user’s actual IP address and attempts to partially anonymize an IP address by converting it to a network ID.</p> </section> <section><h2 id="description">Description</h2> <p>Geolocating the network ID usually returns a similar location as the actual IP, but provides some privacy for the user.</p> <p>$_SERVER[‘REMOTE_ADDR’] cannot be used in all cases, such as when the user is making their request through a proxy, or when the web server is behind a proxy. In those cases, $_SERVER[‘REMOTE_ADDR’] is set to the proxy address rather than the user’s actual address.</p> <p>Modified from <a href="https://stackoverflow.com/a/2031935/450127">https://stackoverflow.com/a/2031935/450127</a>, MIT license.<br>Modified from <a href="https://github.com/geertw/php-ip-anonymizer">https://github.com/geertw/php-ip-anonymizer</a>, MIT license.</p> <p>SECURITY WARNING: This function is <em>NOT</em> intended to be used in circumstances where the authenticity of the IP address matters. This does <em>NOT</em> guarantee that the returned address is valid or accurate, and it can be easily spoofed.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> The anonymized address on success; the given address or false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="241" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function get_unsafe_client_ip() {
+	$client_ip = false;
+
+	// In order of preference, with the best ones for this purpose first.
+	$address_headers = array(
+		'HTTP_CLIENT_IP',
+		'HTTP_X_FORWARDED_FOR',
+		'HTTP_X_FORWARDED',
+		'HTTP_X_CLUSTER_CLIENT_IP',
+		'HTTP_FORWARDED_FOR',
+		'HTTP_FORWARDED',
+		'REMOTE_ADDR',
+	);
+
+	foreach ( $address_headers as $header ) {
+		if ( array_key_exists( $header, $_SERVER ) ) {
+			/*
+			 * HTTP_X_FORWARDED_FOR can contain a chain of comma-separated
+			 * addresses. The first one is the original client. It can't be
+			 * trusted for authenticity, but we don't need to for this purpose.
+			 */
+			$address_chain = explode( ',', $_SERVER[ $header ] );
+			$client_ip     = trim( $address_chain[0] );
+
+			break;
+		}
+	}
+
+	if ( ! $client_ip ) {
+		return false;
+	}
+
+	$anon_ip = wp_privacy_anonymize_ip( $client_ip, true );
+
+	if ( '0.0.0.0' === $anon_ip || '::' === $anon_ip ) {
+		return false;
+	}
+
+	return $anon_ip;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-community-events.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-community-events.php#L241">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-community-events.php#L241-L280">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.8.0/">4.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_community_events/get_unsafe_client_ip" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_community_events/get_unsafe_client_ip</a>
+  </p>
+</div>

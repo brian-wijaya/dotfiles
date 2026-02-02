@@ -1,0 +1,116 @@
+<h1 class="wp-block-wporg-code-reference-title">get_inline_data( <span class="arg-type">WP_Post</span> <span class="arg-name">$post</span> )</h1> <section><p>Adds hidden fields with the data for use in the inline editor for posts and pages.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post object.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="311" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_inline_data( $post ) {
+	$post_type_object = get_post_type_object( $post-&gt;post_type );
+	if ( ! current_user_can( 'edit_post', $post-&gt;ID ) ) {
+		return;
+	}
+
+	$title = esc_textarea( trim( $post-&gt;post_title ) );
+
+	echo '
+&lt;div class="hidden" id="inline_' . $post-&gt;ID . '"&gt;
+	&lt;div class="post_title"&gt;' . $title . '&lt;/div&gt;' .
+	/** This filter is documented in wp-admin/edit-tag-form.php */
+	'&lt;div class="post_name"&gt;' . apply_filters( 'editable_slug', $post-&gt;post_name, $post ) . '&lt;/div&gt;
+	&lt;div class="post_author"&gt;' . $post-&gt;post_author . '&lt;/div&gt;
+	&lt;div class="comment_status"&gt;' . esc_html( $post-&gt;comment_status ) . '&lt;/div&gt;
+	&lt;div class="ping_status"&gt;' . esc_html( $post-&gt;ping_status ) . '&lt;/div&gt;
+	&lt;div class="_status"&gt;' . esc_html( $post-&gt;post_status ) . '&lt;/div&gt;
+	&lt;div class="jj"&gt;' . mysql2date( 'd', $post-&gt;post_date, false ) . '&lt;/div&gt;
+	&lt;div class="mm"&gt;' . mysql2date( 'm', $post-&gt;post_date, false ) . '&lt;/div&gt;
+	&lt;div class="aa"&gt;' . mysql2date( 'Y', $post-&gt;post_date, false ) . '&lt;/div&gt;
+	&lt;div class="hh"&gt;' . mysql2date( 'H', $post-&gt;post_date, false ) . '&lt;/div&gt;
+	&lt;div class="mn"&gt;' . mysql2date( 'i', $post-&gt;post_date, false ) . '&lt;/div&gt;
+	&lt;div class="ss"&gt;' . mysql2date( 's', $post-&gt;post_date, false ) . '&lt;/div&gt;
+	&lt;div class="post_password"&gt;' . esc_html( $post-&gt;post_password ) . '&lt;/div&gt;';
+
+	if ( $post_type_object-&gt;hierarchical ) {
+		echo '&lt;div class="post_parent"&gt;' . $post-&gt;post_parent . '&lt;/div&gt;';
+	}
+
+	echo '&lt;div class="page_template"&gt;' . ( $post-&gt;page_template ? esc_html( $post-&gt;page_template ) : 'default' ) . '&lt;/div&gt;';
+
+	if ( post_type_supports( $post-&gt;post_type, 'page-attributes' ) ) {
+		echo '&lt;div class="menu_order"&gt;' . $post-&gt;menu_order . '&lt;/div&gt;';
+	}
+
+	$taxonomy_names = get_object_taxonomies( $post-&gt;post_type );
+
+	foreach ( $taxonomy_names as $taxonomy_name ) {
+		$taxonomy = get_taxonomy( $taxonomy_name );
+
+		if ( ! $taxonomy-&gt;show_in_quick_edit ) {
+			continue;
+		}
+
+		if ( $taxonomy-&gt;hierarchical ) {
+
+			$terms = get_object_term_cache( $post-&gt;ID, $taxonomy_name );
+			if ( false === $terms ) {
+				$terms = wp_get_object_terms( $post-&gt;ID, $taxonomy_name );
+				wp_cache_add( $post-&gt;ID, wp_list_pluck( $terms, 'term_id' ), $taxonomy_name . '_relationships' );
+			}
+			$term_ids = empty( $terms ) ? array() : wp_list_pluck( $terms, 'term_id' );
+
+			echo '&lt;div class="post_category" id="' . $taxonomy_name . '_' . $post-&gt;ID . '"&gt;' . implode( ',', $term_ids ) . '&lt;/div&gt;';
+
+		} else {
+
+			$terms_to_edit = get_terms_to_edit( $post-&gt;ID, $taxonomy_name );
+			if ( ! is_string( $terms_to_edit ) ) {
+				$terms_to_edit = '';
+			}
+
+			echo '&lt;div class="tags_input" id="' . $taxonomy_name . '_' . $post-&gt;ID . '"&gt;'
+				. esc_html( str_replace( ',', ', ', $terms_to_edit ) ) . '&lt;/div&gt;';
+
+		}
+	}
+
+	if ( ! $post_type_object-&gt;hierarchical ) {
+		echo '&lt;div class="sticky"&gt;' . ( is_sticky( $post-&gt;ID ) ? 'sticky' : '' ) . '&lt;/div&gt;';
+	}
+
+	if ( post_type_supports( $post-&gt;post_type, 'post-formats' ) ) {
+		echo '&lt;div class="post_format"&gt;' . esc_html( get_post_format( $post-&gt;ID ) ) . '&lt;/div&gt;';
+	}
+
+	/**
+	 * Fires after outputting the fields for the inline editor for posts and pages.
+	 *
+	 * @since 4.9.8
+	 *
+	 * @param WP_Post      $post             The current post object.
+	 * @param WP_Post_Type $post_type_object The current post's post type object.
+	 */
+	do_action( 'add_inline_data', $post, $post_type_object );
+
+	echo '&lt;/div&gt;';
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/template.php#L311">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/template.php#L311-L398">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/add_inline_data"><span class="hook-func">do_action</span>( ‘add_inline_data’, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">WP_Post_Type</span> <span class="arg-name">$post_type_object</span></nobr> )</a></dt>
+<dd>
+<p>Fires after outputting the fields for the inline editor for posts and pages.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/editable_slug"><span class="hook-func">apply_filters</span>( ‘editable_slug’, <nobr><span class="arg-type">string</span> <span class="arg-name">$slug</span></nobr>, <nobr><span class="arg-type">WP_Term|WP_Post</span> <span class="arg-name">$tag</span></nobr> )</a></dt>
+<dd>
+<p>Filters the editable slug for a post or term.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_inline_data" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_inline_data</a>
+  </p>
+</div>

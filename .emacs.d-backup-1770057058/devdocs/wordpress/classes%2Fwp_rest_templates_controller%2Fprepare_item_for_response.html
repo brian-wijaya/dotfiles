@@ -1,0 +1,177 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Templates_Controller::prepare_item_for_response( <span class="arg-type">WP_Block_Template</span> <span class="arg-name">$item</span>, <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span>
+</h1> <section><p>Prepare a single template output for response</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$item</code><span class="type"><span class="WP_Block_Template"><a href="../wp_block_template" rel="class">WP_Block_Template</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Template instance.</span></div></dd>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Request object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span> Response object.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="670" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_item_for_response( $item, $request ) {
+	/*
+	 * Resolve pattern blocks so they don't need to be resolved client-side
+	 * in the editor, improving performance.
+	 */
+	$blocks        = parse_blocks( $item-&gt;content );
+	$blocks        = resolve_pattern_blocks( $blocks );
+	$item-&gt;content = serialize_blocks( $blocks );
+
+	// Restores the more descriptive, specific name for use within this method.
+	$template = $item;
+
+	$fields = $this-&gt;get_fields_for_response( $request );
+
+	// Base fields for every template.
+	$data = array();
+
+	if ( rest_is_field_included( 'id', $fields ) ) {
+		$data['id'] = $template-&gt;id;
+	}
+
+	if ( rest_is_field_included( 'theme', $fields ) ) {
+		$data['theme'] = $template-&gt;theme;
+	}
+
+	if ( rest_is_field_included( 'content', $fields ) ) {
+		$data['content'] = array();
+	}
+	if ( rest_is_field_included( 'content.raw', $fields ) ) {
+		$data['content']['raw'] = $template-&gt;content;
+	}
+
+	if ( rest_is_field_included( 'content.block_version', $fields ) ) {
+		$data['content']['block_version'] = block_version( $template-&gt;content );
+	}
+
+	if ( rest_is_field_included( 'slug', $fields ) ) {
+		$data['slug'] = $template-&gt;slug;
+	}
+
+	if ( rest_is_field_included( 'source', $fields ) ) {
+		$data['source'] = $template-&gt;source;
+	}
+
+	if ( rest_is_field_included( 'origin', $fields ) ) {
+		$data['origin'] = $template-&gt;origin;
+	}
+
+	if ( rest_is_field_included( 'type', $fields ) ) {
+		$data['type'] = $template-&gt;type;
+	}
+
+	if ( rest_is_field_included( 'description', $fields ) ) {
+		$data['description'] = $template-&gt;description;
+	}
+
+	if ( rest_is_field_included( 'title', $fields ) ) {
+		$data['title'] = array();
+	}
+
+	if ( rest_is_field_included( 'title.raw', $fields ) ) {
+		$data['title']['raw'] = $template-&gt;title;
+	}
+
+	if ( rest_is_field_included( 'title.rendered', $fields ) ) {
+		if ( $template-&gt;wp_id ) {
+			/** This filter is documented in wp-includes/post-template.php */
+			$data['title']['rendered'] = apply_filters( 'the_title', $template-&gt;title, $template-&gt;wp_id );
+		} else {
+			$data['title']['rendered'] = $template-&gt;title;
+		}
+	}
+
+	if ( rest_is_field_included( 'status', $fields ) ) {
+		$data['status'] = $template-&gt;status;
+	}
+
+	if ( rest_is_field_included( 'wp_id', $fields ) ) {
+		$data['wp_id'] = (int) $template-&gt;wp_id;
+	}
+
+	if ( rest_is_field_included( 'has_theme_file', $fields ) ) {
+		$data['has_theme_file'] = (bool) $template-&gt;has_theme_file;
+	}
+
+	if ( rest_is_field_included( 'is_custom', $fields ) &amp;&amp; 'wp_template' === $template-&gt;type ) {
+		$data['is_custom'] = $template-&gt;is_custom;
+	}
+
+	if ( rest_is_field_included( 'author', $fields ) ) {
+		$data['author'] = (int) $template-&gt;author;
+	}
+
+	if ( rest_is_field_included( 'area', $fields ) &amp;&amp; 'wp_template_part' === $template-&gt;type ) {
+		$data['area'] = $template-&gt;area;
+	}
+
+	if ( rest_is_field_included( 'modified', $fields ) ) {
+		$data['modified'] = mysql_to_rfc3339( $template-&gt;modified );
+	}
+
+	if ( rest_is_field_included( 'author_text', $fields ) ) {
+		$data['author_text'] = self::get_wp_templates_author_text_field( $template );
+	}
+
+	if ( rest_is_field_included( 'original_source', $fields ) ) {
+		$data['original_source'] = self::get_wp_templates_original_source_field( $template );
+	}
+
+	if ( rest_is_field_included( 'plugin', $fields ) ) {
+		$registered_template = WP_Block_Templates_Registry::get_instance()-&gt;get_by_slug( $template-&gt;slug );
+		if ( $registered_template ) {
+			$data['plugin'] = $registered_template-&gt;plugin;
+		}
+	}
+
+	$context = ! empty( $request['context'] ) ? $request['context'] : 'view';
+	$data    = $this-&gt;add_additional_fields_to_object( $data, $request );
+	$data    = $this-&gt;filter_response_by_context( $data, $context );
+
+	// Wrap the data in a response object.
+	$response = rest_ensure_response( $data );
+
+	if ( rest_is_field_included( '_links', $fields ) || rest_is_field_included( '_embedded', $fields ) ) {
+		$links = $this-&gt;prepare_links( $template-&gt;id );
+		$response-&gt;add_links( $links );
+		if ( ! empty( $links['self']['href'] ) ) {
+			$actions = $this-&gt;get_available_actions();
+			$self    = $links['self']['href'];
+			foreach ( $actions as $rel ) {
+				$response-&gt;add_link( $rel, $self );
+			}
+		}
+	}
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php#L670">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php#L670-L806">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/the_title"><span class="hook-func">apply_filters</span>( ‘the_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_title</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post title.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description">Added <code>modified</code> property to the response.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Renamed <code>$template</code> to <code>$item</code> to match parent class for PHP 8 named parameter support.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_templates_controller/prepare_item_for_response" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_templates_controller/prepare_item_for_response</a>
+  </p>
+</div>

@@ -1,0 +1,74 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Textdomain_Registry::get_path_from_lang_dir( <span class="arg-type">string</span> <span class="arg-name">$domain</span>, <span class="arg-type">string</span> <span class="arg-name">$locale</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Gets the path to the language directory for the current domain and locale.</p> </section> <section><h2 id="description">Description</h2> <p>Checks the plugins and themes language directories as well as any custom directory set via <a href="../../functions/load_plugin_textdomain">load_plugin_textdomain()</a> or <a href="../../functions/load_theme_textdomain">load_theme_textdomain()</a>.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="../../functions/_get_path_to_translation_from_lang_dir">_get_path_to_translation_from_lang_dir()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$domain</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Text domain.</span></div></dd>
+<dt>
+<code>$locale</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Locale.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> Language directory path or false if there is none available.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="303" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function get_path_from_lang_dir( $domain, $locale ) {
+	$locations = $this-&gt;get_paths_for_domain( $domain );
+
+	$found_location = false;
+
+	foreach ( $locations as $location ) {
+		$files = $this-&gt;get_language_files_from_path( $location );
+
+		$mo_path  = "$location/$domain-$locale.mo";
+		$php_path = "$location/$domain-$locale.l10n.php";
+
+		foreach ( $files as $file_path ) {
+			if (
+				! in_array( $domain, $this-&gt;domains_with_translations, true ) &amp;&amp;
+				str_starts_with( str_replace( "$location/", '', $file_path ), "$domain-" )
+			) {
+				$this-&gt;domains_with_translations[] = $domain;
+			}
+
+			if ( $file_path === $mo_path || $file_path === $php_path ) {
+				$found_location = rtrim( $location, '/' ) . '/';
+				break 2;
+			}
+		}
+	}
+
+	if ( $found_location ) {
+		$this-&gt;set( $domain, $locale, $found_location );
+
+		return $found_location;
+	}
+
+	/*
+	 * If no path is found for the given locale and a custom path has been set
+	 * using load_plugin_textdomain/load_theme_textdomain, use that one.
+	 */
+	if ( 'en_US' !== $locale &amp;&amp; isset( $this-&gt;custom_paths[ $domain ] ) ) {
+		$fallback_location = rtrim( $this-&gt;custom_paths[ $domain ], '/' ) . '/';
+		$this-&gt;set( $domain, $locale, $fallback_location );
+		return $fallback_location;
+	}
+
+	$this-&gt;set( $domain, $locale, false );
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-textdomain-registry.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-textdomain-registry.php#L303">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-textdomain-registry.php#L303-L348">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_textdomain_registry/get_path_from_lang_dir" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_textdomain_registry/get_path_from_lang_dir</a>
+  </p>
+</div>

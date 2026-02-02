@@ -1,0 +1,162 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Widget_Form_Customize_Control {}</h1> <section><p>Widget Form Customize Control class.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_customize_control">WP_Customize_Control</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_widget_form_customize_control/active_callback">WP_Widget_Form_Customize_Control::active_callback</a></td>
+<td>Whether the current widget is rendered on the page.</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_form_customize_control/render_content">WP_Widget_Form_Customize_Control::render_content</a></td>
+<td>Override render_content to be no-op since content is exported via to_json for deferred embedding.</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_form_customize_control/to_json">WP_Widget_Form_Customize_Control::to_json</a></td>
+<td>Gather control params for exporting to JavaScript.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Widget_Form_Customize_Control extends WP_Customize_Control {
+	/**
+	 * Customize control type.
+	 *
+	 * @since 3.9.0
+	 * @var string
+	 */
+	public $type = 'widget_form';
+
+	/**
+	 * Widget ID.
+	 *
+	 * @since 3.9.0
+	 * @var string
+	 */
+	public $widget_id;
+
+	/**
+	 * Widget ID base.
+	 *
+	 * @since 3.9.0
+	 * @var string
+	 */
+	public $widget_id_base;
+
+	/**
+	 * Sidebar ID.
+	 *
+	 * @since 3.9.0
+	 * @var string
+	 */
+	public $sidebar_id;
+
+	/**
+	 * Widget status.
+	 *
+	 * @since 3.9.0
+	 * @var bool True if new, false otherwise. Default false.
+	 */
+	public $is_new = false;
+
+	/**
+	 * Widget width.
+	 *
+	 * @since 3.9.0
+	 * @var int
+	 */
+	public $width;
+
+	/**
+	 * Widget height.
+	 *
+	 * @since 3.9.0
+	 * @var int
+	 */
+	public $height;
+
+	/**
+	 * Widget mode.
+	 *
+	 * @since 3.9.0
+	 * @var bool True if wide, false otherwise. Default false.
+	 */
+	public $is_wide = false;
+
+	/**
+	 * Gather control params for exporting to JavaScript.
+	 *
+	 * @since 3.9.0
+	 *
+	 * @global array $wp_registered_widgets
+	 */
+	public function to_json() {
+		global $wp_registered_widgets;
+
+		parent::to_json();
+		$exported_properties = array( 'widget_id', 'widget_id_base', 'sidebar_id', 'width', 'height', 'is_wide' );
+		foreach ( $exported_properties as $key ) {
+			$this-&gt;json[ $key ] = $this-&gt;$key;
+		}
+
+		// Get the widget_control and widget_content.
+		require_once ABSPATH . 'wp-admin/includes/widgets.php';
+
+		$widget = $wp_registered_widgets[ $this-&gt;widget_id ];
+		if ( ! isset( $widget['params'][0] ) ) {
+			$widget['params'][0] = array();
+		}
+
+		$args = array(
+			'widget_id'   =&gt; $widget['id'],
+			'widget_name' =&gt; $widget['name'],
+		);
+
+		$args                 = wp_list_widget_controls_dynamic_sidebar(
+			array(
+				0 =&gt; $args,
+				1 =&gt; $widget['params'][0],
+			)
+		);
+		$widget_control_parts = $this-&gt;manager-&gt;widgets-&gt;get_widget_control_parts( $args );
+
+		$this-&gt;json['widget_control'] = $widget_control_parts['control'];
+		$this-&gt;json['widget_content'] = $widget_control_parts['content'];
+	}
+
+	/**
+	 * Override render_content to be no-op since content is exported via to_json for deferred embedding.
+	 *
+	 * @since 3.9.0
+	 */
+	public function render_content() {}
+
+	/**
+	 * Whether the current widget is rendered on the page.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @return bool Whether the widget is rendered.
+	 */
+	public function active_callback() {
+		return $this-&gt;manager-&gt;widgets-&gt;is_widget_rendered( $this-&gt;widget_id );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/customize/class-wp-widget-form-customize-control.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/customize/class-wp-widget-form-customize-control.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/customize/class-wp-widget-form-customize-control.php#L17-L140">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.9.0/">3.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_widget_form_customize_control" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_widget_form_customize_control</a>
+  </p>
+</div>

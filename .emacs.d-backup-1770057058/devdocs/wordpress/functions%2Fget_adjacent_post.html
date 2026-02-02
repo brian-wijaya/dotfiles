@@ -1,0 +1,264 @@
+<h1 class="wp-block-wporg-code-reference-title">get_adjacent_post( <span class="arg-type">bool</span> <span class="arg-name">$in_same_term</span> = <span class="arg-default">false</span>, <span class="arg-type">int[]|string</span> <span class="arg-name">$excluded_terms</span> = <span class="arg-default">”</span>, <span class="arg-type">bool</span> <span class="arg-name">$previous</span> = <span class="arg-default">true</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span> = <span class="arg-default">‘category’</span> ): <span class="return-type"><a href="../classes/wp_post" rel="class">WP_Post</a>|null|string</span>
+</h1> <section><p>Retrieves the adjacent post.</p> </section> <section><h2 id="description">Description</h2> <p>Can either be next or previous post.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$in_same_term</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether post should be in the same taxonomy term.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$excluded_terms</code><span class="type"><span class="int[]">int[]</span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array or comma-separated list of excluded term IDs.<br> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$previous</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to retrieve previous post.<br> </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Taxonomy, if <code>$in_same_term</code> is true. Default <code>'category'</code>.</span></div>
+<p class="default">Default:<code>'category'</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../classes/wp_post" rel="class">WP_Post</a>|null|string</span> Post object if successful. Null if global <code>$post</code> is not set.<br> Empty string if no corresponding post exists.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1830" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_adjacent_post( $in_same_term = false, $excluded_terms = '', $previous = true, $taxonomy = 'category' ) {
+	global $wpdb;
+
+	$post = get_post();
+
+	if ( ! $post || ! taxonomy_exists( $taxonomy ) ) {
+		return null;
+	}
+
+	$current_post_date = $post-&gt;post_date;
+
+	$join     = '';
+	$where    = '';
+	$adjacent = $previous ? 'previous' : 'next';
+
+	if ( ! empty( $excluded_terms ) &amp;&amp; ! is_array( $excluded_terms ) ) {
+		// Back-compat, $excluded_terms used to be $excluded_categories with IDs separated by " and ".
+		if ( str_contains( $excluded_terms, ' and ' ) ) {
+			_deprecated_argument(
+				__FUNCTION__,
+				'3.3.0',
+				sprintf(
+					/* translators: %s: The word 'and'. */
+					__( 'Use commas instead of %s to separate excluded terms.' ),
+					"'and'"
+				)
+			);
+			$excluded_terms = explode( ' and ', $excluded_terms );
+		} else {
+			$excluded_terms = explode( ',', $excluded_terms );
+		}
+
+		$excluded_terms = array_map( 'intval', $excluded_terms );
+	}
+
+	/**
+	 * Filters the IDs of terms excluded from adjacent post queries.
+	 *
+	 * The dynamic portion of the hook name, `$adjacent`, refers to the type
+	 * of adjacency, 'next' or 'previous'.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `get_next_post_excluded_terms`
+	 *  - `get_previous_post_excluded_terms`
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param int[]|string $excluded_terms Array of excluded term IDs. Empty string if none were provided.
+	 */
+	$excluded_terms = apply_filters( "get_{$adjacent}_post_excluded_terms", $excluded_terms );
+
+	if ( $in_same_term || ! empty( $excluded_terms ) ) {
+		if ( $in_same_term ) {
+			$join  .= " INNER JOIN $wpdb-&gt;term_relationships AS tr ON p.ID = tr.object_id INNER JOIN $wpdb-&gt;term_taxonomy AS tt ON tr.term_taxonomy_id = tt.term_taxonomy_id";
+			$where .= $wpdb-&gt;prepare( 'AND tt.taxonomy = %s', $taxonomy );
+
+			if ( ! is_object_in_taxonomy( $post-&gt;post_type, $taxonomy ) ) {
+				return '';
+			}
+			$term_array = wp_get_object_terms( $post-&gt;ID, $taxonomy, array( 'fields' =&gt; 'ids' ) );
+
+			// Remove any exclusions from the term array to include.
+			$term_array = array_diff( $term_array, (array) $excluded_terms );
+			$term_array = array_map( 'intval', $term_array );
+
+			if ( ! $term_array || is_wp_error( $term_array ) ) {
+				return '';
+			}
+
+			$where .= ' AND tt.term_id IN (' . implode( ',', $term_array ) . ')';
+		}
+
+		if ( ! empty( $excluded_terms ) ) {
+			$where .= " AND p.ID NOT IN ( SELECT tr.object_id FROM $wpdb-&gt;term_relationships tr LEFT JOIN $wpdb-&gt;term_taxonomy tt ON (tr.term_taxonomy_id = tt.term_taxonomy_id) WHERE tt.term_id IN (" . implode( ',', array_map( 'intval', $excluded_terms ) ) . ') )';
+		}
+	}
+
+	// 'post_status' clause depends on the current user.
+	if ( is_user_logged_in() ) {
+		$user_id = get_current_user_id();
+
+		$post_type_object = get_post_type_object( $post-&gt;post_type );
+		if ( empty( $post_type_object ) ) {
+			$post_type_cap    = $post-&gt;post_type;
+			$read_private_cap = 'read_private_' . $post_type_cap . 's';
+		} else {
+			$read_private_cap = $post_type_object-&gt;cap-&gt;read_private_posts;
+		}
+
+		/*
+		 * Results should include private posts belonging to the current user, or private posts where the
+		 * current user has the 'read_private_posts' cap.
+		 */
+		$private_states = get_post_stati( array( 'private' =&gt; true ) );
+		$where         .= " AND ( p.post_status = 'publish'";
+		foreach ( $private_states as $state ) {
+			if ( current_user_can( $read_private_cap ) ) {
+				$where .= $wpdb-&gt;prepare( ' OR p.post_status = %s', $state );
+			} else {
+				$where .= $wpdb-&gt;prepare( ' OR (p.post_author = %d AND p.post_status = %s)', $user_id, $state );
+			}
+		}
+		$where .= ' )';
+	} else {
+		$where .= " AND p.post_status = 'publish'";
+	}
+
+	$op    = $previous ? '&lt;' : '&gt;';
+	$order = $previous ? 'DESC' : 'ASC';
+
+	/**
+	 * Filters the JOIN clause in the SQL for an adjacent post query.
+	 *
+	 * The dynamic portion of the hook name, `$adjacent`, refers to the type
+	 * of adjacency, 'next' or 'previous'.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `get_next_post_join`
+	 *  - `get_previous_post_join`
+	 *
+	 * @since 2.5.0
+	 * @since 4.4.0 Added the `$taxonomy` and `$post` parameters.
+	 *
+	 * @param string       $join           The JOIN clause in the SQL.
+	 * @param bool         $in_same_term   Whether post should be in the same taxonomy term.
+	 * @param int[]|string $excluded_terms Array of excluded term IDs. Empty string if none were provided.
+	 * @param string       $taxonomy       Taxonomy. Used to identify the term used when `$in_same_term` is true.
+	 * @param WP_Post      $post           WP_Post object.
+	 */
+	$join = apply_filters( "get_{$adjacent}_post_join", $join, $in_same_term, $excluded_terms, $taxonomy, $post );
+
+	/**
+	 * Filters the WHERE clause in the SQL for an adjacent post query.
+	 *
+	 * The dynamic portion of the hook name, `$adjacent`, refers to the type
+	 * of adjacency, 'next' or 'previous'.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `get_next_post_where`
+	 *  - `get_previous_post_where`
+	 *
+	 * @since 2.5.0
+	 * @since 4.4.0 Added the `$taxonomy` and `$post` parameters.
+	 *
+	 * @param string       $where          The `WHERE` clause in the SQL.
+	 * @param bool         $in_same_term   Whether post should be in the same taxonomy term.
+	 * @param int[]|string $excluded_terms Array of excluded term IDs. Empty string if none were provided.
+	 * @param string       $taxonomy       Taxonomy. Used to identify the term used when `$in_same_term` is true.
+	 * @param WP_Post      $post           WP_Post object.
+	 */
+	$where = apply_filters( "get_{$adjacent}_post_where", $wpdb-&gt;prepare( "WHERE p.post_date $op %s AND p.post_type = %s $where", $current_post_date, $post-&gt;post_type ), $in_same_term, $excluded_terms, $taxonomy, $post );
+
+	/**
+	 * Filters the ORDER BY clause in the SQL for an adjacent post query.
+	 *
+	 * The dynamic portion of the hook name, `$adjacent`, refers to the type
+	 * of adjacency, 'next' or 'previous'.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `get_next_post_sort`
+	 *  - `get_previous_post_sort`
+	 *
+	 * @since 2.5.0
+	 * @since 4.4.0 Added the `$post` parameter.
+	 * @since 4.9.0 Added the `$order` parameter.
+	 *
+	 * @param string $order_by The `ORDER BY` clause in the SQL.
+	 * @param WP_Post $post    WP_Post object.
+	 * @param string  $order   Sort order. 'DESC' for previous post, 'ASC' for next.
+	 */
+	$sort = apply_filters( "get_{$adjacent}_post_sort", "ORDER BY p.post_date $order LIMIT 1", $post, $order );
+
+	$query        = "SELECT p.ID FROM $wpdb-&gt;posts AS p $join $where $sort";
+	$key          = md5( $query );
+	$last_changed = wp_cache_get_last_changed( 'posts' );
+	if ( $in_same_term || ! empty( $excluded_terms ) ) {
+		$last_changed .= wp_cache_get_last_changed( 'terms' );
+	}
+	$cache_key = "adjacent_post:$key:$last_changed";
+
+	$result = wp_cache_get( $cache_key, 'post-queries' );
+	if ( false !== $result ) {
+		if ( $result ) {
+			$result = get_post( $result );
+		}
+		return $result;
+	}
+
+	$result = $wpdb-&gt;get_var( $query );
+	if ( null === $result ) {
+		$result = '';
+	}
+
+	wp_cache_set( $cache_key, $result, 'post-queries' );
+
+	if ( $result ) {
+		$result = get_post( $result );
+	}
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/link-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/link-template.php#L1830">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/link-template.php#L1830-L2034">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_adjacent_post_excluded_terms"><span class="hook-func">apply_filters</span>( “get_{$adjacent}_post_excluded_terms”, <nobr><span class="arg-type">int[]|string</span> <span class="arg-name">$excluded_terms</span></nobr> )</a></dt>
+<dd>
+<p>Filters the IDs of terms excluded from adjacent post queries.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_adjacent_post_join"><span class="hook-func">apply_filters</span>( “get_{$adjacent}_post_join”, <nobr><span class="arg-type">string</span> <span class="arg-name">$join</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$in_same_term</span></nobr>, <nobr><span class="arg-type">int[]|string</span> <span class="arg-name">$excluded_terms</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters the JOIN clause in the SQL for an adjacent post query.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_adjacent_post_sort"><span class="hook-func">apply_filters</span>( “get_{$adjacent}_post_sort”, <nobr><span class="arg-type">string</span> <span class="arg-name">$order_by</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$order</span></nobr> )</a></dt>
+<dd>
+<p>Filters the ORDER BY clause in the SQL for an adjacent post query.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_adjacent_post_where"><span class="hook-func">apply_filters</span>( “get_{$adjacent}_post_where”, <nobr><span class="arg-type">string</span> <span class="arg-name">$where</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$in_same_term</span></nobr>, <nobr><span class="arg-type">int[]|string</span> <span class="arg-name">$excluded_terms</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters the WHERE clause in the SQL for an adjacent post query.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_adjacent_post" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_adjacent_post</a>
+  </p>
+</div>

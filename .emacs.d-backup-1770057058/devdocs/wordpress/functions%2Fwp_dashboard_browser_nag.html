@@ -1,0 +1,96 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_dashboard_browser_nag()</h1> <section><p>Displays the browser update nag.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1708" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_dashboard_browser_nag() {
+	global $is_IE;
+
+	$notice   = '';
+	$response = wp_check_browser_version();
+
+	if ( $response ) {
+		if ( $is_IE ) {
+			$msg = __( 'Internet Explorer does not give you the best WordPress experience. Switch to Microsoft Edge, or another more modern browser to get the most from your site.' );
+		} elseif ( $response['insecure'] ) {
+			$msg = sprintf(
+				/* translators: %s: Browser name and link. */
+				__( "It looks like you're using an insecure version of %s. Using an outdated browser makes your computer unsafe. For the best WordPress experience, please update your browser." ),
+				sprintf( '&lt;a href="%s"&gt;%s&lt;/a&gt;', esc_url( $response['update_url'] ), esc_html( $response['name'] ) )
+			);
+		} else {
+			$msg = sprintf(
+				/* translators: %s: Browser name and link. */
+				__( "It looks like you're using an old version of %s. For the best WordPress experience, please update your browser." ),
+				sprintf( '&lt;a href="%s"&gt;%s&lt;/a&gt;', esc_url( $response['update_url'] ), esc_html( $response['name'] ) )
+			);
+		}
+
+		$browser_nag_class = '';
+		if ( ! empty( $response['img_src'] ) ) {
+			$img_src = ( is_ssl() &amp;&amp; ! empty( $response['img_src_ssl'] ) ) ? $response['img_src_ssl'] : $response['img_src'];
+
+			$notice           .= '&lt;div class="alignright browser-icon"&gt;&lt;img src="' . esc_url( $img_src ) . '" alt="" /&gt;&lt;/div&gt;';
+			$browser_nag_class = ' has-browser-icon';
+		}
+		$notice .= "&lt;p class='browser-update-nag{$browser_nag_class}'&gt;{$msg}&lt;/p&gt;";
+
+		$browsehappy = 'https://browsehappy.com/';
+		$locale      = get_user_locale();
+		if ( 'en_US' !== $locale ) {
+			$browsehappy = add_query_arg( 'locale', $locale, $browsehappy );
+		}
+
+		if ( $is_IE ) {
+			$msg_browsehappy = sprintf(
+				/* translators: %s: Browse Happy URL. */
+				__( 'Learn how to &lt;a href="%s" class="update-browser-link"&gt;browse happy&lt;/a&gt;' ),
+				esc_url( $browsehappy )
+			);
+		} else {
+			$msg_browsehappy = sprintf(
+				/* translators: 1: Browser update URL, 2: Browser name, 3: Browse Happy URL. */
+				__( '&lt;a href="%1$s" class="update-browser-link"&gt;Update %2$s&lt;/a&gt; or learn how to &lt;a href="%3$s" class="browse-happy-link"&gt;browse happy&lt;/a&gt;' ),
+				esc_attr( $response['update_url'] ),
+				esc_html( $response['name'] ),
+				esc_url( $browsehappy )
+			);
+		}
+
+		$notice .= '&lt;p&gt;' . $msg_browsehappy . '&lt;/p&gt;';
+		$notice .= '&lt;p class="hide-if-no-js"&gt;&lt;a href="" class="dismiss" aria-label="' . esc_attr__( 'Dismiss the browser warning panel' ) . '"&gt;' . __( 'Dismiss' ) . '&lt;/a&gt;&lt;/p&gt;';
+		$notice .= '&lt;div class="clear"&gt;&lt;/div&gt;';
+	}
+
+	/**
+	 * Filters the notice output for the 'Browse Happy' nag meta box.
+	 *
+	 * @since 3.2.0
+	 *
+	 * @param string      $notice   The notice content.
+	 * @param array|false $response An array containing web browser information, or
+	 *                              false on failure. See wp_check_browser_version().
+	 */
+	echo apply_filters( 'browse-happy-notice', $notice, $response ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/dashboard.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/dashboard.php#L1708">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/dashboard.php#L1708-L1777">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/browse-happy-notice"><span class="hook-func">apply_filters</span>( ‘browse-happy-notice’, <nobr><span class="arg-type">string</span> <span class="arg-name">$notice</span></nobr>, <nobr><span class="arg-type">array|false</span> <span class="arg-name">$response</span></nobr> )</a></dt>
+<dd>
+<p>Filters the notice output for the ‘Browse Happy’ nag meta box.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td><span class="since-description">Added a special message for Internet Explorer users.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.2.0/">3.2.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_dashboard_browser_nag" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_dashboard_browser_nag</a>
+  </p>
+</div>

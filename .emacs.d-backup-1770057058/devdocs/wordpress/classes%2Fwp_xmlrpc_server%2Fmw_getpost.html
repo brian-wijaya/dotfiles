@@ -1,0 +1,159 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_xmlrpc_server::mw_getPost( <span class="arg-type">array</span> <span class="arg-name">$args</span> ): <span class="return-type">array|<a href="../ixr_error" rel="class">IXR_Error</a></span>
+</h1> <section><p>Retrieves a post.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Method arguments. Note: arguments must be ordered as documented.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">int</span><div class="desc">Post ID.</div>
+</li> <li>
+<code>1</code> <span class="type">string</span><div class="desc">Username.</div>
+</li> <li>
+<code>2</code> <span class="type">string</span><div class="desc">Password.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../ixr_error" rel="class">IXR_Error</a></span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="6058" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function mw_getPost( $args ) {
+	$this-&gt;escape( $args );
+
+	$post_id  = (int) $args[0];
+	$username = $args[1];
+	$password = $args[2];
+
+	$user = $this-&gt;login( $username, $password );
+	if ( ! $user ) {
+		return $this-&gt;error;
+	}
+
+	$postdata = get_post( $post_id, ARRAY_A );
+	if ( ! $postdata ) {
+		return new IXR_Error( 404, __( 'Invalid post ID.' ) );
+	}
+
+	if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		return new IXR_Error( 401, __( 'Sorry, you are not allowed to edit this post.' ) );
+	}
+
+	/** This action is documented in wp-includes/class-wp-xmlrpc-server.php */
+	do_action( 'xmlrpc_call', 'metaWeblog.getPost', $args, $this );
+
+	if ( '' !== $postdata['post_date'] ) {
+		$post_date         = $this-&gt;_convert_date( $postdata['post_date'] );
+		$post_date_gmt     = $this-&gt;_convert_date_gmt( $postdata['post_date_gmt'], $postdata['post_date'] );
+		$post_modified     = $this-&gt;_convert_date( $postdata['post_modified'] );
+		$post_modified_gmt = $this-&gt;_convert_date_gmt( $postdata['post_modified_gmt'], $postdata['post_modified'] );
+
+		$categories = array();
+		$catids     = wp_get_post_categories( $post_id );
+		foreach ( $catids as $catid ) {
+			$categories[] = get_cat_name( $catid );
+		}
+
+		$tagnames = array();
+		$tags     = wp_get_post_tags( $post_id );
+		if ( ! empty( $tags ) ) {
+			foreach ( $tags as $tag ) {
+				$tagnames[] = $tag-&gt;name;
+			}
+			$tagnames = implode( ', ', $tagnames );
+		} else {
+			$tagnames = '';
+		}
+
+		$post = get_extended( $postdata['post_content'] );
+		$link = get_permalink( $postdata['ID'] );
+
+		// Get the author info.
+		$author = get_userdata( $postdata['post_author'] );
+
+		$allow_comments = ( 'open' === $postdata['comment_status'] ) ? 1 : 0;
+		$allow_pings    = ( 'open' === $postdata['ping_status'] ) ? 1 : 0;
+
+		// Consider future posts as published.
+		if ( 'future' === $postdata['post_status'] ) {
+			$postdata['post_status'] = 'publish';
+		}
+
+		// Get post format.
+		$post_format = get_post_format( $post_id );
+		if ( empty( $post_format ) ) {
+			$post_format = 'standard';
+		}
+
+		$sticky = false;
+		if ( is_sticky( $post_id ) ) {
+			$sticky = true;
+		}
+
+		$enclosure = array();
+		foreach ( (array) get_post_custom( $post_id ) as $key =&gt; $val ) {
+			if ( 'enclosure' === $key ) {
+				foreach ( (array) $val as $enc ) {
+					$encdata             = explode( "\n", $enc );
+					$enclosure['url']    = trim( htmlspecialchars( $encdata[0] ) );
+					$enclosure['length'] = (int) trim( $encdata[1] );
+					$enclosure['type']   = trim( $encdata[2] );
+					break 2;
+				}
+			}
+		}
+
+		$resp = array(
+			'dateCreated'            =&gt; $post_date,
+			'userid'                 =&gt; $postdata['post_author'],
+			'postid'                 =&gt; $postdata['ID'],
+			'description'            =&gt; $post['main'],
+			'title'                  =&gt; $postdata['post_title'],
+			'link'                   =&gt; $link,
+			'permaLink'              =&gt; $link,
+			// Commented out because no other tool seems to use this.
+			// 'content' =&gt; $entry['post_content'],
+			'categories'             =&gt; $categories,
+			'mt_excerpt'             =&gt; $postdata['post_excerpt'],
+			'mt_text_more'           =&gt; $post['extended'],
+			'wp_more_text'           =&gt; $post['more_text'],
+			'mt_allow_comments'      =&gt; $allow_comments,
+			'mt_allow_pings'         =&gt; $allow_pings,
+			'mt_keywords'            =&gt; $tagnames,
+			'wp_slug'                =&gt; $postdata['post_name'],
+			'wp_password'            =&gt; $postdata['post_password'],
+			'wp_author_id'           =&gt; (string) $author-&gt;ID,
+			'wp_author_display_name' =&gt; $author-&gt;display_name,
+			'date_created_gmt'       =&gt; $post_date_gmt,
+			'post_status'            =&gt; $postdata['post_status'],
+			'custom_fields'          =&gt; $this-&gt;get_custom_fields( $post_id ),
+			'wp_post_format'         =&gt; $post_format,
+			'sticky'                 =&gt; $sticky,
+			'date_modified'          =&gt; $post_modified,
+			'date_modified_gmt'      =&gt; $post_modified_gmt,
+		);
+
+		if ( ! empty( $enclosure ) ) {
+			$resp['enclosure'] = $enclosure;
+		}
+
+		$resp['wp_post_thumbnail'] = get_post_thumbnail_id( $postdata['ID'] );
+
+		return $resp;
+	} else {
+		return new IXR_Error( 404, __( 'Sorry, no such post.' ) );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-xmlrpc-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L6058">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L6058-L6183">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/xmlrpc_call"><span class="hook-func">do_action</span>( ‘xmlrpc_call’, <nobr><span class="arg-type">string</span> <span class="arg-name">$name</span></nobr>, <nobr><span class="arg-type">array|string</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">wp_xmlrpc_server</span> <span class="arg-name">$server</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the XML-RPC user has been authenticated but before the rest of the method logic begins.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/mw_getpost" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/mw_getpost</a>
+  </p>
+</div>

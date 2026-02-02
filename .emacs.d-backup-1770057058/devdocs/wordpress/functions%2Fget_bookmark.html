@@ -1,0 +1,79 @@
+<h1 class="wp-block-wporg-code-reference-title">get_bookmark( <span class="arg-type">int|stdClass</span> <span class="arg-name">$bookmark</span>, <span class="arg-type">string</span> <span class="arg-name">$output</span> = <span class="arg-default">OBJECT</span>, <span class="arg-type">string</span> <span class="arg-name">$filter</span> = <span class="arg-default">‘raw’</span> ): <span class="return-type">array|object|null</span>
+</h1> <section><p>Retrieves bookmark data.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$bookmark</code><span class="type"><span class="int">int</span>|<span class="stdClass">stdClass</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$output</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The required return type. One of OBJECT, ARRAY_A, or ARRAY_N, which correspond to an stdClass object, an associative array, or a numeric array, respectively. </span></div>
+<p class="default">Default:<code>OBJECT</code></p>
+</dd>
+<dt>
+<code>$filter</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">How to sanitize bookmark fields. Default <code>'raw'</code>.</span></div>
+<p class="default">Default:<code>'raw'</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|object|null</span> Type returned depends on $output value.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="24" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_bookmark( $bookmark, $output = OBJECT, $filter = 'raw' ) {
+	global $wpdb;
+
+	if ( empty( $bookmark ) ) {
+		if ( isset( $GLOBALS['link'] ) ) {
+			$_bookmark = &amp; $GLOBALS['link'];
+		} else {
+			$_bookmark = null;
+		}
+	} elseif ( is_object( $bookmark ) ) {
+		wp_cache_add( $bookmark-&gt;link_id, $bookmark, 'bookmark' );
+		$_bookmark = $bookmark;
+	} else {
+		if ( isset( $GLOBALS['link'] ) &amp;&amp; ( $GLOBALS['link']-&gt;link_id === $bookmark ) ) {
+			$_bookmark = &amp; $GLOBALS['link'];
+		} else {
+			$_bookmark = wp_cache_get( $bookmark, 'bookmark' );
+			if ( ! $_bookmark ) {
+				$_bookmark = $wpdb-&gt;get_row( $wpdb-&gt;prepare( "SELECT * FROM $wpdb-&gt;links WHERE link_id = %d LIMIT 1", $bookmark ) );
+				if ( $_bookmark ) {
+					$_bookmark-&gt;link_category = array_unique( wp_get_object_terms( $_bookmark-&gt;link_id, 'link_category', array( 'fields' =&gt; 'ids' ) ) );
+					wp_cache_add( $_bookmark-&gt;link_id, $_bookmark, 'bookmark' );
+				}
+			}
+		}
+	}
+
+	if ( ! $_bookmark ) {
+		return $_bookmark;
+	}
+
+	$_bookmark = sanitize_bookmark( $_bookmark, $filter );
+
+	if ( OBJECT === $output ) {
+		return $_bookmark;
+	} elseif ( ARRAY_A === $output ) {
+		return get_object_vars( $_bookmark );
+	} elseif ( ARRAY_N === $output ) {
+		return array_values( get_object_vars( $_bookmark ) );
+	} else {
+		return $_bookmark;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/bookmark.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/bookmark.php#L24">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/bookmark.php#L24-L66">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_bookmark" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_bookmark</a>
+  </p>
+</div>

@@ -1,0 +1,199 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Control::render_content()</h1> <section><p>Render the control’s content.</p> </section> <section><h2 id="description">Description</h2> <p>Allows the content to be overridden without having to rewrite the wrapper in <code>$this::render()</code>.</p> <p>Supports basic input types <code>text</code>, <code>checkbox</code>, <code>textarea</code>, <code>radio</code>, <code>select</code> and <code>dropdown-pages</code>.<br>Additional input types such as <code>email</code>, <code>url</code>, <code>number</code>, <code>hidden</code> and <code>date</code> are supported implicitly.</p> <p>Control content can alternately be rendered in JS. See WP_Customize_Control::print_template().</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="487" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function render_content() {
+	$input_id         = '_customize-input-' . $this-&gt;id;
+	$description_id   = '_customize-description-' . $this-&gt;id;
+	$describedby_attr = ( ! empty( $this-&gt;description ) ) ? ' aria-describedby="' . esc_attr( $description_id ) . '" ' : '';
+	switch ( $this-&gt;type ) {
+		case 'checkbox':
+			?&gt;
+			&lt;span class="customize-inside-control-row"&gt;
+				&lt;input
+					id="&lt;?php echo esc_attr( $input_id ); ?&gt;"
+					&lt;?php echo $describedby_attr; ?&gt;
+					type="checkbox"
+					value="&lt;?php echo esc_attr( $this-&gt;value() ); ?&gt;"
+					&lt;?php $this-&gt;link(); ?&gt;
+					&lt;?php checked( $this-&gt;value() ); ?&gt;
+				/&gt;
+				&lt;label for="&lt;?php echo esc_attr( $input_id ); ?&gt;"&gt;&lt;?php echo esc_html( $this-&gt;label ); ?&gt;&lt;/label&gt;
+				&lt;?php if ( ! empty( $this-&gt;description ) ) : ?&gt;
+					&lt;span id="&lt;?php echo esc_attr( $description_id ); ?&gt;" class="description customize-control-description"&gt;&lt;?php echo $this-&gt;description; ?&gt;&lt;/span&gt;
+				&lt;?php endif; ?&gt;
+			&lt;/span&gt;
+			&lt;?php
+			break;
+		case 'radio':
+			if ( empty( $this-&gt;choices ) ) {
+				return;
+			}
+
+			$name = '_customize-radio-' . $this-&gt;id;
+			?&gt;
+			&lt;?php if ( ! empty( $this-&gt;label ) ) : ?&gt;
+				&lt;span class="customize-control-title"&gt;&lt;?php echo esc_html( $this-&gt;label ); ?&gt;&lt;/span&gt;
+			&lt;?php endif; ?&gt;
+			&lt;?php if ( ! empty( $this-&gt;description ) ) : ?&gt;
+				&lt;span id="&lt;?php echo esc_attr( $description_id ); ?&gt;" class="description customize-control-description"&gt;&lt;?php echo $this-&gt;description; ?&gt;&lt;/span&gt;
+			&lt;?php endif; ?&gt;
+
+			&lt;?php foreach ( $this-&gt;choices as $value =&gt; $label ) : ?&gt;
+				&lt;span class="customize-inside-control-row"&gt;
+					&lt;input
+						id="&lt;?php echo esc_attr( $input_id . '-radio-' . $value ); ?&gt;"
+						type="radio"
+						&lt;?php echo $describedby_attr; ?&gt;
+						value="&lt;?php echo esc_attr( $value ); ?&gt;"
+						name="&lt;?php echo esc_attr( $name ); ?&gt;"
+						&lt;?php $this-&gt;link(); ?&gt;
+						&lt;?php checked( $this-&gt;value(), $value ); ?&gt;
+						/&gt;
+					&lt;label for="&lt;?php echo esc_attr( $input_id . '-radio-' . $value ); ?&gt;"&gt;&lt;?php echo esc_html( $label ); ?&gt;&lt;/label&gt;
+				&lt;/span&gt;
+			&lt;?php endforeach; ?&gt;
+			&lt;?php
+			break;
+		case 'select':
+			if ( empty( $this-&gt;choices ) ) {
+				return;
+			}
+
+			?&gt;
+			&lt;?php if ( ! empty( $this-&gt;label ) ) : ?&gt;
+				&lt;label for="&lt;?php echo esc_attr( $input_id ); ?&gt;" class="customize-control-title"&gt;&lt;?php echo esc_html( $this-&gt;label ); ?&gt;&lt;/label&gt;
+			&lt;?php endif; ?&gt;
+			&lt;?php if ( ! empty( $this-&gt;description ) ) : ?&gt;
+				&lt;span id="&lt;?php echo esc_attr( $description_id ); ?&gt;" class="description customize-control-description"&gt;&lt;?php echo $this-&gt;description; ?&gt;&lt;/span&gt;
+			&lt;?php endif; ?&gt;
+
+			&lt;select id="&lt;?php echo esc_attr( $input_id ); ?&gt;" &lt;?php echo $describedby_attr; ?&gt; &lt;?php $this-&gt;link(); ?&gt;&gt;
+				&lt;?php
+				foreach ( $this-&gt;choices as $value =&gt; $label ) {
+					echo '&lt;option value="' . esc_attr( $value ) . '"' . selected( $this-&gt;value(), $value, false ) . '&gt;' . esc_html( $label ) . '&lt;/option&gt;';
+				}
+				?&gt;
+			&lt;/select&gt;
+			&lt;?php
+			break;
+		case 'textarea':
+			?&gt;
+			&lt;?php if ( ! empty( $this-&gt;label ) ) : ?&gt;
+				&lt;label for="&lt;?php echo esc_attr( $input_id ); ?&gt;" class="customize-control-title"&gt;&lt;?php echo esc_html( $this-&gt;label ); ?&gt;&lt;/label&gt;
+			&lt;?php endif; ?&gt;
+			&lt;?php if ( ! empty( $this-&gt;description ) ) : ?&gt;
+				&lt;span id="&lt;?php echo esc_attr( $description_id ); ?&gt;" class="description customize-control-description"&gt;&lt;?php echo $this-&gt;description; ?&gt;&lt;/span&gt;
+			&lt;?php endif; ?&gt;
+			&lt;textarea
+				id="&lt;?php echo esc_attr( $input_id ); ?&gt;"
+				rows="5"
+				&lt;?php echo $describedby_attr; ?&gt;
+				&lt;?php $this-&gt;input_attrs(); ?&gt;
+				&lt;?php $this-&gt;link(); ?&gt;
+			&gt;&lt;?php echo esc_textarea( $this-&gt;value() ); ?&gt;&lt;/textarea&gt;
+			&lt;?php
+			break;
+		case 'dropdown-pages':
+			?&gt;
+			&lt;?php if ( ! empty( $this-&gt;label ) ) : ?&gt;
+				&lt;label for="&lt;?php echo esc_attr( $input_id ); ?&gt;" class="customize-control-title"&gt;&lt;?php echo esc_html( $this-&gt;label ); ?&gt;&lt;/label&gt;
+			&lt;?php endif; ?&gt;
+			&lt;?php if ( ! empty( $this-&gt;description ) ) : ?&gt;
+				&lt;span id="&lt;?php echo esc_attr( $description_id ); ?&gt;" class="description customize-control-description"&gt;&lt;?php echo $this-&gt;description; ?&gt;&lt;/span&gt;
+			&lt;?php endif; ?&gt;
+
+			&lt;?php
+			$dropdown_name     = '_customize-dropdown-pages-' . $this-&gt;id;
+			$show_option_none  = __( '&amp;mdash; Select &amp;mdash;' );
+			$option_none_value = '0';
+			$dropdown          = wp_dropdown_pages(
+				array(
+					'name'              =&gt; $dropdown_name,
+					'echo'              =&gt; 0,
+					'show_option_none'  =&gt; $show_option_none,
+					'option_none_value' =&gt; $option_none_value,
+					'selected'          =&gt; $this-&gt;value(),
+				)
+			);
+			if ( empty( $dropdown ) ) {
+				$dropdown  = sprintf( '&lt;select id="%1$s" name="%1$s"&gt;', esc_attr( $dropdown_name ) );
+				$dropdown .= sprintf( '&lt;option value="%1$s"&gt;%2$s&lt;/option&gt;', esc_attr( $option_none_value ), esc_html( $show_option_none ) );
+				$dropdown .= '&lt;/select&gt;';
+			}
+
+			// Hackily add in the data link parameter.
+			$dropdown = str_replace( '&lt;select', '&lt;select ' . $this-&gt;get_link() . ' id="' . esc_attr( $input_id ) . '" ' . $describedby_attr, $dropdown );
+
+			/*
+			 * Even more hackily add auto-draft page stubs.
+			 * @todo Eventually this should be removed in favor of the pages being injected into the underlying get_pages() call.
+			 * See &lt;https://github.com/xwp/wp-customize-posts/pull/250&gt;.
+			 */
+			$nav_menus_created_posts_setting = $this-&gt;manager-&gt;get_setting( 'nav_menus_created_posts' );
+			if ( $nav_menus_created_posts_setting &amp;&amp; current_user_can( 'publish_pages' ) ) {
+				$auto_draft_page_options = '';
+				foreach ( $nav_menus_created_posts_setting-&gt;value() as $auto_draft_page_id ) {
+					$post = get_post( $auto_draft_page_id );
+					if ( $post &amp;&amp; 'page' === $post-&gt;post_type ) {
+						$auto_draft_page_options .= sprintf( '&lt;option value="%1$s"&gt;%2$s&lt;/option&gt;', esc_attr( $post-&gt;ID ), esc_html( $post-&gt;post_title ) );
+					}
+				}
+				if ( $auto_draft_page_options ) {
+					$dropdown = str_replace( '&lt;/select&gt;', $auto_draft_page_options . '&lt;/select&gt;', $dropdown );
+				}
+			}
+
+			echo $dropdown;
+			?&gt;
+			&lt;?php if ( $this-&gt;allow_addition &amp;&amp; current_user_can( 'publish_pages' ) &amp;&amp; current_user_can( 'edit_theme_options' ) ) : // Currently tied to menus functionality. ?&gt;
+				&lt;button type="button" class="button-link add-new-toggle"&gt;
+					&lt;?php
+					/* translators: %s: Add New Page label. */
+					printf( __( '+ %s' ), get_post_type_object( 'page' )-&gt;labels-&gt;add_new_item );
+					?&gt;
+				&lt;/button&gt;
+				&lt;div class="new-content-item-wrapper"&gt;
+					&lt;label for="create-input-&lt;?php echo esc_attr( $this-&gt;id ); ?&gt;"&gt;&lt;?php _e( 'New page title' ); ?&gt;&lt;/label&gt;
+					&lt;div class="new-content-item"&gt;
+						&lt;input type="text" id="create-input-&lt;?php echo esc_attr( $this-&gt;id ); ?&gt;" class="create-item-input" &gt;
+						&lt;button type="button" class="button add-content"&gt;&lt;?php _e( 'Add' ); ?&gt;&lt;/button&gt;
+					&lt;/div&gt;
+				&lt;/div&gt;
+			&lt;?php endif; ?&gt;
+			&lt;?php
+			break;
+		default:
+			?&gt;
+			&lt;?php if ( ! empty( $this-&gt;label ) ) : ?&gt;
+				&lt;label for="&lt;?php echo esc_attr( $input_id ); ?&gt;" class="customize-control-title"&gt;&lt;?php echo esc_html( $this-&gt;label ); ?&gt;&lt;/label&gt;
+			&lt;?php endif; ?&gt;
+			&lt;?php if ( ! empty( $this-&gt;description ) ) : ?&gt;
+				&lt;span id="&lt;?php echo esc_attr( $description_id ); ?&gt;" class="description customize-control-description"&gt;&lt;?php echo $this-&gt;description; ?&gt;&lt;/span&gt;
+			&lt;?php endif; ?&gt;
+			&lt;input
+				id="&lt;?php echo esc_attr( $input_id ); ?&gt;"
+				type="&lt;?php echo esc_attr( $this-&gt;type ); ?&gt;"
+				&lt;?php echo $describedby_attr; ?&gt;
+				&lt;?php $this-&gt;input_attrs(); ?&gt;
+				&lt;?php if ( ! isset( $this-&gt;input_attrs['value'] ) ) : ?&gt;
+					value="&lt;?php echo esc_attr( $this-&gt;value() ); ?&gt;"
+				&lt;?php endif; ?&gt;
+				&lt;?php $this-&gt;link(); ?&gt;
+				/&gt;
+			&lt;?php
+			break;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-control.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-control.php#L487">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-control.php#L487-L669">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_control/render_content" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_control/render_content</a>
+  </p>
+</div>

@@ -1,0 +1,104 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_delete_comment( <span class="arg-type">int|WP_Comment</span> <span class="arg-name">$comment_id</span>, <span class="arg-type">bool</span> <span class="arg-name">$force_delete</span> = <span class="arg-default">false</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Trashes or deletes a comment.</p> </section> <section><h2 id="description">Description</h2> <p>The comment is moved to Trash instead of permanently deleted unless Trash is disabled, item is already in the Trash, or $force_delete is true.</p> <p>The post comment count will be updated if the comment was approved and has a post ID available.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$comment_id</code><span class="type"><span class="int">int</span>|<span class="WP_Comment"><a href="../classes/wp_comment" rel="class">WP_Comment</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Comment ID or <a href="../classes/wp_comment" rel="class">WP_Comment</a> object.</span></div></dd>
+<dt>
+<code>$force_delete</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to bypass Trash and force deletion. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1468" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_delete_comment( $comment_id, $force_delete = false ) {
+	global $wpdb;
+
+	$comment = get_comment( $comment_id );
+	if ( ! $comment ) {
+		return false;
+	}
+
+	if ( ! $force_delete &amp;&amp; EMPTY_TRASH_DAYS &amp;&amp; ! in_array( wp_get_comment_status( $comment ), array( 'trash', 'spam' ), true ) ) {
+		return wp_trash_comment( $comment_id );
+	}
+
+	/**
+	 * Fires immediately before a comment is deleted from the database.
+	 *
+	 * @since 1.2.0
+	 * @since 4.9.0 Added the `$comment` parameter.
+	 *
+	 * @param string     $comment_id The comment ID as a numeric string.
+	 * @param WP_Comment $comment    The comment to be deleted.
+	 */
+	do_action( 'delete_comment', $comment-&gt;comment_ID, $comment );
+
+	// Move children up a level.
+	$children = $wpdb-&gt;get_col( $wpdb-&gt;prepare( "SELECT comment_ID FROM $wpdb-&gt;comments WHERE comment_parent = %d", $comment-&gt;comment_ID ) );
+	if ( ! empty( $children ) ) {
+		$wpdb-&gt;update( $wpdb-&gt;comments, array( 'comment_parent' =&gt; $comment-&gt;comment_parent ), array( 'comment_parent' =&gt; $comment-&gt;comment_ID ) );
+		clean_comment_cache( $children );
+	}
+
+	// Delete metadata.
+	$meta_ids = $wpdb-&gt;get_col( $wpdb-&gt;prepare( "SELECT meta_id FROM $wpdb-&gt;commentmeta WHERE comment_id = %d", $comment-&gt;comment_ID ) );
+	foreach ( $meta_ids as $mid ) {
+		delete_metadata_by_mid( 'comment', $mid );
+	}
+
+	if ( ! $wpdb-&gt;delete( $wpdb-&gt;comments, array( 'comment_ID' =&gt; $comment-&gt;comment_ID ) ) ) {
+		return false;
+	}
+
+	/**
+	 * Fires immediately after a comment is deleted from the database.
+	 *
+	 * @since 2.9.0
+	 * @since 4.9.0 Added the `$comment` parameter.
+	 *
+	 * @param string     $comment_id The comment ID as a numeric string.
+	 * @param WP_Comment $comment    The deleted comment.
+	 */
+	do_action( 'deleted_comment', $comment-&gt;comment_ID, $comment );
+
+	$post_id = $comment-&gt;comment_post_ID;
+	if ( $post_id &amp;&amp; 1 == $comment-&gt;comment_approved ) {
+		wp_update_comment_count( $post_id );
+	}
+
+	clean_comment_cache( $comment-&gt;comment_ID );
+
+	/** This action is documented in wp-includes/comment.php */
+	do_action( 'wp_set_comment_status', $comment-&gt;comment_ID, 'delete' );
+
+	wp_transition_comment_status( 'delete', $comment-&gt;comment_approved, $comment );
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment.php#L1468">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment.php#L1468-L1532">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_comment"><span class="hook-func">do_action</span>( ‘deleted_comment’, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_id</span></nobr>, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a comment is deleted from the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_comment"><span class="hook-func">do_action</span>( ‘delete_comment’, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_id</span></nobr>, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before a comment is deleted from the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_set_comment_status"><span class="hook-func">do_action</span>( ‘wp_set_comment_status’, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_status</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after transitioning a comment’s status from one to another in the database and removing the comment from the object cache, but prior to all status transition hooks.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_delete_comment" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_delete_comment</a>
+  </p>
+</div>

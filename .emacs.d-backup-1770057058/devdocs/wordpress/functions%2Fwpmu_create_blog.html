@@ -1,0 +1,94 @@
+<h1 class="wp-block-wporg-code-reference-title">wpmu_create_blog( <span class="arg-type">string</span> <span class="arg-name">$domain</span>, <span class="arg-type">string</span> <span class="arg-name">$path</span>, <span class="arg-type">string</span> <span class="arg-name">$title</span>, <span class="arg-type">int</span> <span class="arg-name">$user_id</span>, <span class="arg-type">array</span> <span class="arg-name">$options</span> = <span class="arg-default">array()</span>, <span class="arg-type">int</span> <span class="arg-name">$network_id</span> = <span class="arg-default">1</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Creates a site.</p> </section> <section><h2 id="description">Description</h2> <p>This function runs when a user self-registers a new site as well as when a Super Admin creates a new site. Hook to <a href="../hooks/wpmu_new_blog">‘wpmu_new_blog’</a> for events that should affect all new sites.</p> <p>On subdirectory installations, $domain is the same as the main site’s domain, and the path is the subdirectory name (eg ‘example.com’ and ‘/blog1/’). On subdomain installations, $domain is the new subdomain + root domain (eg ‘blog1.example.com’), and $path is ‘/’.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$domain</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The new site’s domain.</span></div></dd>
+<dt>
+<code>$path</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The new site’s path.</span></div></dd>
+<dt>
+<code>$title</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The new site’s title.</span></div></dd>
+<dt>
+<code>$user_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The user ID of the new site’s admin.</span></div></dd>
+<dt>
+<code>$options</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of key=&gt;value pairs used to set initial site options.<br> If valid status keys are included (<code>'public'</code>, <code>'archived'</code>, <code>'mature'</code>, <code>'spam'</code>, <code>'deleted'</code>, or <code>'lang_id'</code>) the given site status(es) will be updated. Otherwise, keys and values will be used to set options for the new site. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$network_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Network ID. Only relevant on multi-network installations.<br> </span></div>
+<p class="default">Default:<code>1</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Returns <a href="../classes/wp_error" rel="class">WP_Error</a> object on failure, the new site ID on success.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1365" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wpmu_create_blog( $domain, $path, $title, $user_id, $options = array(), $network_id = 1 ) {
+	$defaults = array(
+		'public' =&gt; 0,
+	);
+	$options  = wp_parse_args( $options, $defaults );
+
+	$title   = strip_tags( $title );
+	$user_id = (int) $user_id;
+
+	// Check if the domain has been used already. We should return an error message.
+	if ( domain_exists( $domain, $path, $network_id ) ) {
+		return new WP_Error( 'blog_taken', __( 'Sorry, that site already exists!' ) );
+	}
+
+	if ( ! wp_installing() ) {
+		wp_installing( true );
+	}
+
+	$allowed_data_fields = array( 'public', 'archived', 'mature', 'spam', 'deleted', 'lang_id' );
+
+	$site_data = array_merge(
+		array(
+			'domain'     =&gt; $domain,
+			'path'       =&gt; $path,
+			'network_id' =&gt; $network_id,
+		),
+		array_intersect_key( $options, array_flip( $allowed_data_fields ) )
+	);
+
+	// Data to pass to wp_initialize_site().
+	$site_initialization_data = array(
+		'title'   =&gt; $title,
+		'user_id' =&gt; $user_id,
+		'options' =&gt; array_diff_key( $options, array_flip( $allowed_data_fields ) ),
+	);
+
+	$blog_id = wp_insert_site( array_merge( $site_data, $site_initialization_data ) );
+
+	if ( is_wp_error( $blog_id ) ) {
+		return $blog_id;
+	}
+
+	wp_cache_set_sites_last_changed();
+
+	return $blog_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-functions.php#L1365">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-functions.php#L1365-L1410">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wpmu_create_blog" class="_attribution-link">https://developer.wordpress.org/reference/functions/wpmu_create_blog</a>
+  </p>
+</div>

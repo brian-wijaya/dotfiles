@@ -1,0 +1,101 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_validate_redirect( <span class="arg-type">string</span> <span class="arg-name">$location</span>, <span class="arg-type">string</span> <span class="arg-name">$fallback_url</span> = <span class="arg-default">”</span> ): <span class="return-type">string</span>
+</h1> <section><p>Validates a URL for use in a redirect.</p> </section> <section><h2 id="description">Description</h2> <p>Checks whether the $location is using an allowed host, if it has an absolute path. A plugin can therefore set or remove allowed host(s) to or from the list.</p> <p>If the host is not allowed, then the redirect is to $fallback_url supplied.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$location</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The redirect to validate.</span></div></dd>
+<dt>
+<code>$fallback_url</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The value to return if $location is not allowed.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Redirect-sanitized URL.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1565" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_validate_redirect( $location, $fallback_url = '' ) {
+	$location = wp_sanitize_redirect( trim( $location, " \t\n\r\0\x08\x0B" ) );
+	// Browsers will assume 'http' is your protocol, and will obey a redirect to a URL starting with '//'.
+	if ( str_starts_with( $location, '//' ) ) {
+		$location = 'http:' . $location;
+	}
+
+	/*
+	 * In PHP 5 parse_url() may fail if the URL query part contains 'http://'.
+	 * See https://bugs.php.net/bug.php?id=38143
+	 */
+	$cut  = strpos( $location, '?' );
+	$test = $cut ? substr( $location, 0, $cut ) : $location;
+
+	$lp = parse_url( $test );
+
+	// Give up if malformed URL.
+	if ( false === $lp ) {
+		return $fallback_url;
+	}
+
+	// Allow only 'http' and 'https' schemes. No 'data:', etc.
+	if ( isset( $lp['scheme'] ) &amp;&amp; ! ( 'http' === $lp['scheme'] || 'https' === $lp['scheme'] ) ) {
+		return $fallback_url;
+	}
+
+	if ( ! isset( $lp['host'] ) &amp;&amp; ! empty( $lp['path'] ) &amp;&amp; '/' !== $lp['path'][0] ) {
+		$path = '';
+		if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+			$path = dirname( parse_url( 'http://placeholder' . $_SERVER['REQUEST_URI'], PHP_URL_PATH ) . '?' );
+			$path = wp_normalize_path( $path );
+		}
+		$location = '/' . ltrim( $path . '/', '/' ) . $location;
+	}
+
+	/*
+	 * Reject if certain components are set but host is not.
+	 * This catches URLs like https:host.com for which parse_url() does not set the host field.
+	 */
+	if ( ! isset( $lp['host'] ) &amp;&amp; ( isset( $lp['scheme'] ) || isset( $lp['user'] ) || isset( $lp['pass'] ) || isset( $lp['port'] ) ) ) {
+		return $fallback_url;
+	}
+
+	// Reject malformed components parse_url() can return on odd inputs.
+	foreach ( array( 'user', 'pass', 'host' ) as $component ) {
+		if ( isset( $lp[ $component ] ) &amp;&amp; strpbrk( $lp[ $component ], ':/?#@' ) ) {
+			return $fallback_url;
+		}
+	}
+
+	$wpp = parse_url( home_url() );
+
+	/**
+	 * Filters the list of allowed hosts to redirect to.
+	 *
+	 * @since 2.3.0
+	 *
+	 * @param string[] $hosts An array of allowed host names.
+	 * @param string   $host  The host name of the redirect destination; empty string if not set.
+	 */
+	$allowed_hosts = (array) apply_filters( 'allowed_redirect_hosts', array( $wpp['host'] ), isset( $lp['host'] ) ? $lp['host'] : '' );
+
+	if ( isset( $lp['host'] ) &amp;&amp; ( ! in_array( $lp['host'], $allowed_hosts, true ) &amp;&amp; strtolower( $wpp['host'] ) !== $lp['host'] ) ) {
+		$location = $fallback_url;
+	}
+
+	return $location;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/pluggable.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/pluggable.php#L1565">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/pluggable.php#L1565-L1632">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/allowed_redirect_hosts"><span class="hook-func">apply_filters</span>( ‘allowed_redirect_hosts’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$hosts</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$host</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of allowed hosts to redirect to.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.1/">2.8.1</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_validate_redirect" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_validate_redirect</a>
+  </p>
+</div>

@@ -1,0 +1,103 @@
+<h1 class="wp-block-wporg-code-reference-title">get_rest_url( <span class="arg-type">int|null</span> <span class="arg-name">$blog_id</span> = <span class="arg-default">null</span>, <span class="arg-type">string</span> <span class="arg-name">$path</span> = <span class="arg-default">‘/’</span>, <span class="arg-type">string</span> <span class="arg-name">$scheme</span> = <span class="arg-default">‘rest’</span> ): <span class="return-type">string</span>
+</h1> <section><p>Retrieves the URL to a REST endpoint on a site.</p> </section> <section><h2 id="description">Description</h2> <p>Note: The returned URL is NOT escaped.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$blog_id</code><span class="type"><span class="int">int</span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Blog ID. Default of null returns URL for current blog.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$path</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">REST route. Default <code>'/'</code>.</span></div>
+<p class="default">Default:<code>'/'</code></p>
+</dd>
+<dt>
+<code>$scheme</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Sanitization scheme. Default <code>'rest'</code>.</span></div>
+<p class="default">Default:<code>'rest'</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Full URL to the endpoint.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="488" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_rest_url( $blog_id = null, $path = '/', $scheme = 'rest' ) {
+	if ( empty( $path ) ) {
+		$path = '/';
+	}
+
+	$path = '/' . ltrim( $path, '/' );
+
+	if ( is_multisite() &amp;&amp; get_blog_option( $blog_id, 'permalink_structure' ) || get_option( 'permalink_structure' ) ) {
+		global $wp_rewrite;
+
+		if ( $wp_rewrite-&gt;using_index_permalinks() ) {
+			$url = get_home_url( $blog_id, $wp_rewrite-&gt;index . '/' . rest_get_url_prefix(), $scheme );
+		} else {
+			$url = get_home_url( $blog_id, rest_get_url_prefix(), $scheme );
+		}
+
+		$url .= $path;
+	} else {
+		$url = trailingslashit( get_home_url( $blog_id, '', $scheme ) );
+		/*
+		 * nginx only allows HTTP/1.0 methods when redirecting from / to /index.php.
+		 * To work around this, we manually add index.php to the URL, avoiding the redirect.
+		 */
+		if ( ! str_ends_with( $url, 'index.php' ) ) {
+			$url .= 'index.php';
+		}
+
+		$url = add_query_arg( 'rest_route', $path, $url );
+	}
+
+	if ( is_ssl() &amp;&amp; isset( $_SERVER['SERVER_NAME'] ) ) {
+		// If the current host is the same as the REST URL host, force the REST URL scheme to HTTPS.
+		if ( parse_url( get_home_url( $blog_id ), PHP_URL_HOST ) === $_SERVER['SERVER_NAME'] ) {
+			$url = set_url_scheme( $url, 'https' );
+		}
+	}
+
+	if ( is_admin() &amp;&amp; force_ssl_admin() ) {
+		/*
+		 * In this situation the home URL may be http:, and `is_ssl()` may be false,
+		 * but the admin is served over https: (one way or another), so REST API usage
+		 * will be blocked by browsers unless it is also served over HTTPS.
+		 */
+		$url = set_url_scheme( $url, 'https' );
+	}
+
+	/**
+	 * Filters the REST URL.
+	 *
+	 * Use this filter to adjust the url returned by the get_rest_url() function.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param string   $url     REST URL.
+	 * @param string   $path    REST route.
+	 * @param int|null $blog_id Blog ID.
+	 * @param string   $scheme  Sanitization scheme.
+	 */
+	return apply_filters( 'rest_url', $url, $path, $blog_id, $scheme );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api.php#L488">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api.php#L488-L547">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/rest_url"><span class="hook-func">apply_filters</span>( ‘rest_url’, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$path</span></nobr>, <nobr><span class="arg-type">int|null</span> <span class="arg-name">$blog_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$scheme</span></nobr> )</a></dt>
+<dd>
+<p>Filters the REST URL.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_rest_url" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_rest_url</a>
+  </p>
+</div>

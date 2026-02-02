@@ -1,0 +1,96 @@
+<h1 class="wp-block-wporg-code-reference-title">do_accordion_sections( <span class="arg-type">string|object</span> <span class="arg-name">$screen</span>, <span class="arg-type">string</span> <span class="arg-name">$context</span>, <span class="arg-type">mixed</span> <span class="arg-name">$data_object</span> ): <span class="return-type">int</span>
+</h1> <section><p>Meta Box Accordion Template Function.</p> </section> <section><h2 id="description">Description</h2> <p>Largely made up of abstracted code from <a href="do_meta_boxes" rel="function">do_meta_boxes()</a> , this function serves to build meta boxes as list items for display as a collapsible accordion.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$screen</code><span class="type"><span class="string">string</span>|<span class="object">object</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The screen identifier.</span></div></dd>
+<dt>
+<code>$context</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The screen context for which to display accordion sections.</span></div></dd>
+<dt>
+<code>$data_object</code><span class="type"><span class="mixed">mixed</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Gets passed to the section callback function as the first parameter.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int</span> Number of meta boxes as accordion sections.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1537" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function do_accordion_sections( $screen, $context, $data_object ) {
+	global $wp_meta_boxes;
+
+	wp_enqueue_script( 'accordion' );
+
+	if ( empty( $screen ) ) {
+		$screen = get_current_screen();
+	} elseif ( is_string( $screen ) ) {
+		$screen = convert_to_screen( $screen );
+	}
+
+	$page = $screen-&gt;id;
+
+	$hidden = get_hidden_meta_boxes( $screen );
+	?&gt;
+	&lt;div id="side-sortables" class="accordion-container"&gt;
+		&lt;ul class="outer-border"&gt;
+	&lt;?php
+	$i          = 0;
+	$first_open = false;
+
+	if ( isset( $wp_meta_boxes[ $page ][ $context ] ) ) {
+		foreach ( array( 'high', 'core', 'default', 'low' ) as $priority ) {
+			if ( isset( $wp_meta_boxes[ $page ][ $context ][ $priority ] ) ) {
+				foreach ( $wp_meta_boxes[ $page ][ $context ][ $priority ] as $box ) {
+					if ( false === $box || ! $box['title'] ) {
+						continue;
+					}
+
+					++$i;
+					$hidden_class = in_array( $box['id'], $hidden, true ) ? 'hide-if-js' : '';
+
+					$open_class    = '';
+					$aria_expanded = 'false';
+					if ( ! $first_open &amp;&amp; empty( $hidden_class ) ) {
+						$first_open    = true;
+						$open_class    = 'open';
+						$aria_expanded = 'true';
+					}
+					?&gt;
+					&lt;li class="control-section accordion-section &lt;?php echo $hidden_class; ?&gt; &lt;?php echo $open_class; ?&gt; &lt;?php echo esc_attr( $box['id'] ); ?&gt;" id="&lt;?php echo esc_attr( $box['id'] ); ?&gt;"&gt;
+						&lt;h3 class="accordion-section-title hndle"&gt;
+							&lt;button type="button" class="accordion-trigger" aria-expanded="&lt;?php echo $aria_expanded; ?&gt;" aria-controls="&lt;?php echo esc_attr( $box['id'] ); ?&gt;-content"&gt;
+								&lt;span class="accordion-title"&gt;
+									&lt;?php echo esc_html( $box['title'] ); ?&gt;
+									&lt;span class="dashicons dashicons-arrow-down" aria-hidden="true"&gt;&lt;/span&gt;
+								&lt;/span&gt;
+							&lt;/button&gt;
+						&lt;/h3&gt;
+						&lt;div class="accordion-section-content &lt;?php postbox_classes( $box['id'], $page ); ?&gt;" id="&lt;?php echo esc_attr( $box['id'] ); ?&gt;-content"&gt;
+							&lt;div class="inside"&gt;
+								&lt;?php call_user_func( $box['callback'], $data_object, $box ); ?&gt;
+							&lt;/div&gt;&lt;!-- .inside --&gt;
+						&lt;/div&gt;&lt;!-- .accordion-section-content --&gt;
+					&lt;/li&gt;&lt;!-- .accordion-section --&gt;
+					&lt;?php
+				}
+			}
+		}
+	}
+	?&gt;
+		&lt;/ul&gt;&lt;!-- .outer-border --&gt;
+	&lt;/div&gt;&lt;!-- .accordion-container --&gt;
+	&lt;?php
+	return $i;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/template.php#L1537">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/template.php#L1537-L1602">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.6.0/">3.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/do_accordion_sections" class="_attribution-link">https://developer.wordpress.org/reference/functions/do_accordion_sections</a>
+  </p>
+</div>

@@ -1,0 +1,111 @@
+<h1 class="wp-block-wporg-code-reference-title">File_Upload_Upgrader::__construct( <span class="arg-type">string</span> <span class="arg-name">$form</span>, <span class="arg-type">string</span> <span class="arg-name">$urlholder</span> )</h1> <section><p>Construct the upgrader for a form.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$form</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The name of the form the file was uploaded from.</span></div></dd>
+<dt>
+<code>$urlholder</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The name of the <code>GET</code> parameter that holds the filename.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="54" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function __construct( $form, $urlholder ) {
+
+	if ( empty( $_FILES[ $form ]['name'] ) &amp;&amp; empty( $_GET[ $urlholder ] ) ) {
+		wp_die( __( 'Please select a file' ) );
+	}
+
+	// Handle a newly uploaded file. Else, assume it's already been uploaded.
+	if ( ! empty( $_FILES ) ) {
+		$overrides = array(
+			'test_form' =&gt; false,
+			'test_type' =&gt; false,
+		);
+		$file      = wp_handle_upload( $_FILES[ $form ], $overrides );
+
+		if ( isset( $file['error'] ) ) {
+			wp_die( $file['error'] );
+		}
+
+		if ( 'pluginzip' === $form || 'themezip' === $form ) {
+			if ( ! wp_zip_file_is_valid( $file['file'] ) ) {
+				wp_delete_file( $file['file'] );
+
+				if ( 'pluginzip' === $form ) {
+					$plugins_page = sprintf(
+						'&lt;a href="%s"&gt;%s&lt;/a&gt;',
+						self_admin_url( 'plugin-install.php' ),
+						__( 'Return to the Plugin Installer' )
+					);
+					wp_die( __( 'Incompatible Archive.' ) . '&lt;br /&gt;' . $plugins_page );
+				}
+
+				if ( 'themezip' === $form ) {
+					$themes_page = sprintf(
+						'&lt;a href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+						self_admin_url( 'theme-install.php' ),
+						__( 'Return to the Theme Installer' )
+					);
+					wp_die( __( 'Incompatible Archive.' ) . '&lt;br /&gt;' . $themes_page );
+				}
+			}
+		}
+
+		$this-&gt;filename = $_FILES[ $form ]['name'];
+		$this-&gt;package  = $file['file'];
+
+		// Construct the attachment array.
+		$attachment = array(
+			'post_title'     =&gt; $this-&gt;filename,
+			'post_content'   =&gt; $file['url'],
+			'post_mime_type' =&gt; $file['type'],
+			'guid'           =&gt; $file['url'],
+			'context'        =&gt; 'upgrader',
+			'post_status'    =&gt; 'private',
+		);
+
+		// Save the data.
+		$this-&gt;id = wp_insert_attachment( $attachment, $file['file'] );
+
+		// Schedule a cleanup for 2 hours from now in case of failed installation.
+		wp_schedule_single_event( time() + 2 * HOUR_IN_SECONDS, 'upgrader_scheduled_cleanup', array( $this-&gt;id ) );
+
+	} elseif ( is_numeric( $_GET[ $urlholder ] ) ) {
+		// Numeric Package = previously uploaded file, see above.
+		$this-&gt;id   = (int) $_GET[ $urlholder ];
+		$attachment = get_post( $this-&gt;id );
+		if ( empty( $attachment ) ) {
+			wp_die( __( 'Please select a file' ) );
+		}
+
+		$this-&gt;filename = $attachment-&gt;post_title;
+		$this-&gt;package  = get_attached_file( $attachment-&gt;ID );
+	} else {
+		// Else, It's set to something, Back compat for plugins using the old (pre-3.3) File_Uploader handler.
+		$uploads = wp_upload_dir();
+		if ( ! ( $uploads &amp;&amp; false === $uploads['error'] ) ) {
+			wp_die( $uploads['error'] );
+		}
+
+		$this-&gt;filename = sanitize_file_name( $_GET[ $urlholder ] );
+		$this-&gt;package  = $uploads['basedir'] . '/' . $this-&gt;filename;
+
+		if ( ! str_starts_with( realpath( $this-&gt;package ), realpath( $uploads['basedir'] ) ) ) {
+			wp_die( __( 'Please select a file' ) );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-file-upload-upgrader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-file-upload-upgrader.php#L54">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-file-upload-upgrader.php#L54-L139">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/file_upload_upgrader/__construct" class="_attribution-link">https://developer.wordpress.org/reference/classes/file_upload_upgrader/__construct</a>
+  </p>
+</div>

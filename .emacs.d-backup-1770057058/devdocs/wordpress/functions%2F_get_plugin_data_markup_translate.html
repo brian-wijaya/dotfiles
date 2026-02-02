@@ -1,0 +1,125 @@
+<h1 class="wp-block-wporg-code-reference-title">_get_plugin_data_markup_translate( <span class="arg-type">string</span> <span class="arg-name">$plugin_file</span>, <span class="arg-type">array</span> <span class="arg-name">$plugin_data</span>, <span class="arg-type">bool</span> <span class="arg-name">$markup</span> = <span class="arg-default">true</span>, <span class="arg-type">bool</span> <span class="arg-name">$translate</span> = <span class="arg-default">true</span> ): <span class="return-type">array</span>
+</h1> <section><p>Sanitizes plugin data, optionally adds markup, optionally translates.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="get_plugin_data">get_plugin_data()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$plugin_file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Path to the main plugin file.</span></div></dd>
+<dt>
+<code>$plugin_data</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An array of plugin data. See <a href="get_plugin_data" rel="function">get_plugin_data()</a> .</span></div></dd>
+<dt>
+<code>$markup</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">If the returned data should have HTML markup applied.<br> </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+<dt>
+<code>$translate</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">If the returned data should be translated. </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Plugin data. Values will be empty if not supplied by the plugin.<br> See <a href="get_plugin_data" rel="function">get_plugin_data()</a> for the list of possible values.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="140" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _get_plugin_data_markup_translate( $plugin_file, $plugin_data, $markup = true, $translate = true ) {
+
+	// Sanitize the plugin filename to a WP_PLUGIN_DIR relative path.
+	$plugin_file = plugin_basename( $plugin_file );
+
+	// Translate fields.
+	if ( $translate ) {
+		$textdomain = $plugin_data['TextDomain'];
+		if ( $textdomain ) {
+			if ( ! is_textdomain_loaded( $textdomain ) ) {
+				if ( $plugin_data['DomainPath'] ) {
+					load_plugin_textdomain( $textdomain, false, dirname( $plugin_file ) . $plugin_data['DomainPath'] );
+				} else {
+					load_plugin_textdomain( $textdomain, false, dirname( $plugin_file ) );
+				}
+			}
+		} elseif ( 'hello.php' === basename( $plugin_file ) ) {
+			$textdomain = 'default';
+		}
+		if ( $textdomain ) {
+			foreach ( array( 'Name', 'PluginURI', 'Description', 'Author', 'AuthorURI', 'Version' ) as $field ) {
+				if ( ! empty( $plugin_data[ $field ] ) ) {
+					// phpcs:ignore WordPress.WP.I18n.LowLevelTranslationFunction,WordPress.WP.I18n.NonSingularStringLiteralText,WordPress.WP.I18n.NonSingularStringLiteralDomain
+					$plugin_data[ $field ] = translate( $plugin_data[ $field ], $textdomain );
+				}
+			}
+		}
+	}
+
+	// Sanitize fields.
+	$allowed_tags_in_links = array(
+		'abbr'    =&gt; array( 'title' =&gt; true ),
+		'acronym' =&gt; array( 'title' =&gt; true ),
+		'code'    =&gt; true,
+		'em'      =&gt; true,
+		'strong'  =&gt; true,
+	);
+
+	$allowed_tags      = $allowed_tags_in_links;
+	$allowed_tags['a'] = array(
+		'href'  =&gt; true,
+		'title' =&gt; true,
+	);
+
+	/*
+	 * Name is marked up inside &lt;a&gt; tags. Don't allow these.
+	 * Author is too, but some plugins have used &lt;a&gt; here (omitting Author URI).
+	 */
+	$plugin_data['Name']   = wp_kses( $plugin_data['Name'], $allowed_tags_in_links );
+	$plugin_data['Author'] = wp_kses( $plugin_data['Author'], $allowed_tags );
+
+	$plugin_data['Description'] = wp_kses( $plugin_data['Description'], $allowed_tags );
+	$plugin_data['Version']     = wp_kses( $plugin_data['Version'], $allowed_tags );
+
+	$plugin_data['PluginURI'] = esc_url( $plugin_data['PluginURI'] );
+	$plugin_data['AuthorURI'] = esc_url( $plugin_data['AuthorURI'] );
+
+	$plugin_data['Title']      = $plugin_data['Name'];
+	$plugin_data['AuthorName'] = $plugin_data['Author'];
+
+	// Apply markup.
+	if ( $markup ) {
+		if ( $plugin_data['PluginURI'] &amp;&amp; $plugin_data['Name'] ) {
+			$plugin_data['Title'] = '&lt;a href="' . $plugin_data['PluginURI'] . '"&gt;' . $plugin_data['Name'] . '&lt;/a&gt;';
+		}
+
+		if ( $plugin_data['AuthorURI'] &amp;&amp; $plugin_data['Author'] ) {
+			$plugin_data['Author'] = '&lt;a href="' . $plugin_data['AuthorURI'] . '"&gt;' . $plugin_data['Author'] . '&lt;/a&gt;';
+		}
+
+		$plugin_data['Description'] = wptexturize( $plugin_data['Description'] );
+
+		if ( $plugin_data['Author'] ) {
+			$plugin_data['Description'] .= sprintf(
+				/* translators: %s: Plugin author. */
+				' &lt;cite&gt;' . __( 'By %s.' ) . '&lt;/cite&gt;',
+				$plugin_data['Author']
+			);
+		}
+	}
+
+	return $plugin_data;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/plugin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/plugin.php#L140">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/plugin.php#L140-L222">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_get_plugin_data_markup_translate" class="_attribution-link">https://developer.wordpress.org/reference/functions/_get_plugin_data_markup_translate</a>
+  </p>
+</div>

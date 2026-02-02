@@ -1,0 +1,103 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_register_widget_control( <span class="arg-type">int|string</span> <span class="arg-name">$id</span>, <span class="arg-type">string</span> <span class="arg-name">$name</span>, <span class="arg-type">callable</span> <span class="arg-name">$control_callback</span>, <span class="arg-type">array</span> <span class="arg-name">$options</span> = <span class="arg-default">array()</span>, <span class="arg-type">mixed</span> <span class="arg-name">$params</span> )</h1> <section><p>Registers widget control callback for customizing options.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$id</code><span class="type"><span class="int">int</span>|<span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Sidebar ID.</span></div></dd>
+<dt>
+<code>$name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Sidebar display name.</span></div></dd>
+<dt>
+<code>$control_callback</code><span class="type"><span class="callable">callable</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Run when sidebar is displayed.</span></div></dd>
+<dt>
+<code>$options</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array or string of control options. <br> <ul class="param-hash">
+<li>
+<code>height</code> <span class="type">int</span><div class="desc">Never used. Default 200.</div>
+</li> <li>
+<code>width</code> <span class="type">int</span><div class="desc">Width of the fully expanded control form (but try hard to use the default width).<br> Default 250.</div>
+</li> <li>
+<code>id_base</code> <span class="type">int|string</span><div class="desc">Required for multi-widgets, i.e widgets that allow multiple instances such as the text widget. The widget ID will end up looking like <code>{$id_base}-{$unique_number}</code>.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$params</code><span class="type"><span class="mixed">mixed</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Optional additional parameters to pass to the callback function when it’s called.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="536" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_register_widget_control( $id, $name, $control_callback, $options = array(), ...$params ) {
+	global $wp_registered_widget_controls, $wp_registered_widget_updates, $wp_registered_widgets, $_wp_deprecated_widgets_callbacks;
+
+	$id      = strtolower( $id );
+	$id_base = _get_widget_id_base( $id );
+
+	if ( empty( $control_callback ) ) {
+		unset( $wp_registered_widget_controls[ $id ] );
+		unset( $wp_registered_widget_updates[ $id_base ] );
+		return;
+	}
+
+	if ( in_array( $control_callback, $_wp_deprecated_widgets_callbacks, true ) &amp;&amp; ! is_callable( $control_callback ) ) {
+		unset( $wp_registered_widgets[ $id ] );
+		return;
+	}
+
+	if ( isset( $wp_registered_widget_controls[ $id ] ) &amp;&amp; ! did_action( 'widgets_init' ) ) {
+		return;
+	}
+
+	$defaults          = array(
+		'width'  =&gt; 250,
+		'height' =&gt; 200,
+	); // Height is never used.
+	$options           = wp_parse_args( $options, $defaults );
+	$options['width']  = (int) $options['width'];
+	$options['height'] = (int) $options['height'];
+
+	$widget = array(
+		'name'     =&gt; $name,
+		'id'       =&gt; $id,
+		'callback' =&gt; $control_callback,
+		'params'   =&gt; $params,
+	);
+	$widget = array_merge( $widget, $options );
+
+	$wp_registered_widget_controls[ $id ] = $widget;
+
+	if ( isset( $wp_registered_widget_updates[ $id_base ] ) ) {
+		return;
+	}
+
+	if ( isset( $widget['params'][0]['number'] ) ) {
+		$widget['params'][0]['number'] = -1;
+	}
+
+	unset( $widget['width'], $widget['height'], $widget['name'], $widget['id'] );
+	$wp_registered_widget_updates[ $id_base ] = $widget;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/widgets.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/widgets.php#L536">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/widgets.php#L536-L585">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">Formalized the existing and already documented <code>...$params</code> parameter by adding it to the function signature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.2.0/">2.2.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_register_widget_control" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_register_widget_control</a>
+  </p>
+</div>

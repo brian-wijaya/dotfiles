@@ -1,0 +1,201 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_prepare_themes_for_js( <span class="arg-type">WP_Theme[]</span> <span class="arg-name">$themes</span> = <span class="arg-default">null</span> ): <span class="return-type">array</span>
+</h1> <section><p>Prepares themes for JavaScript.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$themes</code><span class="type"><span class="WP_Theme[]"><a href="../classes/wp_theme" rel="class">WP_Theme</a>[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of theme objects to prepare.<br> Defaults to all allowed themes.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> An associative array of theme data, sorted by name.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="651" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_prepare_themes_for_js( $themes = null ) {
+	$current_theme = get_stylesheet();
+
+	/**
+	 * Filters theme data before it is prepared for JavaScript.
+	 *
+	 * Passing a non-empty array will result in wp_prepare_themes_for_js() returning
+	 * early with that value instead.
+	 *
+	 * @since 4.2.0
+	 *
+	 * @param array           $prepared_themes An associative array of theme data. Default empty array.
+	 * @param WP_Theme[]|null $themes          An array of theme objects to prepare, if any.
+	 * @param string          $current_theme   The active theme slug.
+	 */
+	$prepared_themes = (array) apply_filters( 'pre_prepare_themes_for_js', array(), $themes, $current_theme );
+
+	if ( ! empty( $prepared_themes ) ) {
+		return $prepared_themes;
+	}
+
+	// Make sure the active theme is listed first.
+	$prepared_themes[ $current_theme ] = array();
+
+	if ( null === $themes ) {
+		$themes = wp_get_themes( array( 'allowed' =&gt; true ) );
+		if ( ! isset( $themes[ $current_theme ] ) ) {
+			$themes[ $current_theme ] = wp_get_theme();
+		}
+	}
+
+	$updates    = array();
+	$no_updates = array();
+	if ( ! is_multisite() &amp;&amp; current_user_can( 'update_themes' ) ) {
+		$updates_transient = get_site_transient( 'update_themes' );
+		if ( isset( $updates_transient-&gt;response ) ) {
+			$updates = $updates_transient-&gt;response;
+		}
+		if ( isset( $updates_transient-&gt;no_update ) ) {
+			$no_updates = $updates_transient-&gt;no_update;
+		}
+	}
+
+	WP_Theme::sort_by_name( $themes );
+
+	$parents = array();
+
+	$auto_updates = (array) get_site_option( 'auto_update_themes', array() );
+
+	foreach ( $themes as $theme ) {
+		$slug         = $theme-&gt;get_stylesheet();
+		$encoded_slug = urlencode( $slug );
+
+		$parent = false;
+		if ( $theme-&gt;parent() ) {
+			$parent           = $theme-&gt;parent();
+			$parents[ $slug ] = $parent-&gt;get_stylesheet();
+			$parent           = $parent-&gt;display( 'Name' );
+		}
+
+		$customize_action = null;
+
+		$can_edit_theme_options = current_user_can( 'edit_theme_options' );
+		$can_customize          = current_user_can( 'customize' );
+		$is_block_theme         = $theme-&gt;is_block_theme();
+
+		if ( $is_block_theme &amp;&amp; $can_edit_theme_options ) {
+			$customize_action = admin_url( 'site-editor.php' );
+			if ( $current_theme !== $slug ) {
+				$customize_action = add_query_arg( 'wp_theme_preview', $slug, $customize_action );
+			}
+		} elseif ( ! $is_block_theme &amp;&amp; $can_customize &amp;&amp; $can_edit_theme_options ) {
+			$customize_action = wp_customize_url( $slug );
+		}
+		if ( null !== $customize_action ) {
+			$customize_action = add_query_arg(
+				array(
+					'return' =&gt; urlencode( sanitize_url( remove_query_arg( wp_removable_query_args(), wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) ),
+				),
+				$customize_action
+			);
+			$customize_action = esc_url( $customize_action );
+		}
+
+		$update_requires_wp  = isset( $updates[ $slug ]['requires'] ) ? $updates[ $slug ]['requires'] : null;
+		$update_requires_php = isset( $updates[ $slug ]['requires_php'] ) ? $updates[ $slug ]['requires_php'] : null;
+
+		$auto_update        = in_array( $slug, $auto_updates, true );
+		$auto_update_action = $auto_update ? 'disable-auto-update' : 'enable-auto-update';
+
+		if ( isset( $updates[ $slug ] ) ) {
+			$auto_update_supported      = true;
+			$auto_update_filter_payload = (object) $updates[ $slug ];
+		} elseif ( isset( $no_updates[ $slug ] ) ) {
+			$auto_update_supported      = true;
+			$auto_update_filter_payload = (object) $no_updates[ $slug ];
+		} else {
+			$auto_update_supported = false;
+			/*
+			 * Create the expected payload for the auto_update_theme filter, this is the same data
+			 * as contained within $updates or $no_updates but used when the Theme is not known.
+			 */
+			$auto_update_filter_payload = (object) array(
+				'theme'        =&gt; $slug,
+				'new_version'  =&gt; $theme-&gt;get( 'Version' ),
+				'url'          =&gt; '',
+				'package'      =&gt; '',
+				'requires'     =&gt; $theme-&gt;get( 'RequiresWP' ),
+				'requires_php' =&gt; $theme-&gt;get( 'RequiresPHP' ),
+			);
+		}
+
+		$auto_update_forced = wp_is_auto_update_forced_for_item( 'theme', null, $auto_update_filter_payload );
+
+		$prepared_themes[ $slug ] = array(
+			'id'             =&gt; $slug,
+			'name'           =&gt; $theme-&gt;display( 'Name' ),
+			'screenshot'     =&gt; array( $theme-&gt;get_screenshot() ), // @todo Multiple screenshots.
+			'description'    =&gt; $theme-&gt;display( 'Description' ),
+			'author'         =&gt; $theme-&gt;display( 'Author', false, true ),
+			'authorAndUri'   =&gt; $theme-&gt;display( 'Author' ),
+			'tags'           =&gt; $theme-&gt;display( 'Tags' ),
+			'version'        =&gt; $theme-&gt;get( 'Version' ),
+			'compatibleWP'   =&gt; is_wp_version_compatible( $theme-&gt;get( 'RequiresWP' ) ),
+			'compatiblePHP'  =&gt; is_php_version_compatible( $theme-&gt;get( 'RequiresPHP' ) ),
+			'updateResponse' =&gt; array(
+				'compatibleWP'  =&gt; is_wp_version_compatible( $update_requires_wp ),
+				'compatiblePHP' =&gt; is_php_version_compatible( $update_requires_php ),
+			),
+			'parent'         =&gt; $parent,
+			'active'         =&gt; $slug === $current_theme,
+			'hasUpdate'      =&gt; isset( $updates[ $slug ] ),
+			'hasPackage'     =&gt; isset( $updates[ $slug ] ) &amp;&amp; ! empty( $updates[ $slug ]['package'] ),
+			'update'         =&gt; get_theme_update_available( $theme ),
+			'autoupdate'     =&gt; array(
+				'enabled'   =&gt; $auto_update || $auto_update_forced,
+				'supported' =&gt; $auto_update_supported,
+				'forced'    =&gt; $auto_update_forced,
+			),
+			'actions'        =&gt; array(
+				'activate'   =&gt; current_user_can( 'switch_themes' ) ? wp_nonce_url( admin_url( 'themes.php?action=activate&amp;amp;stylesheet=' . $encoded_slug ), 'switch-theme_' . $slug ) : null,
+				'customize'  =&gt; $customize_action,
+				'delete'     =&gt; ( ! is_multisite() &amp;&amp; current_user_can( 'delete_themes' ) ) ? wp_nonce_url( admin_url( 'themes.php?action=delete&amp;amp;stylesheet=' . $encoded_slug ), 'delete-theme_' . $slug ) : null,
+				'autoupdate' =&gt; wp_is_auto_update_enabled_for_type( 'theme' ) &amp;&amp; ! is_multisite() &amp;&amp; current_user_can( 'update_themes' )
+					? wp_nonce_url( admin_url( 'themes.php?action=' . $auto_update_action . '&amp;amp;stylesheet=' . $encoded_slug ), 'updates' )
+					: null,
+			),
+			'blockTheme'     =&gt; $theme-&gt;is_block_theme(),
+		);
+	}
+
+	// Remove 'delete' action if theme has an active child.
+	if ( ! empty( $parents ) &amp;&amp; array_key_exists( $current_theme, $parents ) ) {
+		unset( $prepared_themes[ $parents[ $current_theme ] ]['actions']['delete'] );
+	}
+
+	/**
+	 * Filters the themes prepared for JavaScript, for themes.php.
+	 *
+	 * Could be useful for changing the order, which is by name by default.
+	 *
+	 * @since 3.8.0
+	 *
+	 * @param array $prepared_themes Array of theme data.
+	 */
+	$prepared_themes = apply_filters( 'wp_prepare_themes_for_js', $prepared_themes );
+	$prepared_themes = array_values( $prepared_themes );
+	return array_filter( $prepared_themes );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/theme.php#L651">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/theme.php#L651-L819">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_prepare_themes_for_js"><span class="hook-func">apply_filters</span>( ‘pre_prepare_themes_for_js’, <nobr><span class="arg-type">array</span> <span class="arg-name">$prepared_themes</span></nobr>, <nobr><span class="arg-type">WP_Theme[]|null</span> <span class="arg-name">$themes</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$current_theme</span></nobr> )</a></dt>
+<dd>
+<p>Filters theme data before it is prepared for JavaScript.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_prepare_themes_for_js"><span class="hook-func">apply_filters</span>( ‘wp_prepare_themes_for_js’, <nobr><span class="arg-type">array</span> <span class="arg-name">$prepared_themes</span></nobr> )</a></dt>
+<dd>
+<p>Filters the themes prepared for JavaScript, for themes.php.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.8.0/">3.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_prepare_themes_for_js" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_prepare_themes_for_js</a>
+  </p>
+</div>

@@ -1,0 +1,162 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_delete_user( <span class="arg-type">int</span> <span class="arg-name">$id</span>, <span class="arg-type">int</span> <span class="arg-name">$reassign</span> = <span class="arg-default">null</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Delete user and optionally reassign posts and links to another user.</p> </section> <section><h2 id="description">Description</h2> <p>Note that on a Multisite installation the user only gets removed from the site and does not get deleted from the database.</p> <p>If the <code>$reassign</code> parameter is not assigned to a user ID, then all posts will be deleted of that user. The action <a href="../hooks/delete_user">‘delete_user’</a> that is passed the user ID being deleted will be run after the posts are either reassigned or deleted.<br>The user meta will also be deleted that are for that user ID.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">User ID.</span></div></dd>
+<dt>
+<code>$reassign</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Reassign posts and links to new User ID.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True when finished.</section> <section><h2 id="more-information">More Information</h2> <ul class="wp-block-list"> <li>If you wish to use this function in a plugin then you must include the ./wp-admin/includes/user.php file in your plugin function, else it will throw a ‘call to undefined function’ error</li> <li>Uses global: (<tt>object</tt>) <a title="Class Reference/wpdb" href="https://codex.wordpress.org/Class_Reference/wpdb"><tt>$wpdb</tt></a>
+</li> <li>This is an Admin function.</li> <li>Uses: <a title="Function Reference/do action" href="do_action"><tt>do_action()</tt></a> Calls <a title="Plugin API/Action Reference/deleted user" href="../hooks/deleted_user">‘deleted_user’</a> hook</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="345" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_delete_user( $id, $reassign = null ) {
+	global $wpdb;
+
+	if ( ! is_numeric( $id ) ) {
+		return false;
+	}
+
+	$id   = (int) $id;
+	$user = new WP_User( $id );
+
+	if ( ! $user-&gt;exists() ) {
+		return false;
+	}
+
+	// Normalize $reassign to null or a user ID. 'novalue' was an older default.
+	if ( 'novalue' === $reassign ) {
+		$reassign = null;
+	} elseif ( null !== $reassign ) {
+		$reassign = (int) $reassign;
+	}
+
+	/**
+	 * Fires immediately before a user is deleted from the site.
+	 *
+	 * Note that on a Multisite installation the user only gets removed from the site
+	 * and does not get deleted from the database.
+	 *
+	 * @since 2.0.0
+	 * @since 5.5.0 Added the `$user` parameter.
+	 *
+	 * @param int      $id       ID of the user to delete.
+	 * @param int|null $reassign ID of the user to reassign posts and links to.
+	 *                           Default null, for no reassignment.
+	 * @param WP_User  $user     WP_User object of the user to delete.
+	 */
+	do_action( 'delete_user', $id, $reassign, $user );
+
+	if ( null === $reassign ) {
+		$post_types_to_delete = array();
+		foreach ( get_post_types( array(), 'objects' ) as $post_type ) {
+			if ( $post_type-&gt;delete_with_user ) {
+				$post_types_to_delete[] = $post_type-&gt;name;
+			} elseif ( null === $post_type-&gt;delete_with_user &amp;&amp; post_type_supports( $post_type-&gt;name, 'author' ) ) {
+				$post_types_to_delete[] = $post_type-&gt;name;
+			}
+		}
+
+		/**
+		 * Filters the list of post types to delete with a user.
+		 *
+		 * @since 3.4.0
+		 *
+		 * @param string[] $post_types_to_delete Array of post types to delete.
+		 * @param int      $id                   User ID.
+		 */
+		$post_types_to_delete = apply_filters( 'post_types_to_delete_with_user', $post_types_to_delete, $id );
+		$post_types_to_delete = implode( "', '", $post_types_to_delete );
+		$post_ids             = $wpdb-&gt;get_col( $wpdb-&gt;prepare( "SELECT ID FROM $wpdb-&gt;posts WHERE post_author = %d AND post_type IN ('$post_types_to_delete')", $id ) );
+		if ( $post_ids ) {
+			foreach ( $post_ids as $post_id ) {
+				wp_delete_post( $post_id );
+			}
+		}
+
+		// Clean links.
+		$link_ids = $wpdb-&gt;get_col( $wpdb-&gt;prepare( "SELECT link_id FROM $wpdb-&gt;links WHERE link_owner = %d", $id ) );
+
+		if ( $link_ids ) {
+			foreach ( $link_ids as $link_id ) {
+				wp_delete_link( $link_id );
+			}
+		}
+	} else {
+		$post_ids = $wpdb-&gt;get_col( $wpdb-&gt;prepare( "SELECT ID FROM $wpdb-&gt;posts WHERE post_author = %d", $id ) );
+		$wpdb-&gt;update( $wpdb-&gt;posts, array( 'post_author' =&gt; $reassign ), array( 'post_author' =&gt; $id ) );
+		if ( ! empty( $post_ids ) ) {
+			foreach ( $post_ids as $post_id ) {
+				clean_post_cache( $post_id );
+			}
+		}
+		$link_ids = $wpdb-&gt;get_col( $wpdb-&gt;prepare( "SELECT link_id FROM $wpdb-&gt;links WHERE link_owner = %d", $id ) );
+		$wpdb-&gt;update( $wpdb-&gt;links, array( 'link_owner' =&gt; $reassign ), array( 'link_owner' =&gt; $id ) );
+		if ( ! empty( $link_ids ) ) {
+			foreach ( $link_ids as $link_id ) {
+				clean_bookmark_cache( $link_id );
+			}
+		}
+	}
+
+	// FINALLY, delete user.
+	if ( is_multisite() ) {
+		remove_user_from_blog( $id, get_current_blog_id() );
+	} else {
+		$meta = $wpdb-&gt;get_col( $wpdb-&gt;prepare( "SELECT umeta_id FROM $wpdb-&gt;usermeta WHERE user_id = %d", $id ) );
+		foreach ( $meta as $mid ) {
+			delete_metadata_by_mid( 'user', $mid );
+		}
+
+		$wpdb-&gt;delete( $wpdb-&gt;users, array( 'ID' =&gt; $id ) );
+	}
+
+	clean_user_cache( $user );
+
+	/**
+	 * Fires immediately after a user is deleted from the site.
+	 *
+	 * Note that on a Multisite installation the user may not have been deleted from
+	 * the database depending on whether `wp_delete_user()` or `wpmu_delete_user()`
+	 * was called.
+	 *
+	 * @since 2.9.0
+	 * @since 5.5.0 Added the `$user` parameter.
+	 *
+	 * @param int      $id       ID of the deleted user.
+	 * @param int|null $reassign ID of the user to reassign posts and links to.
+	 *                           Default null, for no reassignment.
+	 * @param WP_User  $user     WP_User object of the deleted user.
+	 */
+	do_action( 'deleted_user', $id, $reassign, $user );
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/user.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/user.php#L345">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/user.php#L345-L466">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_user"><span class="hook-func">do_action</span>( ‘deleted_user’, <nobr><span class="arg-type">int</span> <span class="arg-name">$id</span></nobr>, <nobr><span class="arg-type">int|null</span> <span class="arg-name">$reassign</span></nobr>, <nobr><span class="arg-type">WP_User</span> <span class="arg-name">$user</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a user is deleted from the site.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_user"><span class="hook-func">do_action</span>( ‘delete_user’, <nobr><span class="arg-type">int</span> <span class="arg-name">$id</span></nobr>, <nobr><span class="arg-type">int|null</span> <span class="arg-name">$reassign</span></nobr>, <nobr><span class="arg-type">WP_User</span> <span class="arg-name">$user</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before a user is deleted from the site.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/post_types_to_delete_with_user"><span class="hook-func">apply_filters</span>( ‘post_types_to_delete_with_user’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$post_types_to_delete</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of post types to delete with a user.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_delete_user" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_delete_user</a>
+  </p>
+</div>

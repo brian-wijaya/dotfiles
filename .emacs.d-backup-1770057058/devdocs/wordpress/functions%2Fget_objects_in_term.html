@@ -1,0 +1,78 @@
+<h1 class="wp-block-wporg-code-reference-title">get_objects_in_term( <span class="arg-type">int|int[]</span> <span class="arg-name">$term_ids</span>, <span class="arg-type">string|string[]</span> <span class="arg-name">$taxonomies</span>, <span class="arg-type">array|string</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">string[]|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Retrieves object IDs of valid taxonomy and term.</p> </section> <section><h2 id="description">Description</h2> <p>The strings of <code>$taxonomies</code> must exist before this function will continue.<br>On failure of finding a valid taxonomy, it will return a <a href="../classes/wp_error" rel="class">WP_Error</a>.</p> <p>The <code>$terms</code> aren’t checked the same as <code>$taxonomies</code>, but still need to exist for object IDs to be returned.</p> <p>It is possible to change the order that object IDs are returned by using <code>$args</code> with either ASC or DESC array. The value should be in the key named ‘order’.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$term_ids</code><span class="type"><span class="int">int</span>|<span class="int[]">int[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Term ID or array of term IDs of terms that will be used.</span></div></dd>
+<dt>
+<code>$taxonomies</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">String of taxonomy name or Array of string values of taxonomy names.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Change the order of the object IDs.<br> <ul class="param-hash">
+<li>
+<code>order</code> <span class="type">string</span><div class="desc">Order to retrieve terms. Accepts <code>'ASC'</code> or <code>'DESC'</code>. Default <code>'ASC'</code>.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string[]|<a href="../classes/wp_error" rel="class">WP_Error</a></span> An array of object IDs as numeric strings on success, <a href="../classes/wp_error" rel="class">WP_Error</a> if the taxonomy does not exist.</section> <section><h2 id="more-information">More Information</h2> <p>If an object is in more than one of the terms passed to $terms, the results returned will contain duplicate object_ids.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="871" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_objects_in_term( $term_ids, $taxonomies, $args = array() ) {
+	global $wpdb;
+
+	if ( ! is_array( $term_ids ) ) {
+		$term_ids = array( $term_ids );
+	}
+	if ( ! is_array( $taxonomies ) ) {
+		$taxonomies = array( $taxonomies );
+	}
+	foreach ( (array) $taxonomies as $taxonomy ) {
+		if ( ! taxonomy_exists( $taxonomy ) ) {
+			return new WP_Error( 'invalid_taxonomy', __( 'Invalid taxonomy.' ) );
+		}
+	}
+
+	$defaults = array( 'order' =&gt; 'ASC' );
+	$args     = wp_parse_args( $args, $defaults );
+
+	$order = ( 'desc' === strtolower( $args['order'] ) ) ? 'DESC' : 'ASC';
+
+	$term_ids = array_map( 'intval', $term_ids );
+
+	$taxonomies = "'" . implode( "', '", array_map( 'esc_sql', $taxonomies ) ) . "'";
+	$term_ids   = "'" . implode( "', '", $term_ids ) . "'";
+
+	$sql = "SELECT tr.object_id FROM $wpdb-&gt;term_relationships AS tr INNER JOIN $wpdb-&gt;term_taxonomy AS tt ON tr.term_taxonomy_id = tt.term_taxonomy_id WHERE tt.taxonomy IN ($taxonomies) AND tt.term_id IN ($term_ids) ORDER BY tr.object_id $order";
+
+	$last_changed = wp_cache_get_last_changed( 'terms' );
+	$cache_key    = 'get_objects_in_term:' . md5( $sql ) . ":$last_changed";
+	$cache        = wp_cache_get( $cache_key, 'term-queries' );
+	if ( false === $cache ) {
+		$object_ids = $wpdb-&gt;get_col( $sql );
+		wp_cache_set( $cache_key, $object_ids, 'term-queries' );
+	} else {
+		$object_ids = (array) $cache;
+	}
+
+	if ( ! $object_ids ) {
+		return array();
+	}
+	return $object_ids;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L871">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L871-L912">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_objects_in_term" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_objects_in_term</a>
+  </p>
+</div>

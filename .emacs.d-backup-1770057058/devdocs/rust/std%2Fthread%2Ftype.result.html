@@ -1,0 +1,34 @@
+<h1 class="main-heading">Type Alias Result </h1>
+<pre class="rust item-decl" data-language="rust">pub type Result&lt;T&gt; = Result&lt;T, Box&lt;dyn Any + Send + 'static&gt;&gt;;</pre>
+<p>A specialized <a href="../result/enum.result" title="enum std::result::Result"><code>Result</code></a> type for threads.</p> <p>Indicates the manner in which a thread exited.</p> <p>The value contained in the <code>Result::Err</code> variant is the value the thread panicked with; that is, the argument the <code>panic!</code> macro was called with. Unlike with normal errors, this value doesn’t implement the <a href="../error/trait.error" title="trait std::error::Error"><code>Error</code></a> trait.</p> <p>Thus, a sensible way to handle a thread panic is to either:</p> <ol> <li>propagate the panic with <a href="../panic/fn.resume_unwind" title="fn std::panic::resume_unwind"><code>std::panic::resume_unwind</code></a>
+</li> <li>or in case the thread is intended to be a subsystem boundary that is supposed to isolate system-level failures, match on the <code>Err</code> variant and handle the panic in an appropriate way</li> </ol> <p>A thread that completes without panicking is considered to exit successfully.</p> <h2 id="examples">Examples</h2> <p>Matching on the result of a joined thread:</p> <div class="example-wrap"><pre class="rust rust-example-rendered" data-language="rust">use std::{fs, thread, panic};
+
+fn copy_in_thread() -&gt; thread::Result&lt;()&gt; {
+    thread::spawn(|| {
+        fs::copy("foo.txt", "bar.txt").unwrap();
+    }).join()
+}
+
+fn main() {
+    match copy_in_thread() {
+        Ok(_) =&gt; println!("copy succeeded"),
+        Err(e) =&gt; panic::resume_unwind(e),
+    }
+}</pre></div>
+<h3 id="aliased-type" class="section-header">Aliased Type</h3>
+<pre class="rust item-decl" data-language="rust">pub enum Result&lt;T&gt; {
+    Ok(T),
+    Err(Box&lt;dyn Any + Send&gt;),
+}</pre>
+<h3 id="variants" class="variants section-header">Variants</h3>
+<div class="variants">
+<section id="variant.Ok" class="variant"><span class="since rightside" title="Stable since Rust version 1.0.0">1.0.0</span><pre class="code-header" data-language="rust">Ok(T)</pre></section><div class="docblock">
+<p>Contains the success value</p> </div>
+<section id="variant.Err" class="variant"><span class="since rightside" title="Stable since Rust version 1.0.0">1.0.0</span><pre class="code-header" data-language="rust">Err(Box&lt;dyn Any + Send&gt;)</pre></section><div class="docblock">
+<p>Contains the error value</p> </div>
+</div><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2010 The Rust Project Developers<br>Licensed under the Apache License, Version 2.0 or the MIT license, at your option.<br>
+    <a href="https://doc.rust-lang.org/std/thread/type.Result.html" class="_attribution-link">https://doc.rust-lang.org/std/thread/type.Result.html</a>
+  </p>
+</div>

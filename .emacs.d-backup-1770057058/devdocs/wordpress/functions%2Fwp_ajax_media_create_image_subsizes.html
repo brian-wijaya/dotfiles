@@ -1,0 +1,71 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_media_create_image_subsizes()</h1> <section><p>Handles creating missing image sub-sizes for just uploaded images via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2504" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_media_create_image_subsizes() {
+	check_ajax_referer( 'media-form' );
+
+	if ( ! current_user_can( 'upload_files' ) ) {
+		wp_send_json_error( array( 'message' =&gt; __( 'Sorry, you are not allowed to upload files.' ) ) );
+	}
+
+	if ( empty( $_POST['attachment_id'] ) ) {
+		wp_send_json_error( array( 'message' =&gt; __( 'Upload failed. Please reload and try again.' ) ) );
+	}
+
+	$attachment_id = (int) $_POST['attachment_id'];
+
+	if ( ! empty( $_POST['_wp_upload_failed_cleanup'] ) ) {
+		// Upload failed. Cleanup.
+		if ( wp_attachment_is_image( $attachment_id ) &amp;&amp; current_user_can( 'delete_post', $attachment_id ) ) {
+			$attachment = get_post( $attachment_id );
+
+			// Created at most 10 min ago.
+			if ( $attachment &amp;&amp; ( time() - strtotime( $attachment-&gt;post_date_gmt ) &lt; 600 ) ) {
+				wp_delete_attachment( $attachment_id, true );
+				wp_send_json_success();
+			}
+		}
+	}
+
+	/*
+	 * Set a custom header with the attachment_id.
+	 * Used by the browser/client to resume creating image sub-sizes after a PHP fatal error.
+	 */
+	if ( ! headers_sent() ) {
+		header( 'X-WP-Upload-Attachment-ID: ' . $attachment_id );
+	}
+
+	/*
+	 * This can still be pretty slow and cause timeout or out of memory errors.
+	 * The js that handles the response would need to also handle HTTP 500 errors.
+	 */
+	wp_update_image_subsizes( $attachment_id );
+
+	if ( ! empty( $_POST['_legacy_support'] ) ) {
+		// The old (inline) uploader. Only needs the attachment_id.
+		$response = array( 'id' =&gt; $attachment_id );
+	} else {
+		// Media modal and Media Library grid view.
+		$response = wp_prepare_attachment_for_js( $attachment_id );
+
+		if ( ! $response ) {
+			wp_send_json_error( array( 'message' =&gt; __( 'Upload failed.' ) ) );
+		}
+	}
+
+	// At this point the image has been uploaded successfully.
+	wp_send_json_success( $response );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L2504">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L2504-L2558">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_media_create_image_subsizes" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_media_create_image_subsizes</a>
+  </p>
+</div>

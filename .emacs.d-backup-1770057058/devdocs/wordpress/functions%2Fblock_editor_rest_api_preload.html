@@ -1,0 +1,110 @@
+<h1 class="wp-block-wporg-code-reference-title">block_editor_rest_api_preload( <span class="arg-type">(string|string[])[]</span> <span class="arg-name">$preload_paths</span>, <span class="arg-type">WP_Block_Editor_Context</span> <span class="arg-name">$block_editor_context</span> )</h1> <section><p>Preloads common data used with the block editor by specifying an array of REST API paths that will be preloaded for a given block editor context.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$preload_paths</code><span class="type"><span class="(string">(string</span>|<span class="string[])[]">string[])[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">List of paths to preload.</span></div></dd>
+<dt>
+<code>$block_editor_context</code><span class="type"><span class="WP_Block_Editor_Context"><a href="../classes/wp_block_editor_context" rel="class">WP_Block_Editor_Context</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The current block editor context.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="695" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function block_editor_rest_api_preload( array $preload_paths, $block_editor_context ) {
+	global $post, $wp_scripts, $wp_styles;
+
+	/**
+	 * Filters the array of REST API paths that will be used to preloaded common data for the block editor.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param (string|string[])[]     $preload_paths        Array of paths to preload.
+	 * @param WP_Block_Editor_Context $block_editor_context The current block editor context.
+	 */
+	$preload_paths = apply_filters( 'block_editor_rest_api_preload_paths', $preload_paths, $block_editor_context );
+
+	if ( ! empty( $block_editor_context-&gt;post ) ) {
+		$selected_post = $block_editor_context-&gt;post;
+
+		/**
+		 * Filters the array of paths that will be preloaded.
+		 *
+		 * Preload common data by specifying an array of REST API paths that will be preloaded.
+		 *
+		 * @since 5.0.0
+		 * @deprecated 5.8.0 Use the <a href="../hooks/block_editor_rest_api_preload_paths">'block_editor_rest_api_preload_paths'</a> filter instead.
+		 *
+		 * @param (string|string[])[] $preload_paths Array of paths to preload.
+		 * @param WP_Post             $selected_post Post being edited.
+		 */
+		$preload_paths = apply_filters_deprecated( 'block_editor_preload_paths', array( $preload_paths, $selected_post ), '5.8.0', 'block_editor_rest_api_preload_paths' );
+	}
+
+	if ( empty( $preload_paths ) ) {
+		return;
+	}
+
+	/*
+	 * Ensure the global $post, $wp_scripts, and $wp_styles remain the same after
+	 * API data is preloaded.
+	 * Because API preloading can call the_content and other filters, plugins
+	 * can unexpectedly modify the global $post or enqueue assets which are not
+	 * intended for the block editor.
+	 */
+	$backup_global_post = ! empty( $post ) ? clone $post : $post;
+	$backup_wp_scripts  = ! empty( $wp_scripts ) ? clone $wp_scripts : $wp_scripts;
+	$backup_wp_styles   = ! empty( $wp_styles ) ? clone $wp_styles : $wp_styles;
+
+	foreach ( $preload_paths as &amp;$path ) {
+		if ( is_string( $path ) &amp;&amp; ! str_starts_with( $path, '/' ) ) {
+			$path = '/' . $path;
+			continue;
+		}
+
+		if ( is_array( $path ) &amp;&amp; is_string( $path[0] ) &amp;&amp; ! str_starts_with( $path[0], '/' ) ) {
+			$path[0] = '/' . $path[0];
+		}
+	}
+
+	unset( $path );
+
+	$preload_data = array_reduce(
+		$preload_paths,
+		'rest_preload_api_request',
+		array()
+	);
+
+	// Restore the global $post, $wp_scripts, and $wp_styles as they were before API preloading.
+	$post       = $backup_global_post;
+	$wp_scripts = $backup_wp_scripts;
+	$wp_styles  = $backup_wp_styles;
+
+	wp_add_inline_script(
+		'wp-api-fetch',
+		sprintf(
+			'wp.apiFetch.use( wp.apiFetch.createPreloadingMiddleware( %s ) );',
+			wp_json_encode( $preload_data )
+		),
+		'after'
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/block-editor.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/block-editor.php#L695">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/block-editor.php#L695-L772">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/block_editor_preload_paths"><span class="hook-func">apply_filters_deprecated</span>( ‘block_editor_preload_paths’, <nobr><span class="arg-type">(string|string[])[]</span> <span class="arg-name">$preload_paths</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$selected_post</span></nobr> )</a></dt>
+<dd>
+<p>Filters the array of paths that will be preloaded.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/block_editor_rest_api_preload_paths"><span class="hook-func">apply_filters</span>( ‘block_editor_rest_api_preload_paths’, <nobr><span class="arg-type">(string|string[])[]</span> <span class="arg-name">$preload_paths</span></nobr>, <nobr><span class="arg-type">WP_Block_Editor_Context</span> <span class="arg-name">$block_editor_context</span></nobr> )</a></dt>
+<dd>
+<p>Filters the array of REST API paths that will be used to preloaded common data for the block editor.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/block_editor_rest_api_preload" class="_attribution-link">https://developer.wordpress.org/reference/functions/block_editor_rest_api_preload</a>
+  </p>
+</div>

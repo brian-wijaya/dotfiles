@@ -1,0 +1,104 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Query::get_queried_object(): <span class="return-type"><a href="../wp_term" rel="class">WP_Term</a>|<a href="../wp_post_type" rel="class">WP_Post_Type</a>|<a href="../wp_post" rel="class">WP_Post</a>|<a href="../wp_user" rel="class">WP_User</a>|null</span>
+</h1> <section><p>Retrieves the currently queried object.</p> </section> <section><h2 id="description">Description</h2> <p>If queried object is not set, then the queried object will be set from the category, tag, taxonomy, posts page, single post, page, or author query variable. After it is set up, it will be returned.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_term" rel="class">WP_Term</a>|<a href="../wp_post_type" rel="class">WP_Post_Type</a>|<a href="../wp_post" rel="class">WP_Post</a>|<a href="../wp_user" rel="class">WP_User</a>|null</span> The queried object.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3866" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_queried_object() {
+	if ( isset( $this-&gt;queried_object ) ) {
+		return $this-&gt;queried_object;
+	}
+
+	$this-&gt;queried_object    = null;
+	$this-&gt;queried_object_id = null;
+
+	if ( $this-&gt;is_category || $this-&gt;is_tag || $this-&gt;is_tax ) {
+		if ( $this-&gt;is_category ) {
+			$cat           = $this-&gt;get( 'cat' );
+			$category_name = $this-&gt;get( 'category_name' );
+
+			if ( $cat ) {
+				$term = get_term( $cat, 'category' );
+			} elseif ( $category_name ) {
+				$term = get_term_by( 'slug', $category_name, 'category' );
+			}
+		} elseif ( $this-&gt;is_tag ) {
+			$tag_id = $this-&gt;get( 'tag_id' );
+			$tag    = $this-&gt;get( 'tag' );
+
+			if ( $tag_id ) {
+				$term = get_term( $tag_id, 'post_tag' );
+			} elseif ( $tag ) {
+				$term = get_term_by( 'slug', $tag, 'post_tag' );
+			}
+		} else {
+			// For other tax queries, grab the first term from the first clause.
+			if ( ! empty( $this-&gt;tax_query-&gt;queried_terms ) ) {
+				$queried_taxonomies = array_keys( $this-&gt;tax_query-&gt;queried_terms );
+				$matched_taxonomy   = reset( $queried_taxonomies );
+				$query              = $this-&gt;tax_query-&gt;queried_terms[ $matched_taxonomy ];
+
+				if ( ! empty( $query['terms'] ) ) {
+					if ( 'term_id' === $query['field'] ) {
+						$term = get_term( reset( $query['terms'] ), $matched_taxonomy );
+					} else {
+						$term = get_term_by( $query['field'], reset( $query['terms'] ), $matched_taxonomy );
+					}
+				}
+			}
+		}
+
+		if ( ! empty( $term ) &amp;&amp; ! is_wp_error( $term ) ) {
+			$this-&gt;queried_object    = $term;
+			$this-&gt;queried_object_id = (int) $term-&gt;term_id;
+
+			if ( $this-&gt;is_category &amp;&amp; 'category' === $this-&gt;queried_object-&gt;taxonomy ) {
+				_make_cat_compat( $this-&gt;queried_object );
+			}
+		}
+	} elseif ( $this-&gt;is_post_type_archive ) {
+		$post_type = $this-&gt;get( 'post_type' );
+
+		if ( is_array( $post_type ) ) {
+			$post_type = reset( $post_type );
+		}
+
+		$this-&gt;queried_object = get_post_type_object( $post_type );
+	} elseif ( $this-&gt;is_posts_page ) {
+		$page_for_posts = get_option( 'page_for_posts' );
+
+		$this-&gt;queried_object    = get_post( $page_for_posts );
+		$this-&gt;queried_object_id = (int) $this-&gt;queried_object-&gt;ID;
+	} elseif ( $this-&gt;is_singular &amp;&amp; ! empty( $this-&gt;post ) ) {
+		$this-&gt;queried_object    = $this-&gt;post;
+		$this-&gt;queried_object_id = (int) $this-&gt;post-&gt;ID;
+	} elseif ( $this-&gt;is_author ) {
+		$author      = (int) $this-&gt;get( 'author' );
+		$author_name = $this-&gt;get( 'author_name' );
+
+		if ( $author ) {
+			$this-&gt;queried_object_id = $author;
+		} elseif ( $author_name ) {
+			$user = get_user_by( 'slug', $author_name );
+
+			if ( $user ) {
+				$this-&gt;queried_object_id = $user-&gt;ID;
+			}
+		}
+
+		$this-&gt;queried_object = get_userdata( $this-&gt;queried_object_id );
+	}
+
+	return $this-&gt;queried_object;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-query.php#L3866">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-query.php#L3866-L3952">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_query/get_queried_object" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_query/get_queried_object</a>
+  </p>
+</div>

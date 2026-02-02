@@ -1,0 +1,101 @@
+<h1 class="wp-block-wporg-code-reference-title">is_blog_installed(): <span class="return-type">bool</span>
+</h1> <section><p>Determines whether WordPress is already installed.</p> </section> <section><h2 id="description">Description</h2> <p>The cache will be checked first. If you have a cache plugin, which saves the cache values, then this will work. If you use the default WordPress cache, and the database goes away, then you might have problems.</p> <p>Checks for the ‘siteurl’ option for whether WordPress is installed.</p> <p>For more information on this and similar theme functions, check out the <a href="https://developer.wordpress.org/themes/basics/conditional-tags/"> Conditional Tags</a> article in the Theme Developer Handbook.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> Whether the site is already installed.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1766" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function is_blog_installed() {
+	global $wpdb;
+
+	/*
+	 * Check cache first. If options table goes away and we have true
+	 * cached, oh well.
+	 */
+	if ( wp_cache_get( 'is_blog_installed' ) ) {
+		return true;
+	}
+
+	$suppress = $wpdb-&gt;suppress_errors();
+
+	if ( ! wp_installing() ) {
+		$alloptions = wp_load_alloptions();
+	}
+
+	// If siteurl is not set to autoload, check it specifically.
+	if ( ! isset( $alloptions['siteurl'] ) ) {
+		$installed = $wpdb-&gt;get_var( "SELECT option_value FROM $wpdb-&gt;options WHERE option_name = 'siteurl'" );
+	} else {
+		$installed = $alloptions['siteurl'];
+	}
+
+	$wpdb-&gt;suppress_errors( $suppress );
+
+	$installed = ! empty( $installed );
+	wp_cache_set( 'is_blog_installed', $installed );
+
+	if ( $installed ) {
+		return true;
+	}
+
+	// If visiting repair.php, return true and let it take over.
+	if ( defined( 'WP_REPAIRING' ) ) {
+		return true;
+	}
+
+	$suppress = $wpdb-&gt;suppress_errors();
+
+	/*
+	 * Loop over the WP tables. If none exist, then scratch installation is allowed.
+	 * If one or more exist, suggest table repair since we got here because the
+	 * options table could not be accessed.
+	 */
+	$wp_tables = $wpdb-&gt;tables();
+	foreach ( $wp_tables as $table ) {
+		// The existence of custom user tables shouldn't suggest an unwise state or prevent a clean installation.
+		if ( defined( 'CUSTOM_USER_TABLE' ) &amp;&amp; CUSTOM_USER_TABLE === $table ) {
+			continue;
+		}
+
+		if ( defined( 'CUSTOM_USER_META_TABLE' ) &amp;&amp; CUSTOM_USER_META_TABLE === $table ) {
+			continue;
+		}
+
+		$described_table = $wpdb-&gt;get_results( "DESCRIBE $table;" );
+		if (
+			( ! $described_table &amp;&amp; empty( $wpdb-&gt;last_error ) ) ||
+			( is_array( $described_table ) &amp;&amp; 0 === count( $described_table ) )
+		) {
+			continue;
+		}
+
+		// One or more tables exist. This is not good.
+
+		wp_load_translations_early();
+
+		// Die with a DB error.
+		$wpdb-&gt;error = sprintf(
+			/* translators: %s: Database repair URL. */
+			__( 'One or more database tables are unavailable. The database may need to be &lt;a href="%s"&gt;repaired&lt;/a&gt;.' ),
+			'maint/repair.php?referrer=is_blog_installed'
+		);
+
+		dead_db();
+	}
+
+	$wpdb-&gt;suppress_errors( $suppress );
+
+	wp_cache_set( 'is_blog_installed', false );
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L1766">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L1766-L1849">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/is_blog_installed" class="_attribution-link">https://developer.wordpress.org/reference/functions/is_blog_installed</a>
+  </p>
+</div>

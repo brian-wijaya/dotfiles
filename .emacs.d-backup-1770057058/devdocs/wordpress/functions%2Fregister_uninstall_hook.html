@@ -1,0 +1,44 @@
+<h1 class="wp-block-wporg-code-reference-title">register_uninstall_hook( <span class="arg-type">string</span> <span class="arg-name">$file</span>, <span class="arg-type">callable</span> <span class="arg-name">$callback</span> )</h1> <section><p>Sets the uninstallation hook for a plugin.</p> </section> <section><h2 id="description">Description</h2> <p>Registers the uninstall hook that will be called when the user clicks on the uninstall link that calls for the plugin to uninstall itself. The link won’t be active unless the plugin hooks into the action.</p> <p>The plugin should not run arbitrary code outside of functions, when registering the uninstall hook. In order to run using the hook, the plugin will have to be included, which means that any code laying outside of a function will be run during the uninstallation process. The plugin should not hinder the uninstallation process.</p> <p>If the plugin can not be written without running code within the plugin, then the plugin should create a file named ‘uninstall.php’ in the base plugin folder. This file will be called, if it exists, during the uninstallation process bypassing the uninstall hook. The plugin, when using the ‘uninstall.php’ should always check for the ‘WP_UNINSTALL_PLUGIN’ constant, before executing.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Plugin file.</span></div></dd>
+<dt>
+<code>$callback</code><span class="type"><span class="callable">callable</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The callback to run when the hook is called. Must be a static method or function.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="923" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function register_uninstall_hook( $file, $callback ) {
+	if ( is_array( $callback ) &amp;&amp; is_object( $callback[0] ) ) {
+		_doing_it_wrong( __FUNCTION__, __( 'Only a static class method or function can be used in an uninstall hook.' ), '3.1.0' );
+		return;
+	}
+
+	/*
+	 * The option should not be autoloaded, because it is not needed in most
+	 * cases. Emphasis should be put on using the 'uninstall.php' way of
+	 * uninstalling the plugin.
+	 */
+	$uninstallable_plugins = (array) get_option( 'uninstall_plugins' );
+	$plugin_basename       = plugin_basename( $file );
+
+	if ( ! isset( $uninstallable_plugins[ $plugin_basename ] ) || $uninstallable_plugins[ $plugin_basename ] !== $callback ) {
+		$uninstallable_plugins[ $plugin_basename ] = $callback;
+		update_option( 'uninstall_plugins', $uninstallable_plugins );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/plugin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/plugin.php#L923">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/plugin.php#L923-L941">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/register_uninstall_hook" class="_attribution-link">https://developer.wordpress.org/reference/functions/register_uninstall_hook</a>
+  </p>
+</div>

@@ -1,0 +1,127 @@
+<h1 class="wp-block-wporg-code-reference-title">get_template_hierarchy( <span class="arg-type">string</span> <span class="arg-name">$slug</span>, <span class="arg-type">bool</span> <span class="arg-name">$is_custom</span> = <span class="arg-default">false</span>, <span class="arg-type">string</span> <span class="arg-name">$template_prefix</span> = <span class="arg-default">”</span> ): <span class="return-type">string[]</span>
+</h1> <section><p>Gets the template hierarchy for the given template slug to be created.</p> </section> <section><h2 id="description">Description</h2> <p>Note: Always add <code>index</code> as the last fallback template.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$slug</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The template slug to be created.</span></div></dd>
+<dt>
+<code>$is_custom</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Indicates if a template is custom or part of the template hierarchy. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$template_prefix</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The template prefix for the created template.<br> Used to extract the main template type, e.g.<br> in <code>taxonomy-books</code> the <code>taxonomy</code> is extracted.<br> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string[]</span> The template hierarchy.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1521" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_template_hierarchy( $slug, $is_custom = false, $template_prefix = '' ) {
+	if ( 'index' === $slug ) {
+		/** This filter is documented in wp-includes/template.php */
+		return apply_filters( 'index_template_hierarchy', array( 'index' ) );
+	}
+	if ( $is_custom ) {
+		/** This filter is documented in wp-includes/template.php */
+		return apply_filters( 'page_template_hierarchy', array( 'page', 'singular', 'index' ) );
+	}
+	if ( 'front-page' === $slug ) {
+		/** This filter is documented in wp-includes/template.php */
+		return apply_filters( 'frontpage_template_hierarchy', array( 'front-page', 'home', 'index' ) );
+	}
+
+	$matches = array();
+
+	$template_hierarchy = array( $slug );
+	// Most default templates don't have `$template_prefix` assigned.
+	if ( ! empty( $template_prefix ) ) {
+		list( $type ) = explode( '-', $template_prefix );
+		// We need these checks because we always add the `$slug` above.
+		if ( ! in_array( $template_prefix, array( $slug, $type ), true ) ) {
+			$template_hierarchy[] = $template_prefix;
+		}
+		if ( $slug !== $type ) {
+			$template_hierarchy[] = $type;
+		}
+	} elseif ( preg_match( '/^(author|category|archive|tag|page)-.+$/', $slug, $matches ) ) {
+		$template_hierarchy[] = $matches[1];
+	} elseif ( preg_match( '/^(taxonomy|single)-(.+)$/', $slug, $matches ) ) {
+		$type           = $matches[1];
+		$slug_remaining = $matches[2];
+
+		$items = 'single' === $type ? get_post_types() : get_taxonomies();
+		foreach ( $items as $item ) {
+			if ( ! str_starts_with( $slug_remaining, $item ) ) {
+					continue;
+			}
+
+			// If $slug_remaining is equal to $post_type or $taxonomy we have
+			// the single-$post_type template or the taxonomy-$taxonomy template.
+			if ( $slug_remaining === $item ) {
+				$template_hierarchy[] = $type;
+				break;
+			}
+
+			// If $slug_remaining is single-$post_type-$slug template.
+			if ( strlen( $slug_remaining ) &gt; strlen( $item ) + 1 ) {
+				$template_hierarchy[] = "$type-$item";
+				$template_hierarchy[] = $type;
+				break;
+			}
+		}
+	}
+	// Handle `archive` template.
+	if (
+		str_starts_with( $slug, 'author' ) ||
+		str_starts_with( $slug, 'taxonomy' ) ||
+		str_starts_with( $slug, 'category' ) ||
+		str_starts_with( $slug, 'tag' ) ||
+		'date' === $slug
+	) {
+		$template_hierarchy[] = 'archive';
+	}
+	// Handle `single` template.
+	if ( 'attachment' === $slug ) {
+		$template_hierarchy[] = 'single';
+	}
+	// Handle `singular` template.
+	if (
+		str_starts_with( $slug, 'single' ) ||
+		str_starts_with( $slug, 'page' ) ||
+		'attachment' === $slug
+	) {
+		$template_hierarchy[] = 'singular';
+	}
+	$template_hierarchy[] = 'index';
+
+	$template_type = '';
+	if ( ! empty( $template_prefix ) ) {
+		list( $template_type ) = explode( '-', $template_prefix );
+	} else {
+		list( $template_type ) = explode( '-', $slug );
+	}
+	$valid_template_types = array( '404', 'archive', 'attachment', 'author', 'category', 'date', 'embed', 'frontpage', 'home', 'index', 'page', 'paged', 'privacypolicy', 'search', 'single', 'singular', 'tag', 'taxonomy' );
+	if ( in_array( $template_type, $valid_template_types, true ) ) {
+		/** This filter is documented in wp-includes/template.php */
+		return apply_filters( "{$template_type}_template_hierarchy", $template_hierarchy );
+	}
+	return $template_hierarchy;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/block-template-utils.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/block-template-utils.php#L1521">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/block-template-utils.php#L1521-L1611">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_template_hierarchy" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_template_hierarchy</a>
+  </p>
+</div>

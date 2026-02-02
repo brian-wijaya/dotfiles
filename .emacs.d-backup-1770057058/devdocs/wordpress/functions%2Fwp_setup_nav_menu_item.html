@@ -1,0 +1,235 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_setup_nav_menu_item( <span class="arg-type">object</span> <span class="arg-name">$menu_item</span> ): <span class="return-type">object</span>
+</h1> <section><p>Decorates a menu item object with the shared navigation menu item properties.</p> </section> <section><h2 id="description">Description</h2> <p>Properties:</p> <ul> <li>ID: The term_id if the menu item represents a taxonomy term.</li> <li>attr_title: The title attribute of the link element for this menu item.</li> <li>classes: The array of class attribute values for the link element of this menu item.</li> <li>db_id: The DB ID of this item as a nav_menu_item object, if it exists (0 if it doesn’t exist).</li> <li>description: The description of this menu item.</li> <li>menu_item_parent: The DB ID of the nav_menu_item that is this item’s menu parent, if any. 0 otherwise.</li> <li>object: The type of object originally represented, such as ‘category’, ‘post’, or ‘attachment’.</li> <li>object_id: The DB ID of the original object this menu item represents, e.g. ID for posts and term_id for categories.</li> <li>post_parent: The DB ID of the original object’s parent object, if any (0 otherwise).</li> <li>post_title: A "no title" label if menu item represents a post that lacks a title.</li> <li>target: The target attribute of the link element for this menu item.</li> <li>title: The title of this menu item.</li> <li>type: The family of objects originally represented, such as ‘post_type’ or ‘taxonomy’.</li> <li>type_label: The singular label used to describe this type of menu item.</li> <li>url: The URL to which this menu item points.</li> <li>xfn: The XFN relationship expressed in the link of this menu item.</li> <li>_invalid: Whether the menu item represents an object that no longer exists.</li> </ul> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$menu_item</code><span class="type"><span class="object">object</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The menu item to modify.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">object</span> The menu item with standard menu item properties.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="845" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_setup_nav_menu_item( $menu_item ) {
+
+	/**
+	 * Filters whether to short-circuit the wp_setup_nav_menu_item() output.
+	 *
+	 * Returning a non-null value from the filter will short-circuit wp_setup_nav_menu_item(),
+	 * returning that value instead.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @param object|null $modified_menu_item Modified menu item. Default null.
+	 * @param object      $menu_item          The menu item to modify.
+	 */
+	$pre_menu_item = apply_filters( 'pre_wp_setup_nav_menu_item', null, $menu_item );
+
+	if ( null !== $pre_menu_item ) {
+		return $pre_menu_item;
+	}
+
+	if ( isset( $menu_item-&gt;post_type ) ) {
+		if ( 'nav_menu_item' === $menu_item-&gt;post_type ) {
+			$menu_item-&gt;db_id            = (int) $menu_item-&gt;ID;
+			$menu_item-&gt;menu_item_parent = ! isset( $menu_item-&gt;menu_item_parent ) ? get_post_meta( $menu_item-&gt;ID, '_menu_item_menu_item_parent', true ) : $menu_item-&gt;menu_item_parent;
+			$menu_item-&gt;object_id        = ! isset( $menu_item-&gt;object_id ) ? get_post_meta( $menu_item-&gt;ID, '_menu_item_object_id', true ) : $menu_item-&gt;object_id;
+			$menu_item-&gt;object           = ! isset( $menu_item-&gt;object ) ? get_post_meta( $menu_item-&gt;ID, '_menu_item_object', true ) : $menu_item-&gt;object;
+			$menu_item-&gt;type             = ! isset( $menu_item-&gt;type ) ? get_post_meta( $menu_item-&gt;ID, '_menu_item_type', true ) : $menu_item-&gt;type;
+
+			if ( 'post_type' === $menu_item-&gt;type ) {
+				$object = get_post_type_object( $menu_item-&gt;object );
+				if ( $object ) {
+					$menu_item-&gt;type_label = $object-&gt;labels-&gt;singular_name;
+					// Denote post states for special pages (only in the admin).
+					if ( function_exists( 'get_post_states' ) ) {
+						$menu_post   = get_post( $menu_item-&gt;object_id );
+						$post_states = get_post_states( $menu_post );
+						if ( $post_states ) {
+							$menu_item-&gt;type_label = wp_strip_all_tags( implode( ', ', $post_states ) );
+						}
+					}
+				} else {
+					$menu_item-&gt;type_label = $menu_item-&gt;object;
+					$menu_item-&gt;_invalid   = true;
+				}
+
+				if ( 'trash' === get_post_status( $menu_item-&gt;object_id ) ) {
+					$menu_item-&gt;_invalid = true;
+				}
+
+				$original_object = get_post( $menu_item-&gt;object_id );
+
+				if ( $original_object ) {
+					$menu_item-&gt;url = get_permalink( $original_object-&gt;ID );
+					/** This filter is documented in wp-includes/post-template.php */
+					$original_title = apply_filters( 'the_title', $original_object-&gt;post_title, $original_object-&gt;ID );
+				} else {
+					$menu_item-&gt;url      = '';
+					$original_title      = '';
+					$menu_item-&gt;_invalid = true;
+				}
+
+				if ( '' === $original_title ) {
+					/* translators: %d: ID of a post. */
+					$original_title = sprintf( __( '#%d (no title)' ), $menu_item-&gt;object_id );
+				}
+
+				$menu_item-&gt;title = ( '' === $menu_item-&gt;post_title ) ? $original_title : $menu_item-&gt;post_title;
+
+			} elseif ( 'post_type_archive' === $menu_item-&gt;type ) {
+				$object = get_post_type_object( $menu_item-&gt;object );
+				if ( $object ) {
+					$menu_item-&gt;title      = ( '' === $menu_item-&gt;post_title ) ? $object-&gt;labels-&gt;archives : $menu_item-&gt;post_title;
+					$post_type_description = $object-&gt;description;
+				} else {
+					$post_type_description = '';
+					$menu_item-&gt;_invalid   = true;
+				}
+
+				$menu_item-&gt;type_label = __( 'Post Type Archive' );
+				$post_content          = wp_trim_words( $menu_item-&gt;post_content, 200 );
+				$post_type_description = ( '' === $post_content ) ? $post_type_description : $post_content;
+				$menu_item-&gt;url        = get_post_type_archive_link( $menu_item-&gt;object );
+
+			} elseif ( 'taxonomy' === $menu_item-&gt;type ) {
+				$object = get_taxonomy( $menu_item-&gt;object );
+				if ( $object ) {
+					$menu_item-&gt;type_label = $object-&gt;labels-&gt;singular_name;
+				} else {
+					$menu_item-&gt;type_label = $menu_item-&gt;object;
+					$menu_item-&gt;_invalid   = true;
+				}
+
+				$original_object = get_term( (int) $menu_item-&gt;object_id, $menu_item-&gt;object );
+
+				if ( $original_object &amp;&amp; ! is_wp_error( $original_object ) ) {
+					$menu_item-&gt;url = get_term_link( (int) $menu_item-&gt;object_id, $menu_item-&gt;object );
+					$original_title = $original_object-&gt;name;
+				} else {
+					$menu_item-&gt;url      = '';
+					$original_title      = '';
+					$menu_item-&gt;_invalid = true;
+				}
+
+				if ( '' === $original_title ) {
+					/* translators: %d: ID of a term. */
+					$original_title = sprintf( __( '#%d (no title)' ), $menu_item-&gt;object_id );
+				}
+
+				$menu_item-&gt;title = ( '' === $menu_item-&gt;post_title ) ? $original_title : $menu_item-&gt;post_title;
+
+			} else {
+				$menu_item-&gt;type_label = __( 'Custom Link' );
+				$menu_item-&gt;title      = $menu_item-&gt;post_title;
+				$menu_item-&gt;url        = ! isset( $menu_item-&gt;url ) ? get_post_meta( $menu_item-&gt;ID, '_menu_item_url', true ) : $menu_item-&gt;url;
+			}
+
+			$menu_item-&gt;target = ! isset( $menu_item-&gt;target ) ? get_post_meta( $menu_item-&gt;ID, '_menu_item_target', true ) : $menu_item-&gt;target;
+
+			/**
+			 * Filters a navigation menu item's title attribute.
+			 *
+			 * @since 3.0.0
+			 *
+			 * @param string $item_title The menu item title attribute.
+			 */
+			$menu_item-&gt;attr_title = ! isset( $menu_item-&gt;attr_title ) ? apply_filters( 'nav_menu_attr_title', $menu_item-&gt;post_excerpt ) : $menu_item-&gt;attr_title;
+
+			if ( ! isset( $menu_item-&gt;description ) ) {
+				/**
+				 * Filters a navigation menu item's description.
+				 *
+				 * @since 3.0.0
+				 *
+				 * @param string $description The menu item description.
+				 */
+				$menu_item-&gt;description = apply_filters( 'nav_menu_description', wp_trim_words( $menu_item-&gt;post_content, 200 ) );
+			}
+
+			$menu_item-&gt;classes = ! isset( $menu_item-&gt;classes ) ? (array) get_post_meta( $menu_item-&gt;ID, '_menu_item_classes', true ) : $menu_item-&gt;classes;
+			$menu_item-&gt;xfn     = ! isset( $menu_item-&gt;xfn ) ? get_post_meta( $menu_item-&gt;ID, '_menu_item_xfn', true ) : $menu_item-&gt;xfn;
+		} else {
+			$menu_item-&gt;db_id            = 0;
+			$menu_item-&gt;menu_item_parent = 0;
+			$menu_item-&gt;object_id        = (int) $menu_item-&gt;ID;
+			$menu_item-&gt;type             = 'post_type';
+
+			$object                = get_post_type_object( $menu_item-&gt;post_type );
+			$menu_item-&gt;object     = $object-&gt;name;
+			$menu_item-&gt;type_label = $object-&gt;labels-&gt;singular_name;
+
+			if ( '' === $menu_item-&gt;post_title ) {
+				/* translators: %d: ID of a post. */
+				$menu_item-&gt;post_title = sprintf( __( '#%d (no title)' ), $menu_item-&gt;ID );
+			}
+
+			$menu_item-&gt;title  = $menu_item-&gt;post_title;
+			$menu_item-&gt;url    = get_permalink( $menu_item-&gt;ID );
+			$menu_item-&gt;target = '';
+
+			/** This filter is documented in wp-includes/nav-menu.php */
+			$menu_item-&gt;attr_title = apply_filters( 'nav_menu_attr_title', '' );
+
+			/** This filter is documented in wp-includes/nav-menu.php */
+			$menu_item-&gt;description = apply_filters( 'nav_menu_description', '' );
+			$menu_item-&gt;classes     = array();
+			$menu_item-&gt;xfn         = '';
+		}
+	} elseif ( isset( $menu_item-&gt;taxonomy ) ) {
+		$menu_item-&gt;ID               = $menu_item-&gt;term_id;
+		$menu_item-&gt;db_id            = 0;
+		$menu_item-&gt;menu_item_parent = 0;
+		$menu_item-&gt;object_id        = (int) $menu_item-&gt;term_id;
+		$menu_item-&gt;post_parent      = (int) $menu_item-&gt;parent;
+		$menu_item-&gt;type             = 'taxonomy';
+
+		$object                = get_taxonomy( $menu_item-&gt;taxonomy );
+		$menu_item-&gt;object     = $object-&gt;name;
+		$menu_item-&gt;type_label = $object-&gt;labels-&gt;singular_name;
+
+		$menu_item-&gt;title       = $menu_item-&gt;name;
+		$menu_item-&gt;url         = get_term_link( $menu_item, $menu_item-&gt;taxonomy );
+		$menu_item-&gt;target      = '';
+		$menu_item-&gt;attr_title  = '';
+		$menu_item-&gt;description = get_term_field( 'description', $menu_item-&gt;term_id, $menu_item-&gt;taxonomy );
+		$menu_item-&gt;classes     = array();
+		$menu_item-&gt;xfn         = '';
+
+	}
+
+	/**
+	 * Filters a navigation menu item object.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param object $menu_item The menu item object.
+	 */
+	return apply_filters( 'wp_setup_nav_menu_item', $menu_item );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/nav-menu.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/nav-menu.php#L845">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/nav-menu.php#L845-L1041">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/nav_menu_attr_title"><span class="hook-func">apply_filters</span>( ‘nav_menu_attr_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$item_title</span></nobr> )</a></dt>
+<dd>
+<p>Filters a navigation menu item’s title attribute.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/nav_menu_description"><span class="hook-func">apply_filters</span>( ‘nav_menu_description’, <nobr><span class="arg-type">string</span> <span class="arg-name">$description</span></nobr> )</a></dt>
+<dd>
+<p>Filters a navigation menu item’s description.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_wp_setup_nav_menu_item"><span class="hook-func">apply_filters</span>( ‘pre_wp_setup_nav_menu_item’, <nobr><span class="arg-type">object|null</span> <span class="arg-name">$modified_menu_item</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$menu_item</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to short-circuit the <a href="wp_setup_nav_menu_item" rel="function">wp_setup_nav_menu_item()</a> output.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/the_title"><span class="hook-func">apply_filters</span>( ‘the_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_title</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post title.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_setup_nav_menu_item"><span class="hook-func">apply_filters</span>( ‘wp_setup_nav_menu_item’, <nobr><span class="arg-type">object</span> <span class="arg-name">$menu_item</span></nobr> )</a></dt>
+<dd>
+<p>Filters a navigation menu item object.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_setup_nav_menu_item" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_setup_nav_menu_item</a>
+  </p>
+</div>

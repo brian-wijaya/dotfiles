@@ -1,0 +1,104 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_add_menu_item()</h1> <section><p>Handles adding a menu item via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1522" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_add_menu_item() {
+	check_ajax_referer( 'add-menu_item', 'menu-settings-column-nonce' );
+
+	if ( ! current_user_can( 'edit_theme_options' ) ) {
+		wp_die( -1 );
+	}
+
+	require_once ABSPATH . 'wp-admin/includes/nav-menu.php';
+
+	/*
+	 * For performance reasons, we omit some object properties from the checklist.
+	 * The following is a hacky way to restore them when adding non-custom items.
+	 */
+	$menu_items_data = array();
+
+	foreach ( (array) $_POST['menu-item'] as $menu_item_data ) {
+		if (
+			! empty( $menu_item_data['menu-item-type'] ) &amp;&amp;
+			'custom' !== $menu_item_data['menu-item-type'] &amp;&amp;
+			! empty( $menu_item_data['menu-item-object-id'] )
+		) {
+			switch ( $menu_item_data['menu-item-type'] ) {
+				case 'post_type':
+					$_object = get_post( $menu_item_data['menu-item-object-id'] );
+					break;
+
+				case 'post_type_archive':
+					$_object = get_post_type_object( $menu_item_data['menu-item-object'] );
+					break;
+
+				case 'taxonomy':
+					$_object = get_term( $menu_item_data['menu-item-object-id'], $menu_item_data['menu-item-object'] );
+					break;
+			}
+
+			$_menu_items = array_map( 'wp_setup_nav_menu_item', array( $_object ) );
+			$_menu_item  = reset( $_menu_items );
+
+			// Restore the missing menu item properties.
+			$menu_item_data['menu-item-description'] = $_menu_item-&gt;description;
+		}
+
+		$menu_items_data[] = $menu_item_data;
+	}
+
+	$item_ids = wp_save_nav_menu_items( 0, $menu_items_data );
+	if ( is_wp_error( $item_ids ) ) {
+		wp_die( 0 );
+	}
+
+	$menu_items = array();
+
+	foreach ( (array) $item_ids as $menu_item_id ) {
+		$menu_obj = get_post( $menu_item_id );
+
+		if ( ! empty( $menu_obj-&gt;ID ) ) {
+			$menu_obj        = wp_setup_nav_menu_item( $menu_obj );
+			$menu_obj-&gt;title = empty( $menu_obj-&gt;title ) ? __( 'Menu Item' ) : $menu_obj-&gt;title;
+			$menu_obj-&gt;label = $menu_obj-&gt;title; // Don't show "(pending)" in ajax-added items.
+			$menu_items[]    = $menu_obj;
+		}
+	}
+
+	/** This filter is documented in wp-admin/includes/nav-menu.php */
+	$walker_class_name = apply_filters( 'wp_edit_nav_menu_walker', 'Walker_Nav_Menu_Edit', $_POST['menu'] );
+
+	if ( ! class_exists( $walker_class_name ) ) {
+		wp_die( 0 );
+	}
+
+	if ( ! empty( $menu_items ) ) {
+		$args = array(
+			'after'       =&gt; '',
+			'before'      =&gt; '',
+			'link_after'  =&gt; '',
+			'link_before' =&gt; '',
+			'walker'      =&gt; new $walker_class_name(),
+		);
+
+		echo walk_nav_menu_tree( $menu_items, 0, (object) $args );
+	}
+
+	wp_die();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L1522">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L1522-L1605">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_edit_nav_menu_walker"><span class="hook-func">apply_filters</span>( ‘wp_edit_nav_menu_walker’, <nobr><span class="arg-type">string</span> <span class="arg-name">$class</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$menu_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the <a href="../classes/walker" rel="class">Walker</a> class used when adding nav menu items.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_add_menu_item" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_add_menu_item</a>
+  </p>
+</div>

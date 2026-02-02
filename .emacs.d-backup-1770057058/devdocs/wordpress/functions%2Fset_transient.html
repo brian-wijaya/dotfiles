@@ -1,0 +1,145 @@
+<h1 class="wp-block-wporg-code-reference-title">set_transient( <span class="arg-type">string</span> <span class="arg-name">$transient</span>, <span class="arg-type">mixed</span> <span class="arg-name">$value</span>, <span class="arg-type">int</span> <span class="arg-name">$expiration</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Sets/updates the value of a transient.</p> </section> <section><h2 id="description">Description</h2> <p>You do not need to serialize values. If the value needs to be serialized, then it will be serialized before it is set.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$transient</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Transient name. Expected to not be SQL-escaped.<br> Must be 172 characters or fewer in length.</span></div></dd>
+<dt>
+<code>$value</code><span class="type"><span class="mixed">mixed</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Transient value. Must be serializable if non-scalar.<br> Expected to not be SQL-escaped.</span></div></dd>
+<dt>
+<code>$expiration</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Time until expiration in seconds. Default 0 (no expiration).</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if the value was set, false otherwise.</section> <section><h2 id="more-information">More Information</h2> <p>For parameter <code>$transient</code>, if memcached is not enabled the name should be 172 characters or less in length as WordPress will prefix your name with “_transient_” or “_transient_timeout_” in the options table (depending on whether it expires or not). Longer key names will silently fail. See <a class="external text" href="https://core.trac.wordpress.org/ticket/15058" rel="nofollow">Trac #15058</a>.</p> <p>If a transient exists, this function will update the transient’s expiration time.</p> <p>NB: transients that never expire are autoloaded, whereas transients with an expiration time are not autoloaded. Consider this when adding transients that may not be needed on every page, and thus do not need to be autoloaded, impacting page performance.</p> <p>WordPress provides some constants for specifying time in seconds. Instead of multiplying out integers, see <a title="Transients API" href="https://codex.wordpress.org/Transients_API#Using_Time_Constants">Transients_API#Using_Time_Constants</a>.</p> <p>Transient key names are limited to 191 characters due to the database schema in the wp_options table ( option_name: varchar(191) ).</p> <p>In WordPress versions previous to 4.4, the length limitation was 45 in set_transient (now 172) and 64 in the database (now 191).</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1500" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function set_transient( $transient, $value, $expiration = 0 ) {
+
+	$expiration = (int) $expiration;
+
+	/**
+	 * Filters a specific transient before its value is set.
+	 *
+	 * The dynamic portion of the hook name, `$transient`, refers to the transient name.
+	 *
+	 * @since 3.0.0
+	 * @since 4.2.0 The `$expiration` parameter was added.
+	 * @since 4.4.0 The `$transient` parameter was added.
+	 *
+	 * @param mixed  $value      New value of transient.
+	 * @param int    $expiration Time until expiration in seconds.
+	 * @param string $transient  Transient name.
+	 */
+	$value = apply_filters( "pre_set_transient_{$transient}", $value, $expiration, $transient );
+
+	/**
+	 * Filters the expiration for a transient before its value is set.
+	 *
+	 * The dynamic portion of the hook name, `$transient`, refers to the transient name.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param int    $expiration Time until expiration in seconds. Use 0 for no expiration.
+	 * @param mixed  $value      New value of transient.
+	 * @param string $transient  Transient name.
+	 */
+	$expiration = apply_filters( "expiration_of_transient_{$transient}", $expiration, $value, $transient );
+
+	if ( wp_using_ext_object_cache() || wp_installing() ) {
+		$result = wp_cache_set( $transient, $value, 'transient', $expiration );
+	} else {
+		$transient_timeout = '_transient_timeout_' . $transient;
+		$transient_option  = '_transient_' . $transient;
+		wp_prime_option_caches( array( $transient_option, $transient_timeout ) );
+
+		if ( false === get_option( $transient_option ) ) {
+			$autoload = true;
+			if ( $expiration ) {
+				$autoload = false;
+				add_option( $transient_timeout, time() + $expiration, '', false );
+			}
+			$result = add_option( $transient_option, $value, '', $autoload );
+		} else {
+			/*
+			 * If expiration is requested, but the transient has no timeout option,
+			 * delete, then re-create transient rather than update.
+			 */
+			$update = true;
+
+			if ( $expiration ) {
+				if ( false === get_option( $transient_timeout ) ) {
+					delete_option( $transient_option );
+					add_option( $transient_timeout, time() + $expiration, '', false );
+					$result = add_option( $transient_option, $value, '', false );
+					$update = false;
+				} else {
+					update_option( $transient_timeout, time() + $expiration );
+				}
+			}
+
+			if ( $update ) {
+				$result = update_option( $transient_option, $value );
+			}
+		}
+	}
+
+	if ( $result ) {
+
+		/**
+		 * Fires after the value for a specific transient has been set.
+		 *
+		 * The dynamic portion of the hook name, `$transient`, refers to the transient name.
+		 *
+		 * @since 3.0.0
+		 * @since 3.6.0 The `$value` and `$expiration` parameters were added.
+		 * @since 4.4.0 The `$transient` parameter was added.
+		 *
+		 * @param mixed  $value      Transient value.
+		 * @param int    $expiration Time until expiration in seconds.
+		 * @param string $transient  The name of the transient.
+		 */
+		do_action( "set_transient_{$transient}", $value, $expiration, $transient );
+
+		/**
+		 * Fires after the value for a transient has been set.
+		 *
+		 * @since 3.0.0
+		 * @since 3.6.0 The `$value` and `$expiration` parameters were added.
+		 *
+		 * @param string $transient  The name of the transient.
+		 * @param mixed  $value      Transient value.
+		 * @param int    $expiration Time until expiration in seconds.
+		 */
+		do_action( 'setted_transient', $transient, $value, $expiration );
+	}
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/option.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/option.php#L1500">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/option.php#L1500-L1601">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/expiration_of_transient_transient"><span class="hook-func">apply_filters</span>( “expiration_of_transient_{$transient}”, <nobr><span class="arg-type">int</span> <span class="arg-name">$expiration</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$transient</span></nobr> )</a></dt>
+<dd>
+<p>Filters the expiration for a transient before its value is set.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_set_transient_transient"><span class="hook-func">apply_filters</span>( “pre_set_transient_{$transient}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$expiration</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$transient</span></nobr> )</a></dt>
+<dd>
+<p>Filters a specific transient before its value is set.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/setted_transient"><span class="hook-func">do_action</span>( ‘setted_transient’, <nobr><span class="arg-type">string</span> <span class="arg-name">$transient</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$expiration</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the value for a transient has been set.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/set_transient_transient"><span class="hook-func">do_action</span>( “set_transient_{$transient}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$expiration</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$transient</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the value for a specific transient has been set.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/set_transient" class="_attribution-link">https://developer.wordpress.org/reference/functions/set_transient</a>
+  </p>
+</div>

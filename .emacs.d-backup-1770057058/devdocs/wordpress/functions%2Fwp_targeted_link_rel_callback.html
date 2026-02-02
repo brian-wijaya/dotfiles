@@ -1,0 +1,80 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_targeted_link_rel_callback( <span class="arg-type">array</span> <span class="arg-name">$matches</span> ): <span class="return-type">string</span>
+</h1> <section><p>Callback to add <code>rel="noopener"</code> string to HTML A element.</p> </section> <section><h2 id="description">Description</h2> <p>Will not duplicate an existing ‘noopener’ value to avoid invalidating the HTML.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$matches</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Single match.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> HTML A Element with <code>rel="noopener"</code> in addition to any existing values.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3348" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_targeted_link_rel_callback( $matches ) {
+	_deprecated_function( __FUNCTION__, '6.7.0' );
+
+	$link_html          = $matches[1];
+	$original_link_html = $link_html;
+
+	// Consider the HTML escaped if there are no unescaped quotes.
+	$is_escaped = ! preg_match( '/(^|[^\\\\])[\'"]/', $link_html );
+	if ( $is_escaped ) {
+		// Replace only the quotes so that they are parsable by wp_kses_hair(), leave the rest as is.
+		$link_html = preg_replace( '/\\\\([\'"])/', '$1', $link_html );
+	}
+
+	$atts = wp_kses_hair( $link_html, wp_allowed_protocols() );
+
+	/**
+	 * Filters the rel values that are added to links with `target` attribute.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param string $rel       The rel values.
+	 * @param string $link_html The matched content of the link tag including all HTML attributes.
+	 */
+	$rel = apply_filters( 'wp_targeted_link_rel', 'noopener', $link_html );
+
+	// Return early if no rel values to be added or if no actual target attribute.
+	if ( ! $rel || ! isset( $atts['target'] ) ) {
+		return "&lt;a $original_link_html&gt;";
+	}
+
+	if ( isset( $atts['rel'] ) ) {
+		$all_parts = preg_split( '/\s/', "{$atts['rel']['value']} $rel", -1, PREG_SPLIT_NO_EMPTY );
+		$rel       = implode( ' ', array_unique( $all_parts ) );
+	}
+
+	$atts['rel']['whole'] = 'rel="' . esc_attr( $rel ) . '"';
+	$link_html            = implode( ' ', array_column( $atts, 'whole' ) );
+
+	if ( $is_escaped ) {
+		$link_html = preg_replace( '/[\'"]/', '\\\\$0', $link_html );
+	}
+
+	return "&lt;a $link_html&gt;";
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/formatting.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/formatting.php#L3348">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/formatting.php#L3348-L3391">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_targeted_link_rel"><span class="hook-func">apply_filters</span>( ‘wp_targeted_link_rel’, <nobr><span class="arg-type">string</span> <span class="arg-name">$rel</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$link_html</span></nobr> )</a></dt>
+<dd>
+<p>Filters the rel values that are added to links with <code>target</code> attribute.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.7.0/">6.7.0</a></td>
+<td>This function has been deprecated.</td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td><span class="since-description">Removed <code>'noreferrer'</code> relationship.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_targeted_link_rel_callback" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_targeted_link_rel_callback</a>
+  </p>
+</div>

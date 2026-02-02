@@ -1,0 +1,99 @@
+<h1 class="wp-block-wporg-code-reference-title">Language_Pack_Upgrader::clear_destination( <span class="arg-type">string</span> <span class="arg-name">$remote_destination</span> ): <span class="return-type">bool|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Clears existing translations where this item is going to be installed into.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$remote_destination</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The location on the remote filesystem to be cleared.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../wp_error" rel="class">WP_Error</a></span> True upon success, <a href="../wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="410" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function clear_destination( $remote_destination ) {
+	global $wp_filesystem;
+
+	$language_update    = $this-&gt;skin-&gt;language_update;
+	$language_directory = WP_LANG_DIR . '/'; // Local path for use with glob().
+
+	if ( 'core' === $language_update-&gt;type ) {
+		$files = array(
+			$remote_destination . $language_update-&gt;language . '.po',
+			$remote_destination . $language_update-&gt;language . '.mo',
+			$remote_destination . $language_update-&gt;language . '.l10n.php',
+			$remote_destination . 'admin-' . $language_update-&gt;language . '.po',
+			$remote_destination . 'admin-' . $language_update-&gt;language . '.mo',
+			$remote_destination . 'admin-' . $language_update-&gt;language . '.l10n.php',
+			$remote_destination . 'admin-network-' . $language_update-&gt;language . '.po',
+			$remote_destination . 'admin-network-' . $language_update-&gt;language . '.mo',
+			$remote_destination . 'admin-network-' . $language_update-&gt;language . '.l10n.php',
+			$remote_destination . 'continents-cities-' . $language_update-&gt;language . '.po',
+			$remote_destination . 'continents-cities-' . $language_update-&gt;language . '.mo',
+			$remote_destination . 'continents-cities-' . $language_update-&gt;language . '.l10n.php',
+		);
+
+		$json_translation_files = glob( $language_directory . $language_update-&gt;language . '-*.json' );
+		if ( $json_translation_files ) {
+			foreach ( $json_translation_files as $json_translation_file ) {
+				$files[] = str_replace( $language_directory, $remote_destination, $json_translation_file );
+			}
+		}
+	} else {
+		$files = array(
+			$remote_destination . $language_update-&gt;slug . '-' . $language_update-&gt;language . '.po',
+			$remote_destination . $language_update-&gt;slug . '-' . $language_update-&gt;language . '.mo',
+			$remote_destination . $language_update-&gt;slug . '-' . $language_update-&gt;language . '.l10n.php',
+		);
+
+		$language_directory     = $language_directory . $language_update-&gt;type . 's/';
+		$json_translation_files = glob( $language_directory . $language_update-&gt;slug . '-' . $language_update-&gt;language . '-*.json' );
+		if ( $json_translation_files ) {
+			foreach ( $json_translation_files as $json_translation_file ) {
+				$files[] = str_replace( $language_directory, $remote_destination, $json_translation_file );
+			}
+		}
+	}
+
+	$files = array_filter( $files, array( $wp_filesystem, 'exists' ) );
+
+	// No files to delete.
+	if ( ! $files ) {
+		return true;
+	}
+
+	// Check all files are writable before attempting to clear the destination.
+	$unwritable_files = array();
+
+	// Check writability.
+	foreach ( $files as $file ) {
+		if ( ! $wp_filesystem-&gt;is_writable( $file ) ) {
+			// Attempt to alter permissions to allow writes and try again.
+			$wp_filesystem-&gt;chmod( $file, FS_CHMOD_FILE );
+			if ( ! $wp_filesystem-&gt;is_writable( $file ) ) {
+				$unwritable_files[] = $file;
+			}
+		}
+	}
+
+	if ( ! empty( $unwritable_files ) ) {
+		return new WP_Error( 'files_not_writable', $this-&gt;strings['files_not_writable'], implode( ', ', $unwritable_files ) );
+	}
+
+	foreach ( $files as $file ) {
+		if ( ! $wp_filesystem-&gt;delete( $file ) ) {
+			return new WP_Error( 'remove_old_failed', $this-&gt;strings['remove_old_failed'] );
+		}
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-language-pack-upgrader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-language-pack-upgrader.php#L410">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-language-pack-upgrader.php#L410-L486">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/language_pack_upgrader/clear_destination" class="_attribution-link">https://developer.wordpress.org/reference/classes/language_pack_upgrader/clear_destination</a>
+  </p>
+</div>

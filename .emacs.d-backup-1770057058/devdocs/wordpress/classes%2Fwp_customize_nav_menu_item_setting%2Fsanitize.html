@@ -1,0 +1,113 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Nav_Menu_Item_Setting::sanitize( <span class="arg-type">array</span> <span class="arg-name">$value</span> ): <span class="return-type">array|false|null|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Sanitize an input.</p> </section> <section><h2 id="description">Description</h2> <p>Note that parent::sanitize() erroneously does <a href="../../functions/wp_unslash" rel="function">wp_unslash()</a> on $value, but we remove that in this override.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$value</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The menu item value to sanitize.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false|null|<a href="../wp_error" rel="class">WP_Error</a></span> Null or <a href="../wp_error" rel="class">WP_Error</a> if an input isn’t valid. False if it is marked for deletion.<br> Otherwise the sanitized value.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="661" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function sanitize( $value ) {
+	// Restores the more descriptive, specific name for use within this method.
+	$menu_item_value = $value;
+
+	// Menu is marked for deletion.
+	if ( false === $menu_item_value ) {
+		return $menu_item_value;
+	}
+
+	// Invalid.
+	if ( ! is_array( $menu_item_value ) ) {
+		return null;
+	}
+
+	$default                     = array(
+		'object_id'        =&gt; 0,
+		'object'           =&gt; '',
+		'menu_item_parent' =&gt; 0,
+		'position'         =&gt; 0,
+		'type'             =&gt; 'custom',
+		'title'            =&gt; '',
+		'url'              =&gt; '',
+		'target'           =&gt; '',
+		'attr_title'       =&gt; '',
+		'description'      =&gt; '',
+		'classes'          =&gt; '',
+		'xfn'              =&gt; '',
+		'status'           =&gt; 'publish',
+		'original_title'   =&gt; '',
+		'nav_menu_term_id' =&gt; 0,
+		'_invalid'         =&gt; false,
+	);
+	$menu_item_value             = array_merge( $default, $menu_item_value );
+	$menu_item_value             = wp_array_slice_assoc( $menu_item_value, array_keys( $default ) );
+	$menu_item_value['position'] = (int) $menu_item_value['position'];
+
+	foreach ( array( 'object_id', 'menu_item_parent', 'nav_menu_term_id' ) as $key ) {
+		// Note we need to allow negative-integer IDs for previewed objects not inserted yet.
+		$menu_item_value[ $key ] = (int) $menu_item_value[ $key ];
+	}
+
+	foreach ( array( 'type', 'object', 'target' ) as $key ) {
+		$menu_item_value[ $key ] = sanitize_key( $menu_item_value[ $key ] );
+	}
+
+	foreach ( array( 'xfn', 'classes' ) as $key ) {
+		$value = $menu_item_value[ $key ];
+		if ( ! is_array( $value ) ) {
+			$value = explode( ' ', $value );
+		}
+		$menu_item_value[ $key ] = implode( ' ', array_map( 'sanitize_html_class', $value ) );
+	}
+
+	$menu_item_value['original_title'] = sanitize_text_field( $menu_item_value['original_title'] );
+
+	// Apply the same filters as when calling wp_insert_post().
+
+	/** This filter is documented in wp-includes/post.php */
+	$menu_item_value['title'] = wp_unslash( apply_filters( 'title_save_pre', wp_slash( $menu_item_value['title'] ) ) );
+
+	/** This filter is documented in wp-includes/post.php */
+	$menu_item_value['attr_title'] = wp_unslash( apply_filters( 'excerpt_save_pre', wp_slash( $menu_item_value['attr_title'] ) ) );
+
+	/** This filter is documented in wp-includes/post.php */
+	$menu_item_value['description'] = wp_unslash( apply_filters( 'content_save_pre', wp_slash( $menu_item_value['description'] ) ) );
+
+	if ( '' !== $menu_item_value['url'] ) {
+		$menu_item_value['url'] = sanitize_url( $menu_item_value['url'] );
+		if ( '' === $menu_item_value['url'] ) {
+			return new WP_Error( 'invalid_url', __( 'Invalid URL.' ) ); // Fail sanitization if URL is invalid.
+		}
+	}
+	if ( 'publish' !== $menu_item_value['status'] ) {
+		$menu_item_value['status'] = 'draft';
+	}
+
+	$menu_item_value['_invalid'] = (bool) $menu_item_value['_invalid'];
+
+	/** This filter is documented in wp-includes/class-wp-customize-setting.php */
+	return apply_filters( "customize_sanitize_{$this-&gt;id}", $menu_item_value, $this );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/customize/class-wp-customize-nav-menu-item-setting.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/customize/class-wp-customize-nav-menu-item-setting.php#L661">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/customize/class-wp-customize-nav-menu-item-setting.php#L661-L741">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/customize_sanitize_this-id"><span class="hook-func">apply_filters</span>( “customize_sanitize_{$this-&gt;id}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">WP_Customize_Setting</span> <span class="arg-name">$setting</span></nobr> )</a></dt>
+<dd>
+<p>Filters a Customize setting value in un-slashed form.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Renamed <code>$menu_item_value</code> to <code>$value</code> for PHP 8 named parameter support.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.3.0/">4.3.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_nav_menu_item_setting/sanitize" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_nav_menu_item_setting/sanitize</a>
+  </p>
+</div>

@@ -1,0 +1,106 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Posts_List_Table::_page_rows( <span class="arg-type">array</span> <span class="arg-name">$children_pages</span>, <span class="arg-type">int</span> <span class="arg-name">$count</span>, <span class="arg-type">int</span> <span class="arg-name">$parent_page</span>, <span class="arg-type">int</span> <span class="arg-name">$level</span>, <span class="arg-type">int</span> <span class="arg-name">$pagenum</span>, <span class="arg-type">int</span> <span class="arg-name">$per_page</span>, <span class="arg-type">array</span> <span class="arg-name">$to_display</span> )</h1> <section><p>Displays the nested hierarchy of sub-pages together with paging support, based on a top level page ID.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$children_pages</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$count</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$parent_page</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$level</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$pagenum</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$per_page</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$to_display</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">List of pages to be displayed. Passed by reference.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="960" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function _page_rows( &amp;$children_pages, &amp;$count, $parent_page, $level, $pagenum, $per_page, &amp;$to_display ) {
+	if ( ! isset( $children_pages[ $parent_page ] ) ) {
+		return;
+	}
+
+	$start = ( $pagenum - 1 ) * $per_page;
+	$end   = $start + $per_page;
+
+	foreach ( $children_pages[ $parent_page ] as $page ) {
+		if ( $count &gt;= $end ) {
+			break;
+		}
+
+		// If the page starts in a subtree, print the parents.
+		if ( $count === $start &amp;&amp; $page-&gt;post_parent &gt; 0 ) {
+			$my_parents = array();
+			$my_parent  = $page-&gt;post_parent;
+
+			while ( $my_parent ) {
+				// Get the ID from the list or the attribute if my_parent is an object.
+				$parent_id = $my_parent;
+
+				if ( is_object( $my_parent ) ) {
+					$parent_id = $my_parent-&gt;ID;
+				}
+
+				$my_parent    = get_post( $parent_id );
+				$my_parents[] = $my_parent;
+
+				if ( ! $my_parent-&gt;post_parent ) {
+					break;
+				}
+
+				$my_parent = $my_parent-&gt;post_parent;
+			}
+
+			$num_parents = count( $my_parents );
+
+			while ( $my_parent = array_pop( $my_parents ) ) {
+				$to_display[ $my_parent-&gt;ID ] = $level - $num_parents;
+				--$num_parents;
+			}
+		}
+
+		if ( $count &gt;= $start ) {
+			$to_display[ $page-&gt;ID ] = $level;
+		}
+
+		++$count;
+
+		$this-&gt;_page_rows( $children_pages, $count, $page-&gt;ID, $level + 1, $pagenum, $per_page, $to_display );
+	}
+
+	unset( $children_pages[ $parent_page ] ); // Required in order to keep track of orphans.
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-posts-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-posts-list-table.php#L960">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-posts-list-table.php#L960-L1014">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td><span class="since-description">Added the <code>$to_display</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_posts_list_table/_page_rows" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_posts_list_table/_page_rows</a>
+  </p>
+</div>

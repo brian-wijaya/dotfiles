@@ -1,0 +1,273 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_list_comments( <span class="arg-type">string|array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span>, <span class="arg-type">WP_Comment[]</span> <span class="arg-name">$comments</span> = <span class="arg-default">null</span> ): <span class="return-type">void|string</span>
+</h1> <section><p>Displays a list of comments.</p> </section> <section><h2 id="description">Description</h2> <p>Used in the comments.php template to list comments for a particular post.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li>WP_Query::$comments</li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="string">string</span>|<span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Formatting options.<br> <ul class="param-hash">
+<li>
+<code>walker</code> <span class="type">object</span><div class="desc">Instance of a <a href="../classes/walker" rel="class">Walker</a> class to list comments. Default null.</div>
+</li> <li>
+<code>max_depth</code> <span class="type">int</span><div class="desc">The maximum comments depth. </div>
+</li> <li>
+<code>style</code> <span class="type">string</span><div class="desc">The style of list ordering. Accepts <code>'ul'</code>, <code>'ol'</code>, or <code>'div'</code>.<br> <code>'div'</code> will result in no additional list markup. Default <code>'ul'</code>.</div>
+</li> <li>
+<code>callback</code> <span class="type">callable</span><div class="desc">Callback function to use. Default null.</div>
+</li> <li>
+<code>end-callback</code> <span class="type">callable</span><div class="desc">Callback function to use at the end. Default null.</div>
+</li> <li>
+<code>type</code> <span class="type">string</span><div class="desc">Type of comments to list. Accepts <code>'all'</code>, <code>'comment'</code>, <code>'pingback'</code>, <code>'trackback'</code>, <code>'pings'</code>. Default <code>'all'</code>.</div>
+</li> <li>
+<code>page</code> <span class="type">int</span><div class="desc">Page ID to list comments for. </div>
+</li> <li>
+<code>per_page</code> <span class="type">int</span><div class="desc">Number of comments to list per page. </div>
+</li> <li>
+<code>avatar_size</code> <span class="type">int</span><div class="desc">Height and width dimensions of the avatar size. Default 32.</div>
+</li> <li>
+<code>reverse_top_level</code> <span class="type">bool</span><div class="desc">Ordering of the listed comments. If true, will display newest comments first. Default null.</div>
+</li> <li>
+<code>reverse_children</code> <span class="type">bool</span><div class="desc">Whether to reverse child comments in the list. Default null.</div>
+</li> <li>
+<code>format</code> <span class="type">string</span><div class="desc">How to format the comments list. Accepts <code>'html5'</code>, <code>'xhtml'</code>.<br> Default <code>'html5'</code> if the theme supports it.</div>
+</li> <li>
+<code>short_ping</code> <span class="type">bool</span><div class="desc">Whether to output short pings. Default false.</div>
+</li> <li>
+<code>echo</code> <span class="type">bool</span><div class="desc">Whether to echo the output or return it. Default true.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$comments</code><span class="type"><span class="WP_Comment[]"><a href="../classes/wp_comment" rel="class">WP_Comment</a>[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of <a href="../classes/wp_comment" rel="class">WP_Comment</a> objects. </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">void|string</span> Void if <code>'echo'</code> argument is true, or no comments to list.<br> Otherwise, HTML list of comments.</section> <section><h2 id="more-information">More Information</h2> <p>Default options for $args</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php line-numbers">$args = array(
+'walker'            =&gt; null,
+'max_depth'         =&gt; '',
+'style'             =&gt; 'ul',
+'callback'          =&gt; null,
+'end-callback'      =&gt; null,
+'type'              =&gt; 'all',
+'page'              =&gt; '',
+'per_page'          =&gt; '',
+'avatar_size'       =&gt; 32,
+'reverse_top_level' =&gt; null,
+'reverse_children'  =&gt; '',
+'format'            =&gt; 'html5', // or 'xhtml' if no 'HTML5' theme support
+'short_ping'        =&gt; false,   // @since 3.6
+'echo'              =&gt; true     // boolean, default is true
+);</code></pre> <p>The ‘<code>max_depth</code>‘, ‘<code>per_page</code>‘, and ‘<code>reverse_top_level</code>‘ parameters can be more easily controlled through the <a href="https://wordpress.org/support/article/settings-discussion-screen/">Discussion Settings</a> Administration Panel but a theme can override those settings.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2234" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_list_comments( $args = array(), $comments = null ) {
+	global $wp_query, $comment_alt, $comment_depth, $comment_thread_alt, $overridden_cpage, $in_comment_loop;
+
+	$in_comment_loop = true;
+
+	$comment_alt        = 0;
+	$comment_thread_alt = 0;
+	$comment_depth      = 1;
+
+	$defaults = array(
+		'walker'            =&gt; null,
+		'max_depth'         =&gt; '',
+		'style'             =&gt; 'ul',
+		'callback'          =&gt; null,
+		'end-callback'      =&gt; null,
+		'type'              =&gt; 'all',
+		'page'              =&gt; '',
+		'per_page'          =&gt; '',
+		'avatar_size'       =&gt; 32,
+		'reverse_top_level' =&gt; null,
+		'reverse_children'  =&gt; '',
+		'format'            =&gt; current_theme_supports( 'html5', 'comment-list' ) ? 'html5' : 'xhtml',
+		'short_ping'        =&gt; false,
+		'echo'              =&gt; true,
+	);
+
+	$parsed_args = wp_parse_args( $args, $defaults );
+
+	/**
+	 * Filters the arguments used in retrieving the comment list.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @see wp_list_comments()
+	 *
+	 * @param array $parsed_args An array of arguments for displaying comments.
+	 */
+	$parsed_args = apply_filters( 'wp_list_comments_args', $parsed_args );
+
+	// Figure out what comments we'll be looping through ($_comments).
+	if ( null !== $comments ) {
+		$comments = (array) $comments;
+		if ( empty( $comments ) ) {
+			return;
+		}
+		if ( 'all' !== $parsed_args['type'] ) {
+			$comments_by_type = separate_comments( $comments );
+			if ( empty( $comments_by_type[ $parsed_args['type'] ] ) ) {
+				return;
+			}
+			$_comments = $comments_by_type[ $parsed_args['type'] ];
+		} else {
+			$_comments = $comments;
+		}
+	} else {
+		/*
+		 * If 'page' or 'per_page' has been passed, and does not match what's in $wp_query,
+		 * perform a separate comment query and allow Walker_Comment to paginate.
+		 */
+		if ( $parsed_args['page'] || $parsed_args['per_page'] ) {
+			$current_cpage = (int) get_query_var( 'cpage' );
+			if ( ! $current_cpage ) {
+				$current_cpage = 'newest' === get_option( 'default_comments_page' ) ? 1 : $wp_query-&gt;max_num_comment_pages;
+			}
+
+			$current_per_page = (int) get_query_var( 'comments_per_page' );
+			if ( (int) $parsed_args['page'] !== $current_cpage || (int) $parsed_args['per_page'] !== $current_per_page ) {
+				$comment_args = array(
+					'post_id' =&gt; get_the_ID(),
+					'orderby' =&gt; 'comment_date_gmt',
+					'order'   =&gt; 'ASC',
+					'status'  =&gt; 'approve',
+				);
+
+				if ( is_user_logged_in() ) {
+					$comment_args['include_unapproved'] = array( get_current_user_id() );
+				} else {
+					$unapproved_email = wp_get_unapproved_comment_author_email();
+
+					if ( $unapproved_email ) {
+						$comment_args['include_unapproved'] = array( $unapproved_email );
+					}
+				}
+
+				$comments = get_comments( $comment_args );
+
+				if ( 'all' !== $parsed_args['type'] ) {
+					$comments_by_type = separate_comments( $comments );
+					if ( empty( $comments_by_type[ $parsed_args['type'] ] ) ) {
+						return;
+					}
+
+					$_comments = $comments_by_type[ $parsed_args['type'] ];
+				} else {
+					$_comments = $comments;
+				}
+			}
+
+			// Otherwise, fall back on the comments from `$wp_query-&gt;comments`.
+		} else {
+			if ( empty( $wp_query-&gt;comments ) ) {
+				return;
+			}
+			if ( 'all' !== $parsed_args['type'] ) {
+				if ( empty( $wp_query-&gt;comments_by_type ) ) {
+					$wp_query-&gt;comments_by_type = separate_comments( $wp_query-&gt;comments );
+				}
+				if ( empty( $wp_query-&gt;comments_by_type[ $parsed_args['type'] ] ) ) {
+					return;
+				}
+				$_comments = $wp_query-&gt;comments_by_type[ $parsed_args['type'] ];
+			} else {
+				$_comments = $wp_query-&gt;comments;
+			}
+
+			if ( $wp_query-&gt;max_num_comment_pages ) {
+				$default_comments_page = get_option( 'default_comments_page' );
+				$cpage                 = (int) get_query_var( 'cpage' );
+
+				if ( 'newest' === $default_comments_page ) {
+					$parsed_args['cpage'] = $cpage;
+				} elseif ( 1 === $cpage ) {
+					/*
+					 * When the first page shows the oldest comments,
+					 * post permalink is the same as the comment permalink.
+					 */
+					$parsed_args['cpage'] = '';
+				} else {
+					$parsed_args['cpage'] = $cpage;
+				}
+
+				$parsed_args['page']     = 0;
+				$parsed_args['per_page'] = 0;
+			}
+		}
+	}
+
+	if ( '' === $parsed_args['per_page'] &amp;&amp; get_option( 'page_comments' ) ) {
+		$parsed_args['per_page'] = get_query_var( 'comments_per_page' );
+	}
+
+	if ( empty( $parsed_args['per_page'] ) ) {
+		$parsed_args['per_page'] = 0;
+		$parsed_args['page']     = 0;
+	}
+
+	if ( '' === $parsed_args['max_depth'] ) {
+		if ( get_option( 'thread_comments' ) ) {
+			$parsed_args['max_depth'] = get_option( 'thread_comments_depth' );
+		} else {
+			$parsed_args['max_depth'] = -1;
+		}
+	}
+
+	if ( '' === $parsed_args['page'] ) {
+		if ( empty( $overridden_cpage ) ) {
+			$parsed_args['page'] = get_query_var( 'cpage' );
+		} else {
+			$threaded            = ( -1 !== (int) $parsed_args['max_depth'] );
+			$parsed_args['page'] = ( 'newest' === get_option( 'default_comments_page' ) ) ? get_comment_pages_count( $_comments, $parsed_args['per_page'], $threaded ) : 1;
+			set_query_var( 'cpage', $parsed_args['page'] );
+		}
+	}
+
+	// Validation check.
+	$parsed_args['page']     = (int) $parsed_args['page'];
+	$parsed_args['per_page'] = (int) $parsed_args['per_page'];
+	if ( 0 === $parsed_args['page'] &amp;&amp; 0 !== $parsed_args['per_page'] ) {
+		$parsed_args['page'] = 1;
+	}
+
+	if ( null === $parsed_args['reverse_top_level'] ) {
+		$parsed_args['reverse_top_level'] = ( 'desc' === get_option( 'comment_order' ) );
+	}
+
+	if ( empty( $parsed_args['walker'] ) ) {
+		$walker = new Walker_Comment();
+	} else {
+		$walker = $parsed_args['walker'];
+	}
+
+	$output = $walker-&gt;paged_walk( $_comments, $parsed_args['max_depth'], $parsed_args['page'], $parsed_args['per_page'], $parsed_args );
+
+	$in_comment_loop = false;
+
+	if ( $parsed_args['echo'] ) {
+		echo $output;
+	} else {
+		return $output;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment-template.php#L2234">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment-template.php#L2234-L2424">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_list_comments_args"><span class="hook-func">apply_filters</span>( ‘wp_list_comments_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$parsed_args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the arguments used in retrieving the comment list.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_list_comments" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_list_comments</a>
+  </p>
+</div>

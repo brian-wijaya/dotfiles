@@ -1,0 +1,182 @@
+<h1 class="wp-block-wporg-code-reference-title">Language_Pack_Upgrader::bulk_upgrade( <span class="arg-type">object[]</span> <span class="arg-name">$language_updates</span> = <span class="arg-default">array()</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">array|bool|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Upgrades several language packs at once.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$language_updates</code><span class="type"><span class="object[]">object[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of language packs to update. See <a href="../../functions/wp_get_translation_updates">wp_get_translation_updates()</a>.<br> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Other arguments for upgrading multiple language packs. <br> <ul class="param-hash">
+<li>
+<code>clear_update_cache</code> <span class="type">bool</span><div class="desc">Whether to clear the update cache when done.<br> Default true.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|bool|<a href="../wp_error" rel="class">WP_Error</a></span> Will return an array of results, or true if there are no updates, false or <a href="../wp_error" rel="class">WP_Error</a> for initial errors.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="167" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function bulk_upgrade( $language_updates = array(), $args = array() ) {
+	global $wp_filesystem;
+
+	$defaults    = array(
+		'clear_update_cache' =&gt; true,
+	);
+	$parsed_args = wp_parse_args( $args, $defaults );
+
+	$this-&gt;init();
+	$this-&gt;upgrade_strings();
+
+	if ( ! $language_updates ) {
+		$language_updates = wp_get_translation_updates();
+	}
+
+	if ( empty( $language_updates ) ) {
+		$this-&gt;skin-&gt;header();
+		$this-&gt;skin-&gt;set_result( true );
+		$this-&gt;skin-&gt;feedback( 'up_to_date' );
+		$this-&gt;skin-&gt;bulk_footer();
+		$this-&gt;skin-&gt;footer();
+		return true;
+	}
+
+	if ( 'upgrader_process_complete' === current_filter() ) {
+		$this-&gt;skin-&gt;feedback( 'starting_upgrade' );
+	}
+
+	// Remove any existing upgrade filters from the plugin/theme upgraders #WP29425 &amp; #WP29230.
+	remove_all_filters( 'upgrader_pre_install' );
+	remove_all_filters( 'upgrader_clear_destination' );
+	remove_all_filters( 'upgrader_post_install' );
+	remove_all_filters( 'upgrader_source_selection' );
+
+	add_filter( 'upgrader_source_selection', array( $this, 'check_package' ), 10, 2 );
+
+	$this-&gt;skin-&gt;header();
+
+	// Connect to the filesystem first.
+	$res = $this-&gt;fs_connect( array( WP_CONTENT_DIR, WP_LANG_DIR ) );
+	if ( ! $res ) {
+		$this-&gt;skin-&gt;footer();
+		return false;
+	}
+
+	$results = array();
+
+	$this-&gt;update_count   = count( $language_updates );
+	$this-&gt;update_current = 0;
+
+	/*
+	 * The filesystem's mkdir() is not recursive. Make sure WP_LANG_DIR exists,
+	 * as we then may need to create a /plugins or /themes directory inside of it.
+	 */
+	$remote_destination = $wp_filesystem-&gt;find_folder( WP_LANG_DIR );
+	if ( ! $wp_filesystem-&gt;exists( $remote_destination ) ) {
+		if ( ! $wp_filesystem-&gt;mkdir( $remote_destination, FS_CHMOD_DIR ) ) {
+			return new WP_Error( 'mkdir_failed_lang_dir', $this-&gt;strings['mkdir_failed'], $remote_destination );
+		}
+	}
+
+	$language_updates_results = array();
+
+	foreach ( $language_updates as $language_update ) {
+
+		$this-&gt;skin-&gt;language_update = $language_update;
+
+		$destination = WP_LANG_DIR;
+		if ( 'plugin' === $language_update-&gt;type ) {
+			$destination .= '/plugins';
+		} elseif ( 'theme' === $language_update-&gt;type ) {
+			$destination .= '/themes';
+		}
+
+		++$this-&gt;update_current;
+
+		$options = array(
+			'package'                     =&gt; $language_update-&gt;package,
+			'destination'                 =&gt; $destination,
+			'clear_destination'           =&gt; true,
+			'abort_if_destination_exists' =&gt; false, // We expect the destination to exist.
+			'clear_working'               =&gt; true,
+			'is_multi'                    =&gt; true,
+			'hook_extra'                  =&gt; array(
+				'language_update_type' =&gt; $language_update-&gt;type,
+				'language_update'      =&gt; $language_update,
+			),
+		);
+
+		$result = $this-&gt;run( $options );
+
+		$results[] = $this-&gt;result;
+
+		// Prevent credentials auth screen from displaying multiple times.
+		if ( false === $result ) {
+			break;
+		}
+
+		$language_updates_results[] = array(
+			'language' =&gt; $language_update-&gt;language,
+			'type'     =&gt; $language_update-&gt;type,
+			'slug'     =&gt; isset( $language_update-&gt;slug ) ? $language_update-&gt;slug : 'default',
+			'version'  =&gt; $language_update-&gt;version,
+		);
+	}
+
+	// Remove upgrade hooks which are not required for translation updates.
+	remove_action( 'upgrader_process_complete', array( 'Language_Pack_Upgrader', 'async_upgrade' ), 20 );
+	remove_action( 'upgrader_process_complete', 'wp_version_check' );
+	remove_action( 'upgrader_process_complete', 'wp_update_plugins' );
+	remove_action( 'upgrader_process_complete', 'wp_update_themes' );
+
+	/** This action is documented in wp-admin/includes/class-wp-upgrader.php */
+	do_action(
+		'upgrader_process_complete',
+		$this,
+		array(
+			'action'       =&gt; 'update',
+			'type'         =&gt; 'translation',
+			'bulk'         =&gt; true,
+			'translations' =&gt; $language_updates_results,
+		)
+	);
+
+	// Re-add upgrade hooks.
+	add_action( 'upgrader_process_complete', array( 'Language_Pack_Upgrader', 'async_upgrade' ), 20 );
+	add_action( 'upgrader_process_complete', 'wp_version_check', 10, 0 );
+	add_action( 'upgrader_process_complete', 'wp_update_plugins', 10, 0 );
+	add_action( 'upgrader_process_complete', 'wp_update_themes', 10, 0 );
+
+	$this-&gt;skin-&gt;bulk_footer();
+
+	$this-&gt;skin-&gt;footer();
+
+	// Clean up our hooks, in case something else does an upgrade on this connection.
+	remove_filter( 'upgrader_source_selection', array( $this, 'check_package' ) );
+
+	if ( $parsed_args['clear_update_cache'] ) {
+		wp_clean_update_cache();
+	}
+
+	return $results;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-language-pack-upgrader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-language-pack-upgrader.php#L167">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-language-pack-upgrader.php#L167-L309">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/upgrader_process_complete"><span class="hook-func">do_action</span>( ‘upgrader_process_complete’, <nobr><span class="arg-type">WP_Upgrader</span> <span class="arg-name">$upgrader</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$hook_extra</span></nobr> )</a></dt>
+<dd>
+<p>Fires when the upgrader process is complete.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/language_pack_upgrader/bulk_upgrade" class="_attribution-link">https://developer.wordpress.org/reference/classes/language_pack_upgrader/bulk_upgrade</a>
+  </p>
+</div>

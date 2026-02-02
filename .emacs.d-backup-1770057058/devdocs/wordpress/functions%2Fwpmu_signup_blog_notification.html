@@ -1,0 +1,171 @@
+<h1 class="wp-block-wporg-code-reference-title">wpmu_signup_blog_notification( <span class="arg-type">string</span> <span class="arg-name">$domain</span>, <span class="arg-type">string</span> <span class="arg-name">$path</span>, <span class="arg-type">string</span> <span class="arg-name">$title</span>, <span class="arg-type">string</span> <span class="arg-name">$user_login</span>, <span class="arg-type">string</span> <span class="arg-name">$user_email</span>, <span class="arg-type">string</span> <span class="arg-name">$key</span>, <span class="arg-type">array</span> <span class="arg-name">$meta</span> = <span class="arg-default">array()</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Sends a confirmation request email to a user when they sign up for a new site. The new site will not become active until the confirmation link is clicked.</p> </section> <section><h2 id="description">Description</h2> <p>This is the notification function used when site registration is enabled.</p> <p>Filter <a href="../hooks/wpmu_signup_blog_notification">‘wpmu_signup_blog_notification’</a> to bypass this function or replace it with your own notification behavior.</p> <p>Filter <a href="../hooks/wpmu_signup_blog_notification_email">‘wpmu_signup_blog_notification_email’</a> and <a href="../hooks/wpmu_signup_blog_notification_subject">‘wpmu_signup_blog_notification_subject’</a> to change the content and subject line of the email sent to newly registered users.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$domain</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The new blog domain.</span></div></dd>
+<dt>
+<code>$path</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The new blog path.</span></div></dd>
+<dt>
+<code>$title</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The site title.</span></div></dd>
+<dt>
+<code>$user_login</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The user’s login name.</span></div></dd>
+<dt>
+<code>$user_email</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The user’s email address.</span></div></dd>
+<dt>
+<code>$key</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The activation key created in <a href="wpmu_signup_blog" rel="function">wpmu_signup_blog()</a> .</span></div></dd>
+<dt>
+<code>$meta</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Signup meta data. By default, contains the requested privacy setting and lang_id.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="925" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wpmu_signup_blog_notification( $domain, $path, $title, $user_login, $user_email, $key, $meta = array() ) {
+	/**
+	 * Filters whether to bypass the new site email notification.
+	 *
+	 * @since MU (3.0.0)
+	 *
+	 * @param string|false $domain     Site domain, or false to prevent the email from sending.
+	 * @param string       $path       Site path.
+	 * @param string       $title      Site title.
+	 * @param string       $user_login User login name.
+	 * @param string       $user_email User email address.
+	 * @param string       $key        Activation key created in wpmu_signup_blog().
+	 * @param array        $meta       Signup meta data. By default, contains the requested privacy setting and lang_id.
+	 */
+	if ( ! apply_filters( 'wpmu_signup_blog_notification', $domain, $path, $title, $user_login, $user_email, $key, $meta ) ) {
+		return false;
+	}
+
+	// Send email with activation link.
+	if ( ! is_subdomain_install() || get_current_network_id() != 1 ) {
+		$activate_url = network_site_url( "wp-activate.php?key=$key" );
+	} else {
+		$activate_url = "http://{$domain}{$path}wp-activate.php?key=$key"; // @todo Use *_url() API.
+	}
+
+	$activate_url = esc_url( $activate_url );
+
+	$admin_email = get_site_option( 'admin_email' );
+
+	if ( '' === $admin_email ) {
+		$admin_email = 'support@' . wp_parse_url( network_home_url(), PHP_URL_HOST );
+	}
+
+	$from_name       = ( '' !== get_site_option( 'site_name' ) ) ? esc_html( get_site_option( 'site_name' ) ) : 'WordPress';
+	$message_headers = "From: \"{$from_name}\" &lt;{$admin_email}&gt;\n" . 'Content-Type: text/plain; charset="' . get_option( 'blog_charset' ) . "\"\n";
+
+	$user            = get_user_by( 'login', $user_login );
+	$switched_locale = $user &amp;&amp; switch_to_user_locale( $user-&gt;ID );
+
+	$message = sprintf(
+		/**
+		 * Filters the message content of the new blog notification email.
+		 *
+		 * Content should be formatted for transmission via wp_mail().
+		 *
+		 * @since MU (3.0.0)
+		 *
+		 * @param string $content    Content of the notification email.
+		 * @param string $domain     Site domain.
+		 * @param string $path       Site path.
+		 * @param string $title      Site title.
+		 * @param string $user_login User login name.
+		 * @param string $user_email User email address.
+		 * @param string $key        Activation key created in wpmu_signup_blog().
+		 * @param array  $meta       Signup meta data. By default, contains the requested privacy setting and lang_id.
+		 */
+		apply_filters(
+			'wpmu_signup_blog_notification_email',
+			/* translators: New site notification email. 1: Activation URL, 2: New site URL. */
+			__( "To activate your site, please click the following link:\n\n%1\$s\n\nAfter you activate, you will receive *another email* with your login.\n\nAfter you activate, you can visit your site here:\n\n%2\$s" ),
+			$domain,
+			$path,
+			$title,
+			$user_login,
+			$user_email,
+			$key,
+			$meta
+		),
+		$activate_url,
+		esc_url( "http://{$domain}{$path}" ),
+		$key
+	);
+
+	$subject = sprintf(
+		/**
+		 * Filters the subject of the new blog notification email.
+		 *
+		 * @since MU (3.0.0)
+		 *
+		 * @param string $subject    Subject of the notification email.
+		 * @param string $domain     Site domain.
+		 * @param string $path       Site path.
+		 * @param string $title      Site title.
+		 * @param string $user_login User login name.
+		 * @param string $user_email User email address.
+		 * @param string $key        Activation key created in wpmu_signup_blog().
+		 * @param array  $meta       Signup meta data. By default, contains the requested privacy setting and lang_id.
+		 */
+		apply_filters(
+			'wpmu_signup_blog_notification_subject',
+			/* translators: New site notification email subject. 1: Network title, 2: New site URL. */
+			_x( '[%1$s] Activate %2$s', 'New site notification email subject' ),
+			$domain,
+			$path,
+			$title,
+			$user_login,
+			$user_email,
+			$key,
+			$meta
+		),
+		$from_name,
+		esc_url( 'http://' . $domain . $path )
+	);
+
+	wp_mail( $user_email, wp_specialchars_decode( $subject ), $message, $message_headers );
+
+	if ( $switched_locale ) {
+		restore_previous_locale();
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-functions.php#L925">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-functions.php#L925-L1036">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wpmu_signup_blog_notification"><span class="hook-func">apply_filters</span>( ‘wpmu_signup_blog_notification’, <nobr><span class="arg-type">string|false</span> <span class="arg-name">$domain</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$path</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$title</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user_login</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user_email</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$key</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$meta</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to bypass the new site email notification.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wpmu_signup_blog_notification_email"><span class="hook-func">apply_filters</span>( ‘wpmu_signup_blog_notification_email’, <nobr><span class="arg-type">string</span> <span class="arg-name">$content</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$domain</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$path</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$title</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user_login</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user_email</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$key</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$meta</span></nobr> )</a></dt>
+<dd>
+<p>Filters the message content of the new blog notification email.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wpmu_signup_blog_notification_subject"><span class="hook-func">apply_filters</span>( ‘wpmu_signup_blog_notification_subject’, <nobr><span class="arg-type">string</span> <span class="arg-name">$subject</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$domain</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$path</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$title</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user_login</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user_email</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$key</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$meta</span></nobr> )</a></dt>
+<dd>
+<p>Filters the subject of the new blog notification email.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wpmu_signup_blog_notification" class="_attribution-link">https://developer.wordpress.org/reference/functions/wpmu_signup_blog_notification</a>
+  </p>
+</div>

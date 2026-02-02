@@ -1,0 +1,77 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Attachments_Controller::update_item( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Updates a single attachment.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="399" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function update_item( $request ) {
+	if ( ! empty( $request['post'] ) &amp;&amp; in_array( get_post_type( $request['post'] ), array( 'revision', 'attachment' ), true ) ) {
+		return new WP_Error(
+			'rest_invalid_param',
+			__( 'Invalid parent type.' ),
+			array( 'status' =&gt; 400 )
+		);
+	}
+
+	$attachment_before = get_post( $request['id'] );
+	$response          = parent::update_item( $request );
+
+	if ( is_wp_error( $response ) ) {
+		return $response;
+	}
+
+	$response = rest_ensure_response( $response );
+	$data     = $response-&gt;get_data();
+
+	if ( isset( $request['alt_text'] ) ) {
+		update_post_meta( $data['id'], '_wp_attachment_image_alt', $request['alt_text'] );
+	}
+
+	$attachment = get_post( $request['id'] );
+
+	if ( ! empty( $schema['properties']['featured_media'] ) &amp;&amp; isset( $request['featured_media'] ) ) {
+		$thumbnail_update = $this-&gt;handle_featured_media( $request['featured_media'], $attachment-&gt;ID );
+
+		if ( is_wp_error( $thumbnail_update ) ) {
+			return $thumbnail_update;
+		}
+	}
+
+	$fields_update = $this-&gt;update_additional_fields_for_object( $attachment, $request );
+
+	if ( is_wp_error( $fields_update ) ) {
+		return $fields_update;
+	}
+
+	$request-&gt;set_param( 'context', 'edit' );
+
+	/** This action is documented in wp-includes/rest-api/endpoints/class-wp-rest-attachments-controller.php */
+	do_action( 'rest_after_insert_attachment', $attachment, $request, false );
+
+	wp_after_insert_post( $attachment, true, $attachment_before );
+
+	$response = $this-&gt;prepare_item_for_response( $attachment, $request );
+	$response = rest_ensure_response( $response );
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-attachments-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-attachments-controller.php#L399">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-attachments-controller.php#L399-L449">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_after_insert_attachment"><span class="hook-func">do_action</span>( ‘rest_after_insert_attachment’, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$attachment</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$creating</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a single attachment is completely created or updated via the REST API.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_attachments_controller/update_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_attachments_controller/update_item</a>
+  </p>
+</div>

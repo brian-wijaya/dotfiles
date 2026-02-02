@@ -1,0 +1,409 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_User_Search {}</h1> <section><p>WordPress User Search class.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_user_search/__construct">WP_User_Search::__construct</a></td>
+<td>PHP5 Constructor – Sets up the object properties.</td>
+</tr>
+<tr class="">
+<td><a href="wp_user_search/do_paging">WP_User_Search::do_paging</a></td>
+<td>Handles paging for the user search query.</td>
+</tr>
+<tr class="">
+<td><a href="wp_user_search/get_results">WP_User_Search::get_results</a></td>
+<td>Retrieves the user search query results.</td>
+</tr>
+<tr class="">
+<td><a href="wp_user_search/is_search">WP_User_Search::is_search</a></td>
+<td>Whether there are search terms.</td>
+</tr>
+<tr class="">
+<td><a href="wp_user_search/page_links">WP_User_Search::page_links</a></td>
+<td>Displaying paging text.</td>
+</tr>
+<tr class="">
+<td><a href="wp_user_search/prepare_query">WP_User_Search::prepare_query</a></td>
+<td>Prepares the user search query (legacy).</td>
+</tr>
+<tr class="">
+<td><a href="wp_user_search/prepare_vars_for_template_usage">WP_User_Search::prepare_vars_for_template_usage</a></td>
+<td>Prepares variables for use in templates.</td>
+</tr>
+<tr class="">
+<td><a href="wp_user_search/query">WP_User_Search::query</a></td>
+<td>Executes the user search query.</td>
+</tr>
+<tr class="">
+<td><a href="wp_user_search/results_are_paged">WP_User_Search::results_are_paged</a></td>
+<td>Whether paging is enabled.</td>
+</tr>
+<tr class="">
+<td><a href="wp_user_search/wp_user_search">WP_User_Search::WP_User_Search</a></td>
+<td>PHP4 Constructor – Sets up the object properties.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="339" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_User_Search {
+
+	/**
+	 * 
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var mixed
+	 */
+	var $results;
+
+	/**
+	 * 
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var string
+	 */
+	var $search_term;
+
+	/**
+	 * Page number.
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var int
+	 */
+	var $page;
+
+	/**
+	 * Role name that users have.
+	 *
+	 * @since 2.5.0
+	 * @access private
+	 * @var string
+	 */
+	var $role;
+
+	/**
+	 * Raw page number.
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var int|bool
+	 */
+	var $raw_page;
+
+	/**
+	 * Amount of users to display per page.
+	 *
+	 * @since 2.1.0
+	 * @access public
+	 * @var int
+	 */
+	var $users_per_page = 50;
+
+	/**
+	 * 
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var int
+	 */
+	var $first_user;
+
+	/**
+	 * 
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var int
+	 */
+	var $last_user;
+
+	/**
+	 * 
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var string
+	 */
+	var $query_limit;
+
+	/**
+	 * 
+	 *
+	 * @since 3.0.0
+	 * @access private
+	 * @var string
+	 */
+	var $query_orderby;
+
+	/**
+	 * 
+	 *
+	 * @since 3.0.0
+	 * @access private
+	 * @var string
+	 */
+	var $query_from;
+
+	/**
+	 * 
+	 *
+	 * @since 3.0.0
+	 * @access private
+	 * @var string
+	 */
+	var $query_where;
+
+	/**
+	 * 
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var int
+	 */
+	var $total_users_for_query = 0;
+
+	/**
+	 * 
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var bool
+	 */
+	var $too_many_total_users = false;
+
+	/**
+	 * 
+	 *
+	 * @since 2.1.0
+	 * @access private
+	 * @var WP_Error
+	 */
+	var $search_errors;
+
+	/**
+	 * 
+	 *
+	 * @since 2.7.0
+	 * @access private
+	 * @var string
+	 */
+	var $paging_text;
+
+	/**
+	 * PHP5 Constructor - Sets up the object properties.
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param string $search_term Search terms string.
+	 * @param int $page Optional. Page ID.
+	 * @param string $role Role name.
+	 * @return WP_User_Search
+	 */
+	function __construct( $search_term = '', $page = '', $role = '' ) {
+		_deprecated_class( 'WP_User_Search', '3.1.0', 'WP_User_Query' );
+
+		$this-&gt;search_term = wp_unslash( $search_term );
+		$this-&gt;raw_page = ( '' == $page ) ? false : (int) $page;
+		$this-&gt;page = ( '' == $page ) ? 1 : (int) $page;
+		$this-&gt;role = $role;
+
+		$this-&gt;prepare_query();
+		$this-&gt;query();
+		$this-&gt;do_paging();
+	}
+
+	/**
+	 * PHP4 Constructor - Sets up the object properties.
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param string $search_term Search terms string.
+	 * @param int $page Optional. Page ID.
+	 * @param string $role Role name.
+	 * @return WP_User_Search
+	 */
+	public function WP_User_Search( $search_term = '', $page = '', $role = '' ) {
+		_deprecated_constructor( 'WP_User_Search', '3.1.0', get_class( $this ) );
+		self::__construct( $search_term, $page, $role );
+	}
+
+	/**
+	 * Prepares the user search query (legacy).
+	 *
+	 * @since 2.1.0
+	 * @access public
+	 *
+	 * @global wpdb $wpdb WordPress database abstraction object.
+	 */
+	public function prepare_query() {
+		global $wpdb;
+		$this-&gt;first_user = ($this-&gt;page - 1) * $this-&gt;users_per_page;
+
+		$this-&gt;query_limit = $wpdb-&gt;prepare(" LIMIT %d, %d", $this-&gt;first_user, $this-&gt;users_per_page);
+		$this-&gt;query_orderby = ' ORDER BY user_login';
+
+		$search_sql = '';
+		if ( $this-&gt;search_term ) {
+			$searches = array();
+			$search_sql = 'AND (';
+			foreach ( array('user_login', 'user_nicename', 'user_email', 'user_url', 'display_name') as $col )
+				$searches[] = $wpdb-&gt;prepare( $col . ' LIKE %s', '%' . like_escape($this-&gt;search_term) . '%' );
+			$search_sql .= implode(' OR ', $searches);
+			$search_sql .= ')';
+		}
+
+		$this-&gt;query_from = " FROM $wpdb-&gt;users";
+		$this-&gt;query_where = " WHERE 1=1 $search_sql";
+
+		if ( $this-&gt;role ) {
+			$this-&gt;query_from .= " INNER JOIN $wpdb-&gt;usermeta ON $wpdb-&gt;users.ID = $wpdb-&gt;usermeta.user_id";
+			$this-&gt;query_where .= $wpdb-&gt;prepare(" AND $wpdb-&gt;usermeta.meta_key = '{$wpdb-&gt;prefix}capabilities' AND $wpdb-&gt;usermeta.meta_value LIKE %s", '%' . $this-&gt;role . '%');
+		} elseif ( is_multisite() ) {
+			$level_key = $wpdb-&gt;prefix . 'capabilities'; // WPMU site admins don't have user_levels.
+			$this-&gt;query_from .= ", $wpdb-&gt;usermeta";
+			$this-&gt;query_where .= " AND $wpdb-&gt;users.ID = $wpdb-&gt;usermeta.user_id AND meta_key = '{$level_key}'";
+		}
+
+		do_action_ref_array( 'pre_user_search', array( &amp;$this ) );
+	}
+
+	/**
+	 * Executes the user search query.
+	 *
+	 * @since 2.1.0
+	 * @access public
+	 *
+	 * @global wpdb $wpdb WordPress database abstraction object.
+	 */
+	public function query() {
+		global $wpdb;
+
+		$this-&gt;results = $wpdb-&gt;get_col("SELECT DISTINCT($wpdb-&gt;users.ID)" . $this-&gt;query_from . $this-&gt;query_where . $this-&gt;query_orderby . $this-&gt;query_limit);
+
+		if ( $this-&gt;results )
+			$this-&gt;total_users_for_query = $wpdb-&gt;get_var("SELECT COUNT(DISTINCT($wpdb-&gt;users.ID))" . $this-&gt;query_from . $this-&gt;query_where); // No limit.
+		else
+			$this-&gt;search_errors = new WP_Error('no_matching_users_found', __('No users found.'));
+	}
+
+	/**
+	 * Prepares variables for use in templates.
+	 *
+	 * @since 2.1.0
+	 * @access public
+	 */
+	function prepare_vars_for_template_usage() {}
+
+	/**
+	 * Handles paging for the user search query.
+	 *
+	 * @since 2.1.0
+	 * @access public
+	 */
+	public function do_paging() {
+		if ( $this-&gt;total_users_for_query &gt; $this-&gt;users_per_page ) { // Have to page the results.
+			$args = array();
+			if ( ! empty($this-&gt;search_term) )
+				$args['usersearch'] = urlencode($this-&gt;search_term);
+			if ( ! empty($this-&gt;role) )
+				$args['role'] = urlencode($this-&gt;role);
+
+			$this-&gt;paging_text = paginate_links( array(
+				'total' =&gt; ceil($this-&gt;total_users_for_query / $this-&gt;users_per_page),
+				'current' =&gt; $this-&gt;page,
+				'base' =&gt; 'users.php?%_%',
+				'format' =&gt; 'userspage=%#%',
+				'add_args' =&gt; $args
+			) );
+			if ( $this-&gt;paging_text ) {
+				$this-&gt;paging_text = sprintf(
+					/* translators: 1: Starting number of users on the current page, 2: Ending number of users, 3: Total number of users. */
+					'&lt;span class="displaying-num"&gt;' . __( 'Displaying %1$s&amp;#8211;%2$s of %3$s' ) . '&lt;/span&gt;%s',
+					number_format_i18n( ( $this-&gt;page - 1 ) * $this-&gt;users_per_page + 1 ),
+					number_format_i18n( min( $this-&gt;page * $this-&gt;users_per_page, $this-&gt;total_users_for_query ) ),
+					number_format_i18n( $this-&gt;total_users_for_query ),
+					$this-&gt;paging_text
+				);
+			}
+		}
+	}
+
+	/**
+	 * Retrieves the user search query results.
+	 *
+	 * @since 2.1.0
+	 * @access public
+	 *
+	 * @return array
+	 */
+	public function get_results() {
+		return (array) $this-&gt;results;
+	}
+
+	/**
+	 * Displaying paging text.
+	 *
+	 * @see do_paging() Builds paging text.
+	 *
+	 * @since 2.1.0
+	 * @access public
+	 */
+	function page_links() {
+		echo $this-&gt;paging_text;
+	}
+
+	/**
+	 * Whether paging is enabled.
+	 *
+	 * @see do_paging() Builds paging text.
+	 *
+	 * @since 2.1.0
+	 * @access public
+	 *
+	 * @return bool
+	 */
+	function results_are_paged() {
+		if ( $this-&gt;paging_text )
+			return true;
+		return false;
+	}
+
+	/**
+	 * Whether there are search terms.
+	 *
+	 * @since 2.1.0
+	 * @access public
+	 *
+	 * @return bool
+	 */
+	function is_search() {
+		if ( $this-&gt;search_term )
+			return true;
+		return false;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/deprecated.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/deprecated.php#L339">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/deprecated.php#L339-L677">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td><span class="since-description">Use <a href="wp_user_query" rel="class">WP_User_Query</a></span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_user_search" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_user_search</a>
+  </p>
+</div>

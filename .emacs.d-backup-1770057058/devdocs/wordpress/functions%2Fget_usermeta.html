@@ -1,0 +1,71 @@
+<h1 class="wp-block-wporg-code-reference-title">get_usermeta( <span class="arg-type">int</span> <span class="arg-name">$user_id</span>, <span class="arg-type">string</span> <span class="arg-name">$meta_key</span> = <span class="arg-default">”</span> ): <span class="return-type">mixed</span>
+</h1> <section><p>Retrieve user metadata.</p> </section> <section><h2 id="description">Description</h2> <p>If $user_id is not a number, then the function will fail over with a ‘false’ boolean return value. Other returned values depend on whether there is only one item to be returned, which be that single item type. If there is more than one metadata value, then it will be list of metadata values.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="get_user_meta">get_user_meta()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$user_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">User ID</span></div></dd>
+<dt>
+<code>$meta_key</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Metadata key. </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2277" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_usermeta( $user_id, $meta_key = '' ) {
+	_deprecated_function( __FUNCTION__, '3.0.0', 'get_user_meta()' );
+	global $wpdb;
+	$user_id = (int) $user_id;
+
+	if ( !$user_id )
+		return false;
+
+	if ( !empty($meta_key) ) {
+		$meta_key = preg_replace('|[^a-z0-9_]|i', '', $meta_key);
+		$user = wp_cache_get($user_id, 'users');
+		// Check the cached user object.
+		if ( false !== $user &amp;&amp; isset($user-&gt;$meta_key) )
+			$metas = array($user-&gt;$meta_key);
+		else
+			$metas = $wpdb-&gt;get_col( $wpdb-&gt;prepare("SELECT meta_value FROM $wpdb-&gt;usermeta WHERE user_id = %d AND meta_key = %s", $user_id, $meta_key) );
+	} else {
+		$metas = $wpdb-&gt;get_col( $wpdb-&gt;prepare("SELECT meta_value FROM $wpdb-&gt;usermeta WHERE user_id = %d", $user_id) );
+	}
+
+	if ( empty($metas) ) {
+		if ( empty($meta_key) )
+			return array();
+		else
+			return '';
+	}
+
+	$metas = array_map('maybe_unserialize', $metas);
+
+	if ( count($metas) === 1 )
+		return $metas[0];
+	else
+		return $metas;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/deprecated.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/deprecated.php#L2277">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/deprecated.php#L2277-L2310">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td><span class="since-description">Use <a href="get_user_meta" rel="function">get_user_meta()</a> </span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_usermeta" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_usermeta</a>
+  </p>
+</div>

@@ -1,0 +1,124 @@
+<h1 class="wp-block-wporg-code-reference-title">sanitize_file_name( <span class="arg-type">string</span> <span class="arg-name">$filename</span> ): <span class="return-type">string</span>
+</h1> <section><p>Sanitizes a filename, replacing whitespace with dashes.</p> </section> <section><h2 id="description">Description</h2> <p>Removes special characters that are illegal in filenames on certain operating systems and special characters requiring special escaping to manipulate at the command line. Replaces spaces and consecutive dashes with a single dash. Trims period, dash and underscore from beginning and end of filename. It is not guaranteed that this function will return a filename that is allowed to be uploaded.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$filename</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The filename to be sanitized.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The sanitized filename.</section> <section><h2 id="more-information">More Information</h2> <p>The special characters are passed through the <a href="../hooks/sanitize_file_name_chars">sanitize_file_name_chars</a> filter before removing them from the file name, allowing plugins to change which characters are considered invalid. After <code>sanitize_file_name()</code> has done its work, it passes the sanitized file name through the <a href="../hooks/sanitize_file_name">sanitize_file_name</a> filter.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2018" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function sanitize_file_name( $filename ) {
+	$filename_raw = $filename;
+	$filename     = remove_accents( $filename );
+
+	$special_chars = array( '?', '[', ']', '/', '\\', '=', '&lt;', '&gt;', ':', ';', ',', "'", '"', '&amp;', '$', '#', '*', '(', ')', '|', '~', '`', '!', '{', '}', '%', '+', '’', '«', '»', '”', '“', chr( 0 ) );
+
+	// Check for support for utf8 in the installed PCRE library once and store the result in a static.
+	static $utf8_pcre = null;
+	if ( ! isset( $utf8_pcre ) ) {
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$utf8_pcre = @preg_match( '/^./u', 'a' );
+	}
+
+	if ( ! seems_utf8( $filename ) ) {
+		$_ext     = pathinfo( $filename, PATHINFO_EXTENSION );
+		$_name    = pathinfo( $filename, PATHINFO_FILENAME );
+		$filename = sanitize_title_with_dashes( $_name ) . '.' . $_ext;
+	}
+
+	if ( $utf8_pcre ) {
+		$filename = preg_replace( "#\x{00a0}#siu", ' ', $filename );
+	}
+
+	/**
+	 * Filters the list of characters to remove from a filename.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param string[] $special_chars Array of characters to remove.
+	 * @param string   $filename_raw  The original filename to be sanitized.
+	 */
+	$special_chars = apply_filters( 'sanitize_file_name_chars', $special_chars, $filename_raw );
+
+	$filename = str_replace( $special_chars, '', $filename );
+	$filename = str_replace( array( '%20', '+' ), '-', $filename );
+	$filename = preg_replace( '/\.{2,}/', '.', $filename );
+	$filename = preg_replace( '/[\r\n\t -]+/', '-', $filename );
+	$filename = trim( $filename, '.-_' );
+
+	if ( ! str_contains( $filename, '.' ) ) {
+		$mime_types = wp_get_mime_types();
+		$filetype   = wp_check_filetype( 'test.' . $filename, $mime_types );
+		if ( $filetype['ext'] === $filename ) {
+			$filename = 'unnamed-file.' . $filetype['ext'];
+		}
+	}
+
+	// Split the filename into a base and extension[s].
+	$parts = explode( '.', $filename );
+
+	// Return if only one extension.
+	if ( count( $parts ) &lt;= 2 ) {
+		/** This filter is documented in wp-includes/formatting.php */
+		return apply_filters( 'sanitize_file_name', $filename, $filename_raw );
+	}
+
+	// Process multiple extensions.
+	$filename  = array_shift( $parts );
+	$extension = array_pop( $parts );
+	$mimes     = get_allowed_mime_types();
+
+	/*
+	 * Loop over any intermediate extensions. Postfix them with a trailing underscore
+	 * if they are a 2 - 5 character long alpha string not in the allowed extension list.
+	 */
+	foreach ( (array) $parts as $part ) {
+		$filename .= '.' . $part;
+
+		if ( preg_match( '/^[a-zA-Z]{2,5}\d?$/', $part ) ) {
+			$allowed = false;
+			foreach ( $mimes as $ext_preg =&gt; $mime_match ) {
+				$ext_preg = '!^(' . $ext_preg . ')$!i';
+				if ( preg_match( $ext_preg, $part ) ) {
+					$allowed = true;
+					break;
+				}
+			}
+			if ( ! $allowed ) {
+				$filename .= '_';
+			}
+		}
+	}
+
+	$filename .= '.' . $extension;
+
+	/**
+	 * Filters a sanitized filename string.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param string $filename     Sanitized filename.
+	 * @param string $filename_raw The filename prior to sanitization.
+	 */
+	return apply_filters( 'sanitize_file_name', $filename, $filename_raw );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/formatting.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/formatting.php#L2018">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/formatting.php#L2018-L2112">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/sanitize_file_name"><span class="hook-func">apply_filters</span>( ‘sanitize_file_name’, <nobr><span class="arg-type">string</span> <span class="arg-name">$filename</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$filename_raw</span></nobr> )</a></dt>
+<dd>
+<p>Filters a sanitized filename string.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/sanitize_file_name_chars"><span class="hook-func">apply_filters</span>( ‘sanitize_file_name_chars’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$special_chars</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$filename_raw</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of characters to remove from a filename.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/sanitize_file_name" class="_attribution-link">https://developer.wordpress.org/reference/functions/sanitize_file_name</a>
+  </p>
+</div>

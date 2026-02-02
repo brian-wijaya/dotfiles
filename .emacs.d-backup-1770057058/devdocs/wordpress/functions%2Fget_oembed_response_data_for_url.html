@@ -1,0 +1,96 @@
+<h1 class="wp-block-wporg-code-reference-title">get_oembed_response_data_for_url( <span class="arg-type">string</span> <span class="arg-name">$url</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> ): <span class="return-type">object|false</span>
+</h1> <section><p>Retrieves the oEmbed response data for a given URL.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The URL that should be inspected for discovery <code>&lt;link&gt;</code> tags.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">oEmbed remote get arguments.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">object|false</span> oEmbed response data if the URL does belong to the current site. False otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="622" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_oembed_response_data_for_url( $url, $args ) {
+	$switched_blog = false;
+
+	if ( is_multisite() ) {
+		$url_parts = wp_parse_args(
+			wp_parse_url( $url ),
+			array(
+				'host' =&gt; '',
+				'port' =&gt; null,
+				'path' =&gt; '/',
+			)
+		);
+
+		$qv = array(
+			'domain'                 =&gt; $url_parts['host'] . ( $url_parts['port'] ? ':' . $url_parts['port'] : '' ),
+			'path'                   =&gt; '/',
+			'update_site_meta_cache' =&gt; false,
+		);
+
+		// In case of subdirectory configs, set the path.
+		if ( ! is_subdomain_install() ) {
+			$path = explode( '/', ltrim( $url_parts['path'], '/' ) );
+			$path = reset( $path );
+
+			if ( $path ) {
+				$qv['path'] = get_network()-&gt;path . $path . '/';
+			}
+		}
+
+		$sites = get_sites( $qv );
+		$site  = reset( $sites );
+
+		// Do not allow embeds for deleted/archived/spam sites.
+		if ( ! empty( $site-&gt;deleted ) || ! empty( $site-&gt;spam ) || ! empty( $site-&gt;archived ) ) {
+			return false;
+		}
+
+		if ( $site &amp;&amp; get_current_blog_id() !== (int) $site-&gt;blog_id ) {
+			switch_to_blog( $site-&gt;blog_id );
+			$switched_blog = true;
+		}
+	}
+
+	$post_id = url_to_postid( $url );
+
+	/** This filter is documented in wp-includes/class-wp-oembed-controller.php */
+	$post_id = apply_filters( 'oembed_request_post_id', $post_id, $url );
+
+	if ( ! $post_id ) {
+		if ( $switched_blog ) {
+			restore_current_blog();
+		}
+
+		return false;
+	}
+
+	$width = isset( $args['width'] ) ? $args['width'] : 0;
+
+	$data = get_oembed_response_data( $post_id, $width );
+
+	if ( $switched_blog ) {
+		restore_current_blog();
+	}
+
+	return $data ? (object) $data : false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/embed.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/embed.php#L622">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/embed.php#L622-L687">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/oembed_request_post_id"><span class="hook-func">apply_filters</span>( ‘oembed_request_post_id’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters the determined post ID.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_oembed_response_data_for_url" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_oembed_response_data_for_url</a>
+  </p>
+</div>

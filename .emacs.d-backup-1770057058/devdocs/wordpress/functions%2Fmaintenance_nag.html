@@ -1,0 +1,63 @@
+<h1 class="wp-block-wporg-code-reference-title">maintenance_nag(): <span class="return-type">void|false</span>
+</h1> <section><p>Displays maintenance nag HTML message.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">void|false</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="853" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function maintenance_nag() {
+	global $upgrading;
+
+	$nag = isset( $upgrading );
+
+	if ( ! $nag ) {
+		$failed = get_site_option( 'auto_core_update_failed' );
+		/*
+		 * If an update failed critically, we may have copied over version.php but not other files.
+		 * In that case, if the installation claims we're running the version we attempted, nag.
+		 * This is serious enough to err on the side of nagging.
+		 *
+		 * If we simply failed to update before we tried to copy any files, then assume things are
+		 * OK if they are now running the latest.
+		 *
+		 * This flag is cleared whenever a successful update occurs using Core_Upgrader.
+		 */
+		$comparison = ! empty( $failed['critical'] ) ? '&gt;=' : '&gt;';
+		if ( isset( $failed['attempted'] ) &amp;&amp; version_compare( $failed['attempted'], wp_get_wp_version(), $comparison ) ) {
+			$nag = true;
+		}
+	}
+
+	if ( ! $nag ) {
+		return false;
+	}
+
+	if ( current_user_can( 'update_core' ) ) {
+		$msg = sprintf(
+			/* translators: %s: URL to WordPress Updates screen. */
+			__( 'An automated WordPress update has failed to complete - &lt;a href="%s"&gt;please attempt the update again now&lt;/a&gt;.' ),
+			'update-core.php'
+		);
+	} else {
+		$msg = __( 'An automated WordPress update has failed to complete! Please notify the site administrator.' );
+	}
+
+	wp_admin_notice(
+		$msg,
+		array(
+			'type'               =&gt; 'warning',
+			'additional_classes' =&gt; array( 'update-nag', 'inline' ),
+			'paragraph_wrap'     =&gt; false,
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/update.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/update.php#L853">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/update.php#L853-L898">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/maintenance_nag" class="_attribution-link">https://developer.wordpress.org/reference/functions/maintenance_nag</a>
+  </p>
+</div>

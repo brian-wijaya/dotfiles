@@ -1,0 +1,59 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Upgrader::clear_destination( <span class="arg-type">string</span> <span class="arg-name">$remote_destination</span> ): <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Clears the directory where this item is going to be installed into.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$remote_destination</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The location on the remote filesystem to be cleared.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span> True upon success, <a href="../wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="440" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function clear_destination( $remote_destination ) {
+	global $wp_filesystem;
+
+	$files = $wp_filesystem-&gt;dirlist( $remote_destination, true, true );
+
+	// False indicates that the $remote_destination doesn't exist.
+	if ( false === $files ) {
+		return true;
+	}
+
+	// Flatten the file list to iterate over.
+	$files = $this-&gt;flatten_dirlist( $files );
+
+	// Check all files are writable before attempting to clear the destination.
+	$unwritable_files = array();
+
+	// Check writability.
+	foreach ( $files as $filename =&gt; $file_details ) {
+		if ( ! $wp_filesystem-&gt;is_writable( $remote_destination . $filename ) ) {
+			// Attempt to alter permissions to allow writes and try again.
+			$wp_filesystem-&gt;chmod( $remote_destination . $filename, ( 'd' === $file_details['type'] ? FS_CHMOD_DIR : FS_CHMOD_FILE ) );
+			if ( ! $wp_filesystem-&gt;is_writable( $remote_destination . $filename ) ) {
+				$unwritable_files[] = $filename;
+			}
+		}
+	}
+
+	if ( ! empty( $unwritable_files ) ) {
+		return new WP_Error( 'files_not_writable', $this-&gt;strings['files_not_writable'], implode( ', ', $unwritable_files ) );
+	}
+
+	if ( ! $wp_filesystem-&gt;delete( $remote_destination, true ) ) {
+		return new WP_Error( 'remove_old_failed', $this-&gt;strings['remove_old_failed'] );
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-upgrader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-upgrader.php#L440">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-upgrader.php#L440-L476">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.3.0/">4.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_upgrader/clear_destination" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_upgrader/clear_destination</a>
+  </p>
+</div>

@@ -1,0 +1,66 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Attachments_Controller::check_upload_size( <span class="arg-type">array</span> <span class="arg-name">$file</span> ): <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Determine if uploaded file exceeds space quota on multisite.</p> </section> <section><h2 id="description">Description</h2> <p>Replicates <a href="../../functions/check_upload_size" rel="function">check_upload_size()</a> .</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">$_FILES array for a given file.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span> True if can upload, error for errors.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1369" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function check_upload_size( $file ) {
+	if ( ! is_multisite() ) {
+		return true;
+	}
+
+	if ( get_site_option( 'upload_space_check_disabled' ) ) {
+		return true;
+	}
+
+	$space_left = get_upload_space_available();
+
+	$file_size = filesize( $file['tmp_name'] );
+
+	if ( $space_left &lt; $file_size ) {
+		return new WP_Error(
+			'rest_upload_limited_space',
+			/* translators: %s: Required disk space in kilobytes. */
+			sprintf( __( 'Not enough space to upload. %s KB needed.' ), number_format( ( $file_size - $space_left ) / KB_IN_BYTES ) ),
+			array( 'status' =&gt; 400 )
+		);
+	}
+
+	if ( $file_size &gt; ( KB_IN_BYTES * get_site_option( 'fileupload_maxk', 1500 ) ) ) {
+		return new WP_Error(
+			'rest_upload_file_too_big',
+			/* translators: %s: Maximum allowed file size in kilobytes. */
+			sprintf( __( 'This file is too big. Files must be less than %s KB in size.' ), get_site_option( 'fileupload_maxk', 1500 ) ),
+			array( 'status' =&gt; 400 )
+		);
+	}
+
+	// Include multisite admin functions to get access to upload_is_user_over_quota().
+	require_once ABSPATH . 'wp-admin/includes/ms.php';
+
+	if ( upload_is_user_over_quota( false ) ) {
+		return new WP_Error(
+			'rest_upload_user_quota_exceeded',
+			__( 'You have used your space quota. Please delete files before uploading.' ),
+			array( 'status' =&gt; 400 )
+		);
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-attachments-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-attachments-controller.php#L1369">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-attachments-controller.php#L1369-L1412">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.8/">4.9.8</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_attachments_controller/check_upload_size" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_attachments_controller/check_upload_size</a>
+  </p>
+</div>

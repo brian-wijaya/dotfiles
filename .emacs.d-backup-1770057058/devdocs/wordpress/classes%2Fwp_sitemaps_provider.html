@@ -1,0 +1,213 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Sitemaps_Provider {}</h1> <section><p>Class <a href="wp_sitemaps_provider" rel="class">WP_Sitemaps_Provider</a>.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_sitemaps_provider/get_max_num_pages">WP_Sitemaps_Provider::get_max_num_pages</a></td>
+<td>Gets the max number of pages available for the object type.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps_provider/get_object_subtypes">WP_Sitemaps_Provider::get_object_subtypes</a></td>
+<td>Returns the list of supported object subtypes exposed by the provider.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps_provider/get_sitemap_entries">WP_Sitemaps_Provider::get_sitemap_entries</a></td>
+<td>Lists sitemap pages exposed by this provider.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps_provider/get_sitemap_type_data">WP_Sitemaps_Provider::get_sitemap_type_data</a></td>
+<td>Gets data about each sitemap type.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps_provider/get_sitemap_url">WP_Sitemaps_Provider::get_sitemap_url</a></td>
+<td>Gets the URL of a sitemap entry.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps_provider/get_url_list">WP_Sitemaps_Provider::get_url_list</a></td>
+<td>Gets a URL list for a sitemap.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="18" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">abstract class WP_Sitemaps_Provider {
+	/**
+	 * Provider name.
+	 *
+	 * This will also be used as the public-facing name in URLs.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @var string
+	 */
+	protected $name = '';
+
+	/**
+	 * Object type name (e.g. 'post', 'term', 'user').
+	 *
+	 * @since 5.5.0
+	 *
+	 * @var string
+	 */
+	protected $object_type = '';
+
+	/**
+	 * Gets a URL list for a sitemap.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param int    $page_num       Page of results.
+	 * @param string $object_subtype Optional. Object subtype name. Default empty.
+	 * @return array[] Array of URL information for a sitemap.
+	 */
+	abstract public function get_url_list( $page_num, $object_subtype = '' );
+
+	/**
+	 * Gets the max number of pages available for the object type.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param string $object_subtype Optional. Object subtype. Default empty.
+	 * @return int Total number of pages.
+	 */
+	abstract public function get_max_num_pages( $object_subtype = '' );
+
+	/**
+	 * Gets data about each sitemap type.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @return array[] Array of sitemap types including object subtype name and number of pages.
+	 */
+	public function get_sitemap_type_data() {
+		$sitemap_data = array();
+
+		$object_subtypes = $this-&gt;get_object_subtypes();
+
+		/*
+		 * If there are no object subtypes, include a single sitemap for the
+		 * entire object type.
+		 */
+		if ( empty( $object_subtypes ) ) {
+			$sitemap_data[] = array(
+				'name'  =&gt; '',
+				'pages' =&gt; $this-&gt;get_max_num_pages(),
+			);
+			return $sitemap_data;
+		}
+
+		// Otherwise, include individual sitemaps for every object subtype.
+		foreach ( $object_subtypes as $object_subtype_name =&gt; $data ) {
+			$object_subtype_name = (string) $object_subtype_name;
+
+			$sitemap_data[] = array(
+				'name'  =&gt; $object_subtype_name,
+				'pages' =&gt; $this-&gt;get_max_num_pages( $object_subtype_name ),
+			);
+		}
+
+		return $sitemap_data;
+	}
+
+	/**
+	 * Lists sitemap pages exposed by this provider.
+	 *
+	 * The returned data is used to populate the sitemap entries of the index.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @return array[] Array of sitemap entries.
+	 */
+	public function get_sitemap_entries() {
+		$sitemaps = array();
+
+		$sitemap_types = $this-&gt;get_sitemap_type_data();
+
+		foreach ( $sitemap_types as $type ) {
+			for ( $page = 1; $page &lt;= $type['pages']; $page++ ) {
+				$sitemap_entry = array(
+					'loc' =&gt; $this-&gt;get_sitemap_url( $type['name'], $page ),
+				);
+
+				/**
+				 * Filters the sitemap entry for the sitemap index.
+				 *
+				 * @since 5.5.0
+				 *
+				 * @param array  $sitemap_entry  Sitemap entry for the post.
+				 * @param string $object_type    Object empty name.
+				 * @param string $object_subtype Object subtype name.
+				 *                               Empty string if the object type does not support subtypes.
+				 * @param int    $page           Page number of results.
+				 */
+				$sitemap_entry = apply_filters( 'wp_sitemaps_index_entry', $sitemap_entry, $this-&gt;object_type, $type['name'], $page );
+
+				$sitemaps[] = $sitemap_entry;
+			}
+		}
+
+		return $sitemaps;
+	}
+
+	/**
+	 * Gets the URL of a sitemap entry.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @global WP_Rewrite $wp_rewrite WordPress rewrite component.
+	 *
+	 * @param string $name The name of the sitemap.
+	 * @param int    $page The page of the sitemap.
+	 * @return string The composed URL for a sitemap entry.
+	 */
+	public function get_sitemap_url( $name, $page ) {
+		global $wp_rewrite;
+
+		// Accounts for cases where name is not included, ex: sitemaps-users-1.xml.
+		$params = array_filter(
+			array(
+				'sitemap'         =&gt; $this-&gt;name,
+				'sitemap-subtype' =&gt; $name,
+				'paged'           =&gt; $page,
+			)
+		);
+
+		$basename = sprintf(
+			'/wp-sitemap-%1$s.xml',
+			implode( '-', $params )
+		);
+
+		if ( ! $wp_rewrite-&gt;using_permalinks() ) {
+			$basename = '/?' . http_build_query( $params, '', '&amp;' );
+		}
+
+		return home_url( $basename );
+	}
+
+	/**
+	 * Returns the list of supported object subtypes exposed by the provider.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @return array List of object subtypes objects keyed by their name.
+	 */
+	public function get_object_subtypes() {
+		return array();
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/sitemaps/class-wp-sitemaps-provider.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/sitemaps/class-wp-sitemaps-provider.php#L18">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/sitemaps/class-wp-sitemaps-provider.php#L18-L182">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_sitemaps_provider" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_sitemaps_provider</a>
+  </p>
+</div>

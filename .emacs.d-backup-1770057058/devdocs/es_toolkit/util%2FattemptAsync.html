@@ -1,0 +1,82 @@
+<h1>attemptAsync</h1>
+
+<p>Executes an async function and returns the result or error as a tuple.</p>
+
+<pre data-language='typescript'><code class='typescript'>const [error, result] = await attemptAsync(func);
+</code></pre>
+
+<h2>Usage</h2>
+
+<h4><code>attemptAsync(func)</code></h4>
+
+<p>Use <code>attemptAsync</code> when you want to safely execute an async function. You can handle errors without wrapping async/await blocks in try-catch.</p>
+
+<pre data-language='typescript'><code class='typescript'>import { attemptAsync } from &#39;es-toolkit/util&#39;;
+
+// When API request succeeds
+const [error, data] = await attemptAsync(async () =&gt; {
+  const response = await fetch(&#39;https://api.example.com/data&#39;);
+  return response.json();
+});
+// error is null, data contains response data
+
+// When network error occurs
+const [error, data] = await attemptAsync(async () =&gt; {
+  throw new Error(&#39;Network error&#39;);
+});
+// error is Error object, data is null
+
+// You can also specify types
+interface User {
+  id: number;
+  name: string;
+}
+
+const [error, users] = await attemptAsync&lt;User[]&gt;(async () =&gt; {
+  const response = await fetch(&#39;https://api.example.com/users&#39;);
+  return response.json();
+});
+// users is inferred as User[] type
+</code></pre>
+
+<p>It&#39;s especially useful when you need error handling in async operations like database queries or file reading.</p>
+
+<pre data-language='typescript'><code class='typescript'>// File reading example
+const [error, content] = await attemptAsync(async () =&gt; {
+  const fs = await import(&#39;fs/promises&#39;);
+  return fs.readFile(&#39;config.json&#39;, &#39;utf8&#39;);
+});
+
+if (error) {
+  console.log(&#39;Cannot read file:&#39;, error.message);
+} else {
+  console.log(&#39;File content:&#39;, content);
+}
+</code></pre>
+
+<p>::: info Use attempt for synchronous functions</p>
+
+<p>This function is suitable for handling async functions (functions that return <code>Promise</code>). If you want to handle synchronous functions, we recommend using the <span><code>attempt</code></span> function instead.</p>
+
+<p>:::</p>
+
+<h4>Parameters</h4>
+
+<ul>
+<li><code>func</code> (<code>() =&gt; Promise&lt;T&gt;</code>): The async function to execute.</li>
+</ul>
+
+<h4>Returns</h4>
+
+<p>(<code>Promise&lt;[null, T] | [E, null]&gt;</code>): Returns a Promise that resolves to <code>[null, result]</code> on success, or <code>[error, null]</code> if an error occurs.</p>
+<div class="_attribution">
+  <p class="_attribution-p">
+          &copy; 2024-2025, Viva Republica<br>
+      Licensed under the MIT License.
+
+    <br>
+    <a href="https://es-toolkit.slash.page/reference/util/attemptAsync.html" class="_attribution-link">
+      https://es-toolkit.slash.page/reference/util/attemptAsync.html
+    </a>
+  </p>
+</div>

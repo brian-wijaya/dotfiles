@@ -1,0 +1,161 @@
+<section id="featurehasher"> <h1>FeatureHasher</h1> <dl class="py class"> <dt class="sig sig-object py" id="sklearn.feature_extraction.FeatureHasher"> <em class="property">class</em><span class="sig-prename descclassname">sklearn.feature_extraction.</span><span class="sig-name descname">FeatureHasher</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">n_features=1048576</span></em>, <em class="sig-param"><span class="n">*</span></em>, <em class="sig-param"><span class="n">input_type='dict'</span></em>, <em class="sig-param"><span class="n">dtype=&lt;class 'numpy.float64'&gt;</span></em>, <em class="sig-param"><span class="n">alternate_sign=True</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_extraction/_hash.py#L22"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Implements feature hashing, aka the hashing trick.</p> <p>This class turns sequences of symbolic feature names (strings) into scipy.sparse matrices, using a hash function to compute the matrix column corresponding to a name. The hash function employed is the signed 32-bit version of Murmurhash3.</p> <p>Feature names of type byte string are used as-is. Unicode strings are converted to UTF-8 first, but no Unicode normalization is done. Feature values must be (finite) numbers.</p> <p>This class is a low-memory alternative to DictVectorizer and CountVectorizer, intended for large-scale (online) learning and situations where memory is tight, e.g. when running prediction code on embedded devices.</p> <p>For an efficiency comparison of the different feature extractors, see <a class="reference internal" href="../../auto_examples/text/plot_hashing_vs_dict_vectorizer#sphx-glr-auto-examples-text-plot-hashing-vs-dict-vectorizer-py"><span class="std std-ref">FeatureHasher and DictVectorizer Comparison</span></a>.</p> <p>Read more in the <a class="reference internal" href="../feature_extraction#feature-hashing"><span class="std std-ref">User Guide</span></a>.</p> <div class="versionadded"> <p><span class="versionmodified added">Added in version 0.13.</span></p> </div> <dl class="field-list"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl> <dt>
+<strong>n_features</strong><span class="classifier">int, default=2**20</span>
+</dt>
+<dd>
+<p>The number of features (columns) in the output matrices. Small numbers of features are likely to cause hash collisions, but large numbers will cause larger coefficient dimensions in linear learners.</p> </dd> <dt>
+<strong>input_type</strong><span class="classifier">str, default=’dict’</span>
+</dt>
+<dd>
+<p>Choose a string from {‘dict’, ‘pair’, ‘string’}. Either “dict” (the default) to accept dictionaries over (feature_name, value); “pair” to accept pairs of (feature_name, value); or “string” to accept single strings. feature_name should be a string, while value should be a number. In the case of “string”, a value of 1 is implied. The feature_name is hashed to find the appropriate column for the feature. The value’s sign might be flipped in the output (but see non_negative, below).</p> </dd> <dt>
+<strong>dtype</strong><span class="classifier">numpy dtype, default=np.float64</span>
+</dt>
+<dd>
+<p>The type of feature values. Passed to scipy.sparse matrix constructors as the dtype argument. Do not set this to bool, np.boolean or any unsigned integer type.</p> </dd> <dt>
+<strong>alternate_sign</strong><span class="classifier">bool, default=True</span>
+</dt>
+<dd>
+<p>When True, an alternating sign is added to the features as to approximately conserve the inner product in the hashed space even for small n_features. This approach is similar to sparse random projection.</p> <div class="versionchanged"> <p><span class="versionmodified changed">Changed in version 0.19: </span><code>alternate_sign</code> replaces the now deprecated <code>non_negative</code> parameter.</p> </div> </dd> </dl> </dd> </dl> <div class="admonition seealso"> <p class="admonition-title">See also</p> <dl class="simple"> <dt><a class="reference internal" href="sklearn.feature_extraction.dictvectorizer#sklearn.feature_extraction.DictVectorizer" title="sklearn.feature_extraction.DictVectorizer"><code>DictVectorizer</code></a></dt>
+<dd>
+<p>Vectorizes string-valued features using a hash table.</p> </dd> <dt><a class="reference internal" href="sklearn.preprocessing.onehotencoder#sklearn.preprocessing.OneHotEncoder" title="sklearn.preprocessing.OneHotEncoder"><code>sklearn.preprocessing.OneHotEncoder</code></a></dt>
+<dd>
+<p>Handles nominal/categorical features.</p> </dd> </dl> </div> <h4 class="rubric">Notes</h4> <p>This estimator is <a class="reference internal" href="https://scikit-learn.org/1.6/glossary.html#term-stateless"><span class="xref std std-term">stateless</span></a> and does not need to be fitted. However, we recommend to call <a class="reference internal" href="#sklearn.feature_extraction.FeatureHasher.fit_transform" title="sklearn.feature_extraction.FeatureHasher.fit_transform"><code>fit_transform</code></a> instead of <a class="reference internal" href="#sklearn.feature_extraction.FeatureHasher.transform" title="sklearn.feature_extraction.FeatureHasher.transform"><code>transform</code></a>, as parameter validation is only performed in <a class="reference internal" href="#sklearn.feature_extraction.FeatureHasher.fit" title="sklearn.feature_extraction.FeatureHasher.fit"><code>fit</code></a>.</p> <h4 class="rubric">Examples</h4> <pre data-language="python">&gt;&gt;&gt; from sklearn.feature_extraction import FeatureHasher
+&gt;&gt;&gt; h = FeatureHasher(n_features=10)
+&gt;&gt;&gt; D = [{'dog': 1, 'cat':2, 'elephant':4},{'dog': 2, 'run': 5}]
+&gt;&gt;&gt; f = h.transform(D)
+&gt;&gt;&gt; f.toarray()
+array([[ 0.,  0., -4., -1.,  0.,  0.,  0.,  0.,  0.,  2.],
+       [ 0.,  0.,  0., -2., -5.,  0.,  0.,  0.,  0.,  0.]])
+</pre> <p>With <code>input_type="string"</code>, the input must be an iterable over iterables of strings:</p> <pre data-language="python">&gt;&gt;&gt; h = FeatureHasher(n_features=8, input_type="string")
+&gt;&gt;&gt; raw_X = [["dog", "cat", "snake"], ["snake", "dog"], ["cat", "bird"]]
+&gt;&gt;&gt; f = h.transform(raw_X)
+&gt;&gt;&gt; f.toarray()
+array([[ 0.,  0.,  0., -1.,  0., -1.,  0.,  1.],
+       [ 0.,  0.,  0., -1.,  0., -1.,  0.,  0.],
+       [ 0., -1.,  0.,  0.,  0.,  0.,  0.,  1.]])
+</pre> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_extraction.FeatureHasher.fit"> <span class="sig-name descname">fit</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">y</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_extraction/_hash.py#L132"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Only validates estimator’s parameters.</p> <p>This method allows to: (i) validate the estimator’s parameters and (ii) be consistent with the scikit-learn transformer API.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>X</strong><span class="classifier">Ignored</span>
+</dt>
+<dd>
+<p>Not used, present here for API consistency by convention.</p> </dd> <dt>
+<strong>y</strong><span class="classifier">Ignored</span>
+</dt>
+<dd>
+<p>Not used, present here for API consistency by convention.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>self</strong><span class="classifier">object</span>
+</dt>
+<dd>
+<p>FeatureHasher class instance.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_extraction.FeatureHasher.fit_transform"> <span class="sig-name descname">fit_transform</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">X</span></em>, <em class="sig-param"><span class="n">y</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">fit_params</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/base.py#L863"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Fit to data, then transform it.</p> <p>Fits transformer to <code>X</code> and <code>y</code> with optional parameters <code>fit_params</code> and returns a transformed version of <code>X</code>.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>X</strong><span class="classifier">array-like of shape (n_samples, n_features)</span>
+</dt>
+<dd>
+<p>Input samples.</p> </dd> <dt>
+<strong>y</strong><span class="classifier">array-like of shape (n_samples,) or (n_samples, n_outputs), default=None</span>
+</dt>
+<dd>
+<p>Target values (None for unsupervised transformations).</p> </dd> <dt>
+<strong>**fit_params</strong><span class="classifier">dict</span>
+</dt>
+<dd>
+<p>Additional fit parameters.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>X_new</strong><span class="classifier">ndarray array of shape (n_samples, n_features_new)</span>
+</dt>
+<dd>
+<p>Transformed array.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_extraction.FeatureHasher.get_metadata_routing"> <span class="sig-name descname">get_metadata_routing</span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/utils/_metadata_requests.py#L1497"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Get metadata routing of this object.</p> <p>Please check <a class="reference internal" href="https://scikit-learn.org/1.6/metadata_routing.html#metadata-routing"><span class="std std-ref">User Guide</span></a> on how the routing mechanism works.</p> <dl class="field-list simple"> <dt class="field-odd">Returns<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>routing</strong><span class="classifier">MetadataRequest</span>
+</dt>
+<dd>
+<p>A <a class="reference internal" href="sklearn.utils.metadata_routing.metadatarequest#sklearn.utils.metadata_routing.MetadataRequest" title="sklearn.utils.metadata_routing.MetadataRequest"><code>MetadataRequest</code></a> encapsulating routing information.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_extraction.FeatureHasher.get_params"> <span class="sig-name descname">get_params</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">deep</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/base.py#L231"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Get parameters for this estimator.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>deep</strong><span class="classifier">bool, default=True</span>
+</dt>
+<dd>
+<p>If True, will return the parameters for this estimator and contained subobjects that are estimators.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>params</strong><span class="classifier">dict</span>
+</dt>
+<dd>
+<p>Parameter names mapped to their values.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_extraction.FeatureHasher.set_output"> <span class="sig-name descname">set_output</span><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span></em>, <em class="sig-param"><span class="n">transform</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/utils/_set_output.py#L392"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Set output container.</p> <p>See <a class="reference internal" href="../../auto_examples/miscellaneous/plot_set_output#sphx-glr-auto-examples-miscellaneous-plot-set-output-py"><span class="std std-ref">Introducing the set_output API</span></a> for an example on how to use the API.</p> <dl class="field-list"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl> <dt>
+<strong>transform</strong><span class="classifier">{“default”, “pandas”, “polars”}, default=None</span>
+</dt>
+<dd>
+<p>Configure output of <code>transform</code> and <code>fit_transform</code>.</p> <ul class="simple"> <li>
+<code>"default"</code>: Default output format of a transformer</li> <li>
+<code>"pandas"</code>: DataFrame output</li> <li>
+<code>"polars"</code>: Polars output</li> <li>
+<code>None</code>: Transform configuration is unchanged</li> </ul> <div class="versionadded"> <p><span class="versionmodified added">Added in version 1.4: </span><code>"polars"</code> option was added.</p> </div> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>self</strong><span class="classifier">estimator instance</span>
+</dt>
+<dd>
+<p>Estimator instance.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_extraction.FeatureHasher.set_params"> <span class="sig-name descname">set_params</span><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">params</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/base.py#L255"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Set the parameters of this estimator.</p> <p>The method works on simple estimators as well as on nested objects (such as <a class="reference internal" href="sklearn.pipeline.pipeline#sklearn.pipeline.Pipeline" title="sklearn.pipeline.Pipeline"><code>Pipeline</code></a>). The latter have parameters of the form <code>&lt;component&gt;__&lt;parameter&gt;</code> so that it’s possible to update each component of a nested object.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>**params</strong><span class="classifier">dict</span>
+</dt>
+<dd>
+<p>Estimator parameters.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>self</strong><span class="classifier">estimator instance</span>
+</dt>
+<dd>
+<p>Estimator instance.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> <dl class="py method"> <dt class="sig sig-object py" id="sklearn.feature_extraction.FeatureHasher.transform"> <span class="sig-name descname">transform</span><span class="sig-paren">(</span><em class="sig-param"><span class="n">raw_X</span></em><span class="sig-paren">)</span><a class="reference external" href="https://github.com/scikit-learn/scikit-learn/blob/99bf3d8e4/sklearn/feature_extraction/_hash.py#L154"><span class="viewcode-link">[source]</span></a>
+</dt> <dd>
+<p>Transform a sequence of instances to a scipy.sparse matrix.</p> <dl class="field-list simple"> <dt class="field-odd">Parameters<span class="colon">:</span>
+</dt> <dd class="field-odd">
+<dl class="simple"> <dt>
+<strong>raw_X</strong><span class="classifier">iterable over iterable over raw features, length = n_samples</span>
+</dt>
+<dd>
+<p>Samples. Each sample must be iterable an (e.g., a list or tuple) containing/generating feature names (and optionally values, see the input_type constructor argument) which will be hashed. raw_X need not support the len function, so it can be the result of a generator; n_samples is determined on the fly.</p> </dd> </dl> </dd> <dt class="field-even">Returns<span class="colon">:</span>
+</dt> <dd class="field-even">
+<dl class="simple"> <dt>
+<strong>X</strong><span class="classifier">sparse matrix of shape (n_samples, n_features)</span>
+</dt>
+<dd>
+<p>Feature matrix, for use with estimators or further transformers.</p> </dd> </dl> </dd> </dl> </dd>
+</dl> </dd>
+</dl> <section id="gallery-examples"> <h2>Gallery examples</h2> <div class="sphx-glr-thumbnails"><div class="sphx-glr-thumbcontainer" tooltip="In this example we illustrate text vectorization, which is the process of representing non-numerical input data (such as dictionaries or text documents) as vectors of real numbers.">
+<img alt="" src="data:image/png;base64,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"> <p><a class="reference internal" href="../../auto_examples/text/plot_hashing_vs_dict_vectorizer#sphx-glr-auto-examples-text-plot-hashing-vs-dict-vectorizer-py"><span class="std std-ref">FeatureHasher and DictVectorizer Comparison</span></a></p>  </div></div></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2007&ndash;2025 The scikit-learn developers<br>Licensed under the 3-clause BSD License.<br>
+    <a href="https://scikit-learn.org/1.6/modules/generated/sklearn.feature_extraction.FeatureHasher.html" class="_attribution-link">https://scikit-learn.org/1.6/modules/generated/sklearn.feature_extraction.FeatureHasher.html</a>
+  </p>
+</div>

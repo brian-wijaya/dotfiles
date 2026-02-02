@@ -1,0 +1,65 @@
+<h1 class="wp-block-wporg-code-reference-title">rest_get_date_with_gmt( <span class="arg-type">string</span> <span class="arg-name">$date</span>, <span class="arg-type">bool</span> <span class="arg-name">$is_utc</span> = <span class="arg-default">false</span> ): <span class="return-type">array|null</span>
+</h1> <section><p>Parses a date into both its local and UTC equivalent, in MySQL datetime format.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="rest_parse_date">rest_parse_date()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$date</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">RFC3339 timestamp.</span></div></dd>
+<dt>
+<code>$is_utc</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether the provided date should be interpreted as UTC. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|null</span> Local and UTC datetime strings, in MySQL datetime format (Y-m-d H:i:s), null on failure.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">string</span><div class="desc">Local datetime string.</div>
+</li> <li>
+<code>1</code> <span class="type">string</span><div class="desc">UTC datetime string.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1365" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function rest_get_date_with_gmt( $date, $is_utc = false ) {
+	/*
+	 * Whether or not the original date actually has a timezone string
+	 * changes the way we need to do timezone conversion.
+	 * Store this info before parsing the date, and use it later.
+	 */
+	$has_timezone = preg_match( '#(Z|[+-]\d{2}(:\d{2})?)$#', $date );
+
+	$date = rest_parse_date( $date );
+
+	if ( false === $date ) {
+		return null;
+	}
+
+	/*
+	 * At this point $date could either be a local date (if we were passed
+	 * a *local* date without a timezone offset) or a UTC date (otherwise).
+	 * Timezone conversion needs to be handled differently between these two cases.
+	 */
+	if ( ! $is_utc &amp;&amp; ! $has_timezone ) {
+		$local = gmdate( 'Y-m-d H:i:s', $date );
+		$utc   = get_gmt_from_date( $local );
+	} else {
+		$utc   = gmdate( 'Y-m-d H:i:s', $date );
+		$local = get_date_from_gmt( $utc );
+	}
+
+	return array( $local, $utc );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api.php#L1365">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api.php#L1365-L1393">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/rest_get_date_with_gmt" class="_attribution-link">https://developer.wordpress.org/reference/functions/rest_get_date_with_gmt</a>
+  </p>
+</div>

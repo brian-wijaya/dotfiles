@@ -1,0 +1,46 @@
+<h1 class="wp-block-wporg-code-reference-title">save_mod_rewrite_rules(): <span class="return-type">bool|null</span>
+</h1> <section><p>Updates the htaccess file with the current rules if it is writable.</p> </section> <section><h2 id="description">Description</h2> <p>Always writes to the file if it exists and is writable to ensure that we blank out old rules.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">bool|null</span> True on write success, false on failure. Null in multisite.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="262" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function save_mod_rewrite_rules() {
+	global $wp_rewrite;
+
+	if ( is_multisite() ) {
+		return;
+	}
+
+	// Ensure get_home_path() is declared.
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+
+	$home_path     = get_home_path();
+	$htaccess_file = $home_path . '.htaccess';
+
+	/*
+	 * If the file doesn't already exist check for write access to the directory
+	 * and whether we have some rules. Else check for write access to the file.
+	 */
+	if ( ! file_exists( $htaccess_file ) &amp;&amp; is_writable( $home_path ) &amp;&amp; $wp_rewrite-&gt;using_mod_rewrite_permalinks()
+		|| is_writable( $htaccess_file )
+	) {
+		if ( got_mod_rewrite() ) {
+			$rules = explode( "\n", $wp_rewrite-&gt;mod_rewrite_rules() );
+
+			return insert_with_markers( $htaccess_file, 'WordPress', $rules );
+		}
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/misc.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/misc.php#L262">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/misc.php#L262-L290">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/save_mod_rewrite_rules" class="_attribution-link">https://developer.wordpress.org/reference/functions/save_mod_rewrite_rules</a>
+  </p>
+</div>

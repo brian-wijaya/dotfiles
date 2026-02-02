@@ -1,0 +1,74 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Term_Query::parse_orderby( <span class="arg-type">string</span> <span class="arg-name">$orderby_raw</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Parse and sanitize ‘orderby’ keys passed to the term query.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$orderby_raw</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Alias for the field to order by.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> Value to used in the ORDER clause. False otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="918" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function parse_orderby( $orderby_raw ) {
+	$_orderby           = strtolower( $orderby_raw );
+	$maybe_orderby_meta = false;
+
+	if ( in_array( $_orderby, array( 'term_id', 'name', 'slug', 'term_group' ), true ) ) {
+		$orderby = "t.$_orderby";
+	} elseif ( in_array( $_orderby, array( 'count', 'parent', 'taxonomy', 'term_taxonomy_id', 'description' ), true ) ) {
+		$orderby = "tt.$_orderby";
+	} elseif ( 'term_order' === $_orderby ) {
+		$orderby = 'tr.term_order';
+	} elseif ( 'include' === $_orderby &amp;&amp; ! empty( $this-&gt;query_vars['include'] ) ) {
+		$include = implode( ',', wp_parse_id_list( $this-&gt;query_vars['include'] ) );
+		$orderby = "FIELD( t.term_id, $include )";
+	} elseif ( 'slug__in' === $_orderby &amp;&amp; ! empty( $this-&gt;query_vars['slug'] ) &amp;&amp; is_array( $this-&gt;query_vars['slug'] ) ) {
+		$slugs   = implode( "', '", array_map( 'sanitize_title_for_query', $this-&gt;query_vars['slug'] ) );
+		$orderby = "FIELD( t.slug, '" . $slugs . "')";
+	} elseif ( 'none' === $_orderby ) {
+		$orderby = '';
+	} elseif ( empty( $_orderby ) || 'id' === $_orderby || 'term_id' === $_orderby ) {
+		$orderby = 't.term_id';
+	} else {
+		$orderby = 't.name';
+
+		// This may be a value of orderby related to meta.
+		$maybe_orderby_meta = true;
+	}
+
+	/**
+	 * Filters the ORDERBY clause of the terms query.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param string   $orderby    `ORDERBY` clause of the terms query.
+	 * @param array    $args       An array of term query arguments.
+	 * @param string[] $taxonomies An array of taxonomy names.
+	 */
+	$orderby = apply_filters( 'get_terms_orderby', $orderby, $this-&gt;query_vars, $this-&gt;query_vars['taxonomy'] );
+
+	// Run after the 'get_terms_orderby' filter for backward compatibility.
+	if ( $maybe_orderby_meta ) {
+		$maybe_orderby_meta = $this-&gt;parse_orderby_meta( $_orderby );
+		if ( $maybe_orderby_meta ) {
+			$orderby = $maybe_orderby_meta;
+		}
+	}
+
+	return $orderby;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-term-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-term-query.php#L918">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-term-query.php#L918-L965">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/get_terms_orderby"><span class="hook-func">apply_filters</span>( ‘get_terms_orderby’, <nobr><span class="arg-type">string</span> <span class="arg-name">$orderby</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$taxonomies</span></nobr> )</a></dt>
+<dd>
+<p>Filters the ORDERBY clause of the terms query.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_term_query/parse_orderby" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_term_query/parse_orderby</a>
+  </p>
+</div>

@@ -1,0 +1,155 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Nav_Menus::search_available_items_query( <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">array</span>
+</h1> <section><p>Performs post queries for available-item searching.</p> </section> <section><h2 id="description">Description</h2> <p>Based on WP_Editor::wp_link_query().</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Accepts <code>'pagenum'</code> and <code>'s'</code> (search) arguments.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Menu items.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="352" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function search_available_items_query( $args = array() ) {
+	$items = array();
+
+	$post_type_objects = get_post_types( array( 'show_in_nav_menus' =&gt; true ), 'objects' );
+	$query             = array(
+		'post_type'              =&gt; array_keys( $post_type_objects ),
+		'suppress_filters'       =&gt; true,
+		'update_post_term_cache' =&gt; false,
+		'update_post_meta_cache' =&gt; false,
+		'post_status'            =&gt; 'publish',
+		'posts_per_page'         =&gt; 20,
+	);
+
+	$args['pagenum'] = isset( $args['pagenum'] ) ? absint( $args['pagenum'] ) : 1;
+	$query['offset'] = $args['pagenum'] &gt; 1 ? $query['posts_per_page'] * ( $args['pagenum'] - 1 ) : 0;
+
+	if ( isset( $args['s'] ) ) {
+		$query['s'] = $args['s'];
+	}
+
+	$posts = array();
+
+	// Prepend list of posts with nav_menus_created_posts search results on first page.
+	$nav_menus_created_posts_setting = $this-&gt;manager-&gt;get_setting( 'nav_menus_created_posts' );
+	if ( 1 === $args['pagenum'] &amp;&amp; $nav_menus_created_posts_setting &amp;&amp; count( $nav_menus_created_posts_setting-&gt;value() ) &gt; 0 ) {
+		$stub_post_query = new WP_Query(
+			array_merge(
+				$query,
+				array(
+					'post_status'    =&gt; 'auto-draft',
+					'post__in'       =&gt; $nav_menus_created_posts_setting-&gt;value(),
+					'posts_per_page' =&gt; -1,
+				)
+			)
+		);
+		$posts           = array_merge( $posts, $stub_post_query-&gt;posts );
+	}
+
+	// Query posts.
+	$get_posts = new WP_Query( $query );
+	$posts     = array_merge( $posts, $get_posts-&gt;posts );
+
+	// Create items for posts.
+	foreach ( $posts as $post ) {
+		$post_title = $post-&gt;post_title;
+		if ( '' === $post_title ) {
+			/* translators: %d: ID of a post. */
+			$post_title = sprintf( __( '#%d (no title)' ), $post-&gt;ID );
+		}
+
+		$post_type_label = $post_type_objects[ $post-&gt;post_type ]-&gt;labels-&gt;singular_name;
+		$post_states     = get_post_states( $post );
+		if ( ! empty( $post_states ) ) {
+			$post_type_label = implode( ',', $post_states );
+		}
+
+		$items[] = array(
+			'id'         =&gt; 'post-' . $post-&gt;ID,
+			'title'      =&gt; html_entity_decode( $post_title, ENT_QUOTES, get_bloginfo( 'charset' ) ),
+			'type'       =&gt; 'post_type',
+			'type_label' =&gt; $post_type_label,
+			'object'     =&gt; $post-&gt;post_type,
+			'object_id'  =&gt; (int) $post-&gt;ID,
+			'url'        =&gt; get_permalink( (int) $post-&gt;ID ),
+		);
+	}
+
+	// Query taxonomy terms.
+	$taxonomies = get_taxonomies( array( 'show_in_nav_menus' =&gt; true ), 'names' );
+	$terms      = get_terms(
+		array(
+			'taxonomies' =&gt; $taxonomies,
+			'name__like' =&gt; $args['s'],
+			'number'     =&gt; 20,
+			'hide_empty' =&gt; false,
+			'offset'     =&gt; 20 * ( $args['pagenum'] - 1 ),
+		)
+	);
+
+	// Check if any taxonomies were found.
+	if ( ! empty( $terms ) ) {
+		foreach ( $terms as $term ) {
+			$items[] = array(
+				'id'         =&gt; 'term-' . $term-&gt;term_id,
+				'title'      =&gt; html_entity_decode( $term-&gt;name, ENT_QUOTES, get_bloginfo( 'charset' ) ),
+				'type'       =&gt; 'taxonomy',
+				'type_label' =&gt; get_taxonomy( $term-&gt;taxonomy )-&gt;labels-&gt;singular_name,
+				'object'     =&gt; $term-&gt;taxonomy,
+				'object_id'  =&gt; (int) $term-&gt;term_id,
+				'url'        =&gt; get_term_link( (int) $term-&gt;term_id, $term-&gt;taxonomy ),
+			);
+		}
+	}
+
+	// Add "Home" link if search term matches. Treat as a page, but switch to custom on add.
+	if ( isset( $args['s'] ) ) {
+		// Only insert custom "Home" link if there's no Front Page
+		$front_page = 'page' === get_option( 'show_on_front' ) ? (int) get_option( 'page_on_front' ) : 0;
+		if ( empty( $front_page ) ) {
+			$title   = _x( 'Home', 'nav menu home label' );
+			$matches = function_exists( 'mb_stripos' ) ? false !== mb_stripos( $title, $args['s'] ) : false !== stripos( $title, $args['s'] );
+			if ( $matches ) {
+				$items[] = array(
+					'id'         =&gt; 'home',
+					'title'      =&gt; $title,
+					'type'       =&gt; 'custom',
+					'type_label' =&gt; __( 'Custom Link' ),
+					'object'     =&gt; '',
+					'url'        =&gt; home_url(),
+				);
+			}
+		}
+	}
+
+	/**
+	 * Filters the available menu items during a search request.
+	 *
+	 * @since 4.5.0
+	 *
+	 * @param array $items The array of menu items.
+	 * @param array $args  Includes 'pagenum' and 's' (search) arguments.
+	 */
+	$items = apply_filters( 'customize_nav_menu_searched_items', $items, $args );
+
+	return $items;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-nav-menus.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-nav-menus.php#L352">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-nav-menus.php#L352-L477">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/customize_nav_menu_searched_items"><span class="hook-func">apply_filters</span>( ‘customize_nav_menu_searched_items’, <nobr><span class="arg-type">array</span> <span class="arg-name">$items</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the available menu items during a search request.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.3.0/">4.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_nav_menus/search_available_items_query" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_nav_menus/search_available_items_query</a>
+  </p>
+</div>

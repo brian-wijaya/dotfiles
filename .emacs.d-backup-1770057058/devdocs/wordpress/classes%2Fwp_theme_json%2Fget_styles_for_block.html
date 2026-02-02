@@ -1,0 +1,162 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Theme_JSON::get_styles_for_block( <span class="arg-type">array</span> <span class="arg-name">$block_metadata</span> ): <span class="return-type">string</span>
+</h1> <section><p>Gets the CSS rules for a particular block from theme.json.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$block_metadata</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Metadata about the block to get styles for.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Styles for the block.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2324" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">	$declarations             = array();
+	$root_variable_duplicates = array();
+	$root_style_length        = strlen( '--wp--style--root--' );
+
+	foreach ( $properties as $css_property =&gt; $value_path ) {
+		if ( ! is_array( $value_path ) ) {
+			continue;
+		}
+
+		$is_root_style = str_starts_with( $css_property, '--wp--style--root--' );
+		if ( $is_root_style &amp;&amp; ( static::ROOT_BLOCK_SELECTOR !== $selector || ! $use_root_padding ) ) {
+			continue;
+		}
+
+		$value = static::get_property_value( $styles, $value_path, $theme_json );
+
+		/*
+		 * Root-level padding styles don't currently support strings with CSS shorthand values.
+		 * This may change: https://github.com/WordPress/gutenberg/issues/40132.
+		 */
+		if ( '--wp--style--root--padding' === $css_property &amp;&amp; is_string( $value ) ) {
+			continue;
+		}
+
+		if ( $is_root_style &amp;&amp; $use_root_padding ) {
+			$root_variable_duplicates[] = substr( $css_property, $root_style_length );
+		}
+
+		/*
+		 * Processes background image styles.
+		 * If the value is a URL, it will be converted to a CSS `url()` value.
+		 * For uploaded image (images with a database ID), apply size and position defaults,
+		 * equal to those applied in block supports in lib/background.php.
+		 */
+		if ( 'background-image' === $css_property &amp;&amp; ! empty( $value ) ) {
+			$background_styles = wp_style_engine_get_styles(
+				array( 'background' =&gt; array( 'backgroundImage' =&gt; $value ) )
+			);
+			$value             = $background_styles['declarations'][ $css_property ];
+		}
+		if ( empty( $value ) &amp;&amp; static::ROOT_BLOCK_SELECTOR !== $selector &amp;&amp; ! empty( $styles['background']['backgroundImage']['id'] ) ) {
+			if ( 'background-size' === $css_property ) {
+				$value = 'cover';
+			}
+			// If the background size is set to `contain` and no position is set, set the position to `center`.
+			if ( 'background-position' === $css_property ) {
+				$background_size = $styles['background']['backgroundSize'] ?? null;
+				$value           = 'contain' === $background_size ? '50% 50%' : null;
+			}
+		}
+
+		// Skip if empty and not "0" or value represents array of longhand values.
+		$has_missing_value = empty( $value ) &amp;&amp; ! is_numeric( $value );
+		if ( $has_missing_value || is_array( $value ) ) {
+			continue;
+		}
+
+		/*
+		 * Look up protected properties, keyed by value path.
+		 * Skip protected properties that are explicitly set to `null`.
+		 */
+		$path_string = implode( '.', $value_path );
+		if (
+			isset( static::PROTECTED_PROPERTIES[ $path_string ] ) &amp;&amp;
+			_wp_array_get( $settings, static::PROTECTED_PROPERTIES[ $path_string ], null ) === null
+		) {
+			continue;
+		}
+
+		// Calculates fluid typography rules where available.
+		if ( 'font-size' === $css_property ) {
+			/*
+			 * wp_get_typography_font_size_value() will check
+			 * if fluid typography has been activated and also
+			 * whether the incoming value can be converted to a fluid value.
+			 * Values that already have a clamp() function will not pass the test,
+			 * and therefore the original $value will be returned.
+			 * Pass the current theme_json settings to override any global settings.
+			 */
+			$value = wp_get_typography_font_size_value( array( 'size' =&gt; $value ), $settings );
+		}
+
+		if ( 'aspect-ratio' === $css_property ) {
+			// For aspect ratio to work, other dimensions rules must be unset.
+			// This ensures that a fixed height does not override the aspect ratio.
+			$declarations[] = array(
+				'name'  =&gt; 'min-height',
+				'value' =&gt; 'unset',
+			);
+		}
+
+		$declarations[] = array(
+			'name'  =&gt; $css_property,
+			'value' =&gt; $value,
+		);
+	}
+
+	// If a variable value is added to the root, the corresponding property should be removed.
+	foreach ( $root_variable_duplicates as $duplicate ) {
+		$discard = array_search( $duplicate, array_column( $declarations, 'name' ), true );
+		if ( is_numeric( $discard ) ) {
+			array_splice( $declarations, $discard, 1 );
+		}
+	}
+
+	return $declarations;
+}
+
+/**
+ * Returns the style property for the given path.
+ *
+ * It also converts references to a path to the value
+ * stored at that location, e.g.
+ * { "ref": "style.color.background" } =&gt; "#fff".
+ *
+ * @since 5.8.0
+ * @since 5.9.0 Added support for values of array type, which are returned as is.
+ * @since 6.1.0 Added the `$theme_json` parameter.
+ * @since 6.3.0 It no longer converts the internal format "var:preset|color|secondary"
+ *              to the standard form "--wp--preset--color--secondary".
+ *              This is already done by the sanitize method,
+ *              so every property will be in the standard form.
+ * @since 6.7.0 Added support for background image refs.
+ *
+ * @param array $styles Styles subtree.
+ * @param array $path   Which property to process.
+ * @param array $theme_json Theme JSON array.
+ * @return string|array Style property value.
+ */
+protected static function get_property_value( $styles, $path, $theme_json = null ) {
+	$value = _wp_array_get( $styles, $path, '' );
+
+	if ( '' === $value || null === $value ) {
+		// No need to process the value further.
+		return '';
+	}
+
+	/*
+	 * This converts references to a path to the value at that path
+	 * where the value is an array with a "ref" key, pointing to a path.
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-theme-json.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-theme-json.php#L2324">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-theme-json.php#L2324-L2463">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_theme_json/get_styles_for_block" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_theme_json/get_styles_for_block</a>
+  </p>
+</div>

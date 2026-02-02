@@ -1,0 +1,80 @@
+<h1 class="wp-block-wporg-code-reference-title">get_post_type_archive_link( <span class="arg-type">string</span> <span class="arg-name">$post_type</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Retrieves the permalink for a post type archive.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post type.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> The post type archive permalink. False if the post type does not exist or does not have an archive.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1302" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_post_type_archive_link( $post_type ) {
+	global $wp_rewrite;
+
+	$post_type_obj = get_post_type_object( $post_type );
+
+	if ( ! $post_type_obj ) {
+		return false;
+	}
+
+	if ( 'post' === $post_type ) {
+		$show_on_front  = get_option( 'show_on_front' );
+		$page_for_posts = get_option( 'page_for_posts' );
+
+		if ( 'page' === $show_on_front &amp;&amp; $page_for_posts ) {
+			$link = get_permalink( $page_for_posts );
+		} else {
+			$link = get_home_url();
+		}
+		/** This filter is documented in wp-includes/link-template.php */
+		return apply_filters( 'post_type_archive_link', $link, $post_type );
+	}
+
+	if ( ! $post_type_obj-&gt;has_archive ) {
+		return false;
+	}
+
+	if ( get_option( 'permalink_structure' ) &amp;&amp; is_array( $post_type_obj-&gt;rewrite ) ) {
+		$struct = ( true === $post_type_obj-&gt;has_archive ) ? $post_type_obj-&gt;rewrite['slug'] : $post_type_obj-&gt;has_archive;
+		if ( $post_type_obj-&gt;rewrite['with_front'] ) {
+			$struct = $wp_rewrite-&gt;front . $struct;
+		} else {
+			$struct = $wp_rewrite-&gt;root . $struct;
+		}
+		$link = home_url( user_trailingslashit( $struct, 'post_type_archive' ) );
+	} else {
+		$link = home_url( '?post_type=' . $post_type );
+	}
+
+	/**
+	 * Filters the post type archive permalink.
+	 *
+	 * @since 3.1.0
+	 *
+	 * @param string $link      The post type archive permalink.
+	 * @param string $post_type Post type name.
+	 */
+	return apply_filters( 'post_type_archive_link', $link, $post_type );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/link-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/link-template.php#L1302">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/link-template.php#L1302-L1349">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/post_type_archive_link"><span class="hook-func">apply_filters</span>( ‘post_type_archive_link’, <nobr><span class="arg-type">string</span> <span class="arg-name">$link</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post type archive permalink.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.5.0/">4.5.0</a></td>
+<td><span class="since-description">Support for posts was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_post_type_archive_link" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_post_type_archive_link</a>
+  </p>
+</div>

@@ -1,0 +1,100 @@
+<h1 class="wp-block-wporg-code-reference-title">get_attachment_link( <span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span> = <span class="arg-default">null</span>, <span class="arg-type">bool</span> <span class="arg-name">$leavename</span> = <span class="arg-default">false</span> ): <span class="return-type">string</span>
+</h1> <section><p>Retrieves the permalink for an attachment.</p> </section> <section><h2 id="description">Description</h2> <p>This can be used in the WordPress Loop or outside of it.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Post ID or object. Default uses the global <code>$post</code>.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$leavename</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to keep the page name. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The attachment permalink.</section> <section><h2 id="more-information">More Information</h2> <p>Under a <a title="Using Permalinks" href="https://wordpress.org/support/article/using-permalinks/">“pretty” permalink structure</a>, the function returns something like <tt>http://wp.example.net/<var>path_to_post</var>/<var>post_name</var>/<var>attachment_name</var></tt>.</p> <p>Under <a title="Using Permalinks" href="https://wordpress.org/support/article/using-permalinks/">the default permalink structure</a> — or if WordPress can’t construct a pretty URI — the function returns something like <tt>http://wp.example.net/?attachment_id=<var>n</var></tt>, where <var>n</var> is the attachment ID number.</p> <p>You can change the output of this function through the <tt><a title="Plugin API/Filter Reference" href="../hooks/attachment_link">attachment_link</a></tt> filter.</p> <p>If you want a direct link to the attached file (instead of the attachment page), you can use the function <tt><a title="Function Reference/wp get attachment url" href="wp_get_attachment_url">wp_get_attachment_url</a>(<var>id</var>)</tt> instead.</p> <p><b>Note</b>: that <tt>get_attachment_link</tt> actually returns an URI, whereas <tt><a title="Function Reference/wp get attachment link" href="wp_get_attachment_link">wp_get_attachment_link()</a></tt> returns an HTML hyperlink.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="472" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_attachment_link( $post = null, $leavename = false ) {
+	global $wp_rewrite;
+
+	$link = false;
+
+	$post             = get_post( $post );
+	$force_plain_link = wp_force_plain_post_permalink( $post );
+	$parent_id        = $post-&gt;post_parent;
+	$parent           = $parent_id ? get_post( $parent_id ) : false;
+	$parent_valid     = true; // Default for no parent.
+	if (
+		$parent_id &amp;&amp;
+		(
+			$post-&gt;post_parent === $post-&gt;ID ||
+			! $parent ||
+			! is_post_type_viewable( get_post_type( $parent ) )
+		)
+	) {
+		// Post is either its own parent or parent post unavailable.
+		$parent_valid = false;
+	}
+
+	if ( $force_plain_link || ! $parent_valid ) {
+		$link = false;
+	} elseif ( $wp_rewrite-&gt;using_permalinks() &amp;&amp; $parent ) {
+		if ( 'page' === $parent-&gt;post_type ) {
+			$parentlink = _get_page_link( $post-&gt;post_parent ); // Ignores page_on_front.
+		} else {
+			$parentlink = get_permalink( $post-&gt;post_parent );
+		}
+
+		if ( is_numeric( $post-&gt;post_name ) || str_contains( get_option( 'permalink_structure' ), '%category%' ) ) {
+			$name = 'attachment/' . $post-&gt;post_name; // &lt;permalink&gt;/&lt;int&gt;/ is paged so we use the explicit attachment marker.
+		} else {
+			$name = $post-&gt;post_name;
+		}
+
+		if ( ! str_contains( $parentlink, '?' ) ) {
+			$link = user_trailingslashit( trailingslashit( $parentlink ) . '%postname%' );
+		}
+
+		if ( ! $leavename ) {
+			$link = str_replace( '%postname%', $name, $link );
+		}
+	} elseif ( $wp_rewrite-&gt;using_permalinks() &amp;&amp; ! $leavename ) {
+		$link = home_url( user_trailingslashit( $post-&gt;post_name ) );
+	}
+
+	if ( ! $link ) {
+		$link = home_url( '/?attachment_id=' . $post-&gt;ID );
+	}
+
+	/**
+	 * Filters the permalink for an attachment.
+	 *
+	 * @since 2.0.0
+	 * @since 5.6.0 Providing an empty string will now disable
+	 *              the view attachment page link on the media modal.
+	 *
+	 * @param string $link    The attachment's permalink.
+	 * @param int    $post_id Attachment ID.
+	 */
+	return apply_filters( 'attachment_link', $link, $post-&gt;ID );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/link-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/link-template.php#L472">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/link-template.php#L472-L535">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/attachment_link"><span class="hook-func">apply_filters</span>( ‘attachment_link’, <nobr><span class="arg-type">string</span> <span class="arg-name">$link</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the permalink for an attachment.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_attachment_link" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_attachment_link</a>
+  </p>
+</div>

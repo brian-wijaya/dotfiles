@@ -1,0 +1,204 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Theme_JSON::get_layout_styles( <span class="arg-type">array</span> <span class="arg-name">$block_metadata</span> ): <span class="return-type">string</span>
+</h1> <section><p>Gets the CSS layout rules for a particular block from theme.json layout definitions.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$block_metadata</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Metadata about the block to get styles for.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Layout styles for the block.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1263" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">					}
+				}
+			} else {
+				// If associative, process as a single object.
+				$tree[ $key ] = self::remove_keys_not_in_schema( $value, $schema[ $key ] );
+
+				if ( empty( $tree[ $key ] ) ) {
+					unset( $tree[ $key ] );
+				}
+			}
+		}
+	}
+	return $tree;
+}
+
+/**
+ * Returns the existing settings for each block.
+ *
+ * Example:
+ *
+ *     {
+ *       'root': {
+ *         'color': {
+ *           'custom': true
+ *         }
+ *       },
+ *       'core/paragraph': {
+ *         'spacing': {
+ *           'customPadding': true
+ *         }
+ *       }
+ *     }
+ *
+ * @since 5.8.0
+ *
+ * @return array Settings per block.
+ */
+public function get_settings() {
+	if ( ! isset( $this-&gt;theme_json['settings'] ) ) {
+		return array();
+	} else {
+		return $this-&gt;theme_json['settings'];
+	}
+}
+
+/**
+ * Returns the stylesheet that results of processing
+ * the theme.json structure this object represents.
+ *
+ * @since 5.8.0
+ * @since 5.9.0 Removed the `$type` parameter, added the `$types` and `$origins` parameters.
+ * @since 6.3.0 Add fallback layout styles for Post Template when block gap support isn't available.
+ * @since 6.6.0 Added boolean `skip_root_layout_styles` and `include_block_style_variations` options
+ *              to control styles output as desired.
+ *
+ * @param string[] $types   Types of styles to load. Will load all by default. It accepts:
+ *                          - `variables`: only the CSS Custom Properties for presets &amp; custom ones.
+ *                          - `styles`: only the styles section in theme.json.
+ *                          - `presets`: only the classes for the presets.
+ * @param string[] $origins A list of origins to include. By default it includes VALID_ORIGINS.
+ * @param array    $options {
+ *     Optional. An array of options for now used for internal purposes only (may change without notice).
+ *
+ *     @type string $scope                           Makes sure all style are scoped to a given selector
+ *     @type string $root_selector                   Overwrites and forces a given selector to be used on the root node
+ *     @type bool   $skip_root_layout_styles         Omits root layout styles from the generated stylesheet. Default false.
+ *     @type bool   $include_block_style_variations  Includes styles for block style variations in the generated stylesheet. Default false.
+ * }
+ * @return string The resulting stylesheet.
+ */
+public function get_stylesheet( $types = array( 'variables', 'styles', 'presets' ), $origins = null, $options = array() ) {
+	if ( null === $origins ) {
+		$origins = static::VALID_ORIGINS;
+	}
+
+	if ( is_string( $types ) ) {
+		// Dispatch error and map old arguments to new ones.
+		_deprecated_argument( __FUNCTION__, '5.9.0' );
+		if ( 'block_styles' === $types ) {
+			$types = array( 'styles', 'presets' );
+		} elseif ( 'css_variables' === $types ) {
+			$types = array( 'variables' );
+		} else {
+			$types = array( 'variables', 'styles', 'presets' );
+		}
+	}
+
+	$blocks_metadata = static::get_blocks_metadata();
+	$style_nodes     = static::get_style_nodes( $this-&gt;theme_json, $blocks_metadata, $options );
+	$setting_nodes   = static::get_setting_nodes( $this-&gt;theme_json, $blocks_metadata );
+
+	$root_style_key    = array_search( static::ROOT_BLOCK_SELECTOR, array_column( $style_nodes, 'selector' ), true );
+	$root_settings_key = array_search( static::ROOT_BLOCK_SELECTOR, array_column( $setting_nodes, 'selector' ), true );
+
+	if ( ! empty( $options['scope'] ) ) {
+		foreach ( $setting_nodes as &amp;$node ) {
+			$node['selector'] = static::scope_selector( $options['scope'], $node['selector'] );
+		}
+		foreach ( $style_nodes as &amp;$node ) {
+			$node = static::scope_style_node_selectors( $options['scope'], $node );
+		}
+		unset( $node );
+	}
+
+	if ( ! empty( $options['root_selector'] ) ) {
+		if ( false !== $root_settings_key ) {
+			$setting_nodes[ $root_settings_key ]['selector'] = $options['root_selector'];
+		}
+		if ( false !== $root_style_key ) {
+			$style_nodes[ $root_style_key ]['selector'] = $options['root_selector'];
+		}
+	}
+
+	$stylesheet = '';
+
+	if ( in_array( 'variables', $types, true ) ) {
+		$stylesheet .= $this-&gt;get_css_variables( $setting_nodes, $origins );
+	}
+
+	if ( in_array( 'styles', $types, true ) ) {
+		if ( false !== $root_style_key &amp;&amp; empty( $options['skip_root_layout_styles'] ) ) {
+			$stylesheet .= $this-&gt;get_root_layout_rules( $style_nodes[ $root_style_key ]['selector'], $style_nodes[ $root_style_key ] );
+		}
+		$stylesheet .= $this-&gt;get_block_classes( $style_nodes );
+	} elseif ( in_array( 'base-layout-styles', $types, true ) ) {
+		$root_selector          = static::ROOT_BLOCK_SELECTOR;
+		$columns_selector       = '.wp-block-columns';
+		$post_template_selector = '.wp-block-post-template';
+		if ( ! empty( $options['scope'] ) ) {
+			$root_selector          = static::scope_selector( $options['scope'], $root_selector );
+			$columns_selector       = static::scope_selector( $options['scope'], $columns_selector );
+			$post_template_selector = static::scope_selector( $options['scope'], $post_template_selector );
+		}
+		if ( ! empty( $options['root_selector'] ) ) {
+			$root_selector = $options['root_selector'];
+		}
+		/*
+		 * Base layout styles are provided as part of `styles`, so only output separately if explicitly requested.
+		 * For backwards compatibility, the Columns block is explicitly included, to support a different default gap value.
+		 */
+		$base_styles_nodes = array(
+			array(
+				'path'     =&gt; array( 'styles' ),
+				'selector' =&gt; $root_selector,
+			),
+			array(
+				'path'     =&gt; array( 'styles', 'blocks', 'core/columns' ),
+				'selector' =&gt; $columns_selector,
+				'name'     =&gt; 'core/columns',
+			),
+			array(
+				'path'     =&gt; array( 'styles', 'blocks', 'core/post-template' ),
+				'selector' =&gt; $post_template_selector,
+				'name'     =&gt; 'core/post-template',
+			),
+		);
+
+		foreach ( $base_styles_nodes as $base_style_node ) {
+			$stylesheet .= $this-&gt;get_layout_styles( $base_style_node, $types );
+		}
+	}
+
+	if ( in_array( 'presets', $types, true ) ) {
+		$stylesheet .= $this-&gt;get_preset_classes( $setting_nodes, $origins );
+	}
+
+	// Load the custom CSS last so it has the highest specificity.
+	if ( in_array( 'custom-css', $types, true ) ) {
+		// Add the global styles root CSS.
+		$stylesheet .= _wp_array_get( $this-&gt;theme_json, array( 'styles', 'css' ) );
+	}
+
+	return $stylesheet;
+}
+
+/**
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-theme-json.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-theme-json.php#L1263">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-theme-json.php#L1263-L1438">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description">Reduced specificity for layout margin rules.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_theme_json/get_layout_styles" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_theme_json/get_layout_styles</a>
+  </p>
+</div>

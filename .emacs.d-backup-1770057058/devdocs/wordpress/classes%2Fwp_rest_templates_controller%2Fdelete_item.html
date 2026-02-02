@@ -1,0 +1,76 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Templates_Controller::delete_item( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Deletes a single template.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="507" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function delete_item( $request ) {
+	$template = get_block_template( $request['id'], $this-&gt;post_type );
+	if ( ! $template ) {
+		return new WP_Error( 'rest_template_not_found', __( 'No templates exist with that id.' ), array( 'status' =&gt; 404 ) );
+	}
+	if ( 'custom' !== $template-&gt;source ) {
+		return new WP_Error( 'rest_invalid_template', __( 'Templates based on theme files can\'t be removed.' ), array( 'status' =&gt; 400 ) );
+	}
+
+	$id    = $template-&gt;wp_id;
+	$force = (bool) $request['force'];
+
+	$request-&gt;set_param( 'context', 'edit' );
+
+	// If we're forcing, then delete permanently.
+	if ( $force ) {
+		$previous = $this-&gt;prepare_item_for_response( $template, $request );
+		$result   = wp_delete_post( $id, true );
+		$response = new WP_REST_Response();
+		$response-&gt;set_data(
+			array(
+				'deleted'  =&gt; true,
+				'previous' =&gt; $previous-&gt;get_data(),
+			)
+		);
+	} else {
+		// Otherwise, only trash if we haven't already.
+		if ( 'trash' === $template-&gt;status ) {
+			return new WP_Error(
+				'rest_template_already_trashed',
+				__( 'The template has already been deleted.' ),
+				array( 'status' =&gt; 410 )
+			);
+		}
+
+		/*
+		 * (Note that internally this falls through to `wp_delete_post()`
+		 * if the Trash is disabled.)
+		 */
+		$result           = wp_trash_post( $id );
+		$template-&gt;status = 'trash';
+		$response         = $this-&gt;prepare_item_for_response( $template, $request );
+	}
+
+	if ( ! $result ) {
+		return new WP_Error(
+			'rest_cannot_delete',
+			__( 'The template cannot be deleted.' ),
+			array( 'status' =&gt; 500 )
+		);
+	}
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php#L507">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-templates-controller.php#L507-L560">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_templates_controller/delete_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_templates_controller/delete_item</a>
+  </p>
+</div>

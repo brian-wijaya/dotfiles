@@ -1,0 +1,167 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> Theme_Upgrader_Skin {}</h1> <section><p>Theme Upgrader Skin for WordPress Theme Upgrades.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_upgrader_skin">WP_Upgrader_Skin</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="theme_upgrader_skin/__construct">Theme_Upgrader_Skin::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="theme_upgrader_skin/after">Theme_Upgrader_Skin::after</a></td>
+<td>Performs an action following a single theme update.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="18" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class Theme_Upgrader_Skin extends WP_Upgrader_Skin {
+
+	/**
+	 * Holds the theme slug in the Theme Directory.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @var string
+	 */
+	public $theme = '';
+
+	/**
+	 * Constructor.
+	 *
+	 * Sets up the theme upgrader skin.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param array $args Optional. The theme upgrader skin arguments to
+	 *                    override default options. Default empty array.
+	 */
+	public function __construct( $args = array() ) {
+		$defaults = array(
+			'url'   =&gt; '',
+			'theme' =&gt; '',
+			'nonce' =&gt; '',
+			'title' =&gt; __( 'Update Theme' ),
+		);
+		$args     = wp_parse_args( $args, $defaults );
+
+		$this-&gt;theme = $args['theme'];
+
+		parent::__construct( $args );
+	}
+
+	/**
+	 * Performs an action following a single theme update.
+	 *
+	 * @since 2.8.0
+	 */
+	public function after() {
+		$this-&gt;decrement_update_count( 'theme' );
+
+		$update_actions = array();
+		$theme_info     = $this-&gt;upgrader-&gt;theme_info();
+		if ( $theme_info ) {
+			$name       = $theme_info-&gt;display( 'Name' );
+			$stylesheet = $this-&gt;upgrader-&gt;result['destination_name'];
+			$template   = $theme_info-&gt;get_template();
+
+			$activate_link = add_query_arg(
+				array(
+					'action'     =&gt; 'activate',
+					'template'   =&gt; urlencode( $template ),
+					'stylesheet' =&gt; urlencode( $stylesheet ),
+				),
+				admin_url( 'themes.php' )
+			);
+			$activate_link = wp_nonce_url( $activate_link, 'switch-theme_' . $stylesheet );
+
+			$customize_url = add_query_arg(
+				array(
+					'theme'  =&gt; urlencode( $stylesheet ),
+					'return' =&gt; urlencode( admin_url( 'themes.php' ) ),
+				),
+				admin_url( 'customize.php' )
+			);
+
+			if ( get_stylesheet() === $stylesheet ) {
+				if ( current_user_can( 'edit_theme_options' ) &amp;&amp; current_user_can( 'customize' ) ) {
+					$update_actions['preview'] = sprintf(
+						'&lt;a href="%s" class="hide-if-no-customize load-customize"&gt;' .
+						'&lt;span aria-hidden="true"&gt;%s&lt;/span&gt;&lt;span class="screen-reader-text"&gt;%s&lt;/span&gt;&lt;/a&gt;',
+						esc_url( $customize_url ),
+						__( 'Customize' ),
+						/* translators: Hidden accessibility text. %s: Theme name. */
+						sprintf( __( 'Customize &amp;#8220;%s&amp;#8221;' ), $name )
+					);
+				}
+			} elseif ( current_user_can( 'switch_themes' ) ) {
+				if ( current_user_can( 'edit_theme_options' ) &amp;&amp; current_user_can( 'customize' ) ) {
+					$update_actions['preview'] = sprintf(
+						'&lt;a href="%s" class="hide-if-no-customize load-customize"&gt;' .
+						'&lt;span aria-hidden="true"&gt;%s&lt;/span&gt;&lt;span class="screen-reader-text"&gt;%s&lt;/span&gt;&lt;/a&gt;',
+						esc_url( $customize_url ),
+						__( 'Live Preview' ),
+						/* translators: Hidden accessibility text. %s: Theme name. */
+						sprintf( __( 'Live Preview &amp;#8220;%s&amp;#8221;' ), $name )
+					);
+				}
+
+				$update_actions['activate'] = sprintf(
+					'&lt;a href="%s" class="activatelink"&gt;' .
+					'&lt;span aria-hidden="true"&gt;%s&lt;/span&gt;&lt;span class="screen-reader-text"&gt;%s&lt;/span&gt;&lt;/a&gt;',
+					esc_url( $activate_link ),
+					_x( 'Activate', 'theme' ),
+					/* translators: Hidden accessibility text. %s: Theme name. */
+					sprintf( _x( 'Activate &amp;#8220;%s&amp;#8221;', 'theme' ), $name )
+				);
+			}
+
+			if ( ! $this-&gt;result || is_wp_error( $this-&gt;result ) || is_network_admin() ) {
+				unset( $update_actions['preview'], $update_actions['activate'] );
+			}
+		}
+
+		$update_actions['themes_page'] = sprintf(
+			'&lt;a href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+			self_admin_url( 'themes.php' ),
+			__( 'Go to Themes page' )
+		);
+
+		/**
+		 * Filters the list of action links available following a single theme update.
+		 *
+		 * @since 2.8.0
+		 *
+		 * @param string[] $update_actions Array of theme action links.
+		 * @param string   $theme          Theme directory name.
+		 */
+		$update_actions = apply_filters( 'update_theme_complete_actions', $update_actions, $this-&gt;theme );
+
+		if ( ! empty( $update_actions ) ) {
+			$this-&gt;feedback( implode( ' | ', (array) $update_actions ) );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-theme-upgrader-skin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-theme-upgrader-skin.php#L18">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-theme-upgrader-skin.php#L18-L144">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td><span class="since-description">Moved to its own file from wp-admin/includes/class-wp-upgrader-skins.php.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/theme_upgrader_skin" class="_attribution-link">https://developer.wordpress.org/reference/classes/theme_upgrader_skin</a>
+  </p>
+</div>

@@ -1,0 +1,59 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_kses_attr_parse( <span class="arg-type">string</span> <span class="arg-name">$element</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Finds all attributes of an HTML element.</p> </section> <section><h2 id="description">Description</h2> <p>Does not modify input. May return "evil" output.</p> <p>Based on <code>wp_kses_split2()</code> and <code>wp_kses_attr()</code>.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$element</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">HTML element.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> List of attributes found in the element. Returns false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1543" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_kses_attr_parse( $element ) {
+	$valid = preg_match( '%^(&lt;\s*)(/\s*)?([a-zA-Z0-9]+\s*)([^&gt;]*)(&gt;?)$%', $element, $matches );
+	if ( 1 !== $valid ) {
+		return false;
+	}
+
+	$begin  = $matches[1];
+	$slash  = $matches[2];
+	$elname = $matches[3];
+	$attr   = $matches[4];
+	$end    = $matches[5];
+
+	if ( '' !== $slash ) {
+		// Closing elements do not get parsed.
+		return false;
+	}
+
+	// Is there a closing XHTML slash at the end of the attributes?
+	if ( 1 === preg_match( '%\s*/\s*$%', $attr, $matches ) ) {
+		$xhtml_slash = $matches[0];
+		$attr        = substr( $attr, 0, -strlen( $xhtml_slash ) );
+	} else {
+		$xhtml_slash = '';
+	}
+
+	// Split it.
+	$attrarr = wp_kses_hair_parse( $attr );
+	if ( false === $attrarr ) {
+		return false;
+	}
+
+	// Make sure all input is returned by adding front and back matter.
+	array_unshift( $attrarr, $begin . $slash . $elname );
+	array_push( $attrarr, $xhtml_slash . $end );
+
+	return $attrarr;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/kses.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/kses.php#L1543">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/kses.php#L1543-L1579">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.3/">4.2.3</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_kses_attr_parse" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_kses_attr_parse</a>
+  </p>
+</div>

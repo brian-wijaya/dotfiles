@@ -1,0 +1,61 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_URL_Details_Controller::get_icon( <span class="arg-type">string</span> <span class="arg-name">$html</span>, <span class="arg-type">string</span> <span class="arg-name">$url</span> ): <span class="return-type">string</span>
+</h1> <section><p>Parses the site icon from the provided HTML.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$html</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The HTML from the remote website at URL.</span></div></dd>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The target website URL.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The icon URI on success. Empty string if not found.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="308" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function get_icon( $html, $url ) {
+	// Grab the icon's link element.
+	$pattern = '#&lt;link\s[^&gt;]*rel=(?:[\"\']??)\s*(?:icon|shortcut icon|icon shortcut)\s*(?:[\"\']??)[^&gt;]*\/?&gt;#isU';
+	preg_match( $pattern, $html, $element );
+	if ( empty( $element[0] ) || ! is_string( $element[0] ) ) {
+		return '';
+	}
+	$element = trim( $element[0] );
+
+	// Get the icon's href value.
+	$pattern = '#href=([\"\']??)([^\" &gt;]*?)\\1[^&gt;]*#isU';
+	preg_match( $pattern, $element, $icon );
+	if ( empty( $icon[2] ) || ! is_string( $icon[2] ) ) {
+		return '';
+	}
+	$icon = trim( $icon[2] );
+
+	// If the icon is a data URL, return it.
+	$parsed_icon = parse_url( $icon );
+	if ( isset( $parsed_icon['scheme'] ) &amp;&amp; 'data' === $parsed_icon['scheme'] ) {
+		return $icon;
+	}
+
+	// Attempt to convert relative URLs to absolute.
+	if ( ! is_string( $url ) || '' === $url ) {
+		return $icon;
+	}
+	$parsed_url = parse_url( $url );
+	if ( isset( $parsed_url['scheme'] ) &amp;&amp; isset( $parsed_url['host'] ) ) {
+		$root_url = $parsed_url['scheme'] . '://' . $parsed_url['host'] . '/';
+		$icon     = WP_Http::make_absolute_url( $icon, $root_url );
+	}
+
+	return $icon;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php#L308">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-url-details-controller.php#L308-L342">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_url_details_controller/get_icon" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_url_details_controller/get_icon</a>
+  </p>
+</div>

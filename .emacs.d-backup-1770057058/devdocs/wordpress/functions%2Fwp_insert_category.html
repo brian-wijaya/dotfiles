@@ -1,0 +1,107 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_insert_category( <span class="arg-type">array</span> <span class="arg-name">$catarr</span>, <span class="arg-type">bool</span> <span class="arg-name">$wp_error</span> = <span class="arg-default">false</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Updates an existing Category or creates a new Category.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$catarr</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array of arguments for inserting a new category.<br> <ul class="param-hash">
+<li>
+<code>cat_ID</code> <span class="type">int</span><div class="desc">Category ID. A non-zero value updates an existing category.<br> Default 0.</div>
+</li> <li>
+<code>taxonomy</code> <span class="type">string</span><div class="desc">Taxonomy slug. Default <code>'category'</code>.</div>
+</li> <li>
+<code>cat_name</code> <span class="type">string</span><div class="desc">Category name. Default empty.</div>
+</li> <li>
+<code>category_description</code> <span class="type">string</span><div class="desc">Category description. Default empty.</div>
+</li> <li>
+<code>category_nicename</code> <span class="type">string</span><div class="desc">Category nice (display) name. Default empty.</div>
+</li> <li>
+<code>category_parent</code> <span class="type">int|string</span><div class="desc">Category parent ID. Default empty.</div>
+</li> </ul> </span></div></dd>
+<dt>
+<code>$wp_error</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> The ID number of the new or updated Category on success. Zero or a <a href="../classes/wp_error" rel="class">WP_Error</a> on failure, depending on param <code>$wp_error</code>.</section> <section><h2 id="more-information">More Information</h2> <p>Not all possible members of the <tt>$catarr</tt> array are listed here.</p> <p>The value of <tt>category_nicename</tt> will set the slug. (In WordPress terminology, a “nice” name is one that is sanitized for use in places like URLs. It is not meant for displaying to humans, as you might assume.)</p> <p>See <tt><a title="Function Reference/wp create category" href="https://codex.wordpress.org/Function_Reference/wp_create_category">wp_create_category()</a></tt> for a simpler version which takes just a string instead of an array</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="121" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_insert_category( $catarr, $wp_error = false ) {
+	$cat_defaults = array(
+		'cat_ID'               =&gt; 0,
+		'taxonomy'             =&gt; 'category',
+		'cat_name'             =&gt; '',
+		'category_description' =&gt; '',
+		'category_nicename'    =&gt; '',
+		'category_parent'      =&gt; '',
+	);
+	$catarr       = wp_parse_args( $catarr, $cat_defaults );
+
+	if ( '' === trim( $catarr['cat_name'] ) ) {
+		if ( ! $wp_error ) {
+			return 0;
+		} else {
+			return new WP_Error( 'cat_name', __( 'You did not enter a category name.' ) );
+		}
+	}
+
+	$catarr['cat_ID'] = (int) $catarr['cat_ID'];
+
+	// Are we updating or creating?
+	$update = ! empty( $catarr['cat_ID'] );
+
+	$name        = $catarr['cat_name'];
+	$description = $catarr['category_description'];
+	$slug        = $catarr['category_nicename'];
+	$parent      = (int) $catarr['category_parent'];
+	if ( $parent &lt; 0 ) {
+		$parent = 0;
+	}
+
+	if ( empty( $parent )
+		|| ! term_exists( $parent, $catarr['taxonomy'] )
+		|| ( $catarr['cat_ID'] &amp;&amp; term_is_ancestor_of( $catarr['cat_ID'], $parent, $catarr['taxonomy'] ) ) ) {
+		$parent = 0;
+	}
+
+	$args = compact( 'name', 'slug', 'parent', 'description' );
+
+	if ( $update ) {
+		$catarr['cat_ID'] = wp_update_term( $catarr['cat_ID'], $catarr['taxonomy'], $args );
+	} else {
+		$catarr['cat_ID'] = wp_insert_term( $catarr['cat_name'], $catarr['taxonomy'], $args );
+	}
+
+	if ( is_wp_error( $catarr['cat_ID'] ) ) {
+		if ( $wp_error ) {
+			return $catarr['cat_ID'];
+		} else {
+			return 0;
+		}
+	}
+	return $catarr['cat_ID']['term_id'];
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/taxonomy.php#L121">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/taxonomy.php#L121-L175">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td><span class="since-description">The <code>'taxonomy'</code> argument was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td><span class="since-description">$wp_error parameter was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_insert_category" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_insert_category</a>
+  </p>
+</div>

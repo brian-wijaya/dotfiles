@@ -1,0 +1,102 @@
+<h1 class="wp-block-wporg-code-reference-title">make_site_theme_from_default( <span class="arg-type">string</span> <span class="arg-name">$theme_name</span>, <span class="arg-type">string</span> <span class="arg-name">$template</span> ): <span class="return-type">void|false</span>
+</h1> <section><p>Creates a site theme from the default theme.</p> </section> <section><h2 id="description">Description</h2>  </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$theme_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The name of the theme.</span></div></dd>
+<dt>
+<code>$template</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The directory name of the theme.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">void|false</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3434" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function make_site_theme_from_default( $theme_name, $template ) {
+	$site_dir    = WP_CONTENT_DIR . "/themes/$template";
+	$default_dir = WP_CONTENT_DIR . '/themes/' . WP_DEFAULT_THEME;
+
+	/*
+	 * Copy files from the default theme to the site theme.
+	 * $files = array( 'index.php', 'comments.php', 'comments-popup.php', 'footer.php', 'header.php', 'sidebar.php', 'style.css' );
+	 */
+
+	$theme_dir = @opendir( $default_dir );
+	if ( $theme_dir ) {
+		while ( ( $theme_file = readdir( $theme_dir ) ) !== false ) {
+			if ( is_dir( "$default_dir/$theme_file" ) ) {
+				continue;
+			}
+
+			if ( ! copy( "$default_dir/$theme_file", "$site_dir/$theme_file" ) ) {
+				return;
+			}
+
+			chmod( "$site_dir/$theme_file", 0777 );
+		}
+
+		closedir( $theme_dir );
+	}
+
+	// Rewrite the theme header.
+	$stylelines = explode( "\n", implode( '', file( "$site_dir/style.css" ) ) );
+	if ( $stylelines ) {
+		$f = fopen( "$site_dir/style.css", 'w' );
+
+		$headers = array(
+			'Theme Name:'  =&gt; $theme_name,
+			'Theme URI:'   =&gt; __get_option( 'url' ),
+			'Description:' =&gt; 'Your theme.',
+			'Version:'     =&gt; '1',
+			'Author:'      =&gt; 'You',
+		);
+
+		foreach ( $stylelines as $line ) {
+			foreach ( $headers as $header =&gt; $value ) {
+				if ( str_contains( $line, $header ) ) {
+					$line = $header . ' ' . $value;
+					break;
+				}
+			}
+
+			fwrite( $f, $line . "\n" );
+		}
+
+		fclose( $f );
+	}
+
+	// Copy the images.
+	umask( 0 );
+	if ( ! mkdir( "$site_dir/images", 0777 ) ) {
+		return false;
+	}
+
+	$images_dir = @opendir( "$default_dir/images" );
+	if ( $images_dir ) {
+		while ( ( $image = readdir( $images_dir ) ) !== false ) {
+			if ( is_dir( "$default_dir/images/$image" ) ) {
+				continue;
+			}
+
+			if ( ! copy( "$default_dir/images/$image", "$site_dir/images/$image" ) ) {
+				return;
+			}
+
+			chmod( "$site_dir/images/$image", 0777 );
+		}
+
+		closedir( $images_dir );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/upgrade.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/upgrade.php#L3434">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/upgrade.php#L3434-L3509">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/make_site_theme_from_default" class="_attribution-link">https://developer.wordpress.org/reference/functions/make_site_theme_from_default</a>
+  </p>
+</div>

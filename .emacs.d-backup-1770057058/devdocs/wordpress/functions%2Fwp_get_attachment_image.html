@@ -1,0 +1,190 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_attachment_image( <span class="arg-type">int</span> <span class="arg-name">$attachment_id</span>, <span class="arg-type">string|int[]</span> <span class="arg-name">$size</span> = <span class="arg-default">‘thumbnail’</span>, <span class="arg-type">bool</span> <span class="arg-name">$icon</span> = <span class="arg-default">false</span>, <span class="arg-type">string|array</span> <span class="arg-name">$attr</span> = <span class="arg-default">”</span> ): <span class="return-type">string</span>
+</h1> <section><p>Gets an HTML img element representing an image attachment.</p> </section> <section><h2 id="description">Description</h2> <p>While <code>$size</code> will accept an array, it is better to register a size with <a href="add_image_size" rel="function">add_image_size()</a> so that a cropped version is generated. It’s much more efficient than having to find the closest-sized image and then having the browser scale down the image.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$attachment_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Image attachment ID.</span></div></dd>
+<dt>
+<code>$size</code><span class="type"><span class="string">string</span>|<span class="int[]">int[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Image size. Accepts any registered image size name, or an array of width and height values in pixels (in that order). Default <code>'thumbnail'</code>.</span></div>
+<p class="default">Default:<code>'thumbnail'</code></p>
+</dd>
+<dt>
+<code>$icon</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether the image should be treated as an icon. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$attr</code><span class="type"><span class="string">string</span>|<span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Attributes for the image markup.<br> <ul class="param-hash">
+<li>
+<code>src</code> <span class="type">string</span><div class="desc">Image attachment URL.</div>
+</li> <li>
+<code>class</code> <span class="type">string</span><div class="desc">CSS class name or space-separated list of classes.<br> Default <code>attachment-$size_class size-$size_class</code>, where <code>$size_class</code> is the image size being requested.</div>
+</li> <li>
+<code>alt</code> <span class="type">string</span><div class="desc">Image description for the alt attribute.</div>
+</li> <li>
+<code>srcset</code> <span class="type">string</span><div class="desc">The <code>'srcset'</code> attribute value.</div>
+</li> <li>
+<code>sizes</code> <span class="type">string</span><div class="desc">The <code>'sizes'</code> attribute value.</div>
+</li> <li>
+<code>loading</code> <span class="type">string|false</span><div class="desc">The <code>'loading'</code> attribute value. Passing a value of false will result in the attribute being omitted for the image.<br> Defaults to <code>'lazy'</code>, depending on <a href="wp_lazy_loading_enabled" rel="function">wp_lazy_loading_enabled()</a> .</div>
+</li> <li>
+<code>decoding</code> <span class="type">string</span><div class="desc">The <code>'decoding'</code> attribute value. Possible values are <code>'async'</code> (default), <code>'sync'</code>, or <code>'auto'</code>. Passing false or an empty string will result in the attribute being omitted.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> HTML img element or empty string on failure.</section> <section><h2 id="more-information">More Information</h2> <h3 id="usage">Usage</h3> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">wp_get_attachment_image( $attachment_id, $size, $icon, $attr );</code></pre> <p>If the attachment is an image, the function returns an image at the specified size. For other attachments, the function returns a media icon if the $icon parameter is set to true.</p> <p>To get attachment IDs dynamically in a template, you can use <code>get_posts( array( 'post_type' =&gt; 'attachment' ) )</code>, etc.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1058" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers"> * @return string HTML img element or empty string on failure.
+ */
+function wp_get_attachment_image( $attachment_id, $size = 'thumbnail', $icon = false, $attr = '' ) {
+	$html  = '';
+	$image = wp_get_attachment_image_src( $attachment_id, $size, $icon );
+
+	if ( $image ) {
+		list( $src, $width, $height ) = $image;
+
+		$attachment = get_post( $attachment_id );
+		$hwstring   = image_hwstring( $width, $height );
+		$size_class = $size;
+
+		if ( is_array( $size_class ) ) {
+			$size_class = implode( 'x', $size_class );
+		}
+
+		$default_attr = array(
+			'src'   =&gt; $src,
+			'class' =&gt; "attachment-$size_class size-$size_class",
+			'alt'   =&gt; trim( strip_tags( get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) ) ),
+		);
+
+		/**
+		 * Filters the context in which wp_get_attachment_image() is used.
+		 *
+		 * @since 6.3.0
+		 *
+		 * @param string $context The context. Default 'wp_get_attachment_image'.
+		 */
+		$context = apply_filters( 'wp_get_attachment_image_context', 'wp_get_attachment_image' );
+		$attr    = wp_parse_args( $attr, $default_attr );
+
+		$loading_attr              = $attr;
+		$loading_attr['width']     = $width;
+		$loading_attr['height']    = $height;
+		$loading_optimization_attr = wp_get_loading_optimization_attributes(
+			'img',
+			$loading_attr,
+			$context
+		);
+
+		// Add loading optimization attributes if not available.
+		$attr = array_merge( $attr, $loading_optimization_attr );
+
+		// Omit the `decoding` attribute if the value is invalid according to the spec.
+		if ( empty( $attr['decoding'] ) || ! in_array( $attr['decoding'], array( 'async', 'sync', 'auto' ), true ) ) {
+			unset( $attr['decoding'] );
+		}
+
+		/*
+		 * If the default value of `lazy` for the `loading` attribute is overridden
+		 * to omit the attribute for this image, ensure it is not included.
+		 */
+		if ( isset( $attr['loading'] ) &amp;&amp; ! $attr['loading'] ) {
+			unset( $attr['loading'] );
+		}
+
+		// If the `fetchpriority` attribute is overridden and set to false or an empty string.
+		if ( isset( $attr['fetchpriority'] ) &amp;&amp; ! $attr['fetchpriority'] ) {
+			unset( $attr['fetchpriority'] );
+		}
+
+		// Generate 'srcset' and 'sizes' if not already present.
+		if ( empty( $attr['srcset'] ) ) {
+			$image_meta = wp_get_attachment_metadata( $attachment_id );
+
+			if ( is_array( $image_meta ) ) {
+				$size_array = array( absint( $width ), absint( $height ) );
+				$srcset     = wp_calculate_image_srcset( $size_array, $src, $image_meta, $attachment_id );
+				$sizes      = wp_calculate_image_sizes( $size_array, $src, $image_meta, $attachment_id );
+
+				if ( $srcset &amp;&amp; ( $sizes || ! empty( $attr['sizes'] ) ) ) {
+					$attr['srcset'] = $srcset;
+
+					if ( empty( $attr['sizes'] ) ) {
+						$attr['sizes'] = $sizes;
+					}
+				}
+			}
+		}
+
+		// Adds 'auto' to the sizes attribute if applicable.
+		if (
+			isset( $attr['loading'] ) &amp;&amp;
+			'lazy' === $attr['loading'] &amp;&amp;
+			isset( $attr['sizes'] ) &amp;&amp;
+			! wp_sizes_attribute_includes_valid_auto( $attr['sizes'] )
+		) {
+			$attr['sizes'] = 'auto, ' . $attr['sizes'];
+		}
+
+		/**
+		 * Filters the list of attachment image attributes.
+		 *
+		 * @since 2.8.0
+		 *
+		 * @param string[]     $attr       Array of attribute values for the image markup, keyed by attribute name.
+		 *                                 See wp_get_attachment_image().
+		 * @param WP_Post      $attachment Image attachment post.
+		 * @param string|int[] $size       Requested image size. Can be any registered image size name, or
+		 *                                 an array of width and height values in pixels (in that order).
+		 */
+		$attr = apply_filters( 'wp_get_attachment_image_attributes', $attr, $attachment, $size );
+
+		$attr = array_map( 'esc_attr', $attr );
+		$html = rtrim( "&lt;img $hwstring" );
+
+		foreach ( $attr as $name =&gt; $value ) {
+			$html .= " $name=" . '"' . $value . '"';
+		}
+
+		$html .= ' /&gt;';
+	}
+
+	/**
+	 * Filters the HTML img element representing an image attachment.
+	 *
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/media.php#L1058">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/media.php#L1058-L1175">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td><span class="since-description">The <code>$decoding</code> attribute was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">The <code>$loading</code> attribute was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">The <code>$srcset</code> and <code>$sizes</code> attributes were added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_attachment_image" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_attachment_image</a>
+  </p>
+</div>

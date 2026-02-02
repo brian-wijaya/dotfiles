@@ -1,0 +1,163 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Theme_Install_List_Table::single_row( <span class="arg-type">stdClass</span> <span class="arg-name">$theme</span> )</h1> <section><p>Prints a theme from the WordPress.org API.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$theme</code><span class="type"><span class="stdClass">stdClass</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An object that contains theme data returned by the WordPress.org API.<br> <ul class="param-hash">
+<li>
+<code>name</code> <span class="type">string</span><div class="desc">Theme name, e.g. ‘Twenty Twenty-One’.</div>
+</li> <li>
+<code>slug</code> <span class="type">string</span><div class="desc">Theme slug, e.g. <code>'twentytwentyone'</code>.</div>
+</li> <li>
+<code>version</code> <span class="type">string</span><div class="desc">Theme version, e.g. <code>'1.1'</code>.</div>
+</li> <li>
+<code>author</code> <span class="type">string</span><div class="desc">Theme author username, e.g. <code>'melchoyce'</code>.</div>
+</li> <li>
+<code>preview_url</code> <span class="type">string</span><div class="desc">Preview URL, e.g. <code>&lt;a href="https://2021.wordpress.net/"&gt;https://2021.wordpress.net/&lt;/a&gt;</code>.</div>
+</li> <li>
+<code>screenshot_url</code> <span class="type">string</span><div class="desc">Screenshot URL, e.g. <code>&lt;a href="https://wordpress.org/themes/twentytwentyone/"&gt;https://wordpress.org/themes/twentytwentyone/&lt;/a&gt;</code>.</div>
+</li> <li>
+<code>rating</code> <span class="type">float</span><div class="desc">Rating score.</div>
+</li> <li>
+<code>num_ratings</code> <span class="type">int</span><div class="desc">The number of ratings.</div>
+</li> <li>
+<code>homepage</code> <span class="type">string</span><div class="desc">Theme homepage, e.g. <code>&lt;a href="https://wordpress.org/themes/twentytwentyone/"&gt;https://wordpress.org/themes/twentytwentyone/&lt;/a&gt;</code>.</div>
+</li> <li>
+<code>description</code> <span class="type">string</span><div class="desc">Theme description.</div>
+</li> <li>
+<code>download_link</code> <span class="type">string</span><div class="desc">Theme ZIP download URL.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="275" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function single_row( $theme ) {
+	global $themes_allowedtags;
+
+	if ( empty( $theme ) ) {
+		return;
+	}
+
+	$name   = wp_kses( $theme-&gt;name, $themes_allowedtags );
+	$author = wp_kses( $theme-&gt;author, $themes_allowedtags );
+
+	/* translators: %s: Theme name. */
+	$preview_title = sprintf( __( 'Preview &amp;#8220;%s&amp;#8221;' ), $name );
+	$preview_url   = add_query_arg(
+		array(
+			'tab'   =&gt; 'theme-information',
+			'theme' =&gt; $theme-&gt;slug,
+		),
+		self_admin_url( 'theme-install.php' )
+	);
+
+	$actions = array();
+
+	$install_url = add_query_arg(
+		array(
+			'action' =&gt; 'install-theme',
+			'theme'  =&gt; $theme-&gt;slug,
+		),
+		self_admin_url( 'update.php' )
+	);
+
+	$update_url = add_query_arg(
+		array(
+			'action' =&gt; 'upgrade-theme',
+			'theme'  =&gt; $theme-&gt;slug,
+		),
+		self_admin_url( 'update.php' )
+	);
+
+	$status = $this-&gt;_get_theme_status( $theme );
+
+	switch ( $status ) {
+		case 'update_available':
+			$actions[] = sprintf(
+				'&lt;a class="install-now" href="%s" title="%s"&gt;%s&lt;/a&gt;',
+				esc_url( wp_nonce_url( $update_url, 'upgrade-theme_' . $theme-&gt;slug ) ),
+				/* translators: %s: Theme version. */
+				esc_attr( sprintf( __( 'Update to version %s' ), $theme-&gt;version ) ),
+				__( 'Update' )
+			);
+			break;
+		case 'newer_installed':
+		case 'latest_installed':
+			$actions[] = sprintf(
+				'&lt;span class="install-now" title="%s"&gt;%s&lt;/span&gt;',
+				esc_attr__( 'This theme is already installed and is up to date' ),
+				_x( 'Installed', 'theme' )
+			);
+			break;
+		case 'install':
+		default:
+			$actions[] = sprintf(
+				'&lt;a class="install-now" href="%s" title="%s"&gt;%s&lt;/a&gt;',
+				esc_url( wp_nonce_url( $install_url, 'install-theme_' . $theme-&gt;slug ) ),
+				/* translators: %s: Theme name. */
+				esc_attr( sprintf( _x( 'Install %s', 'theme' ), $name ) ),
+				_x( 'Install Now', 'theme' )
+			);
+			break;
+	}
+
+	$actions[] = sprintf(
+		'&lt;a class="install-theme-preview" href="%s" title="%s"&gt;%s&lt;/a&gt;',
+		esc_url( $preview_url ),
+		/* translators: %s: Theme name. */
+		esc_attr( sprintf( __( 'Preview %s' ), $name ) ),
+		__( 'Preview' )
+	);
+
+	/**
+	 * Filters the install action links for a theme in the Install Themes list table.
+	 *
+	 * @since 3.4.0
+	 *
+	 * @param string[] $actions An array of theme action links. Defaults are
+	 *                          links to Install Now, Preview, and Details.
+	 * @param stdClass $theme   An object that contains theme data returned by the
+	 *                          WordPress.org API.
+	 */
+	$actions = apply_filters( 'theme_install_actions', $actions, $theme );
+
+	?&gt;
+	&lt;a class="screenshot install-theme-preview" href="&lt;?php echo esc_url( $preview_url ); ?&gt;" title="&lt;?php echo esc_attr( $preview_title ); ?&gt;"&gt;
+		&lt;img src="&lt;?php echo esc_url( $theme-&gt;screenshot_url . '?ver=' . $theme-&gt;version ); ?&gt;" width="150" alt="" /&gt;
+	&lt;/a&gt;
+
+	&lt;h3&gt;&lt;?php echo $name; ?&gt;&lt;/h3&gt;
+	&lt;div class="theme-author"&gt;
+	&lt;?php
+		/* translators: %s: Theme author. */
+		printf( __( 'By %s' ), $author );
+	?&gt;
+	&lt;/div&gt;
+
+	&lt;div class="action-links"&gt;
+		&lt;ul&gt;
+			&lt;?php foreach ( $actions as $action ) : ?&gt;
+				&lt;li&gt;&lt;?php echo $action; ?&gt;&lt;/li&gt;
+			&lt;?php endforeach; ?&gt;
+			&lt;li class="hide-if-no-js"&gt;&lt;a href="#" class="theme-detail"&gt;&lt;?php _e( 'Details' ); ?&gt;&lt;/a&gt;&lt;/li&gt;
+		&lt;/ul&gt;
+	&lt;/div&gt;
+
+	&lt;?php
+	$this-&gt;install_theme_info( $theme );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-theme-install-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-theme-install-list-table.php#L275">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-theme-install-list-table.php#L275-L389">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/theme_install_actions"><span class="hook-func">apply_filters</span>( ‘theme_install_actions’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$actions</span></nobr>, <nobr><span class="arg-type">stdClass</span> <span class="arg-name">$theme</span></nobr> )</a></dt>
+<dd>
+<p>Filters the install action links for a theme in the Install Themes list table.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_theme_install_list_table/single_row" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_theme_install_list_table/single_row</a>
+  </p>
+</div>

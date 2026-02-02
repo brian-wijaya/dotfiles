@@ -1,0 +1,151 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Sitemaps_Posts::get_url_list( <span class="arg-type">int</span> <span class="arg-name">$page_num</span>, <span class="arg-type">string</span> <span class="arg-name">$object_subtype</span> = <span class="arg-default">”</span> ): <span class="return-type">array[]</span>
+</h1> <section><p>Gets a URL list for a post type sitemap.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$page_num</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Page of results.</span></div></dd>
+<dt>
+<code>$object_subtype</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Post type name. </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array[]</span> Array of URL information for a sitemap.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="64" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_url_list( $page_num, $object_subtype = '' ) {
+	// Restores the more descriptive, specific name for use within this method.
+	$post_type = $object_subtype;
+
+	// Bail early if the queried post type is not supported.
+	$supported_types = $this-&gt;get_object_subtypes();
+
+	if ( ! isset( $supported_types[ $post_type ] ) ) {
+		return array();
+	}
+
+	/**
+	 * Filters the posts URL list before it is generated.
+	 *
+	 * Returning a non-null value will effectively short-circuit the generation,
+	 * returning that value instead.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param array[]|null $url_list  The URL list. Default null.
+	 * @param string       $post_type Post type name.
+	 * @param int          $page_num  Page of results.
+	 */
+	$url_list = apply_filters(
+		'wp_sitemaps_posts_pre_url_list',
+		null,
+		$post_type,
+		$page_num
+	);
+
+	if ( null !== $url_list ) {
+		return $url_list;
+	}
+
+	$args          = $this-&gt;get_posts_query_args( $post_type );
+	$args['paged'] = $page_num;
+
+	$query = new WP_Query( $args );
+
+	$url_list = array();
+
+	/*
+	 * Add a URL for the homepage in the pages sitemap.
+	 * Shows only on the first page if the reading settings are set to display latest posts.
+	 */
+	if ( 'page' === $post_type &amp;&amp; 1 === $page_num &amp;&amp; 'posts' === get_option( 'show_on_front' ) ) {
+		// Extract the data needed for home URL to add to the array.
+		$sitemap_entry = array(
+			'loc' =&gt; home_url( '/' ),
+		);
+
+		/*
+		 * Get the most recent posts displayed on the homepage,
+		 * and then sort them by their modified date to find
+		 * the date the homepage was approximately last updated.
+		 */
+		$latest_posts = new WP_Query(
+			array(
+				'post_type'              =&gt; 'post',
+				'post_status'            =&gt; 'publish',
+				'orderby'                =&gt; 'date',
+				'order'                  =&gt; 'DESC',
+				'no_found_rows'          =&gt; true,
+				'update_post_meta_cache' =&gt; false,
+				'update_post_term_cache' =&gt; false,
+			)
+		);
+
+		if ( ! empty( $latest_posts-&gt;posts ) ) {
+			$posts = wp_list_sort( $latest_posts-&gt;posts, 'post_modified_gmt', 'DESC' );
+
+			$sitemap_entry['lastmod'] = wp_date( DATE_W3C, strtotime( $posts[0]-&gt;post_modified_gmt ) );
+		}
+
+		/**
+		 * Filters the sitemap entry for the home page when the 'show_on_front' option equals 'posts'.
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param array $sitemap_entry Sitemap entry for the home page.
+		 */
+		$sitemap_entry = apply_filters( 'wp_sitemaps_posts_show_on_front_entry', $sitemap_entry );
+		$url_list[]    = $sitemap_entry;
+	}
+
+	foreach ( $query-&gt;posts as $post ) {
+		$sitemap_entry = array(
+			'loc'     =&gt; get_permalink( $post ),
+			'lastmod' =&gt; wp_date( DATE_W3C, strtotime( $post-&gt;post_modified_gmt ) ),
+		);
+
+		/**
+		 * Filters the sitemap entry for an individual post.
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param array   $sitemap_entry Sitemap entry for the post.
+		 * @param WP_Post $post          Post object.
+		 * @param string  $post_type     Name of the post_type.
+		 */
+		$sitemap_entry = apply_filters( 'wp_sitemaps_posts_entry', $sitemap_entry, $post, $post_type );
+		$url_list[]    = $sitemap_entry;
+	}
+
+	return $url_list;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/sitemaps/providers/class-wp-sitemaps-posts.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/sitemaps/providers/class-wp-sitemaps-posts.php#L64">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/sitemaps/providers/class-wp-sitemaps-posts.php#L64-L169">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/wp_sitemaps_posts_entry"><span class="hook-func">apply_filters</span>( ‘wp_sitemaps_posts_entry’, <nobr><span class="arg-type">array</span> <span class="arg-name">$sitemap_entry</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters the sitemap entry for an individual post.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/wp_sitemaps_posts_pre_url_list"><span class="hook-func">apply_filters</span>( ‘wp_sitemaps_posts_pre_url_list’, <nobr><span class="arg-type">array[]|null</span> <span class="arg-name">$url_list</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$page_num</span></nobr> )</a></dt>
+<dd>
+<p>Filters the posts URL list before it is generated.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/wp_sitemaps_posts_show_on_front_entry"><span class="hook-func">apply_filters</span>( ‘wp_sitemaps_posts_show_on_front_entry’, <nobr><span class="arg-type">array</span> <span class="arg-name">$sitemap_entry</span></nobr> )</a></dt>
+<dd>
+<p>Filters the sitemap entry for the home page when the ‘show_on_front’ option equals ‘posts’.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Renamed <code>$post_type</code> to <code>$object_subtype</code> to match parent class for PHP 8 named parameter support.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_sitemaps_posts/get_url_list" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_sitemaps_posts/get_url_list</a>
+  </p>
+</div>

@@ -1,0 +1,51 @@
+<h1 class="wp-block-wporg-code-reference-title">verify_file_md5( <span class="arg-type">string</span> <span class="arg-name">$filename</span>, <span class="arg-type">string</span> <span class="arg-name">$expected_md5</span> ): <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Calculates and compares the MD5 of a file to its expected value.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$filename</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The filename to check the MD5 of.</span></div></dd>
+<dt>
+<code>$expected_md5</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The expected MD5 of the file, either a base64-encoded raw md5, or a hex-encoded md5.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True on success, false when the MD5 format is unknown/unexpected, <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1350" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function verify_file_md5( $filename, $expected_md5 ) {
+	if ( 32 === strlen( $expected_md5 ) ) {
+		$expected_raw_md5 = pack( 'H*', $expected_md5 );
+	} elseif ( 24 === strlen( $expected_md5 ) ) {
+		$expected_raw_md5 = base64_decode( $expected_md5 );
+	} else {
+		return false; // Unknown format.
+	}
+
+	$file_md5 = md5_file( $filename, true );
+
+	if ( $file_md5 === $expected_raw_md5 ) {
+		return true;
+	}
+
+	return new WP_Error(
+		'md5_mismatch',
+		sprintf(
+			/* translators: 1: File checksum, 2: Expected checksum value. */
+			__( 'The checksum of the file (%1$s) does not match the expected checksum value (%2$s).' ),
+			bin2hex( $file_md5 ),
+			bin2hex( $expected_raw_md5 )
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/file.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/file.php#L1350">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/file.php#L1350-L1374">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/verify_file_md5" class="_attribution-link">https://developer.wordpress.org/reference/functions/verify_file_md5</a>
+  </p>
+</div>

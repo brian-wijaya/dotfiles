@@ -1,0 +1,293 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_archives( <span class="arg-type">string|array</span> <span class="arg-name">$args</span> = <span class="arg-default">”</span> ): <span class="return-type">void|string</span>
+</h1> <section><p>Displays archive links based on type and format.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="get_archives_link">get_archives_link()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="string">string</span>|<span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Default archive links arguments. Optional.<br> <ul class="param-hash">
+<li>
+<code>type</code> <span class="type">string</span><div class="desc">Type of archive to retrieve. Accepts <code>'daily'</code>, <code>'weekly'</code>, <code>'monthly'</code>, <code>'yearly'</code>, <code>'postbypost'</code>, or <code>'alpha'</code>. Both <code>'postbypost'</code> and <code>'alpha'</code> display the same archive link list as well as post titles instead of displaying dates. The difference between the two is that <code>'alpha'</code> will order by post title and <code>'postbypost'</code> will order by post date.<br> Default <code>'monthly'</code>.</div>
+</li> <li>
+<code>limit</code> <span class="type">string|int</span><div class="desc">Number of links to limit the query to. Default empty (no limit).</div>
+</li> <li>
+<code>format</code> <span class="type">string</span><div class="desc">Format each link should take using the $before and $after args.<br> Accepts <code>'link'</code> (<code>&lt;link&gt;</code> tag), <code>'option'</code> (<code>&lt;option&gt;</code> tag), <code>'html'</code> (<code>&lt;li&gt;</code> tag), or a custom format, which generates a link anchor with $before preceding and $after succeeding. Default <code>'html'</code>.</div>
+</li> <li>
+<code>before</code> <span class="type">string</span><div class="desc">Markup to prepend to the beginning of each link. </div>
+</li> <li>
+<code>after</code> <span class="type">string</span><div class="desc">Markup to append to the end of each link. </div>
+</li> <li>
+<code>show_post_count</code> <span class="type">bool</span><div class="desc">Whether to display the post count alongside the link. Default false.</div>
+</li> <li>
+<code>echo</code> <span class="type">bool|int</span><div class="desc">Whether to echo or return the links list. Default <code>1|true</code> to echo.</div>
+</li> <li>
+<code>order</code> <span class="type">string</span><div class="desc">Whether to use ascending or descending order. Accepts <code>'ASC'</code>, or <code>'DESC'</code>.<br> Default <code>'DESC'</code>.</div>
+</li> <li>
+<code>post_type</code> <span class="type">string</span><div class="desc">Post type. Default <code>'post'</code>.</div>
+</li> <li>
+<code>year</code> <span class="type">string</span><div class="desc">Year. Default current year.</div>
+</li> <li>
+<code>monthnum</code> <span class="type">string</span><div class="desc">Month number. Default current month number.</div>
+</li> <li>
+<code>day</code> <span class="type">string</span><div class="desc">Day. Default current day.</div>
+</li> <li>
+<code>w</code> <span class="type">string</span><div class="desc">Week. Default current week.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">void|string</span> Void if <code>'echo'</code> argument is true, archive links if <code>'echo'</code> is false.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1996" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_archives( $args = '' ) {
+	global $wpdb, $wp_locale;
+
+	$defaults = array(
+		'type'            =&gt; 'monthly',
+		'limit'           =&gt; '',
+		'format'          =&gt; 'html',
+		'before'          =&gt; '',
+		'after'           =&gt; '',
+		'show_post_count' =&gt; false,
+		'echo'            =&gt; 1,
+		'order'           =&gt; 'DESC',
+		'post_type'       =&gt; 'post',
+		'year'            =&gt; get_query_var( 'year' ),
+		'monthnum'        =&gt; get_query_var( 'monthnum' ),
+		'day'             =&gt; get_query_var( 'day' ),
+		'w'               =&gt; get_query_var( 'w' ),
+	);
+
+	$parsed_args = wp_parse_args( $args, $defaults );
+
+	$post_type_object = get_post_type_object( $parsed_args['post_type'] );
+	if ( ! is_post_type_viewable( $post_type_object ) ) {
+		return;
+	}
+
+	$parsed_args['post_type'] = $post_type_object-&gt;name;
+
+	if ( '' === $parsed_args['type'] ) {
+		$parsed_args['type'] = 'monthly';
+	}
+
+	if ( ! empty( $parsed_args['limit'] ) ) {
+		$parsed_args['limit'] = absint( $parsed_args['limit'] );
+		$parsed_args['limit'] = ' LIMIT ' . $parsed_args['limit'];
+	}
+
+	$order = strtoupper( $parsed_args['order'] );
+	if ( 'ASC' !== $order ) {
+		$order = 'DESC';
+	}
+
+	// This is what will separate dates on weekly archive links.
+	$archive_week_separator = '&amp;#8211;';
+
+	$sql_where = $wpdb-&gt;prepare( "WHERE post_type = %s AND post_status = 'publish'", $parsed_args['post_type'] );
+
+	/**
+	 * Filters the SQL WHERE clause for retrieving archives.
+	 *
+	 * @since 2.2.0
+	 *
+	 * @param string $sql_where   Portion of SQL query containing the WHERE clause.
+	 * @param array  $parsed_args An array of default arguments.
+	 */
+	$where = apply_filters( 'getarchives_where', $sql_where, $parsed_args );
+
+	/**
+	 * Filters the SQL JOIN clause for retrieving archives.
+	 *
+	 * @since 2.2.0
+	 *
+	 * @param string $sql_join    Portion of SQL query containing JOIN clause.
+	 * @param array  $parsed_args An array of default arguments.
+	 */
+	$join = apply_filters( 'getarchives_join', '', $parsed_args );
+
+	$output = '';
+
+	$last_changed = wp_cache_get_last_changed( 'posts' );
+
+	$limit = $parsed_args['limit'];
+
+	if ( 'monthly' === $parsed_args['type'] ) {
+		$query   = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, count(ID) as posts FROM $wpdb-&gt;posts $join $where GROUP BY YEAR(post_date), MONTH(post_date) ORDER BY post_date $order $limit";
+		$key     = md5( $query );
+		$key     = "wp_get_archives:$key:$last_changed";
+		$results = wp_cache_get( $key, 'post-queries' );
+		if ( ! $results ) {
+			$results = $wpdb-&gt;get_results( $query );
+			wp_cache_set( $key, $results, 'post-queries' );
+		}
+		if ( $results ) {
+			$after = $parsed_args['after'];
+			foreach ( (array) $results as $result ) {
+				$url = get_month_link( $result-&gt;year, $result-&gt;month );
+				if ( 'post' !== $parsed_args['post_type'] ) {
+					$url = add_query_arg( 'post_type', $parsed_args['post_type'], $url );
+				}
+				/* translators: 1: Month name, 2: 4-digit year. */
+				$text = sprintf( __( '%1$s %2$d' ), $wp_locale-&gt;get_month( $result-&gt;month ), $result-&gt;year );
+				if ( $parsed_args['show_post_count'] ) {
+					$parsed_args['after'] = '&amp;nbsp;(' . $result-&gt;posts . ')' . $after;
+				}
+				$selected = is_archive() &amp;&amp; (string) $parsed_args['year'] === $result-&gt;year &amp;&amp; (string) $parsed_args['monthnum'] === $result-&gt;month;
+				$output  .= get_archives_link( $url, $text, $parsed_args['format'], $parsed_args['before'], $parsed_args['after'], $selected );
+			}
+		}
+	} elseif ( 'yearly' === $parsed_args['type'] ) {
+		$query   = "SELECT YEAR(post_date) AS `year`, count(ID) as posts FROM $wpdb-&gt;posts $join $where GROUP BY YEAR(post_date) ORDER BY post_date $order $limit";
+		$key     = md5( $query );
+		$key     = "wp_get_archives:$key:$last_changed";
+		$results = wp_cache_get( $key, 'post-queries' );
+		if ( ! $results ) {
+			$results = $wpdb-&gt;get_results( $query );
+			wp_cache_set( $key, $results, 'post-queries' );
+		}
+		if ( $results ) {
+			$after = $parsed_args['after'];
+			foreach ( (array) $results as $result ) {
+				$url = get_year_link( $result-&gt;year );
+				if ( 'post' !== $parsed_args['post_type'] ) {
+					$url = add_query_arg( 'post_type', $parsed_args['post_type'], $url );
+				}
+				$text = sprintf( '%d', $result-&gt;year );
+				if ( $parsed_args['show_post_count'] ) {
+					$parsed_args['after'] = '&amp;nbsp;(' . $result-&gt;posts . ')' . $after;
+				}
+				$selected = is_archive() &amp;&amp; (string) $parsed_args['year'] === $result-&gt;year;
+				$output  .= get_archives_link( $url, $text, $parsed_args['format'], $parsed_args['before'], $parsed_args['after'], $selected );
+			}
+		}
+	} elseif ( 'daily' === $parsed_args['type'] ) {
+		$query   = "SELECT YEAR(post_date) AS `year`, MONTH(post_date) AS `month`, DAYOFMONTH(post_date) AS `dayofmonth`, count(ID) as posts FROM $wpdb-&gt;posts $join $where GROUP BY YEAR(post_date), MONTH(post_date), DAYOFMONTH(post_date) ORDER BY post_date $order $limit";
+		$key     = md5( $query );
+		$key     = "wp_get_archives:$key:$last_changed";
+		$results = wp_cache_get( $key, 'post-queries' );
+		if ( ! $results ) {
+			$results = $wpdb-&gt;get_results( $query );
+			wp_cache_set( $key, $results, 'post-queries' );
+		}
+		if ( $results ) {
+			$after = $parsed_args['after'];
+			foreach ( (array) $results as $result ) {
+				$url = get_day_link( $result-&gt;year, $result-&gt;month, $result-&gt;dayofmonth );
+				if ( 'post' !== $parsed_args['post_type'] ) {
+					$url = add_query_arg( 'post_type', $parsed_args['post_type'], $url );
+				}
+				$date = sprintf( '%1$d-%2$02d-%3$02d 00:00:00', $result-&gt;year, $result-&gt;month, $result-&gt;dayofmonth );
+				$text = mysql2date( get_option( 'date_format' ), $date );
+				if ( $parsed_args['show_post_count'] ) {
+					$parsed_args['after'] = '&amp;nbsp;(' . $result-&gt;posts . ')' . $after;
+				}
+				$selected = is_archive() &amp;&amp; (string) $parsed_args['year'] === $result-&gt;year &amp;&amp; (string) $parsed_args['monthnum'] === $result-&gt;month &amp;&amp; (string) $parsed_args['day'] === $result-&gt;dayofmonth;
+				$output  .= get_archives_link( $url, $text, $parsed_args['format'], $parsed_args['before'], $parsed_args['after'], $selected );
+			}
+		}
+	} elseif ( 'weekly' === $parsed_args['type'] ) {
+		$week    = _wp_mysql_week( '`post_date`' );
+		$query   = "SELECT DISTINCT $week AS `week`, YEAR( `post_date` ) AS `yr`, DATE_FORMAT( `post_date`, '%Y-%m-%d' ) AS `yyyymmdd`, count( `ID` ) AS `posts` FROM `$wpdb-&gt;posts` $join $where GROUP BY $week, YEAR( `post_date` ) ORDER BY `post_date` $order $limit";
+		$key     = md5( $query );
+		$key     = "wp_get_archives:$key:$last_changed";
+		$results = wp_cache_get( $key, 'post-queries' );
+		if ( ! $results ) {
+			$results = $wpdb-&gt;get_results( $query );
+			wp_cache_set( $key, $results, 'post-queries' );
+		}
+		$arc_w_last = '';
+		if ( $results ) {
+			$after = $parsed_args['after'];
+			foreach ( (array) $results as $result ) {
+				if ( $result-&gt;week != $arc_w_last ) {
+					$arc_year       = $result-&gt;yr;
+					$arc_w_last     = $result-&gt;week;
+					$arc_week       = get_weekstartend( $result-&gt;yyyymmdd, get_option( 'start_of_week' ) );
+					$arc_week_start = date_i18n( get_option( 'date_format' ), $arc_week['start'] );
+					$arc_week_end   = date_i18n( get_option( 'date_format' ), $arc_week['end'] );
+					$url            = add_query_arg(
+						array(
+							'm' =&gt; $arc_year,
+							'w' =&gt; $result-&gt;week,
+						),
+						home_url( '/' )
+					);
+					if ( 'post' !== $parsed_args['post_type'] ) {
+						$url = add_query_arg( 'post_type', $parsed_args['post_type'], $url );
+					}
+					$text = $arc_week_start . $archive_week_separator . $arc_week_end;
+					if ( $parsed_args['show_post_count'] ) {
+						$parsed_args['after'] = '&amp;nbsp;(' . $result-&gt;posts . ')' . $after;
+					}
+					$selected = is_archive() &amp;&amp; (string) $parsed_args['year'] === $result-&gt;yr &amp;&amp; (string) $parsed_args['w'] === $result-&gt;week;
+					$output  .= get_archives_link( $url, $text, $parsed_args['format'], $parsed_args['before'], $parsed_args['after'], $selected );
+				}
+			}
+		}
+	} elseif ( ( 'postbypost' === $parsed_args['type'] ) || ( 'alpha' === $parsed_args['type'] ) ) {
+		$orderby = ( 'alpha' === $parsed_args['type'] ) ? 'post_title ASC ' : 'post_date DESC, ID DESC ';
+		$query   = "SELECT * FROM $wpdb-&gt;posts $join $where ORDER BY $orderby $limit";
+		$key     = md5( $query );
+		$key     = "wp_get_archives:$key:$last_changed";
+		$results = wp_cache_get( $key, 'post-queries' );
+		if ( ! $results ) {
+			$results = $wpdb-&gt;get_results( $query );
+			wp_cache_set( $key, $results, 'post-queries' );
+		}
+		if ( $results ) {
+			foreach ( (array) $results as $result ) {
+				if ( '0000-00-00 00:00:00' !== $result-&gt;post_date ) {
+					$url = get_permalink( $result );
+					if ( $result-&gt;post_title ) {
+						/** This filter is documented in wp-includes/post-template.php */
+						$text = strip_tags( apply_filters( 'the_title', $result-&gt;post_title, $result-&gt;ID ) );
+					} else {
+						$text = $result-&gt;ID;
+					}
+					$selected = get_the_ID() === $result-&gt;ID;
+					$output  .= get_archives_link( $url, $text, $parsed_args['format'], $parsed_args['before'], $parsed_args['after'], $selected );
+				}
+			}
+		}
+	}
+
+	if ( $parsed_args['echo'] ) {
+		echo $output;
+	} else {
+		return $output;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/general-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/general-template.php#L1996">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/general-template.php#L1996-L2214">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/getarchives_join"><span class="hook-func">apply_filters</span>( ‘getarchives_join’, <nobr><span class="arg-type">string</span> <span class="arg-name">$sql_join</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$parsed_args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the SQL JOIN clause for retrieving archives.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/getarchives_where"><span class="hook-func">apply_filters</span>( ‘getarchives_where’, <nobr><span class="arg-type">string</span> <span class="arg-name">$sql_where</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$parsed_args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the SQL WHERE clause for retrieving archives.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/the_title"><span class="hook-func">apply_filters</span>( ‘the_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_title</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post title.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td><span class="since-description">The <code>$year</code>, <code>$monthnum</code>, <code>$day</code>, and <code>$w</code> arguments were added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">The <code>$post_type</code> argument was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.2.0/">1.2.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_archives" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_archives</a>
+  </p>
+</div>

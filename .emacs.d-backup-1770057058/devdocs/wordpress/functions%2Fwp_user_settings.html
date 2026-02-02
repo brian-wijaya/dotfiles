@@ -1,0 +1,58 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_user_settings()</h1> <section><p>Saves and restores user interface settings stored in a cookie.</p> </section> <section><h2 id="description">Description</h2> <p>Checks if the current user-settings cookie is updated and stores it. When no cookie exists (different browser used), adds the last saved cookie restoring the settings.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1677" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_user_settings() {
+
+	if ( ! is_admin() || wp_doing_ajax() ) {
+		return;
+	}
+
+	$user_id = get_current_user_id();
+	if ( ! $user_id ) {
+		return;
+	}
+
+	if ( ! is_user_member_of_blog() ) {
+		return;
+	}
+
+	$settings = (string) get_user_option( 'user-settings', $user_id );
+
+	if ( isset( $_COOKIE[ 'wp-settings-' . $user_id ] ) ) {
+		$cookie = preg_replace( '/[^A-Za-z0-9=&amp;_]/', '', $_COOKIE[ 'wp-settings-' . $user_id ] );
+
+		// No change or both empty.
+		if ( $cookie === $settings ) {
+			return;
+		}
+
+		$last_saved = (int) get_user_option( 'user-settings-time', $user_id );
+		$current    = isset( $_COOKIE[ 'wp-settings-time-' . $user_id ] ) ? preg_replace( '/[^0-9]/', '', $_COOKIE[ 'wp-settings-time-' . $user_id ] ) : 0;
+
+		// The cookie is newer than the saved value. Update the user_option and leave the cookie as-is.
+		if ( $current &gt; $last_saved ) {
+			update_user_option( $user_id, 'user-settings', $cookie, false );
+			update_user_option( $user_id, 'user-settings-time', time() - 5, false );
+			return;
+		}
+	}
+
+	// The cookie is not set in the current browser or the saved value is newer.
+	$secure = ( 'https' === parse_url( admin_url(), PHP_URL_SCHEME ) );
+	setcookie( 'wp-settings-' . $user_id, $settings, time() + YEAR_IN_SECONDS, SITECOOKIEPATH, '', $secure );
+	setcookie( 'wp-settings-time-' . $user_id, time(), time() + YEAR_IN_SECONDS, SITECOOKIEPATH, '', $secure );
+	$_COOKIE[ 'wp-settings-' . $user_id ] = $settings;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/option.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/option.php#L1677">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/option.php#L1677-L1718">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_user_settings" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_user_settings</a>
+  </p>
+</div>

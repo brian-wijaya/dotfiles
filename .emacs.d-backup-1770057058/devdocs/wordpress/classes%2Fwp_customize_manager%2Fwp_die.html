@@ -1,0 +1,64 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Manager::wp_die( <span class="arg-type">string|WP_Error</span> <span class="arg-name">$ajax_message</span>, <span class="arg-type">string</span> <span class="arg-name">$message</span> = <span class="arg-default">null</span> )</h1> <section><p>Custom wp_die wrapper. Returns either the standard message for UI or the Ajax message.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$ajax_message</code><span class="type"><span class="string">string</span>|<span class="WP_Error"><a href="../wp_error" rel="class">WP_Error</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Ajax return.</span></div></dd>
+<dt>
+<code>$message</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">UI message.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="451" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function wp_die( $ajax_message, $message = null ) {
+	if ( $this-&gt;doing_ajax() ) {
+		wp_die( $ajax_message );
+	}
+
+	if ( ! $message ) {
+		$message = __( 'Something went wrong.' );
+	}
+
+	if ( $this-&gt;messenger_channel ) {
+		ob_start();
+		wp_enqueue_scripts();
+		wp_print_scripts( array( 'customize-base' ) );
+
+		$settings = array(
+			'messengerArgs' =&gt; array(
+				'channel' =&gt; $this-&gt;messenger_channel,
+				'url'     =&gt; wp_customize_url(),
+			),
+			'error'         =&gt; $ajax_message,
+		);
+		$message .= ob_get_clean();
+		ob_start();
+		?&gt;
+		&lt;script&gt;
+		( function( api, settings ) {
+			var preview = new api.Messenger( settings.messengerArgs );
+			preview.send( 'iframe-loading-error', settings.error );
+		} )( wp.customize, &lt;?php echo wp_json_encode( $settings ); ?&gt; );
+		&lt;/script&gt;
+		&lt;?php
+		$message .= wp_get_inline_script_tag( wp_remove_surrounding_empty_script_tags( ob_get_clean() ) );
+	}
+
+	wp_die( $message );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-manager.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-manager.php#L451">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-manager.php#L451-L486">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_manager/wp_die" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_manager/wp_die</a>
+  </p>
+</div>

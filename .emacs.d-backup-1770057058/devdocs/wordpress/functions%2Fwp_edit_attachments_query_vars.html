@@ -1,0 +1,86 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_edit_attachments_query_vars( <span class="arg-type">array|false</span> <span class="arg-name">$q</span> = <span class="arg-default">false</span> ): <span class="return-type">array</span>
+</h1> <section><p>Returns the query variables for the current attachments request.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$q</code><span class="type"><span class="array">array</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of query variables to use to build the query.<br> Defaults to the <code>$_GET</code> superglobal.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The parsed query vars.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1320" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_edit_attachments_query_vars( $q = false ) {
+	if ( false === $q ) {
+		$q = $_GET;
+	}
+	$q['m']         = isset( $q['m'] ) ? (int) $q['m'] : 0;
+	$q['cat']       = isset( $q['cat'] ) ? (int) $q['cat'] : 0;
+	$q['post_type'] = 'attachment';
+	$post_type      = get_post_type_object( 'attachment' );
+	$states         = 'inherit';
+	if ( current_user_can( $post_type-&gt;cap-&gt;read_private_posts ) ) {
+		$states .= ',private';
+	}
+
+	$q['post_status'] = isset( $q['status'] ) &amp;&amp; 'trash' === $q['status'] ? 'trash' : $states;
+	$q['post_status'] = isset( $q['attachment-filter'] ) &amp;&amp; 'trash' === $q['attachment-filter'] ? 'trash' : $states;
+
+	$media_per_page = (int) get_user_option( 'upload_per_page' );
+	if ( empty( $media_per_page ) || $media_per_page &lt; 1 ) {
+		$media_per_page = 20;
+	}
+
+	/**
+	 * Filters the number of items to list per page when listing media items.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param int $media_per_page Number of media to list. Default 20.
+	 */
+	$q['posts_per_page'] = apply_filters( 'upload_per_page', $media_per_page );
+
+	$post_mime_types = get_post_mime_types();
+	if ( isset( $q['post_mime_type'] ) &amp;&amp; ! array_intersect( (array) $q['post_mime_type'], array_keys( $post_mime_types ) ) ) {
+		unset( $q['post_mime_type'] );
+	}
+
+	foreach ( array_keys( $post_mime_types ) as $type ) {
+		if ( isset( $q['attachment-filter'] ) &amp;&amp; "post_mime_type:$type" === $q['attachment-filter'] ) {
+			$q['post_mime_type'] = $type;
+			break;
+		}
+	}
+
+	if ( isset( $q['detached'] ) || ( isset( $q['attachment-filter'] ) &amp;&amp; 'detached' === $q['attachment-filter'] ) ) {
+		$q['post_parent'] = 0;
+	}
+
+	if ( isset( $q['mine'] ) || ( isset( $q['attachment-filter'] ) &amp;&amp; 'mine' === $q['attachment-filter'] ) ) {
+		$q['author'] = get_current_user_id();
+	}
+
+	// Filter query clauses to include filenames.
+	if ( isset( $q['s'] ) ) {
+		add_filter( 'wp_allow_query_attachment_by_filename', '__return_true' );
+	}
+
+	return $q;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/post.php#L1320">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/post.php#L1320-L1376">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/upload_per_page"><span class="hook-func">apply_filters</span>( ‘upload_per_page’, <nobr><span class="arg-type">int</span> <span class="arg-name">$media_per_page</span></nobr> )</a></dt>
+<dd>
+<p>Filters the number of items to list per page when listing media items.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_edit_attachments_query_vars" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_edit_attachments_query_vars</a>
+  </p>
+</div>

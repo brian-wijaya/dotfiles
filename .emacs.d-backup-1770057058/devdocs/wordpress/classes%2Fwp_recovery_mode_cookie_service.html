@@ -1,0 +1,289 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Recovery_Mode_Cookie_Service {}</h1> <section><p>Core class used to set, validate, and clear cookies that identify a Recovery Mode session.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_recovery_mode_cookie_service/clear_cookie">WP_Recovery_Mode_Cookie_Service::clear_cookie</a></td>
+<td>Clears the recovery mode cookie.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_cookie_service/generate_cookie">WP_Recovery_Mode_Cookie_Service::generate_cookie</a></td>
+<td>Generates the recovery mode cookie value.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_cookie_service/get_session_id_from_cookie">WP_Recovery_Mode_Cookie_Service::get_session_id_from_cookie</a></td>
+<td>Gets the session identifier from the cookie.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_cookie_service/is_cookie_set">WP_Recovery_Mode_Cookie_Service::is_cookie_set</a></td>
+<td>Checks whether the recovery mode cookie is set.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_cookie_service/parse_cookie">WP_Recovery_Mode_Cookie_Service::parse_cookie</a></td>
+<td>Parses the cookie into its four parts.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_cookie_service/recovery_mode_hash">WP_Recovery_Mode_Cookie_Service::recovery_mode_hash</a></td>
+<td>Gets a form of `<a href="../functions/wp_hash" rel="function">wp_hash()</a> ` specific to Recovery Mode.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_cookie_service/set_cookie">WP_Recovery_Mode_Cookie_Service::set_cookie</a></td>
+<td>Sets the recovery mode cookie.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_cookie_service/validate_cookie">WP_Recovery_Mode_Cookie_Service::validate_cookie</a></td>
+<td>Validates the recovery mode cookie.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="15" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">final class WP_Recovery_Mode_Cookie_Service {
+
+	/**
+	 * Checks whether the recovery mode cookie is set.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @return bool True if the cookie is set, false otherwise.
+	 */
+	public function is_cookie_set() {
+		return ! empty( $_COOKIE[ RECOVERY_MODE_COOKIE ] );
+	}
+
+	/**
+	 * Sets the recovery mode cookie.
+	 *
+	 * This must be immediately followed by exiting the request.
+	 *
+	 * @since 5.2.0
+	 */
+	public function set_cookie() {
+
+		$value = $this-&gt;generate_cookie();
+
+		/**
+		 * Filters the length of time a Recovery Mode cookie is valid for.
+		 *
+		 * @since 5.2.0
+		 *
+		 * @param int $length Length in seconds.
+		 */
+		$length = apply_filters( 'recovery_mode_cookie_length', WEEK_IN_SECONDS );
+
+		$expire = time() + $length;
+
+		setcookie( RECOVERY_MODE_COOKIE, $value, $expire, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+
+		if ( COOKIEPATH !== SITECOOKIEPATH ) {
+			setcookie( RECOVERY_MODE_COOKIE, $value, $expire, SITECOOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+		}
+	}
+
+	/**
+	 * Clears the recovery mode cookie.
+	 *
+	 * @since 5.2.0
+	 */
+	public function clear_cookie() {
+		setcookie( RECOVERY_MODE_COOKIE, ' ', time() - YEAR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN );
+		setcookie( RECOVERY_MODE_COOKIE, ' ', time() - YEAR_IN_SECONDS, SITECOOKIEPATH, COOKIE_DOMAIN );
+	}
+
+	/**
+	 * Validates the recovery mode cookie.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @param string $cookie Optionally specify the cookie string.
+	 *                       If omitted, it will be retrieved from the super global.
+	 * @return true|WP_Error True on success, error object on failure.
+	 */
+	public function validate_cookie( $cookie = '' ) {
+
+		if ( ! $cookie ) {
+			if ( empty( $_COOKIE[ RECOVERY_MODE_COOKIE ] ) ) {
+				return new WP_Error( 'no_cookie', __( 'No cookie present.' ) );
+			}
+
+			$cookie = $_COOKIE[ RECOVERY_MODE_COOKIE ];
+		}
+
+		$parts = $this-&gt;parse_cookie( $cookie );
+
+		if ( is_wp_error( $parts ) ) {
+			return $parts;
+		}
+
+		list( , $created_at, $random, $signature ) = $parts;
+
+		if ( ! ctype_digit( $created_at ) ) {
+			return new WP_Error( 'invalid_created_at', __( 'Invalid cookie format.' ) );
+		}
+
+		/** This filter is documented in wp-includes/class-wp-recovery-mode-cookie-service.php */
+		$length = apply_filters( 'recovery_mode_cookie_length', WEEK_IN_SECONDS );
+
+		if ( time() &gt; $created_at + $length ) {
+			return new WP_Error( 'expired', __( 'Cookie expired.' ) );
+		}
+
+		$to_sign = sprintf( 'recovery_mode|%s|%s', $created_at, $random );
+		$hashed  = $this-&gt;recovery_mode_hash( $to_sign );
+
+		if ( ! hash_equals( $signature, $hashed ) ) {
+			return new WP_Error( 'signature_mismatch', __( 'Invalid cookie.' ) );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Gets the session identifier from the cookie.
+	 *
+	 * The cookie should be validated before calling this API.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @param string $cookie Optionally specify the cookie string.
+	 *                       If omitted, it will be retrieved from the super global.
+	 * @return string|WP_Error Session ID on success, or error object on failure.
+	 */
+	public function get_session_id_from_cookie( $cookie = '' ) {
+		if ( ! $cookie ) {
+			if ( empty( $_COOKIE[ RECOVERY_MODE_COOKIE ] ) ) {
+				return new WP_Error( 'no_cookie', __( 'No cookie present.' ) );
+			}
+
+			$cookie = $_COOKIE[ RECOVERY_MODE_COOKIE ];
+		}
+
+		$parts = $this-&gt;parse_cookie( $cookie );
+		if ( is_wp_error( $parts ) ) {
+			return $parts;
+		}
+
+		list( , , $random ) = $parts;
+
+		return sha1( $random );
+	}
+
+	/**
+	 * Parses the cookie into its four parts.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @param string $cookie Cookie content.
+	 * @return array|WP_Error Cookie parts array, or error object on failure.
+	 */
+	private function parse_cookie( $cookie ) {
+		$cookie = base64_decode( $cookie );
+		$parts  = explode( '|', $cookie );
+
+		if ( 4 !== count( $parts ) ) {
+			return new WP_Error( 'invalid_format', __( 'Invalid cookie format.' ) );
+		}
+
+		return $parts;
+	}
+
+	/**
+	 * Generates the recovery mode cookie value.
+	 *
+	 * The cookie is a base64 encoded string with the following format:
+	 *
+	 * recovery_mode|iat|rand|signature
+	 *
+	 * Where "recovery_mode" is a constant string,
+	 * iat is the time the cookie was generated at,
+	 * rand is a randomly generated password that is also used as a session identifier
+	 * and signature is an hmac of the preceding 3 parts.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @return string Generated cookie content.
+	 */
+	private function generate_cookie() {
+		$to_sign = sprintf( 'recovery_mode|%s|%s', time(), wp_generate_password( 20, false ) );
+		$signed  = $this-&gt;recovery_mode_hash( $to_sign );
+
+		return base64_encode( sprintf( '%s|%s', $to_sign, $signed ) );
+	}
+
+	/**
+	 * Gets a form of `wp_hash()` specific to Recovery Mode.
+	 *
+	 * We cannot use `wp_hash()` because it is defined in `pluggable.php` which is not loaded until after plugins are loaded,
+	 * which is too late to verify the recovery mode cookie.
+	 *
+	 * This tries to use the `AUTH` salts first, but if they aren't valid specific salts will be generated and stored.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @param string $data Data to hash.
+	 * @return string|false The hashed $data, or false on failure.
+	 */
+	private function recovery_mode_hash( $data ) {
+		$default_keys = array_unique(
+			array(
+				'put your unique phrase here',
+				/*
+				 * translators: This string should only be translated if wp-config-sample.php is localized.
+				 * You can check the localized release package or
+				 * https://i18n.svn.wordpress.org/&lt;locale code&gt;/branches/&lt;wp version&gt;/dist/wp-config-sample.php
+				 */
+				__( 'put your unique phrase here' ),
+			)
+		);
+
+		if ( ! defined( 'AUTH_KEY' ) || in_array( AUTH_KEY, $default_keys, true ) ) {
+			$auth_key = get_site_option( 'recovery_mode_auth_key' );
+
+			if ( ! $auth_key ) {
+				if ( ! function_exists( 'wp_generate_password' ) ) {
+					require_once ABSPATH . WPINC . '/pluggable.php';
+				}
+
+				$auth_key = wp_generate_password( 64, true, true );
+				update_site_option( 'recovery_mode_auth_key', $auth_key );
+			}
+		} else {
+			$auth_key = AUTH_KEY;
+		}
+
+		if ( ! defined( 'AUTH_SALT' ) || in_array( AUTH_SALT, $default_keys, true ) || AUTH_SALT === $auth_key ) {
+			$auth_salt = get_site_option( 'recovery_mode_auth_salt' );
+
+			if ( ! $auth_salt ) {
+				if ( ! function_exists( 'wp_generate_password' ) ) {
+					require_once ABSPATH . WPINC . '/pluggable.php';
+				}
+
+				$auth_salt = wp_generate_password( 64, true, true );
+				update_site_option( 'recovery_mode_auth_salt', $auth_salt );
+			}
+		} else {
+			$auth_salt = AUTH_SALT;
+		}
+
+		$secret = $auth_key . $auth_salt;
+
+		return hash_hmac( 'sha1', $data, $secret );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-recovery-mode-cookie-service.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-recovery-mode-cookie-service.php#L15">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-recovery-mode-cookie-service.php#L15-L247">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_recovery_mode_cookie_service" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_recovery_mode_cookie_service</a>
+  </p>
+</div>

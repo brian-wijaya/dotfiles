@@ -1,0 +1,98 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Dependencies::all_deps( <span class="arg-type">string|string[]</span> <span class="arg-name">$handles</span>, <span class="arg-type">bool</span> <span class="arg-name">$recursion</span> = <span class="arg-default">false</span>, <span class="arg-type">int|false</span> <span class="arg-name">$group</span> = <span class="arg-default">false</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Determines dependencies.</p> </section> <section><h2 id="description">Description</h2> <p>Recursively builds an array of items to process taking dependencies into account. Does NOT catch infinite loops.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$handles</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Item handle (string) or item handles (array of strings).</span></div></dd>
+<dt>
+<code>$recursion</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Internal flag that function is calling itself.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$group</code><span class="type"><span class="int">int</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Group level: level (int), no group (false).<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="180" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function all_deps( $handles, $recursion = false, $group = false ) {
+	$handles = (array) $handles;
+	if ( ! $handles ) {
+		return false;
+	}
+
+	foreach ( $handles as $handle ) {
+		$handle_parts = explode( '?', $handle );
+		$handle       = $handle_parts[0];
+		$queued       = in_array( $handle, $this-&gt;to_do, true );
+
+		if ( in_array( $handle, $this-&gt;done, true ) ) { // Already done.
+			continue;
+		}
+
+		$moved     = $this-&gt;set_group( $handle, $recursion, $group );
+		$new_group = $this-&gt;groups[ $handle ];
+
+		if ( $queued &amp;&amp; ! $moved ) { // Already queued and in the right group.
+			continue;
+		}
+
+		$keep_going = true;
+		if ( ! isset( $this-&gt;registered[ $handle ] ) ) {
+			$keep_going = false; // Item doesn't exist.
+		} elseif ( $this-&gt;registered[ $handle ]-&gt;deps &amp;&amp; array_diff( $this-&gt;registered[ $handle ]-&gt;deps, array_keys( $this-&gt;registered ) ) ) {
+			$keep_going = false; // Item requires dependencies that don't exist.
+		} elseif ( $this-&gt;registered[ $handle ]-&gt;deps &amp;&amp; ! $this-&gt;all_deps( $this-&gt;registered[ $handle ]-&gt;deps, true, $new_group ) ) {
+			$keep_going = false; // Item requires dependencies that don't exist.
+		}
+
+		if ( ! $keep_going ) { // Either item or its dependencies don't exist.
+			if ( $recursion ) {
+				return false; // Abort this branch.
+			} else {
+				continue; // We're at the top level. Move on to the next one.
+			}
+		}
+
+		if ( $queued ) { // Already grabbed it and its dependencies.
+			continue;
+		}
+
+		if ( isset( $handle_parts[1] ) ) {
+			$this-&gt;args[ $handle ] = $handle_parts[1];
+		}
+
+		$this-&gt;to_do[] = $handle;
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes_class-wp-dependencies-php-2/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-dependencies.php#L180">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-dependencies.php#L180-L231">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td><span class="since-description">Added the <code>$group</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td><span class="since-description">Moved from <code>WP_Scripts</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/WP_Dependencies/all_deps" class="_attribution-link">https://developer.wordpress.org/reference/classes/WP_Dependencies/all_deps</a>
+  </p>
+</div>

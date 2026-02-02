@@ -1,0 +1,101 @@
+<h1 class="wp-block-wporg-code-reference-title">wpdb::check_connection( <span class="arg-type">bool</span> <span class="arg-name">$allow_bail</span> = <span class="arg-default">true</span> ): <span class="return-type">bool|void</span>
+</h1> <section><p>Checks that the connection to the database is still up. If not, try to reconnect.</p> </section> <section><h2 id="description">Description</h2> <p>If this function is unable to reconnect, it will forcibly die, or if called after the <a href="../../hooks/template_redirect">‘template_redirect’</a> hook has been fired, return false instead.</p> <p>If <code>$allow_bail</code> is false, the lack of database connection will need to be handled manually.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$allow_bail</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Allows the function to bail. </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|void</span> True if the connection is up.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2116" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function check_connection( $allow_bail = true ) {
+	// Check if the connection is alive.
+	if ( ! empty( $this-&gt;dbh ) &amp;&amp; mysqli_query( $this-&gt;dbh, 'DO 1' ) !== false ) {
+		return true;
+	}
+
+	$error_reporting = false;
+
+	// Disable warnings, as we don't want to see a multitude of "unable to connect" messages.
+	if ( WP_DEBUG ) {
+		$error_reporting = error_reporting();
+		error_reporting( $error_reporting &amp; ~E_WARNING );
+	}
+
+	for ( $tries = 1; $tries &lt;= $this-&gt;reconnect_retries; $tries++ ) {
+		/*
+		 * On the last try, re-enable warnings. We want to see a single instance
+		 * of the "unable to connect" message on the bail() screen, if it appears.
+		 */
+		if ( $this-&gt;reconnect_retries === $tries &amp;&amp; WP_DEBUG ) {
+			error_reporting( $error_reporting );
+		}
+
+		if ( $this-&gt;db_connect( false ) ) {
+			if ( $error_reporting ) {
+				error_reporting( $error_reporting );
+			}
+
+			return true;
+		}
+
+		sleep( 1 );
+	}
+
+	/*
+	 * If template_redirect has already happened, it's too late for wp_die()/dead_db().
+	 * Let's just return and hope for the best.
+	 */
+	if ( did_action( 'template_redirect' ) ) {
+		return false;
+	}
+
+	if ( ! $allow_bail ) {
+		return false;
+	}
+
+	wp_load_translations_early();
+
+	$message = '&lt;h1&gt;' . __( 'Error reconnecting to the database' ) . "&lt;/h1&gt;\n";
+
+	$message .= '&lt;p&gt;' . sprintf(
+		/* translators: %s: Database host. */
+		__( 'This means that the contact with the database server at %s was lost. This could mean your host&amp;#8217;s database server is down.' ),
+		'&lt;code&gt;' . htmlspecialchars( $this-&gt;dbhost, ENT_QUOTES ) . '&lt;/code&gt;'
+	) . "&lt;/p&gt;\n";
+
+	$message .= "&lt;ul&gt;\n";
+	$message .= '&lt;li&gt;' . __( 'Are you sure the database server is running?' ) . "&lt;/li&gt;\n";
+	$message .= '&lt;li&gt;' . __( 'Are you sure the database server is not under particularly heavy load?' ) . "&lt;/li&gt;\n";
+	$message .= "&lt;/ul&gt;\n";
+
+	$message .= '&lt;p&gt;' . sprintf(
+		/* translators: %s: Support forums URL. */
+		__( 'If you are unsure what these terms mean you should probably contact your host. If you still need help you can always visit the &lt;a href="%s"&gt;WordPress support forums&lt;/a&gt;.' ),
+		__( 'https://wordpress.org/support/forums/' )
+	) . "&lt;/p&gt;\n";
+
+	// We weren't able to reconnect, so we better bail.
+	$this-&gt;bail( $message, 'db_connect_fail' );
+
+	/*
+	 * Call dead_db() if bail didn't die, because this database is no more.
+	 * It has ceased to be (at least temporarily).
+	 */
+	dead_db();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wpdb.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wpdb.php#L2116">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wpdb.php#L2116-L2191">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.9.0/">3.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wpdb/check_connection" class="_attribution-link">https://developer.wordpress.org/reference/classes/wpdb/check_connection</a>
+  </p>
+</div>

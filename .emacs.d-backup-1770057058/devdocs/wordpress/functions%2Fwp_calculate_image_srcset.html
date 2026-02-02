@@ -1,0 +1,229 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_calculate_image_srcset( <span class="arg-type">int[]</span> <span class="arg-name">$size_array</span>, <span class="arg-type">string</span> <span class="arg-name">$image_src</span>, <span class="arg-type">array</span> <span class="arg-name">$image_meta</span>, <span class="arg-type">int</span> <span class="arg-name">$attachment_id</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>A helper function to calculate the image sources to include in a ‘srcset’ attribute.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$size_array</code><span class="type"><span class="int[]">int[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An array of width and height values.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">int</span><div class="desc">The width in pixels.</div>
+</li> <li>
+<code>1</code> <span class="type">int</span><div class="desc">The height in pixels.</div>
+</li> </ul> </span></div></dd>
+<dt>
+<code>$image_src</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The <code>'src'</code> of the image.</span></div></dd>
+<dt>
+<code>$image_meta</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The image meta data as returned by ‘<a href="wp_get_attachment_metadata" rel="function">wp_get_attachment_metadata()</a> ‘.</span></div></dd>
+<dt>
+<code>$attachment_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">The image attachment ID. Default 0.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> The <code>'srcset'</code> attribute value. False on error or when only one source exists.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1302" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers"> *
+ * @param int[]  $size_array    {
+ *     An array of width and height values.
+ *
+ *     @type int $0 The width in pixels.
+ *     @type int $1 The height in pixels.
+ * }
+ * @param string $image_src     The 'src' of the image.
+ * @param array  $image_meta    The image meta data as returned by 'wp_get_attachment_metadata()'.
+ * @param int    $attachment_id Optional. The image attachment ID. Default 0.
+ * @return string|false The 'srcset' attribute value. False on error or when only one source exists.
+ */
+function wp_calculate_image_srcset( $size_array, $image_src, $image_meta, $attachment_id = 0 ) {
+	/**
+	 * Pre-filters the image meta to be able to fix inconsistencies in the stored data.
+	 *
+	 * @since 4.5.0
+	 *
+	 * @param array  $image_meta    The image meta data as returned by 'wp_get_attachment_metadata()'.
+	 * @param int[]  $size_array    {
+	 *     An array of requested width and height values.
+	 *
+	 *     @type int $0 The width in pixels.
+	 *     @type int $1 The height in pixels.
+	 * }
+	 * @param string $image_src     The 'src' of the image.
+	 * @param int    $attachment_id The image attachment ID or 0 if not supplied.
+	 */
+	$image_meta = apply_filters( 'wp_calculate_image_srcset_meta', $image_meta, $size_array, $image_src, $attachment_id );
+
+	if ( empty( $image_meta['sizes'] ) || ! isset( $image_meta['file'] ) || strlen( $image_meta['file'] ) &lt; 4 ) {
+		return false;
+	}
+
+	$image_sizes = $image_meta['sizes'];
+
+	// Get the width and height of the image.
+	$image_width  = (int) $size_array[0];
+	$image_height = (int) $size_array[1];
+
+	// Bail early if error/no width.
+	if ( $image_width &lt; 1 ) {
+		return false;
+	}
+
+	$image_basename = wp_basename( $image_meta['file'] );
+
+	/*
+	 * WordPress flattens animated GIFs into one frame when generating intermediate sizes.
+	 * To avoid hiding animation in user content, if src is a full size GIF, a srcset attribute is not generated.
+	 * If src is an intermediate size GIF, the full size is excluded from srcset to keep a flattened GIF from becoming animated.
+	 */
+	if ( ! isset( $image_sizes['thumbnail']['mime-type'] ) || 'image/gif' !== $image_sizes['thumbnail']['mime-type'] ) {
+		$image_sizes[] = array(
+			'width'  =&gt; $image_meta['width'],
+			'height' =&gt; $image_meta['height'],
+			'file'   =&gt; $image_basename,
+		);
+	} elseif ( str_contains( $image_src, $image_meta['file'] ) ) {
+		return false;
+	}
+
+	// Retrieve the uploads sub-directory from the full size image.
+	$dirname = _wp_get_attachment_relative_path( $image_meta['file'] );
+
+	if ( $dirname ) {
+		$dirname = trailingslashit( $dirname );
+	}
+
+	$upload_dir    = wp_get_upload_dir();
+	$image_baseurl = trailingslashit( $upload_dir['baseurl'] ) . $dirname;
+
+	/*
+	 * If currently on HTTPS, prefer HTTPS URLs when we know they're supported by the domain
+	 * (which is to say, when they share the domain name of the current request).
+	 */
+	if ( is_ssl() &amp;&amp; ! str_starts_with( $image_baseurl, 'https' ) ) {
+		/*
+		 * Since the `Host:` header might contain a port, it should
+		 * be compared against the image URL using the same port.
+		 */
+		$parsed = parse_url( $image_baseurl );
+		$domain = isset( $parsed['host'] ) ? $parsed['host'] : '';
+
+		if ( isset( $parsed['port'] ) ) {
+			$domain .= ':' . $parsed['port'];
+		}
+
+		if ( $_SERVER['HTTP_HOST'] === $domain ) {
+			$image_baseurl = set_url_scheme( $image_baseurl, 'https' );
+		}
+	}
+
+	/*
+	 * Images that have been edited in WordPress after being uploaded will
+	 * contain a unique hash. Look for that hash and use it later to filter
+	 * out images that are leftovers from previous versions.
+	 */
+	$image_edited = preg_match( '/-e[0-9]{13}/', wp_basename( $image_src ), $image_edit_hash );
+
+	/**
+	 * Filters the maximum image width to be included in a 'srcset' attribute.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param int   $max_width  The maximum image width to be included in the 'srcset'. Default '2048'.
+	 * @param int[] $size_array {
+	 *     An array of requested width and height values.
+	 *
+	 *     @type int $0 The width in pixels.
+	 *     @type int $1 The height in pixels.
+	 * }
+	 */
+	$max_srcset_image_width = apply_filters( 'max_srcset_image_width', 2048, $size_array );
+
+	// Array to hold URL candidates.
+	$sources = array();
+
+	/**
+	 * To make sure the ID matches our image src, we will check to see if any sizes in our attachment
+	 * meta match our $image_src. If no matches are found we don't return a srcset to avoid serving
+	 * an incorrect image. See #35045.
+	 */
+	$src_matched = false;
+
+	/*
+	 * Loop through available images. Only use images that are resized
+	 * versions of the same edit.
+	 */
+	foreach ( $image_sizes as $image ) {
+		$is_src = false;
+
+		// Check if image meta isn't corrupted.
+		if ( ! is_array( $image ) ) {
+			continue;
+		}
+
+		// If the file name is part of the `src`, we've confirmed a match.
+		if ( ! $src_matched &amp;&amp; str_contains( $image_src, $dirname . $image['file'] ) ) {
+			$src_matched = true;
+			$is_src      = true;
+		}
+
+		// Filter out images that are from previous edits.
+		if ( $image_edited &amp;&amp; ! strpos( $image['file'], $image_edit_hash[0] ) ) {
+			continue;
+		}
+
+		/*
+		 * Filters out images that are wider than '$max_srcset_image_width' unless
+		 * that file is in the 'src' attribute.
+		 */
+		if ( $max_srcset_image_width &amp;&amp; $image['width'] &gt; $max_srcset_image_width &amp;&amp; ! $is_src ) {
+			continue;
+		}
+
+		// If the image dimensions are within 1px of the expected size, use it.
+		if ( wp_image_matches_ratio( $image_width, $image_height, $image['width'], $image['height'] ) ) {
+			// Add the URL, descriptor, and value to the sources array to be returned.
+			$source = array(
+				'url'        =&gt; $image_baseurl . $image['file'],
+				'descriptor' =&gt; 'w',
+				'value'      =&gt; $image['width'],
+			);
+
+			// The 'src' image has to be the first in the 'srcset', because of a bug in iOS8. See #35030.
+			if ( $is_src ) {
+				$sources = array( $image['width'] =&gt; $source ) + $sources;
+			} else {
+				$sources[ $image['width'] ] = $source;
+			}
+		}
+	}
+
+	/**
+	 * Filters an image's 'srcset' sources.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param array  $sources {
+	 *     One or more arrays of source data to include in the 'srcset'.
+	 *
+	 *     @type array $width {
+	 *         @type string $url        The URL of an image source.
+	 *         @type string $descriptor The descriptor type used in the image candidate string,
+	 *                                  either 'w' or 'x'.
+	 *         @type int    $value      The source width if paired with a 'w' descriptor, or a
+	 *                                  pixel density value if paired with an 'x' descriptor.
+	 *     }
+	 * }
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/media.php#L1302">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/media.php#L1302-L1491">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_calculate_image_srcset" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_calculate_image_srcset</a>
+  </p>
+</div>

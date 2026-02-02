@@ -1,0 +1,224 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Widgets::enqueue_scripts()</h1> <section><p>Enqueues scripts and styles for Customizer panel and export data to JavaScript.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="699" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function enqueue_scripts() {
+	global $wp_scripts, $wp_registered_sidebars, $wp_registered_widgets;
+
+	wp_enqueue_style( 'customize-widgets' );
+	wp_enqueue_script( 'customize-widgets' );
+
+	/** This action is documented in wp-admin/admin-header.php */
+	do_action( 'admin_enqueue_scripts', 'widgets.php' );
+
+	/*
+	 * Export available widgets with control_tpl removed from model
+	 * since plugins need templates to be in the DOM.
+	 */
+	$available_widgets = array();
+
+	foreach ( $this-&gt;get_available_widgets() as $available_widget ) {
+		unset( $available_widget['control_tpl'] );
+		$available_widgets[] = $available_widget;
+	}
+
+	$widget_reorder_nav_tpl = sprintf(
+		'&lt;div class="widget-reorder-nav"&gt;&lt;span class="move-widget" tabindex="0"&gt;%1$s&lt;/span&gt;&lt;span class="move-widget-down" tabindex="0"&gt;%2$s&lt;/span&gt;&lt;span class="move-widget-up" tabindex="0"&gt;%3$s&lt;/span&gt;&lt;/div&gt;',
+		__( 'Move to another area&amp;hellip;' ),
+		__( 'Move down' ),
+		__( 'Move up' )
+	);
+
+	$move_widget_area_tpl = str_replace(
+		array( '{description}', '{btn}' ),
+		array(
+			__( 'Select an area to move this widget into:' ),
+			_x( 'Move', 'Move widget' ),
+		),
+		'&lt;div class="move-widget-area"&gt;
+			&lt;p class="description"&gt;{description}&lt;/p&gt;
+			&lt;ul class="widget-area-select"&gt;
+				&lt;% _.each( sidebars, function ( sidebar ){ %&gt;
+					&lt;li class="" data-id="&lt;%- sidebar.id %&gt;" title="&lt;%- sidebar.description %&gt;" tabindex="0"&gt;&lt;%- sidebar.name %&gt;&lt;/li&gt;
+				&lt;% }); %&gt;
+			&lt;/ul&gt;
+			&lt;div class="move-widget-actions"&gt;
+				&lt;button class="move-widget-btn button" type="button"&gt;{btn}&lt;/button&gt;
+			&lt;/div&gt;
+		&lt;/div&gt;'
+	);
+
+	/*
+	 * Gather all strings in PHP that may be needed by JS on the client.
+	 * Once JS i18n is implemented (in #20491), this can be removed.
+	 */
+	$some_non_rendered_areas_messages    = array();
+	$some_non_rendered_areas_messages[1] = html_entity_decode(
+		__( 'Your theme has 1 other widget area, but this particular page does not display it.' ),
+		ENT_QUOTES,
+		get_bloginfo( 'charset' )
+	);
+	$registered_sidebar_count            = count( $wp_registered_sidebars );
+	for ( $non_rendered_count = 2; $non_rendered_count &lt; $registered_sidebar_count; $non_rendered_count++ ) {
+		$some_non_rendered_areas_messages[ $non_rendered_count ] = html_entity_decode(
+			sprintf(
+				/* translators: %s: The number of other widget areas registered but not rendered. */
+				_n(
+					'Your theme has %s other widget area, but this particular page does not display it.',
+					'Your theme has %s other widget areas, but this particular page does not display them.',
+					$non_rendered_count
+				),
+				number_format_i18n( $non_rendered_count )
+			),
+			ENT_QUOTES,
+			get_bloginfo( 'charset' )
+		);
+	}
+
+	if ( 1 === $registered_sidebar_count ) {
+		$no_areas_shown_message = html_entity_decode(
+			sprintf(
+				__( 'Your theme has 1 widget area, but this particular page does not display it.' )
+			),
+			ENT_QUOTES,
+			get_bloginfo( 'charset' )
+		);
+	} else {
+		$no_areas_shown_message = html_entity_decode(
+			sprintf(
+				/* translators: %s: The total number of widget areas registered. */
+				_n(
+					'Your theme has %s widget area, but this particular page does not display it.',
+					'Your theme has %s widget areas, but this particular page does not display them.',
+					$registered_sidebar_count
+				),
+				number_format_i18n( $registered_sidebar_count )
+			),
+			ENT_QUOTES,
+			get_bloginfo( 'charset' )
+		);
+	}
+
+	$settings = array(
+		'registeredSidebars'          =&gt; array_values( $wp_registered_sidebars ),
+		'registeredWidgets'           =&gt; $wp_registered_widgets,
+		'availableWidgets'            =&gt; $available_widgets, // @todo Merge this with registered_widgets.
+		'l10n'                        =&gt; array(
+			'saveBtnLabel'     =&gt; __( 'Apply' ),
+			'saveBtnTooltip'   =&gt; __( 'Save and preview changes before publishing them.' ),
+			'removeBtnLabel'   =&gt; __( 'Remove' ),
+			'removeBtnTooltip' =&gt; __( 'Keep widget settings and move it to the inactive widgets' ),
+			'error'            =&gt; __( 'An error has occurred. Please reload the page and try again.' ),
+			'widgetMovedUp'    =&gt; __( 'Widget moved up' ),
+			'widgetMovedDown'  =&gt; __( 'Widget moved down' ),
+			'navigatePreview'  =&gt; __( 'You can navigate to other pages on your site while using the Customizer to view and edit the widgets displayed on those pages.' ),
+			'someAreasShown'   =&gt; $some_non_rendered_areas_messages,
+			'noAreasShown'     =&gt; $no_areas_shown_message,
+			'reorderModeOn'    =&gt; __( 'Reorder mode enabled' ),
+			'reorderModeOff'   =&gt; __( 'Reorder mode closed' ),
+			'reorderLabelOn'   =&gt; esc_attr__( 'Reorder widgets' ),
+			/* translators: %d: The number of widgets found. */
+			'widgetsFound'     =&gt; __( 'Number of widgets found: %d' ),
+			'noWidgetsFound'   =&gt; __( 'No widgets found.' ),
+		),
+		'tpl'                         =&gt; array(
+			'widgetReorderNav' =&gt; $widget_reorder_nav_tpl,
+			'moveWidgetArea'   =&gt; $move_widget_area_tpl,
+		),
+		'selectiveRefreshableWidgets' =&gt; $this-&gt;get_selective_refreshable_widgets(),
+	);
+
+	foreach ( $settings['registeredWidgets'] as &amp;$registered_widget ) {
+		unset( $registered_widget['callback'] ); // May not be JSON-serializable.
+	}
+
+	$wp_scripts-&gt;add_data(
+		'customize-widgets',
+		'data',
+		sprintf( 'var _wpCustomizeWidgetsSettings = %s;', wp_json_encode( $settings ) )
+	);
+
+	/*
+	 * TODO: Update 'wp-customize-widgets' to not rely so much on things in
+	 * 'customize-widgets'. This will let us skip most of the above and not
+	 * enqueue 'customize-widgets' which saves bytes.
+	 */
+
+	if ( wp_use_widgets_block_editor() ) {
+		$block_editor_context = new WP_Block_Editor_Context(
+			array(
+				'name' =&gt; 'core/customize-widgets',
+			)
+		);
+
+		$editor_settings = get_block_editor_settings(
+			get_legacy_widget_block_editor_settings(),
+			$block_editor_context
+		);
+
+		wp_add_inline_script(
+			'wp-customize-widgets',
+			sprintf(
+				'wp.domReady( function() {
+				   wp.customizeWidgets.initialize( "widgets-customizer", %s );
+				} );',
+				wp_json_encode( $editor_settings )
+			)
+		);
+
+		// Preload server-registered block schemas.
+		wp_add_inline_script(
+			'wp-blocks',
+			'wp.blocks.unstable__bootstrapServerSideBlockDefinitions(' . wp_json_encode( get_block_editor_server_block_settings() ) . ');'
+		);
+
+		// Preload server-registered block bindings sources.
+		$registered_sources = get_all_registered_block_bindings_sources();
+		if ( ! empty( $registered_sources ) ) {
+			$filtered_sources = array();
+			foreach ( $registered_sources as $source ) {
+				$filtered_sources[] = array(
+					'name'        =&gt; $source-&gt;name,
+					'label'       =&gt; $source-&gt;label,
+					'usesContext' =&gt; $source-&gt;uses_context,
+				);
+			}
+			$script = sprintf( 'for ( const source of %s ) { wp.blocks.registerBlockBindingsSource( source ); }', wp_json_encode( $filtered_sources ) );
+			wp_add_inline_script(
+				'wp-blocks',
+				$script
+			);
+		}
+
+		wp_add_inline_script(
+			'wp-blocks',
+			sprintf( 'wp.blocks.setCategories( %s );', wp_json_encode( get_block_categories( $block_editor_context ) ) ),
+			'after'
+		);
+
+		wp_enqueue_script( 'wp-customize-widgets' );
+		wp_enqueue_style( 'wp-customize-widgets' );
+
+		/** This action is documented in edit-form-blocks.php */
+		do_action( 'enqueue_block_editor_assets' );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-widgets.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-widgets.php#L699">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-widgets.php#L699-L899">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/admin_enqueue_scripts"><span class="hook-func">do_action</span>( ‘admin_enqueue_scripts’, <nobr><span class="arg-type">string</span> <span class="arg-name">$hook_suffix</span></nobr> )</a></dt>
+<dd>
+<p>Fires when enqueuing scripts for all admin pages.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/enqueue_block_editor_assets"><span class="hook-func">do_action</span>( ‘enqueue_block_editor_assets’ )</a></dt>
+<dd>
+<p>Fires after block assets have been enqueued for the editing interface.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.9.0/">3.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_widgets/enqueue_scripts" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_widgets/enqueue_scripts</a>
+  </p>
+</div>

@@ -1,0 +1,73 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Community_Events::trim_events( <span class="arg-type">array</span> <span class="arg-name">$events</span> ): <span class="return-type">array</span>
+</h1> <section><p>Prepares the event list for presentation.</p> </section> <section><h2 id="description">Description</h2> <p>Discards expired events, and makes WordCamps "sticky." Attendees need more advanced notice about WordCamps than they do for meetups, so camps should appear in the list sooner. If a WordCamp is coming up, the API will "stick" it in the response, even if it wouldn’t otherwise appear. When that happens, the event will be at the end of the list, and will need to be moved into a higher position, so that it doesn’t get trimmed off.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$events</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The events that will be prepared.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The response body with events trimmed.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="466" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function trim_events( array $events ) {
+	$future_events = array();
+
+	foreach ( $events as $event ) {
+		/*
+		 * The API's `date` and `end_date` fields are in the _event's_ local timezone, but UTC is needed so
+		 * it can be converted to the _user's_ local time.
+		 */
+		$end_time = (int) $event['end_unix_timestamp'];
+
+		if ( time() &lt; $end_time ) {
+			// Decode HTML entities from the event title.
+			$event['title'] = html_entity_decode( $event['title'], ENT_QUOTES, 'UTF-8' );
+
+			array_push( $future_events, $event );
+		}
+	}
+
+	$future_wordcamps = array_filter(
+		$future_events,
+		static function ( $wordcamp ) {
+			return 'wordcamp' === $wordcamp['type'];
+		}
+	);
+
+	$future_wordcamps    = array_values( $future_wordcamps ); // Remove gaps in indices.
+	$trimmed_events      = array_slice( $future_events, 0, 3 );
+	$trimmed_event_types = wp_list_pluck( $trimmed_events, 'type' );
+
+	// Make sure the soonest upcoming WordCamp is pinned in the list.
+	if ( $future_wordcamps &amp;&amp; ! in_array( 'wordcamp', $trimmed_event_types, true ) ) {
+		array_pop( $trimmed_events );
+		array_push( $trimmed_events, $future_wordcamps[0] );
+	}
+
+	return $trimmed_events;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-community-events.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-community-events.php#L466">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-community-events.php#L466-L502">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.0.0/">6.0.0</a></td>
+<td><span class="since-description">Decode HTML entities from the event title.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.2/">5.5.2</a></td>
+<td><span class="since-description">Accepts and returns only the events, rather than an entire HTTP response.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.7/">4.9.7</a></td>
+<td><span class="since-description">Stick a WordCamp to the final list.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.8.0/">4.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_community_events/trim_events" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_community_events/trim_events</a>
+  </p>
+</div>

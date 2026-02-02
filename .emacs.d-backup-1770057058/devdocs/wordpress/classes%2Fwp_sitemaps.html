@@ -1,0 +1,307 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Sitemaps {}</h1> <section><p>Class <a href="wp_sitemaps" rel="class">WP_Sitemaps</a>.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_sitemaps/__construct">WP_Sitemaps::__construct</a></td>
+<td>
+<a href="wp_sitemaps" rel="class">WP_Sitemaps</a> constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps/add_robots">WP_Sitemaps::add_robots</a></td>
+<td>Adds the sitemap index to robots.txt.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps/init">WP_Sitemaps::init</a></td>
+<td>Initiates all sitemap functionality.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps/redirect_sitemapxml">WP_Sitemaps::redirect_sitemapxml</a></td>
+<td>Redirects a URL to the wp-sitemap.xml — <span class="deprecated-method">deprecated</span>
+</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps/register_rewrites">WP_Sitemaps::register_rewrites</a></td>
+<td>Registers sitemap rewrite tags and routing rules.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps/register_sitemaps">WP_Sitemaps::register_sitemaps</a></td>
+<td>Registers and sets up the functionality for all supported sitemaps.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps/render_sitemaps">WP_Sitemaps::render_sitemaps</a></td>
+<td>Renders sitemap templates based on rewrite rules.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps/sitemaps_enabled">WP_Sitemaps::sitemaps_enabled</a></td>
+<td>Determines whether sitemaps are enabled or not.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="18" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Sitemaps {
+	/**
+	 * The main index of supported sitemaps.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @var WP_Sitemaps_Index
+	 */
+	public $index;
+
+	/**
+	 * The main registry of supported sitemaps.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @var WP_Sitemaps_Registry
+	 */
+	public $registry;
+
+	/**
+	 * An instance of the renderer class.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @var WP_Sitemaps_Renderer
+	 */
+	public $renderer;
+
+	/**
+	 * WP_Sitemaps constructor.
+	 *
+	 * @since 5.5.0
+	 */
+	public function __construct() {
+		$this-&gt;registry = new WP_Sitemaps_Registry();
+		$this-&gt;renderer = new WP_Sitemaps_Renderer();
+		$this-&gt;index    = new WP_Sitemaps_Index( $this-&gt;registry );
+	}
+
+	/**
+	 * Initiates all sitemap functionality.
+	 *
+	 * If sitemaps are disabled, only the rewrite rules will be registered
+	 * by this method, in order to properly send 404s.
+	 *
+	 * @since 5.5.0
+	 */
+	public function init() {
+		// These will all fire on the init hook.
+		$this-&gt;register_rewrites();
+
+		add_action( 'template_redirect', array( $this, 'render_sitemaps' ) );
+
+		if ( ! $this-&gt;sitemaps_enabled() ) {
+			return;
+		}
+
+		$this-&gt;register_sitemaps();
+
+		// Add additional action callbacks.
+		add_filter( 'robots_txt', array( $this, 'add_robots' ), 0, 2 );
+	}
+
+	/**
+	 * Determines whether sitemaps are enabled or not.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @return bool Whether sitemaps are enabled.
+	 */
+	public function sitemaps_enabled() {
+		$is_enabled = (bool) get_option( 'blog_public' );
+
+		/**
+		 * Filters whether XML Sitemaps are enabled or not.
+		 *
+		 * When XML Sitemaps are disabled via this filter, rewrite rules are still
+		 * in place to ensure a 404 is returned.
+		 *
+		 * @see WP_Sitemaps::register_rewrites()
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param bool $is_enabled Whether XML Sitemaps are enabled or not.
+		 *                         Defaults to true for public sites.
+		 */
+		return (bool) apply_filters( 'wp_sitemaps_enabled', $is_enabled );
+	}
+
+	/**
+	 * Registers and sets up the functionality for all supported sitemaps.
+	 *
+	 * @since 5.5.0
+	 */
+	public function register_sitemaps() {
+		$providers = array(
+			'posts'      =&gt; new WP_Sitemaps_Posts(),
+			'taxonomies' =&gt; new WP_Sitemaps_Taxonomies(),
+			'users'      =&gt; new WP_Sitemaps_Users(),
+		);
+
+		/* @var WP_Sitemaps_Provider $provider */
+		foreach ( $providers as $name =&gt; $provider ) {
+			$this-&gt;registry-&gt;add_provider( $name, $provider );
+		}
+	}
+
+	/**
+	 * Registers sitemap rewrite tags and routing rules.
+	 *
+	 * @since 5.5.0
+	 */
+	public function register_rewrites() {
+		// Add rewrite tags.
+		add_rewrite_tag( '%sitemap%', '([^?]+)' );
+		add_rewrite_tag( '%sitemap-subtype%', '([^?]+)' );
+
+		// Register index route.
+		add_rewrite_rule( '^wp-sitemap\.xml$', 'index.php?sitemap=index', 'top' );
+
+		// Register rewrites for the XSL stylesheet.
+		add_rewrite_tag( '%sitemap-stylesheet%', '([^?]+)' );
+		add_rewrite_rule( '^wp-sitemap\.xsl$', 'index.php?sitemap-stylesheet=sitemap', 'top' );
+		add_rewrite_rule( '^wp-sitemap-index\.xsl$', 'index.php?sitemap-stylesheet=index', 'top' );
+
+		// Register routes for providers.
+		add_rewrite_rule(
+			'^wp-sitemap-([a-z]+?)-([a-z\d_-]+?)-(\d+?)\.xml$',
+			'index.php?sitemap=$matches[1]&amp;sitemap-subtype=$matches[2]&amp;paged=$matches[3]',
+			'top'
+		);
+		add_rewrite_rule(
+			'^wp-sitemap-([a-z]+?)-(\d+?)\.xml$',
+			'index.php?sitemap=$matches[1]&amp;paged=$matches[2]',
+			'top'
+		);
+	}
+
+	/**
+	 * Renders sitemap templates based on rewrite rules.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @global WP_Query $wp_query WordPress Query object.
+	 */
+	public function render_sitemaps() {
+		global $wp_query;
+
+		$sitemap         = sanitize_text_field( get_query_var( 'sitemap' ) );
+		$object_subtype  = sanitize_text_field( get_query_var( 'sitemap-subtype' ) );
+		$stylesheet_type = sanitize_text_field( get_query_var( 'sitemap-stylesheet' ) );
+		$paged           = absint( get_query_var( 'paged' ) );
+
+		// Bail early if this isn't a sitemap or stylesheet route.
+		if ( ! ( $sitemap || $stylesheet_type ) ) {
+			return;
+		}
+
+		if ( ! $this-&gt;sitemaps_enabled() ) {
+			$wp_query-&gt;set_404();
+			status_header( 404 );
+			return;
+		}
+
+		// Render stylesheet if this is stylesheet route.
+		if ( $stylesheet_type ) {
+			$stylesheet = new WP_Sitemaps_Stylesheet();
+
+			$stylesheet-&gt;render_stylesheet( $stylesheet_type );
+			exit;
+		}
+
+		// Render the index.
+		if ( 'index' === $sitemap ) {
+			$sitemap_list = $this-&gt;index-&gt;get_sitemap_list();
+
+			$this-&gt;renderer-&gt;render_index( $sitemap_list );
+			exit;
+		}
+
+		$provider = $this-&gt;registry-&gt;get_provider( $sitemap );
+
+		if ( ! $provider ) {
+			return;
+		}
+
+		if ( empty( $paged ) ) {
+			$paged = 1;
+		}
+
+		$url_list = $provider-&gt;get_url_list( $paged, $object_subtype );
+
+		// Force a 404 and bail early if no URLs are present.
+		if ( empty( $url_list ) ) {
+			$wp_query-&gt;set_404();
+			status_header( 404 );
+			return;
+		}
+
+		$this-&gt;renderer-&gt;render_sitemap( $url_list );
+		exit;
+	}
+
+	/**
+	 * Redirects a URL to the wp-sitemap.xml
+	 *
+	 * @since 5.5.0
+	 * @deprecated 6.7.0 Deprecated in favor of <a href="wp_rewrite/rewrite_rules">WP_Rewrite::rewrite_rules()</a>
+	 *
+	 * @param bool     $bypass Pass-through of the pre_handle_404 filter value.
+	 * @param WP_Query $query  The WP_Query object.
+	 * @return bool Bypass value.
+	 */
+	public function redirect_sitemapxml( $bypass, $query ) {
+		_deprecated_function( __FUNCTION__, '6.7.0' );
+
+		// If a plugin has already utilized the pre_handle_404 function, return without action to avoid conflicts.
+		if ( $bypass ) {
+			return $bypass;
+		}
+
+		// 'pagename' is for most permalink types, name is for when the %postname% is used as a top-level field.
+		if ( 'sitemap-xml' === $query-&gt;get( 'pagename' )
+			|| 'sitemap-xml' === $query-&gt;get( 'name' )
+		) {
+			wp_safe_redirect( $this-&gt;index-&gt;get_index_url() );
+			exit();
+		}
+
+		return $bypass;
+	}
+
+	/**
+	 * Adds the sitemap index to robots.txt.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param string $output    robots.txt output.
+	 * @param bool   $is_public Whether the site is public.
+	 * @return string The robots.txt output.
+	 */
+	public function add_robots( $output, $is_public ) {
+		if ( $is_public ) {
+			$output .= "\nSitemap: " . esc_url( $this-&gt;index-&gt;get_index_url() ) . "\n";
+		}
+
+		return $output;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/sitemaps/class-wp-sitemaps.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/sitemaps/class-wp-sitemaps.php#L18">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/sitemaps/class-wp-sitemaps.php#L18-L266">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_sitemaps" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_sitemaps</a>
+  </p>
+</div>

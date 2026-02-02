@@ -1,0 +1,137 @@
+<h1 class="wp-block-wporg-code-reference-title">spawn_cron( <span class="arg-type">int</span> <span class="arg-name">$gmt_time</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Sends a request to run cron through HTTP request that doesn’t halt page loading.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$gmt_time</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Unix timestamp (UTC). Default 0 (current time is used).</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if spawned, false if no events spawned.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="851" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function spawn_cron( $gmt_time = 0 ) {
+	if ( ! $gmt_time ) {
+		$gmt_time = microtime( true );
+	}
+
+	if ( defined( 'DOING_CRON' ) || isset( $_GET['doing_wp_cron'] ) ) {
+		return false;
+	}
+
+	/*
+	 * Get the cron lock, which is a Unix timestamp of when the last cron was spawned
+	 * and has not finished running.
+	 *
+	 * Multiple processes on multiple web servers can run this code concurrently,
+	 * this lock attempts to make spawning as atomic as possible.
+	 */
+	$lock = (float) get_transient( 'doing_cron' );
+
+	if ( $lock &gt; $gmt_time + 10 * MINUTE_IN_SECONDS ) {
+		$lock = 0;
+	}
+
+	// Don't run if another process is currently running it or more than once every 60 sec.
+	if ( $lock + WP_CRON_LOCK_TIMEOUT &gt; $gmt_time ) {
+		return false;
+	}
+
+	// Confidence check.
+	$crons = wp_get_ready_cron_jobs();
+	if ( empty( $crons ) ) {
+		return false;
+	}
+
+	$keys = array_keys( $crons );
+	if ( isset( $keys[0] ) &amp;&amp; $keys[0] &gt; $gmt_time ) {
+		return false;
+	}
+
+	if ( defined( 'ALTERNATE_WP_CRON' ) &amp;&amp; ALTERNATE_WP_CRON ) {
+		if ( 'GET' !== $_SERVER['REQUEST_METHOD'] || defined( 'DOING_AJAX' ) || defined( 'XMLRPC_REQUEST' ) ) {
+			return false;
+		}
+
+		$doing_wp_cron = sprintf( '%.22F', $gmt_time );
+		set_transient( 'doing_cron', $doing_wp_cron );
+
+		ob_start();
+		wp_redirect( add_query_arg( 'doing_wp_cron', $doing_wp_cron, wp_unslash( $_SERVER['REQUEST_URI'] ) ) );
+		echo ' ';
+
+		// Flush any buffers and send the headers.
+		wp_ob_end_flush_all();
+		flush();
+
+		require_once ABSPATH . 'wp-cron.php';
+		return true;
+	}
+
+	// Set the cron lock with the current unix timestamp, when the cron is being spawned.
+	$doing_wp_cron = sprintf( '%.22F', $gmt_time );
+	set_transient( 'doing_cron', $doing_wp_cron );
+
+	/**
+	 * Filters the cron request arguments.
+	 *
+	 * @since 3.5.0
+	 * @since 4.5.0 The `$doing_wp_cron` parameter was added.
+	 *
+	 * @param array $cron_request_array {
+	 *     An array of cron request URL arguments.
+	 *
+	 *     @type string $url  The cron request URL.
+	 *     @type int    $key  The 22 digit GMT microtime.
+	 *     @type array  $args {
+	 *         An array of cron request arguments.
+	 *
+	 *         @type int  $timeout   The request timeout in seconds. Default .01 seconds.
+	 *         @type bool $blocking  Whether to set blocking for the request. Default false.
+	 *         @type bool $sslverify Whether SSL should be verified for the request. Default false.
+	 *     }
+	 * }
+	 * @param string $doing_wp_cron The unix timestamp of the cron lock.
+	 */
+	$cron_request = apply_filters(
+		'cron_request',
+		array(
+			'url'  =&gt; add_query_arg( 'doing_wp_cron', $doing_wp_cron, site_url( 'wp-cron.php' ) ),
+			'key'  =&gt; $doing_wp_cron,
+			'args' =&gt; array(
+				'timeout'   =&gt; 0.01,
+				'blocking'  =&gt; false,
+				/** This filter is documented in wp-includes/class-wp-http-streams.php */
+				'sslverify' =&gt; apply_filters( 'https_local_ssl_verify', false ),
+			),
+		),
+		$doing_wp_cron
+	);
+
+	$result = wp_remote_post( $cron_request['url'], $cron_request['args'] );
+
+	return ! is_wp_error( $result );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/cron.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/cron.php#L851">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/cron.php#L851-L952">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/cron_request"><span class="hook-func">apply_filters</span>( ‘cron_request’, <nobr><span class="arg-type">array</span> <span class="arg-name">$cron_request_array</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$doing_wp_cron</span></nobr> )</a></dt>
+<dd>
+<p>Filters the cron request arguments.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/https_local_ssl_verify"><span class="hook-func">apply_filters</span>( ‘https_local_ssl_verify’, <nobr><span class="arg-type">bool|string</span> <span class="arg-name">$ssl_verify</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether SSL should be verified for local HTTP API requests.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td><span class="since-description">Return values added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/spawn_cron" class="_attribution-link">https://developer.wordpress.org/reference/functions/spawn_cron</a>
+  </p>
+</div>

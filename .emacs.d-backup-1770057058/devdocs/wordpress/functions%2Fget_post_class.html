@@ -1,0 +1,162 @@
+<h1 class="wp-block-wporg-code-reference-title">get_post_class( <span class="arg-type">string|string[]</span> <span class="arg-name">$css_class</span> = <span class="arg-default">”</span>, <span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span> = <span class="arg-default">null</span> ): <span class="return-type">string[]</span>
+</h1> <section><p>Retrieves an array of the class names for the post container element.</p> </section> <section><h2 id="description">Description</h2> <p>The class names are many:</p> <ul> <li>If the post has a post thumbnail, <code>has-post-thumbnail</code> is added as a class.</li> <li>If the post is sticky, then the <code>sticky</code> class name is added.</li> <li>The class <code>hentry</code> is always added to each post.</li> <li>For each taxonomy that the post belongs to, a class will be added of the format <code>{$taxonomy}-{$slug}</code>, e.g. <code>category-foo</code> or <code>my_custom_taxonomy-bar</code>.<br>The <code>post_tag</code> taxonomy is a special case; the class has the <code>tag-</code> prefix instead of <code>post_tag-</code>.</li> </ul> <p>All class names are passed through the filter, <a href="../hooks/post_class">‘post_class’</a>, followed by <code>$css_class</code> parameter value, with the post ID as the last parameter.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$css_class</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Space-separated string or array of class names to add to the class list. </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Post ID or post object.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string[]</span> Array of class names.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="494" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_post_class( $css_class = '', $post = null ) {
+	$post = get_post( $post );
+
+	$classes = array();
+
+	if ( $css_class ) {
+		if ( ! is_array( $css_class ) ) {
+			$css_class = preg_split( '#\s+#', $css_class );
+		}
+		$classes = array_map( 'esc_attr', $css_class );
+	} else {
+		// Ensure that we always coerce class to being an array.
+		$css_class = array();
+	}
+
+	if ( ! $post ) {
+		return $classes;
+	}
+
+	$classes[] = 'post-' . $post-&gt;ID;
+	if ( ! is_admin() ) {
+		$classes[] = $post-&gt;post_type;
+	}
+	$classes[] = 'type-' . $post-&gt;post_type;
+	$classes[] = 'status-' . $post-&gt;post_status;
+
+	// Post Format.
+	if ( post_type_supports( $post-&gt;post_type, 'post-formats' ) ) {
+		$post_format = get_post_format( $post-&gt;ID );
+
+		if ( $post_format &amp;&amp; ! is_wp_error( $post_format ) ) {
+			$classes[] = 'format-' . sanitize_html_class( $post_format );
+		} else {
+			$classes[] = 'format-standard';
+		}
+	}
+
+	$post_password_required = post_password_required( $post-&gt;ID );
+
+	// Post requires password.
+	if ( $post_password_required ) {
+		$classes[] = 'post-password-required';
+	} elseif ( ! empty( $post-&gt;post_password ) ) {
+		$classes[] = 'post-password-protected';
+	}
+
+	// Post thumbnails.
+	if ( current_theme_supports( 'post-thumbnails' ) &amp;&amp; has_post_thumbnail( $post-&gt;ID ) &amp;&amp; ! is_attachment( $post ) &amp;&amp; ! $post_password_required ) {
+		$classes[] = 'has-post-thumbnail';
+	}
+
+	// Sticky for Sticky Posts.
+	if ( is_sticky( $post-&gt;ID ) ) {
+		if ( is_home() &amp;&amp; ! is_paged() ) {
+			$classes[] = 'sticky';
+		} elseif ( is_admin() ) {
+			$classes[] = 'status-sticky';
+		}
+	}
+
+	// hentry for hAtom compliance.
+	$classes[] = 'hentry';
+
+	// All public taxonomies.
+	$taxonomies = get_taxonomies( array( 'public' =&gt; true ) );
+
+	/**
+	 * Filters the taxonomies to generate classes for each individual term.
+	 *
+	 * Default is all public taxonomies registered to the post type.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param string[] $taxonomies List of all taxonomy names to generate classes for.
+	 * @param int      $post_id    The post ID.
+	 * @param string[] $classes    An array of post class names.
+	 * @param string[] $css_class  An array of additional class names added to the post.
+	*/
+	$taxonomies = apply_filters( 'post_class_taxonomies', $taxonomies, $post-&gt;ID, $classes, $css_class );
+
+	foreach ( (array) $taxonomies as $taxonomy ) {
+		if ( is_object_in_taxonomy( $post-&gt;post_type, $taxonomy ) ) {
+			foreach ( (array) get_the_terms( $post-&gt;ID, $taxonomy ) as $term ) {
+				if ( empty( $term-&gt;slug ) ) {
+					continue;
+				}
+
+				$term_class = sanitize_html_class( $term-&gt;slug, $term-&gt;term_id );
+				if ( is_numeric( $term_class ) || ! trim( $term_class, '-' ) ) {
+					$term_class = $term-&gt;term_id;
+				}
+
+				// 'post_tag' uses the 'tag' prefix for backward compatibility.
+				if ( 'post_tag' === $taxonomy ) {
+					$classes[] = 'tag-' . $term_class;
+				} else {
+					$classes[] = sanitize_html_class( $taxonomy . '-' . $term_class, $taxonomy . '-' . $term-&gt;term_id );
+				}
+			}
+		}
+	}
+
+	$classes = array_map( 'esc_attr', $classes );
+
+	/**
+	 * Filters the list of CSS class names for the current post.
+	 *
+	 * @since 2.7.0
+	 *
+	 * @param string[] $classes   An array of post class names.
+	 * @param string[] $css_class An array of additional class names added to the post.
+	 * @param int      $post_id   The post ID.
+	 */
+	$classes = apply_filters( 'post_class', $classes, $css_class, $post-&gt;ID );
+
+	return array_unique( $classes );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post-template.php#L494">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post-template.php#L494-L610">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/post_class"><span class="hook-func">apply_filters</span>( ‘post_class’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$classes</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$css_class</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of CSS class names for the current post.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/post_class_taxonomies"><span class="hook-func">apply_filters</span>( ‘post_class_taxonomies’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$taxonomies</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$classes</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$css_class</span></nobr> )</a></dt>
+<dd>
+<p>Filters the taxonomies to generate classes for each individual term.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td><span class="since-description">Custom taxonomy class names were added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_post_class" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_post_class</a>
+  </p>
+</div>

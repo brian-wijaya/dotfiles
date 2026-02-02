@@ -1,0 +1,46 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Recovery_Mode_Link_Service::handle_begin_link( <span class="arg-type">int</span> <span class="arg-name">$ttl</span> )</h1> <section><p>Enters recovery mode when the user hits wp-login.php with a valid recovery mode link.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$ttl</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Number of seconds the link should be valid for.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="73" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function handle_begin_link( $ttl ) {
+	if ( ! isset( $GLOBALS['pagenow'] ) || 'wp-login.php' !== $GLOBALS['pagenow'] ) {
+		return;
+	}
+
+	if ( ! isset( $_GET['action'], $_GET['rm_token'], $_GET['rm_key'] ) || self::LOGIN_ACTION_ENTER !== $_GET['action'] ) {
+		return;
+	}
+
+	if ( ! function_exists( 'wp_generate_password' ) ) {
+		require_once ABSPATH . WPINC . '/pluggable.php';
+	}
+
+	$validated = $this-&gt;key_service-&gt;validate_recovery_mode_key( $_GET['rm_token'], $_GET['rm_key'], $ttl );
+
+	if ( is_wp_error( $validated ) ) {
+		wp_die( $validated, '' );
+	}
+
+	$this-&gt;cookie_service-&gt;set_cookie();
+
+	$url = add_query_arg( 'action', self::LOGIN_ACTION_ENTERED, wp_login_url() );
+	wp_redirect( $url );
+	die;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-recovery-mode-link-service.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-recovery-mode-link-service.php#L73">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-recovery-mode-link-service.php#L73-L97">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_recovery_mode_link_service/handle_begin_link" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_recovery_mode_link_service/handle_begin_link</a>
+  </p>
+</div>

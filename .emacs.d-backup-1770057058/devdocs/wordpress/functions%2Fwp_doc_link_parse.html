@@ -1,0 +1,84 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_doc_link_parse( <span class="arg-type">string</span> <span class="arg-name">$content</span> ): <span class="return-type">array</span>
+</h1>  <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$content</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="630" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_doc_link_parse( $content ) {
+	if ( ! is_string( $content ) || empty( $content ) ) {
+		return array();
+	}
+
+	if ( ! function_exists( 'token_get_all' ) ) {
+		return array();
+	}
+
+	$tokens           = token_get_all( $content );
+	$count            = count( $tokens );
+	$functions        = array();
+	$ignore_functions = array();
+
+	for ( $t = 0; $t &lt; $count - 2; $t++ ) {
+		if ( ! is_array( $tokens[ $t ] ) ) {
+			continue;
+		}
+
+		if ( T_STRING === $tokens[ $t ][0] &amp;&amp; ( '(' === $tokens[ $t + 1 ] || '(' === $tokens[ $t + 2 ] ) ) {
+			// If it's a function or class defined locally, there's not going to be any docs available.
+			if ( ( isset( $tokens[ $t - 2 ][1] ) &amp;&amp; in_array( $tokens[ $t - 2 ][1], array( 'function', 'class' ), true ) )
+				|| ( isset( $tokens[ $t - 2 ][0] ) &amp;&amp; T_OBJECT_OPERATOR === $tokens[ $t - 1 ][0] )
+			) {
+				$ignore_functions[] = $tokens[ $t ][1];
+			}
+
+			// Add this to our stack of unique references.
+			$functions[] = $tokens[ $t ][1];
+		}
+	}
+
+	$functions = array_unique( $functions );
+	sort( $functions );
+
+	/**
+	 * Filters the list of functions and classes to be ignored from the documentation lookup.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param string[] $ignore_functions Array of names of functions and classes to be ignored.
+	 */
+	$ignore_functions = apply_filters( 'documentation_ignore_functions', $ignore_functions );
+
+	$ignore_functions = array_unique( $ignore_functions );
+
+	$output = array();
+
+	foreach ( $functions as $function ) {
+		if ( in_array( $function, $ignore_functions, true ) ) {
+			continue;
+		}
+
+		$output[] = $function;
+	}
+
+	return $output;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/misc.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/misc.php#L630">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/misc.php#L630-L687">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/documentation_ignore_functions"><span class="hook-func">apply_filters</span>( ‘documentation_ignore_functions’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$ignore_functions</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of functions and classes to be ignored from the documentation lookup.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_doc_link_parse" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_doc_link_parse</a>
+  </p>
+</div>

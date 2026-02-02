@@ -1,0 +1,349 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_default_styles( <span class="arg-type">WP_Styles</span> <span class="arg-name">$styles</span> )</h1> <section><p>Assigns default styles to $styles object.</p> </section> <section><h2 id="description">Description</h2> <p>Nothing is returned, because the $styles parameter is passed by reference.<br>Meaning that whatever object is passed will be updated without having to reassign the variable that was passed back to the same value. This saves memory.</p> <p>Adding default styles is not the only task, it also assigns the base_url property, the default version, and text direction for the object.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$styles</code><span class="type"><span class="WP_Styles"><a href="../classes/wp_styles" rel="class">WP_Styles</a></span></span><span class="required">required</span>
+</dt>
+
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1525" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_default_styles( $styles ) {
+	global $editor_styles;
+
+	/*
+	 * Include an unmodified $wp_version.
+	 *
+	 * Note: wp_get_wp_version() is not used here, as this file can be included
+	 * via wp-admin/load-scripts.php or wp-admin/load-styles.php, in which case
+	 * wp-includes/functions.php is not loaded.
+	 */
+	require ABSPATH . WPINC . '/version.php';
+
+	if ( ! defined( 'SCRIPT_DEBUG' ) ) {
+		/*
+		 * Note: str_contains() is not used here, as this file can be included
+		 * via wp-admin/load-scripts.php or wp-admin/load-styles.php, in which case
+		 * the polyfills from wp-includes/compat.php are not loaded.
+		 */
+		define( 'SCRIPT_DEBUG', false !== strpos( $wp_version, '-src' ) );
+	}
+
+	$guessurl = site_url();
+
+	if ( ! $guessurl ) {
+		$guessurl = wp_guess_url();
+	}
+
+	$styles-&gt;base_url        = $guessurl;
+	$styles-&gt;content_url     = defined( 'WP_CONTENT_URL' ) ? WP_CONTENT_URL : '';
+	$styles-&gt;default_version = get_bloginfo( 'version' );
+	$styles-&gt;text_direction  = function_exists( 'is_rtl' ) &amp;&amp; is_rtl() ? 'rtl' : 'ltr';
+	$styles-&gt;default_dirs    = array( '/wp-admin/', '/wp-includes/css/' );
+
+	// Open Sans is no longer used by core, but may be relied upon by themes and plugins.
+	$open_sans_font_url = '';
+
+	/*
+	 * translators: If there are characters in your language that are not supported
+	 * by Open Sans, translate this to 'off'. Do not translate into your own language.
+	 */
+	if ( 'off' !== _x( 'on', 'Open Sans font: on or off' ) ) {
+		$subsets = 'latin,latin-ext';
+
+		/*
+		 * translators: To add an additional Open Sans character subset specific to your language,
+		 * translate this to 'greek', 'cyrillic' or 'vietnamese'. Do not translate into your own language.
+		 */
+		$subset = _x( 'no-subset', 'Open Sans font: add new subset (greek, cyrillic, vietnamese)' );
+
+		if ( 'cyrillic' === $subset ) {
+			$subsets .= ',cyrillic,cyrillic-ext';
+		} elseif ( 'greek' === $subset ) {
+			$subsets .= ',greek,greek-ext';
+		} elseif ( 'vietnamese' === $subset ) {
+			$subsets .= ',vietnamese';
+		}
+
+		// Hotlink Open Sans, for now.
+		$open_sans_font_url = "https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,300,400,600&amp;subset=$subsets&amp;display=fallback";
+	}
+
+	// Register a stylesheet for the selected admin color scheme.
+	$styles-&gt;add( 'colors', true, array( 'wp-admin', 'buttons' ) );
+
+	$suffix = SCRIPT_DEBUG ? '' : '.min';
+
+	// Admin CSS.
+	$styles-&gt;add( 'common', "/wp-admin/css/common$suffix.css" );
+	$styles-&gt;add( 'forms', "/wp-admin/css/forms$suffix.css" );
+	$styles-&gt;add( 'admin-menu', "/wp-admin/css/admin-menu$suffix.css" );
+	$styles-&gt;add( 'dashboard', "/wp-admin/css/dashboard$suffix.css" );
+	$styles-&gt;add( 'list-tables', "/wp-admin/css/list-tables$suffix.css" );
+	$styles-&gt;add( 'edit', "/wp-admin/css/edit$suffix.css" );
+	$styles-&gt;add( 'revisions', "/wp-admin/css/revisions$suffix.css" );
+	$styles-&gt;add( 'media', "/wp-admin/css/media$suffix.css" );
+	$styles-&gt;add( 'themes', "/wp-admin/css/themes$suffix.css" );
+	$styles-&gt;add( 'about', "/wp-admin/css/about$suffix.css" );
+	$styles-&gt;add( 'nav-menus', "/wp-admin/css/nav-menus$suffix.css" );
+	$styles-&gt;add( 'widgets', "/wp-admin/css/widgets$suffix.css", array( 'wp-pointer' ) );
+	$styles-&gt;add( 'site-icon', "/wp-admin/css/site-icon$suffix.css" );
+	$styles-&gt;add( 'l10n', "/wp-admin/css/l10n$suffix.css" );
+	$styles-&gt;add( 'code-editor', "/wp-admin/css/code-editor$suffix.css", array( 'wp-codemirror' ) );
+	$styles-&gt;add( 'site-health', "/wp-admin/css/site-health$suffix.css" );
+
+	$styles-&gt;add( 'wp-admin', false, array( 'dashicons', 'common', 'forms', 'admin-menu', 'dashboard', 'list-tables', 'edit', 'revisions', 'media', 'themes', 'about', 'nav-menus', 'widgets', 'site-icon', 'l10n' ) );
+
+	$styles-&gt;add( 'login', "/wp-admin/css/login$suffix.css", array( 'dashicons', 'buttons', 'forms', 'l10n' ) );
+	$styles-&gt;add( 'install', "/wp-admin/css/install$suffix.css", array( 'dashicons', 'buttons', 'forms', 'l10n' ) );
+	$styles-&gt;add( 'wp-color-picker', "/wp-admin/css/color-picker$suffix.css" );
+	$styles-&gt;add( 'customize-controls', "/wp-admin/css/customize-controls$suffix.css", array( 'wp-admin', 'colors', 'imgareaselect' ) );
+	$styles-&gt;add( 'customize-widgets', "/wp-admin/css/customize-widgets$suffix.css", array( 'wp-admin', 'colors' ) );
+	$styles-&gt;add( 'customize-nav-menus', "/wp-admin/css/customize-nav-menus$suffix.css", array( 'wp-admin', 'colors' ) );
+
+	// Common dependencies.
+	$styles-&gt;add( 'buttons', "/wp-includes/css/buttons$suffix.css" );
+	$styles-&gt;add( 'dashicons', "/wp-includes/css/dashicons$suffix.css" );
+
+	// Includes CSS.
+	$styles-&gt;add( 'admin-bar', "/wp-includes/css/admin-bar$suffix.css", array( 'dashicons' ) );
+	$styles-&gt;add( 'wp-auth-check', "/wp-includes/css/wp-auth-check$suffix.css", array( 'dashicons' ) );
+	$styles-&gt;add( 'editor-buttons', "/wp-includes/css/editor$suffix.css", array( 'dashicons' ) );
+	$styles-&gt;add( 'media-views', "/wp-includes/css/media-views$suffix.css", array( 'buttons', 'dashicons', 'wp-mediaelement' ) );
+	$styles-&gt;add( 'wp-pointer', "/wp-includes/css/wp-pointer$suffix.css", array( 'dashicons' ) );
+	$styles-&gt;add( 'customize-preview', "/wp-includes/css/customize-preview$suffix.css", array( 'dashicons' ) );
+	$styles-&gt;add( 'wp-embed-template-ie', "/wp-includes/css/wp-embed-template-ie$suffix.css" );
+	$styles-&gt;add_data( 'wp-embed-template-ie', 'conditional', 'lte IE 8' );
+
+	// External libraries and friends.
+	$styles-&gt;add( 'imgareaselect', '/wp-includes/js/imgareaselect/imgareaselect.css', array(), '0.9.8' );
+	$styles-&gt;add( 'wp-jquery-ui-dialog', "/wp-includes/css/jquery-ui-dialog$suffix.css", array( 'dashicons' ) );
+	$styles-&gt;add( 'mediaelement', '/wp-includes/js/mediaelement/mediaelementplayer-legacy.min.css', array(), '4.2.17' );
+	$styles-&gt;add( 'wp-mediaelement', "/wp-includes/js/mediaelement/wp-mediaelement$suffix.css", array( 'mediaelement' ) );
+	$styles-&gt;add( 'thickbox', '/wp-includes/js/thickbox/thickbox.css', array( 'dashicons' ) );
+	$styles-&gt;add( 'wp-codemirror', '/wp-includes/js/codemirror/codemirror.min.css', array(), '5.29.1-alpha-ee20357' );
+
+	// Deprecated CSS.
+	$styles-&gt;add( 'deprecated-media', "/wp-admin/css/deprecated-media$suffix.css" );
+	$styles-&gt;add( 'farbtastic', "/wp-admin/css/farbtastic$suffix.css", array(), '1.3u1' );
+	$styles-&gt;add( 'jcrop', '/wp-includes/js/jcrop/jquery.Jcrop.min.css', array(), '0.9.15' );
+	$styles-&gt;add( 'colors-fresh', false, array( 'wp-admin', 'buttons' ) ); // Old handle.
+	$styles-&gt;add( 'open-sans', $open_sans_font_url ); // No longer used in core as of 4.6.
+
+	// Noto Serif is no longer used by core, but may be relied upon by themes and plugins.
+	$fonts_url = '';
+
+	/*
+	 * translators: Use this to specify the proper Google Font name and variants
+	 * to load that is supported by your language. Do not translate.
+	 * Set to 'off' to disable loading.
+	 */
+	$font_family = _x( 'Noto Serif:400,400i,700,700i', 'Google Font Name and Variants' );
+	if ( 'off' !== $font_family ) {
+		$fonts_url = 'https://fonts.googleapis.com/css?family=' . urlencode( $font_family );
+	}
+	$styles-&gt;add( 'wp-editor-font', $fonts_url ); // No longer used in core as of 5.7.
+	$block_library_theme_path = WPINC . "/css/dist/block-library/theme$suffix.css";
+	$styles-&gt;add( 'wp-block-library-theme', "/$block_library_theme_path" );
+	$styles-&gt;add_data( 'wp-block-library-theme', 'path', ABSPATH . $block_library_theme_path );
+
+	$styles-&gt;add(
+		'wp-reset-editor-styles',
+		"/wp-includes/css/dist/block-library/reset$suffix.css",
+		array( 'common', 'forms' ) // Make sure the reset is loaded after the default WP Admin styles.
+	);
+
+	$styles-&gt;add(
+		'wp-editor-classic-layout-styles',
+		"/wp-includes/css/dist/edit-post/classic$suffix.css",
+		array()
+	);
+
+	$styles-&gt;add(
+		'wp-block-editor-content',
+		"/wp-includes/css/dist/block-editor/content$suffix.css",
+		array( 'wp-components' )
+	);
+
+	$wp_edit_blocks_dependencies = array(
+		'wp-components',
+		'wp-editor',
+		/*
+		 * This needs to be added before the block library styles,
+		 * The block library styles override the "reset" styles.
+		 */
+		'wp-reset-editor-styles',
+		'wp-block-library',
+		'wp-reusable-blocks',
+		'wp-block-editor-content',
+		'wp-patterns',
+	);
+
+	// Only load the default layout and margin styles for themes without theme.json file.
+	if ( ! wp_theme_has_theme_json() ) {
+		$wp_edit_blocks_dependencies[] = 'wp-editor-classic-layout-styles';
+	}
+
+	if (
+		current_theme_supports( 'wp-block-styles' ) &amp;&amp;
+		( ! is_array( $editor_styles ) || count( $editor_styles ) === 0 )
+	) {
+		/*
+		 * Include opinionated block styles if the theme supports block styles and
+		 * no $editor_styles are declared, so the editor never appears broken.
+		 */
+		$wp_edit_blocks_dependencies[] = 'wp-block-library-theme';
+	}
+
+	$styles-&gt;add(
+		'wp-edit-blocks',
+		"/wp-includes/css/dist/block-library/editor$suffix.css",
+		$wp_edit_blocks_dependencies
+	);
+
+	$package_styles = array(
+		'block-editor'         =&gt; array( 'wp-components', 'wp-preferences' ),
+		'block-library'        =&gt; array(),
+		'block-directory'      =&gt; array(),
+		'components'           =&gt; array(),
+		'commands'             =&gt; array(),
+		'edit-post'            =&gt; array(
+			'wp-components',
+			'wp-block-editor',
+			'wp-editor',
+			'wp-edit-blocks',
+			'wp-block-library',
+			'wp-commands',
+			'wp-preferences',
+		),
+		'editor'               =&gt; array(
+			'wp-components',
+			'wp-block-editor',
+			'wp-reusable-blocks',
+			'wp-patterns',
+			'wp-preferences',
+		),
+		'format-library'       =&gt; array(),
+		'list-reusable-blocks' =&gt; array( 'wp-components' ),
+		'reusable-blocks'      =&gt; array( 'wp-components' ),
+		'patterns'             =&gt; array( 'wp-components' ),
+		'preferences'          =&gt; array( 'wp-components' ),
+		'nux'                  =&gt; array( 'wp-components' ),
+		'widgets'              =&gt; array(
+			'wp-components',
+		),
+		'edit-widgets'         =&gt; array(
+			'wp-widgets',
+			'wp-block-editor',
+			'wp-edit-blocks',
+			'wp-block-library',
+			'wp-reusable-blocks',
+			'wp-patterns',
+			'wp-preferences',
+		),
+		'customize-widgets'    =&gt; array(
+			'wp-widgets',
+			'wp-block-editor',
+			'wp-edit-blocks',
+			'wp-block-library',
+			'wp-reusable-blocks',
+			'wp-patterns',
+			'wp-preferences',
+		),
+		'edit-site'            =&gt; array(
+			'wp-components',
+			'wp-block-editor',
+			'wp-edit-blocks',
+			'wp-commands',
+			'wp-preferences',
+		),
+	);
+
+	foreach ( $package_styles as $package =&gt; $dependencies ) {
+		$handle = 'wp-' . $package;
+		$path   = "/wp-includes/css/dist/$package/style$suffix.css";
+
+		if ( 'block-library' === $package &amp;&amp; wp_should_load_separate_core_block_assets() ) {
+			$path = "/wp-includes/css/dist/$package/common$suffix.css";
+		}
+		$styles-&gt;add( $handle, $path, $dependencies );
+		$styles-&gt;add_data( $handle, 'path', ABSPATH . $path );
+	}
+
+	// RTL CSS.
+	$rtl_styles = array(
+		// Admin CSS.
+		'common',
+		'forms',
+		'admin-menu',
+		'dashboard',
+		'list-tables',
+		'edit',
+		'revisions',
+		'media',
+		'themes',
+		'about',
+		'nav-menus',
+		'widgets',
+		'site-icon',
+		'l10n',
+		'install',
+		'wp-color-picker',
+		'customize-controls',
+		'customize-widgets',
+		'customize-nav-menus',
+		'customize-preview',
+		'login',
+		'site-health',
+		// Includes CSS.
+		'buttons',
+		'admin-bar',
+		'wp-auth-check',
+		'editor-buttons',
+		'media-views',
+		'wp-pointer',
+		'wp-jquery-ui-dialog',
+		// Package styles.
+		'wp-reset-editor-styles',
+		'wp-editor-classic-layout-styles',
+		'wp-block-library-theme',
+		'wp-edit-blocks',
+		'wp-block-editor',
+		'wp-block-library',
+		'wp-block-directory',
+		'wp-commands',
+		'wp-components',
+		'wp-customize-widgets',
+		'wp-edit-post',
+		'wp-edit-site',
+		'wp-edit-widgets',
+		'wp-editor',
+		'wp-format-library',
+		'wp-list-reusable-blocks',
+		'wp-reusable-blocks',
+		'wp-patterns',
+		'wp-nux',
+		'wp-widgets',
+		// Deprecated CSS.
+		'deprecated-media',
+		'farbtastic',
+	);
+
+	foreach ( $rtl_styles as $rtl_style ) {
+		$styles-&gt;add_data( $rtl_style, 'rtl', 'replace' );
+		if ( $suffix ) {
+			$styles-&gt;add_data( $rtl_style, 'suffix', $suffix );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/script-loader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/script-loader.php#L1525">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/script-loader.php#L1525-L1852">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_default_styles" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_default_styles</a>
+  </p>
+</div>

@@ -1,0 +1,175 @@
+<h1 class="wp-block-wporg-code-reference-title">activate_plugin( <span class="arg-type">string</span> <span class="arg-name">$plugin</span>, <span class="arg-type">string</span> <span class="arg-name">$redirect</span> = <span class="arg-default">”</span>, <span class="arg-type">bool</span> <span class="arg-name">$network_wide</span> = <span class="arg-default">false</span>, <span class="arg-type">bool</span> <span class="arg-name">$silent</span> = <span class="arg-default">false</span> ): <span class="return-type">null|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Attempts activation of plugin in a “sandbox” and redirects on success.</p> </section> <section><h2 id="description">Description</h2> <p>A plugin that is already activated will not attempt to be activated again.</p> <p>The way it works is by setting the redirection to the error before trying to include the plugin file. If the plugin fails, then the redirection will not be overwritten with the success message. Also, the options will not be updated and the activation hook will not be called on plugin error.</p> <p>It should be noted that in no way the below code will actually prevent errors within the file. The code should not be used elsewhere to replicate the "sandbox", which uses redirection to work.<br>{@source 13 1}</p> <p>If any errors are found or text is outputted, then it will be captured to ensure that the success redirection will update the error redirection.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$plugin</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Path to the plugin file relative to the plugins directory.</span></div></dd>
+<dt>
+<code>$redirect</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">URL to redirect to.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$network_wide</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to enable the plugin for all sites in the network or just the current site. Multisite only. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$silent</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to prevent calling activation hooks. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">null|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Null on success, <a href="../classes/wp_error" rel="class">WP_Error</a> on invalid file.</section> <section><h2 id="more-information">More Information</h2> <p>Plugin will fail to activate with the following generic response for multiple reasons, including; issues parsing the header information, issue with the ‘plugin’ cache (see <a href="../classes/wp_object_cache">WordPress Object Cache</a>), or a permissions error.</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">The plugin does not have a valid header.</code></pre> <p>Issues with the plugin cache, are caused when the plugin files are added or modified, after the plugins have all been initialised. This can be resolved by reloading the page, sending the <code>activate_plugin()</code> as a separate AJAX request, or if necessary, by manually updating the cache. Example below:</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php line-numbers">$cache_plugins = wp_cache_get( 'plugins', 'plugins' );
+if ( !empty( $cache_plugins ) ) {
+$new_plugin = array(
+'Name' =&gt; $plugin_name,
+'PluginURI' =&gt; $plugin_uri,
+'Version' =&gt; $plugin_version,
+'Description' =&gt; $plugin_description,
+'Author' =&gt; $author_name,
+'AuthorURI' =&gt; $author_uri,
+'TextDomain' =&gt; '',
+'DomainPath' =&gt; '',
+'Network' =&gt; '',
+'Title' =&gt; $plugin_name,
+'AuthorName' =&gt; $author_name,
+);
+$cache_plugins[''][$plugin_path] = $new_plugin;
+wp_cache_set( 'plugins', $cache_plugins, 'plugins' );
+}</code></pre> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="641" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function activate_plugin( $plugin, $redirect = '', $network_wide = false, $silent = false ) {
+	$plugin = plugin_basename( trim( $plugin ) );
+
+	if ( is_multisite() &amp;&amp; ( $network_wide || is_network_only_plugin( $plugin ) ) ) {
+		$network_wide        = true;
+		$current             = get_site_option( 'active_sitewide_plugins', array() );
+		$_GET['networkwide'] = 1; // Back compat for plugins looking for this value.
+	} else {
+		$current = get_option( 'active_plugins', array() );
+	}
+
+	$valid = validate_plugin( $plugin );
+	if ( is_wp_error( $valid ) ) {
+		return $valid;
+	}
+
+	$requirements = validate_plugin_requirements( $plugin );
+	if ( is_wp_error( $requirements ) ) {
+		return $requirements;
+	}
+
+	if ( $network_wide &amp;&amp; ! isset( $current[ $plugin ] )
+		|| ! $network_wide &amp;&amp; ! in_array( $plugin, $current, true )
+	) {
+		if ( ! empty( $redirect ) ) {
+			// We'll override this later if the plugin can be included without fatal error.
+			wp_redirect( add_query_arg( '_error_nonce', wp_create_nonce( 'plugin-activation-error_' . $plugin ), $redirect ) );
+		}
+
+		ob_start();
+
+		// Load the plugin to test whether it throws any errors.
+		plugin_sandbox_scrape( $plugin );
+
+		if ( ! $silent ) {
+			/**
+			 * Fires before a plugin is activated.
+			 *
+			 * If a plugin is silently activated (such as during an update),
+			 * this hook does not fire.
+			 *
+			 * @since 2.9.0
+			 *
+			 * @param string $plugin       Path to the plugin file relative to the plugins directory.
+			 * @param bool   $network_wide Whether to enable the plugin for all sites in the network
+			 *                             or just the current site. Multisite only. Default false.
+			 */
+			do_action( 'activate_plugin', $plugin, $network_wide );
+
+			/**
+			 * Fires as a specific plugin is being activated.
+			 *
+			 * This hook is the "activation" hook used internally by register_activation_hook().
+			 * The dynamic portion of the hook name, `$plugin`, refers to the plugin basename.
+			 *
+			 * If a plugin is silently activated (such as during an update), this hook does not fire.
+			 *
+			 * @since 2.0.0
+			 *
+			 * @param bool $network_wide Whether to enable the plugin for all sites in the network
+			 *                           or just the current site. Multisite only. Default false.
+			 */
+			do_action( "activate_{$plugin}", $network_wide );
+		}
+
+		if ( $network_wide ) {
+			$current            = get_site_option( 'active_sitewide_plugins', array() );
+			$current[ $plugin ] = time();
+			update_site_option( 'active_sitewide_plugins', $current );
+		} else {
+			$current   = get_option( 'active_plugins', array() );
+			$current[] = $plugin;
+			sort( $current );
+			update_option( 'active_plugins', $current );
+		}
+
+		if ( ! $silent ) {
+			/**
+			 * Fires after a plugin has been activated.
+			 *
+			 * If a plugin is silently activated (such as during an update),
+			 * this hook does not fire.
+			 *
+			 * @since 2.9.0
+			 *
+			 * @param string $plugin       Path to the plugin file relative to the plugins directory.
+			 * @param bool   $network_wide Whether to enable the plugin for all sites in the network
+			 *                             or just the current site. Multisite only. Default false.
+			 */
+			do_action( 'activated_plugin', $plugin, $network_wide );
+		}
+
+		if ( ob_get_length() &gt; 0 ) {
+			$output = ob_get_clean();
+			return new WP_Error( 'unexpected_output', __( 'The plugin generated unexpected output.' ), $output );
+		}
+
+		ob_end_clean();
+	}
+
+	return null;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/plugin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/plugin.php#L641">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/plugin.php#L641-L742">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/activated_plugin"><span class="hook-func">do_action</span>( ‘activated_plugin’, <nobr><span class="arg-type">string</span> <span class="arg-name">$plugin</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$network_wide</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a plugin has been activated.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/activate_plugin"><span class="hook-func">do_action</span>( “activate_{$plugin}”, <nobr><span class="arg-type">bool</span> <span class="arg-name">$network_wide</span></nobr> )</a></dt>
+<dd>
+<p>Fires as a specific plugin is being activated.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td><span class="since-description">Test for WordPress version and PHP version compatibility.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/activate_plugin" class="_attribution-link">https://developer.wordpress.org/reference/functions/activate_plugin</a>
+  </p>
+</div>

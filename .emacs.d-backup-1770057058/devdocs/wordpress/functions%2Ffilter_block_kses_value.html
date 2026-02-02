@@ -1,0 +1,67 @@
+<h1 class="wp-block-wporg-code-reference-title">filter_block_kses_value( <span class="arg-type">string[]|string</span> <span class="arg-name">$value</span>, <span class="arg-type">array[]|string</span> <span class="arg-name">$allowed_html</span>, <span class="arg-type">string[]</span> <span class="arg-name">$allowed_protocols</span> = <span class="arg-default">array()</span>, <span class="arg-type">array</span> <span class="arg-name">$block_context</span> = <span class="arg-default">null</span> ): <span class="return-type">string[]|string</span>
+</h1> <section><p>Filters and sanitizes a parsed block attribute value to remove non-allowable HTML.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$value</code><span class="type"><span class="string[]">string[]</span>|<span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The attribute value to filter.</span></div></dd>
+<dt>
+<code>$allowed_html</code><span class="type"><span class="array[]">array[]</span>|<span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An array of allowed HTML elements and attributes, or a context name such as <code>'post'</code>. See <a href="wp_kses_allowed_html" rel="function">wp_kses_allowed_html()</a> for the list of accepted context names.</span></div></dd>
+<dt>
+<code>$allowed_protocols</code><span class="type"><span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of allowed URL protocols.<br> Defaults to the result of <a href="wp_allowed_protocols" rel="function">wp_allowed_protocols()</a> .</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$block_context</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The block the attribute belongs to, in parsed block array format.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string[]|string</span> The filtered and sanitized result.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1884" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function filter_block_kses_value( $value, $allowed_html, $allowed_protocols = array(), $block_context = null ) {
+	if ( is_array( $value ) ) {
+		foreach ( $value as $key =&gt; $inner_value ) {
+			$filtered_key   = filter_block_kses_value( $key, $allowed_html, $allowed_protocols, $block_context );
+			$filtered_value = filter_block_kses_value( $inner_value, $allowed_html, $allowed_protocols, $block_context );
+
+			if ( isset( $block_context['blockName'] ) &amp;&amp; 'core/template-part' === $block_context['blockName'] ) {
+				$filtered_value = filter_block_core_template_part_attributes( $filtered_value, $filtered_key, $allowed_html );
+			}
+			if ( $filtered_key !== $key ) {
+				unset( $value[ $key ] );
+			}
+
+			$value[ $filtered_key ] = $filtered_value;
+		}
+	} elseif ( is_string( $value ) ) {
+		return wp_kses( $value, $allowed_html, $allowed_protocols );
+	}
+
+	return $value;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/blocks.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/blocks.php#L1884">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/blocks.php#L1884-L1904">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.5.5/">6.5.5</a></td>
+<td><span class="since-description">Added the <code>$block_context</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.1/">5.3.1</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/filter_block_kses_value" class="_attribution-link">https://developer.wordpress.org/reference/functions/filter_block_kses_value</a>
+  </p>
+</div>

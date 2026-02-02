@@ -1,0 +1,187 @@
+<h1 class="wp-block-wporg-code-reference-title">Plugin_Installer_Skin::do_overwrite(): <span class="return-type">bool</span>
+</h1> <section><p>Checks if the plugin can be overwritten and outputs the HTML for overwriting a plugin on upload.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> Whether the plugin can be overwritten and HTML was outputted.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="192" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">private function do_overwrite() {
+	if ( 'upload' !== $this-&gt;type || ! is_wp_error( $this-&gt;result ) || 'folder_exists' !== $this-&gt;result-&gt;get_error_code() ) {
+		return false;
+	}
+
+	$folder = $this-&gt;result-&gt;get_error_data( 'folder_exists' );
+	$folder = ltrim( substr( $folder, strlen( WP_PLUGIN_DIR ) ), '/' );
+
+	$current_plugin_data = false;
+	$all_plugins         = get_plugins();
+
+	foreach ( $all_plugins as $plugin =&gt; $plugin_data ) {
+		if ( strrpos( $plugin, $folder ) !== 0 ) {
+			continue;
+		}
+
+		$current_plugin_data = $plugin_data;
+	}
+
+	$new_plugin_data = $this-&gt;upgrader-&gt;new_plugin_data;
+
+	if ( ! $current_plugin_data || ! $new_plugin_data ) {
+		return false;
+	}
+
+	echo '&lt;h2 class="update-from-upload-heading"&gt;' . esc_html__( 'This plugin is already installed.' ) . '&lt;/h2&gt;';
+
+	$this-&gt;is_downgrading = version_compare( $current_plugin_data['Version'], $new_plugin_data['Version'], '&gt;' );
+
+	$rows = array(
+		'Name'        =&gt; __( 'Plugin name' ),
+		'Version'     =&gt; __( 'Version' ),
+		'Author'      =&gt; __( 'Author' ),
+		'RequiresWP'  =&gt; __( 'Required WordPress version' ),
+		'RequiresPHP' =&gt; __( 'Required PHP version' ),
+	);
+
+	$table  = '&lt;table class="update-from-upload-comparison"&gt;&lt;tbody&gt;';
+	$table .= '&lt;tr&gt;&lt;th&gt;&lt;/th&gt;&lt;th&gt;' . esc_html_x( 'Current', 'plugin' ) . '&lt;/th&gt;';
+	$table .= '&lt;th&gt;' . esc_html_x( 'Uploaded', 'plugin' ) . '&lt;/th&gt;&lt;/tr&gt;';
+
+	$is_same_plugin = true; // Let's consider only these rows.
+
+	foreach ( $rows as $field =&gt; $label ) {
+		$old_value = ! empty( $current_plugin_data[ $field ] ) ? (string) $current_plugin_data[ $field ] : '-';
+		$new_value = ! empty( $new_plugin_data[ $field ] ) ? (string) $new_plugin_data[ $field ] : '-';
+
+		$is_same_plugin = $is_same_plugin &amp;&amp; ( $old_value === $new_value );
+
+		$diff_field   = ( 'Version' !== $field &amp;&amp; $new_value !== $old_value );
+		$diff_version = ( 'Version' === $field &amp;&amp; $this-&gt;is_downgrading );
+
+		$table .= '&lt;tr&gt;&lt;td class="name-label"&gt;' . $label . '&lt;/td&gt;&lt;td&gt;' . wp_strip_all_tags( $old_value ) . '&lt;/td&gt;';
+		$table .= ( $diff_field || $diff_version ) ? '&lt;td class="warning"&gt;' : '&lt;td&gt;';
+		$table .= wp_strip_all_tags( $new_value ) . '&lt;/td&gt;&lt;/tr&gt;';
+	}
+
+	$table .= '&lt;/tbody&gt;&lt;/table&gt;';
+
+	/**
+	 * Filters the compare table output for overwriting a plugin package on upload.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param string $table               The output table with Name, Version, Author, RequiresWP, and RequiresPHP info.
+	 * @param array  $current_plugin_data Array with current plugin data.
+	 * @param array  $new_plugin_data     Array with uploaded plugin data.
+	 */
+	echo apply_filters( 'install_plugin_overwrite_comparison', $table, $current_plugin_data, $new_plugin_data );
+
+	$install_actions = array();
+	$can_update      = true;
+
+	$blocked_message  = '&lt;p&gt;' . esc_html__( 'The plugin cannot be updated due to the following:' ) . '&lt;/p&gt;';
+	$blocked_message .= '&lt;ul class="ul-disc"&gt;';
+
+	$requires_php = isset( $new_plugin_data['RequiresPHP'] ) ? $new_plugin_data['RequiresPHP'] : null;
+	$requires_wp  = isset( $new_plugin_data['RequiresWP'] ) ? $new_plugin_data['RequiresWP'] : null;
+
+	if ( ! is_php_version_compatible( $requires_php ) ) {
+		$error = sprintf(
+			/* translators: 1: Current PHP version, 2: Version required by the uploaded plugin. */
+			__( 'The PHP version on your server is %1$s, however the uploaded plugin requires %2$s.' ),
+			PHP_VERSION,
+			$requires_php
+		);
+
+		$blocked_message .= '&lt;li&gt;' . esc_html( $error ) . '&lt;/li&gt;';
+		$can_update       = false;
+	}
+
+	if ( ! is_wp_version_compatible( $requires_wp ) ) {
+		$error = sprintf(
+			/* translators: 1: Current WordPress version, 2: Version required by the uploaded plugin. */
+			__( 'Your WordPress version is %1$s, however the uploaded plugin requires %2$s.' ),
+			esc_html( wp_get_wp_version() ),
+			$requires_wp
+		);
+
+		$blocked_message .= '&lt;li&gt;' . esc_html( $error ) . '&lt;/li&gt;';
+		$can_update       = false;
+	}
+
+	$blocked_message .= '&lt;/ul&gt;';
+
+	if ( $can_update ) {
+		if ( $this-&gt;is_downgrading ) {
+			$warning = sprintf(
+				/* translators: %s: Documentation URL. */
+				__( 'You are uploading an older version of a current plugin. You can continue to install the older version, but be sure to &lt;a href="%s"&gt;back up your database and files&lt;/a&gt; first.' ),
+				__( 'https://developer.wordpress.org/advanced-administration/security/backup/' )
+			);
+		} else {
+			$warning = sprintf(
+				/* translators: %s: Documentation URL. */
+				__( 'You are updating a plugin. Be sure to &lt;a href="%s"&gt;back up your database and files&lt;/a&gt; first.' ),
+				__( 'https://developer.wordpress.org/advanced-administration/security/backup/' )
+			);
+		}
+
+		echo '&lt;p class="update-from-upload-notice"&gt;' . $warning . '&lt;/p&gt;';
+
+		$overwrite = $this-&gt;is_downgrading ? 'downgrade-plugin' : 'update-plugin';
+
+		$install_actions['overwrite_plugin'] = sprintf(
+			'&lt;a class="button button-primary update-from-upload-overwrite" href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+			wp_nonce_url( add_query_arg( 'overwrite', $overwrite, $this-&gt;url ), 'plugin-upload' ),
+			_x( 'Replace current with uploaded', 'plugin' )
+		);
+	} else {
+		echo $blocked_message;
+	}
+
+	$cancel_url = add_query_arg( 'action', 'upload-plugin-cancel-overwrite', $this-&gt;url );
+
+	$install_actions['plugins_page'] = sprintf(
+		'&lt;a class="button" href="%s"&gt;%s&lt;/a&gt;',
+		wp_nonce_url( $cancel_url, 'plugin-upload-cancel-overwrite' ),
+		__( 'Cancel and go back' )
+	);
+
+	/**
+	 * Filters the list of action links available following a single plugin installation failure
+	 * when overwriting is allowed.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param string[] $install_actions Array of plugin action links.
+	 * @param object   $api             Object containing WordPress.org API plugin data.
+	 * @param array    $new_plugin_data Array with uploaded plugin data.
+	 */
+	$install_actions = apply_filters( 'install_plugin_overwrite_actions', $install_actions, $this-&gt;api, $new_plugin_data );
+
+	if ( ! empty( $install_actions ) ) {
+		printf(
+			'&lt;p class="update-from-upload-expired hidden"&gt;%s&lt;/p&gt;',
+			__( 'The uploaded file has expired. Please go back and upload it again.' )
+		);
+		echo '&lt;p class="update-from-upload-actions"&gt;' . implode( ' ', (array) $install_actions ) . '&lt;/p&gt;';
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-plugin-installer-skin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-plugin-installer-skin.php#L192">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-plugin-installer-skin.php#L192-L354">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/install_plugin_overwrite_actions"><span class="hook-func">apply_filters</span>( ‘install_plugin_overwrite_actions’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$install_actions</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$api</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$new_plugin_data</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of action links available following a single plugin installation failure when overwriting is allowed.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/install_plugin_overwrite_comparison"><span class="hook-func">apply_filters</span>( ‘install_plugin_overwrite_comparison’, <nobr><span class="arg-type">string</span> <span class="arg-name">$table</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$current_plugin_data</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$new_plugin_data</span></nobr> )</a></dt>
+<dd>
+<p>Filters the compare table output for overwriting a plugin package on upload.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/plugin_installer_skin/do_overwrite" class="_attribution-link">https://developer.wordpress.org/reference/classes/plugin_installer_skin/do_overwrite</a>
+  </p>
+</div>

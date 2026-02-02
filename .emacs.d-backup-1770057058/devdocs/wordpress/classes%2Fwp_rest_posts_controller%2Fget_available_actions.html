@@ -1,0 +1,73 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Posts_Controller::get_available_actions( <span class="arg-type">WP_Post</span> <span class="arg-name">$post</span>, <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type">array</span>
+</h1> <section><p>Gets the link relations available for the post and current user.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post object.</span></div></dd>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Request object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> List of link relations.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2251" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function get_available_actions( $post, $request ) {
+
+	if ( 'edit' !== $request['context'] ) {
+		return array();
+	}
+
+	$rels = array();
+
+	$post_type = get_post_type_object( $post-&gt;post_type );
+
+	if ( 'attachment' !== $this-&gt;post_type &amp;&amp; current_user_can( $post_type-&gt;cap-&gt;publish_posts ) ) {
+		$rels[] = 'https://api.w.org/action-publish';
+	}
+
+	if ( current_user_can( 'unfiltered_html' ) ) {
+		$rels[] = 'https://api.w.org/action-unfiltered-html';
+	}
+
+	if ( 'post' === $post_type-&gt;name ) {
+		if ( current_user_can( $post_type-&gt;cap-&gt;edit_others_posts ) &amp;&amp; current_user_can( $post_type-&gt;cap-&gt;publish_posts ) ) {
+			$rels[] = 'https://api.w.org/action-sticky';
+		}
+	}
+
+	if ( post_type_supports( $post_type-&gt;name, 'author' ) ) {
+		if ( current_user_can( $post_type-&gt;cap-&gt;edit_others_posts ) ) {
+			$rels[] = 'https://api.w.org/action-assign-author';
+		}
+	}
+
+	$taxonomies = wp_list_filter( get_object_taxonomies( $this-&gt;post_type, 'objects' ), array( 'show_in_rest' =&gt; true ) );
+
+	foreach ( $taxonomies as $tax ) {
+		$tax_base   = ! empty( $tax-&gt;rest_base ) ? $tax-&gt;rest_base : $tax-&gt;name;
+		$create_cap = is_taxonomy_hierarchical( $tax-&gt;name ) ? $tax-&gt;cap-&gt;edit_terms : $tax-&gt;cap-&gt;assign_terms;
+
+		if ( current_user_can( $create_cap ) ) {
+			$rels[] = 'https://api.w.org/action-create-' . $tax_base;
+		}
+
+		if ( current_user_can( $tax-&gt;cap-&gt;assign_terms ) ) {
+			$rels[] = 'https://api.w.org/action-assign-' . $tax_base;
+		}
+	}
+
+	return $rels;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php#L2251">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php#L2251-L2297">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.8/">4.9.8</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_posts_controller/get_available_actions" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_posts_controller/get_available_actions</a>
+  </p>
+</div>

@@ -1,0 +1,128 @@
+<h1 class="wp-block-wporg-code-reference-title">redirect_guess_404_permalink(): <span class="return-type">string|false</span>
+</h1> <section><p>Attempts to guess the correct URL for a 404 request based on query vars.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> The correct URL if one is found. False on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="918" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function redirect_guess_404_permalink() {
+	global $wpdb;
+
+	/**
+	 * Filters whether to attempt to guess a redirect URL for a 404 request.
+	 *
+	 * Returning a false value from the filter will disable the URL guessing
+	 * and return early without performing a redirect.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param bool $do_redirect_guess Whether to attempt to guess a redirect URL
+	 *                                for a 404 request. Default true.
+	 */
+	if ( false === apply_filters( 'do_redirect_guess_404_permalink', true ) ) {
+		return false;
+	}
+
+	/**
+	 * Short-circuits the redirect URL guessing for 404 requests.
+	 *
+	 * Returning a non-null value from the filter will effectively short-circuit
+	 * the URL guessing, returning the passed value instead.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param null|string|false $pre Whether to short-circuit guessing the redirect for a 404.
+	 *                               Default null to continue with the URL guessing.
+	 */
+	$pre = apply_filters( 'pre_redirect_guess_404_permalink', null );
+	if ( null !== $pre ) {
+		return $pre;
+	}
+
+	if ( get_query_var( 'name' ) ) {
+		$publicly_viewable_statuses   = array_filter( get_post_stati(), 'is_post_status_viewable' );
+		$publicly_viewable_post_types = array_filter( get_post_types( array( 'exclude_from_search' =&gt; false ) ), 'is_post_type_viewable' );
+
+		/**
+		 * Filters whether to perform a strict guess for a 404 redirect.
+		 *
+		 * Returning a truthy value from the filter will redirect only exact post_name matches.
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param bool $strict_guess Whether to perform a strict guess. Default false (loose guess).
+		 */
+		$strict_guess = apply_filters( 'strict_redirect_guess_404_permalink', false );
+
+		if ( $strict_guess ) {
+			$where = $wpdb-&gt;prepare( 'post_name = %s', get_query_var( 'name' ) );
+		} else {
+			$where = $wpdb-&gt;prepare( 'post_name LIKE %s', $wpdb-&gt;esc_like( get_query_var( 'name' ) ) . '%' );
+		}
+
+		// If any of post_type, year, monthnum, or day are set, use them to refine the query.
+		if ( get_query_var( 'post_type' ) ) {
+			if ( is_array( get_query_var( 'post_type' ) ) ) {
+				$post_types = array_intersect( get_query_var( 'post_type' ), $publicly_viewable_post_types );
+				if ( empty( $post_types ) ) {
+					return false;
+				}
+				$where .= " AND post_type IN ('" . join( "', '", esc_sql( get_query_var( 'post_type' ) ) ) . "')";
+			} else {
+				if ( ! in_array( get_query_var( 'post_type' ), $publicly_viewable_post_types, true ) ) {
+					return false;
+				}
+				$where .= $wpdb-&gt;prepare( ' AND post_type = %s', get_query_var( 'post_type' ) );
+			}
+		} else {
+			$where .= " AND post_type IN ('" . implode( "', '", esc_sql( $publicly_viewable_post_types ) ) . "')";
+		}
+
+		if ( get_query_var( 'year' ) ) {
+			$where .= $wpdb-&gt;prepare( ' AND YEAR(post_date) = %d', get_query_var( 'year' ) );
+		}
+		if ( get_query_var( 'monthnum' ) ) {
+			$where .= $wpdb-&gt;prepare( ' AND MONTH(post_date) = %d', get_query_var( 'monthnum' ) );
+		}
+		if ( get_query_var( 'day' ) ) {
+			$where .= $wpdb-&gt;prepare( ' AND DAYOFMONTH(post_date) = %d', get_query_var( 'day' ) );
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$post_id = $wpdb-&gt;get_var( "SELECT ID FROM $wpdb-&gt;posts WHERE $where AND post_status IN ('" . implode( "', '", esc_sql( $publicly_viewable_statuses ) ) . "')" );
+
+		if ( ! $post_id ) {
+			return false;
+		}
+
+		if ( get_query_var( 'feed' ) ) {
+			return get_post_comments_feed_link( $post_id, get_query_var( 'feed' ) );
+		} elseif ( get_query_var( 'page' ) &gt; 1 ) {
+			return trailingslashit( get_permalink( $post_id ) ) . user_trailingslashit( get_query_var( 'page' ), 'single_paged' );
+		} else {
+			return get_permalink( $post_id );
+		}
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/canonical.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/canonical.php#L918">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/canonical.php#L918-L1018">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/do_redirect_guess_404_permalink"><span class="hook-func">apply_filters</span>( ‘do_redirect_guess_404_permalink’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$do_redirect_guess</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to attempt to guess a redirect URL for a 404 request.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_redirect_guess_404_permalink"><span class="hook-func">apply_filters</span>( ‘pre_redirect_guess_404_permalink’, <nobr><span class="arg-type">null|string|false</span> <span class="arg-name">$pre</span></nobr> )</a></dt>
+<dd>
+<p>Short-circuits the redirect URL guessing for 404 requests.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/strict_redirect_guess_404_permalink"><span class="hook-func">apply_filters</span>( ‘strict_redirect_guess_404_permalink’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$strict_guess</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to perform a strict guess for a 404 redirect.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/redirect_guess_404_permalink" class="_attribution-link">https://developer.wordpress.org/reference/functions/redirect_guess_404_permalink</a>
+  </p>
+</div>

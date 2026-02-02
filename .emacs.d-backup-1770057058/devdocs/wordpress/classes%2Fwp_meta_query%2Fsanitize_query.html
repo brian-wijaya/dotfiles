@@ -1,0 +1,78 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Meta_Query::sanitize_query( <span class="arg-type">array</span> <span class="arg-name">$queries</span> ): <span class="return-type">array</span>
+</h1> <section><p>Ensures the ‘meta_query’ argument passed to the class constructor is well-formed.</p> </section> <section><h2 id="description">Description</h2> <p>Eliminates empty items and ensures that a ‘relation’ is set.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$queries</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array of query clauses.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Sanitized array of query clauses.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="192" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function sanitize_query( $queries ) {
+	$clean_queries = array();
+
+	if ( ! is_array( $queries ) ) {
+		return $clean_queries;
+	}
+
+	foreach ( $queries as $key =&gt; $query ) {
+		if ( 'relation' === $key ) {
+			$relation = $query;
+
+		} elseif ( ! is_array( $query ) ) {
+			continue;
+
+			// First-order clause.
+		} elseif ( $this-&gt;is_first_order_clause( $query ) ) {
+			if ( isset( $query['value'] ) &amp;&amp; array() === $query['value'] ) {
+				unset( $query['value'] );
+			}
+
+			$clean_queries[ $key ] = $query;
+
+			// Otherwise, it's a nested query, so we recurse.
+		} else {
+			$cleaned_query = $this-&gt;sanitize_query( $query );
+
+			if ( ! empty( $cleaned_query ) ) {
+				$clean_queries[ $key ] = $cleaned_query;
+			}
+		}
+	}
+
+	if ( empty( $clean_queries ) ) {
+		return $clean_queries;
+	}
+
+	// Sanitize the 'relation' key provided in the query.
+	if ( isset( $relation ) &amp;&amp; 'OR' === strtoupper( $relation ) ) {
+		$clean_queries['relation'] = 'OR';
+		$this-&gt;has_or_relation     = true;
+
+		/*
+		* If there is only a single clause, call the relation 'OR'.
+		* This value will not actually be used to join clauses, but it
+		* simplifies the logic around combining key-only queries.
+		*/
+	} elseif ( 1 === count( $clean_queries ) ) {
+		$clean_queries['relation'] = 'OR';
+
+		// Default to AND.
+	} else {
+		$clean_queries['relation'] = 'AND';
+	}
+
+	return $clean_queries;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-meta-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-meta-query.php#L192">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-meta-query.php#L192-L247">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.1.0/">4.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_meta_query/sanitize_query" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_meta_query/sanitize_query</a>
+  </p>
+</div>

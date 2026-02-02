@@ -1,0 +1,175 @@
+<h1 class="wp-block-wporg-code-reference-title">create_initial_rest_routes()</h1> <section><p>Registers default REST API routes.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="265" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function create_initial_rest_routes() {
+	foreach ( get_post_types( array( 'show_in_rest' =&gt; true ), 'objects' ) as $post_type ) {
+		$controller = $post_type-&gt;get_rest_controller();
+
+		if ( ! $controller ) {
+			continue;
+		}
+
+		if ( ! $post_type-&gt;late_route_registration ) {
+			$controller-&gt;register_routes();
+		}
+
+		$revisions_controller = $post_type-&gt;get_revisions_rest_controller();
+		if ( $revisions_controller ) {
+			$revisions_controller-&gt;register_routes();
+		}
+
+		$autosaves_controller = $post_type-&gt;get_autosave_rest_controller();
+		if ( $autosaves_controller ) {
+			$autosaves_controller-&gt;register_routes();
+		}
+
+		if ( $post_type-&gt;late_route_registration ) {
+			$controller-&gt;register_routes();
+		}
+	}
+
+	// Post types.
+	$controller = new WP_REST_Post_Types_Controller();
+	$controller-&gt;register_routes();
+
+	// Post statuses.
+	$controller = new WP_REST_Post_Statuses_Controller();
+	$controller-&gt;register_routes();
+
+	// Taxonomies.
+	$controller = new WP_REST_Taxonomies_Controller();
+	$controller-&gt;register_routes();
+
+	// Terms.
+	foreach ( get_taxonomies( array( 'show_in_rest' =&gt; true ), 'object' ) as $taxonomy ) {
+		$controller = $taxonomy-&gt;get_rest_controller();
+
+		if ( ! $controller ) {
+			continue;
+		}
+
+		$controller-&gt;register_routes();
+	}
+
+	// Users.
+	$controller = new WP_REST_Users_Controller();
+	$controller-&gt;register_routes();
+
+	// Application Passwords
+	$controller = new WP_REST_Application_Passwords_Controller();
+	$controller-&gt;register_routes();
+
+	// Comments.
+	$controller = new WP_REST_Comments_Controller();
+	$controller-&gt;register_routes();
+
+	$search_handlers = array(
+		new WP_REST_Post_Search_Handler(),
+		new WP_REST_Term_Search_Handler(),
+		new WP_REST_Post_Format_Search_Handler(),
+	);
+
+	/**
+	 * Filters the search handlers to use in the REST search controller.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @param array $search_handlers List of search handlers to use in the controller. Each search
+	 *                               handler instance must extend the `WP_REST_Search_Handler` class.
+	 *                               Default is only a handler for posts.
+	 */
+	$search_handlers = apply_filters( 'wp_rest_search_handlers', $search_handlers );
+
+	$controller = new WP_REST_Search_Controller( $search_handlers );
+	$controller-&gt;register_routes();
+
+	// Block Renderer.
+	$controller = new WP_REST_Block_Renderer_Controller();
+	$controller-&gt;register_routes();
+
+	// Block Types.
+	$controller = new WP_REST_Block_Types_Controller();
+	$controller-&gt;register_routes();
+
+	// Settings.
+	$controller = new WP_REST_Settings_Controller();
+	$controller-&gt;register_routes();
+
+	// Themes.
+	$controller = new WP_REST_Themes_Controller();
+	$controller-&gt;register_routes();
+
+	// Plugins.
+	$controller = new WP_REST_Plugins_Controller();
+	$controller-&gt;register_routes();
+
+	// Sidebars.
+	$controller = new WP_REST_Sidebars_Controller();
+	$controller-&gt;register_routes();
+
+	// Widget Types.
+	$controller = new WP_REST_Widget_Types_Controller();
+	$controller-&gt;register_routes();
+
+	// Widgets.
+	$controller = new WP_REST_Widgets_Controller();
+	$controller-&gt;register_routes();
+
+	// Block Directory.
+	$controller = new WP_REST_Block_Directory_Controller();
+	$controller-&gt;register_routes();
+
+	// Pattern Directory.
+	$controller = new WP_REST_Pattern_Directory_Controller();
+	$controller-&gt;register_routes();
+
+	// Block Patterns.
+	$controller = new WP_REST_Block_Patterns_Controller();
+	$controller-&gt;register_routes();
+
+	// Block Pattern Categories.
+	$controller = new WP_REST_Block_Pattern_Categories_Controller();
+	$controller-&gt;register_routes();
+
+	// Site Health.
+	$site_health = WP_Site_Health::get_instance();
+	$controller  = new WP_REST_Site_Health_Controller( $site_health );
+	$controller-&gt;register_routes();
+
+	// URL Details.
+	$controller = new WP_REST_URL_Details_Controller();
+	$controller-&gt;register_routes();
+
+	// Menu Locations.
+	$controller = new WP_REST_Menu_Locations_Controller();
+	$controller-&gt;register_routes();
+
+	// Site Editor Export.
+	$controller = new WP_REST_Edit_Site_Export_Controller();
+	$controller-&gt;register_routes();
+
+	// Navigation Fallback.
+	$controller = new WP_REST_Navigation_Fallback_Controller();
+	$controller-&gt;register_routes();
+
+	// Font Collections.
+	$font_collections_controller = new WP_REST_Font_Collections_Controller();
+	$font_collections_controller-&gt;register_routes();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api.php#L265">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api.php#L265-L419">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_rest_search_handlers"><span class="hook-func">apply_filters</span>( ‘wp_rest_search_handlers’, <nobr><span class="arg-type">array</span> <span class="arg-name">$search_handlers</span></nobr> )</a></dt>
+<dd>
+<p>Filters the search handlers to use in the REST search controller.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/create_initial_rest_routes" class="_attribution-link">https://developer.wordpress.org/reference/functions/create_initial_rest_routes</a>
+  </p>
+</div>

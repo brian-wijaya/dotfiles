@@ -1,0 +1,152 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_upload_bits( <span class="arg-type">string</span> <span class="arg-name">$name</span>, <span class="arg-type">null|string</span> <span class="arg-name">$deprecated</span>, <span class="arg-type">string</span> <span class="arg-name">$bits</span>, <span class="arg-type">string|null</span> <span class="arg-name">$time</span> = <span class="arg-default">null</span> ): <span class="return-type">array</span>
+</h1> <section><p>Creates a file in the upload folder with given content.</p> </section> <section><h2 id="description">Description</h2> <p>If there is an error, then the key ‘error’ will exist with the error message.<br>If success, then the key ‘file’ will have the unique file path, the ‘url’ key will have the link to the new file. and the ‘error’ key will be set to false.</p> <p>This function will not move an uploaded file to the upload folder. It will create a new file with the content in $bits parameter. If you move the upload file, read the content of the uploaded file, and then you can give the filename and content to this function, which will add it to the upload folder.</p> <p>The permissions will be set on the new file automatically by this function.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Filename.</span></div></dd>
+<dt>
+<code>$deprecated</code><span class="type"><span class="null">null</span>|<span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Never used. Set to null.</span></div></dd>
+<dt>
+<code>$bits</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">File content</span></div></dd>
+<dt>
+<code>$time</code><span class="type"><span class="string">string</span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Time formatted in <code>'yyyy/mm'</code>. </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Information about the newly-uploaded file.<br> <ul class="param-hash">
+<li>
+<code>file</code> <span class="type">string</span><div class="desc">Filename of the newly-uploaded file.</div>
+</li> <li>
+<code>url</code> <span class="type">string</span><div class="desc">URL of the uploaded file.</div>
+</li> <li>
+<code>type</code> <span class="type">string</span><div class="desc">File type.</div>
+</li> <li>
+<code>error</code> <span class="type">string|false</span><div class="desc">Error message, if there has been an error.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2883" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_upload_bits( $name, $deprecated, $bits, $time = null ) {
+	if ( ! empty( $deprecated ) ) {
+		_deprecated_argument( __FUNCTION__, '2.0.0' );
+	}
+
+	if ( empty( $name ) ) {
+		return array( 'error' =&gt; __( 'Empty filename' ) );
+	}
+
+	$wp_filetype = wp_check_filetype( $name );
+	if ( ! $wp_filetype['ext'] &amp;&amp; ! current_user_can( 'unfiltered_upload' ) ) {
+		return array( 'error' =&gt; __( 'Sorry, you are not allowed to upload this file type.' ) );
+	}
+
+	$upload = wp_upload_dir( $time );
+
+	if ( false !== $upload['error'] ) {
+		return $upload;
+	}
+
+	/**
+	 * Filters whether to treat the upload bits as an error.
+	 *
+	 * Returning a non-array from the filter will effectively short-circuit preparing the upload bits
+	 * and return that value instead. An error message should be returned as a string.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param array|string $upload_bits_error An array of upload bits data, or error message to return.
+	 */
+	$upload_bits_error = apply_filters(
+		'wp_upload_bits',
+		array(
+			'name' =&gt; $name,
+			'bits' =&gt; $bits,
+			'time' =&gt; $time,
+		)
+	);
+	if ( ! is_array( $upload_bits_error ) ) {
+		$upload['error'] = $upload_bits_error;
+		return $upload;
+	}
+
+	$filename = wp_unique_filename( $upload['path'], $name );
+
+	$new_file = $upload['path'] . "/$filename";
+	if ( ! wp_mkdir_p( dirname( $new_file ) ) ) {
+		if ( str_starts_with( $upload['basedir'], ABSPATH ) ) {
+			$error_path = str_replace( ABSPATH, '', $upload['basedir'] ) . $upload['subdir'];
+		} else {
+			$error_path = wp_basename( $upload['basedir'] ) . $upload['subdir'];
+		}
+
+		$message = sprintf(
+			/* translators: %s: Directory path. */
+			__( 'Unable to create directory %s. Is its parent directory writable by the server?' ),
+			$error_path
+		);
+		return array( 'error' =&gt; $message );
+	}
+
+	$ifp = @fopen( $new_file, 'wb' );
+	if ( ! $ifp ) {
+		return array(
+			/* translators: %s: File name. */
+			'error' =&gt; sprintf( __( 'Could not write file %s' ), $new_file ),
+		);
+	}
+
+	fwrite( $ifp, $bits );
+	fclose( $ifp );
+	clearstatcache();
+
+	// Set correct file permissions.
+	$stat  = @ stat( dirname( $new_file ) );
+	$perms = $stat['mode'] &amp; 0007777;
+	$perms = $perms &amp; 0000666;
+	chmod( $new_file, $perms );
+	clearstatcache();
+
+	// Compute the URL.
+	$url = $upload['url'] . "/$filename";
+
+	if ( is_multisite() ) {
+		clean_dirsize_cache( $new_file );
+	}
+
+	/** This filter is documented in wp-admin/includes/file.php */
+	return apply_filters(
+		'wp_handle_upload',
+		array(
+			'file'  =&gt; $new_file,
+			'url'   =&gt; $url,
+			'type'  =&gt; $wp_filetype['type'],
+			'error' =&gt; false,
+		),
+		'sideload'
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L2883">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L2883-L2981">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_handle_upload"><span class="hook-func">apply_filters</span>( ‘wp_handle_upload’, <nobr><span class="arg-type">array</span> <span class="arg-name">$upload</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Filters the data array for the uploaded file.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_upload_bits"><span class="hook-func">apply_filters</span>( ‘wp_upload_bits’, <nobr><span class="arg-type">array|string</span> <span class="arg-name">$upload_bits_error</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to treat the upload bits as an error.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_upload_bits" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_upload_bits</a>
+  </p>
+</div>

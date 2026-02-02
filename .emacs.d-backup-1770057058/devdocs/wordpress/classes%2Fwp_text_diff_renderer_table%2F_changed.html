@@ -1,0 +1,110 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Text_Diff_Renderer_Table::_changed( <span class="arg-type">array</span> <span class="arg-name">$orig</span>, <span class="arg-type">array</span> <span class="arg-name">$final</span> ): <span class="return-type">string</span>
+</h1> <section><p>Process changed lines to do word-by-word diffs for extra highlighting.</p> </section> <section><h2 id="description">Description</h2> <p>(TRAC style) sometimes these lines can actually be deleted or added rows.<br>We do additional processing to figure that out</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$orig</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$final</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="282" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function _changed( $orig, $final ) { // phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.finalFound
+	$r = '';
+
+	/*
+	 * Does the aforementioned additional processing:
+	 * *_matches tell what rows are "the same" in orig and final. Those pairs will be diffed to get word changes.
+	 * - match is numeric: an index in other column.
+	 * - match is 'X': no match. It is a new row.
+	 * *_rows are column vectors for the orig column and the final column.
+	 * - row &gt;= 0: an index of the $orig or $final array.
+	 * - row &lt; 0: a blank row for that column.
+	 */
+	list($orig_matches, $final_matches, $orig_rows, $final_rows) = $this-&gt;interleave_changed_lines( $orig, $final );
+
+	// These will hold the word changes as determined by an inline diff.
+	$orig_diffs  = array();
+	$final_diffs = array();
+
+	// Compute word diffs for each matched pair using the inline diff.
+	foreach ( $orig_matches as $o =&gt; $f ) {
+		if ( is_numeric( $o ) &amp;&amp; is_numeric( $f ) ) {
+			$text_diff = new Text_Diff( 'auto', array( array( $orig[ $o ] ), array( $final[ $f ] ) ) );
+			$renderer  = new $this-&gt;inline_diff_renderer();
+			$diff      = $renderer-&gt;render( $text_diff );
+
+			// If they're too different, don't include any &lt;ins&gt; or &lt;del&gt;'s.
+			if ( preg_match_all( '!(&lt;ins&gt;.*?&lt;/ins&gt;|&lt;del&gt;.*?&lt;/del&gt;)!', $diff, $diff_matches ) ) {
+				// Length of all text between &lt;ins&gt; or &lt;del&gt;.
+				$stripped_matches = strlen( strip_tags( implode( ' ', $diff_matches[0] ) ) );
+				/*
+				 * Since we count length of text between &lt;ins&gt; or &lt;del&gt; (instead of picking just one),
+				 * we double the length of chars not in those tags.
+				 */
+				$stripped_diff = strlen( strip_tags( $diff ) ) * 2 - $stripped_matches;
+				$diff_ratio    = $stripped_matches / $stripped_diff;
+				if ( $diff_ratio &gt; $this-&gt;_diff_threshold ) {
+					continue; // Too different. Don't save diffs.
+				}
+			}
+
+			// Un-inline the diffs by removing &lt;del&gt; or &lt;ins&gt;.
+			$orig_diffs[ $o ]  = preg_replace( '|&lt;ins&gt;.*?&lt;/ins&gt;|', '', $diff );
+			$final_diffs[ $f ] = preg_replace( '|&lt;del&gt;.*?&lt;/del&gt;|', '', $diff );
+		}
+	}
+
+	foreach ( array_keys( $orig_rows ) as $row ) {
+		// Both columns have blanks. Ignore them.
+		if ( $orig_rows[ $row ] &lt; 0 &amp;&amp; $final_rows[ $row ] &lt; 0 ) {
+			continue;
+		}
+
+		// If we have a word based diff, use it. Otherwise, use the normal line.
+		if ( isset( $orig_diffs[ $orig_rows[ $row ] ] ) ) {
+			$orig_line = $orig_diffs[ $orig_rows[ $row ] ];
+		} elseif ( isset( $orig[ $orig_rows[ $row ] ] ) ) {
+			$orig_line = htmlspecialchars( $orig[ $orig_rows[ $row ] ] );
+		} else {
+			$orig_line = '';
+		}
+
+		if ( isset( $final_diffs[ $final_rows[ $row ] ] ) ) {
+			$final_line = $final_diffs[ $final_rows[ $row ] ];
+		} elseif ( isset( $final[ $final_rows[ $row ] ] ) ) {
+			$final_line = htmlspecialchars( $final[ $final_rows[ $row ] ] );
+		} else {
+			$final_line = '';
+		}
+
+		if ( $orig_rows[ $row ] &lt; 0 ) { // Orig is blank. This is really an added row.
+			$r .= $this-&gt;_added( array( $final_line ), false );
+		} elseif ( $final_rows[ $row ] &lt; 0 ) { // Final is blank. This is really a deleted row.
+			$r .= $this-&gt;_deleted( array( $orig_line ), false );
+		} else { // A true changed row.
+			if ( $this-&gt;_show_split_view ) {
+				$r .= '&lt;tr&gt;' . $this-&gt;deletedLine( $orig_line ) . $this-&gt;addedLine( $final_line ) . "&lt;/tr&gt;\n";
+			} else {
+				$r .= '&lt;tr&gt;' . $this-&gt;deletedLine( $orig_line ) . '&lt;/tr&gt;&lt;tr&gt;' . $this-&gt;addedLine( $final_line ) . "&lt;/tr&gt;\n";
+			}
+		}
+	}
+
+	return $r;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-text-diff-renderer-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-text-diff-renderer-table.php#L282">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-text-diff-renderer-table.php#L282-L365">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_text_diff_renderer_table/_changed" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_text_diff_renderer_table/_changed</a>
+  </p>
+</div>

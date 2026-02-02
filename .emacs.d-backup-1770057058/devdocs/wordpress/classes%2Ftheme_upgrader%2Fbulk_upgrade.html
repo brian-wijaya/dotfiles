@@ -1,0 +1,208 @@
+<h1 class="wp-block-wporg-code-reference-title">Theme_Upgrader::bulk_upgrade( <span class="arg-type">string[]</span> <span class="arg-name">$themes</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">array[]|false</span>
+</h1> <section><p>Upgrades several themes at once.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$themes</code><span class="type"><span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array of the theme slugs.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Other arguments for upgrading several themes at once. <br> <ul class="param-hash">
+<li>
+<code>clear_update_cache</code> <span class="type">bool</span><div class="desc">Whether to clear the update cache if successful.<br> Default true.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array[]|false</span> An array of results, or false if unable to connect to the filesystem.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="383" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function bulk_upgrade( $themes, $args = array() ) {
+	$wp_version  = wp_get_wp_version();
+	$defaults    = array(
+		'clear_update_cache' =&gt; true,
+	);
+	$parsed_args = wp_parse_args( $args, $defaults );
+
+	$this-&gt;init();
+	$this-&gt;bulk = true;
+	$this-&gt;upgrade_strings();
+
+	$current = get_site_transient( 'update_themes' );
+
+	add_filter( 'upgrader_pre_install', array( $this, 'current_before' ), 10, 2 );
+	add_filter( 'upgrader_post_install', array( $this, 'current_after' ), 10, 2 );
+	add_filter( 'upgrader_clear_destination', array( $this, 'delete_old_theme' ), 10, 4 );
+
+	$this-&gt;skin-&gt;header();
+
+	// Connect to the filesystem first.
+	$res = $this-&gt;fs_connect( array( WP_CONTENT_DIR ) );
+	if ( ! $res ) {
+		$this-&gt;skin-&gt;footer();
+		return false;
+	}
+
+	$this-&gt;skin-&gt;bulk_header();
+
+	/*
+	 * Only start maintenance mode if:
+	 * - running Multisite and there are one or more themes specified, OR
+	 * - a theme with an update available is currently in use.
+	 * @todo For multisite, maintenance mode should only kick in for individual sites if at all possible.
+	 */
+	$maintenance = ( is_multisite() &amp;&amp; ! empty( $themes ) );
+	foreach ( $themes as $theme ) {
+		$maintenance = $maintenance || get_stylesheet() === $theme || get_template() === $theme;
+	}
+	if ( $maintenance ) {
+		$this-&gt;maintenance_mode( true );
+	}
+
+	$results = array();
+
+	$this-&gt;update_count   = count( $themes );
+	$this-&gt;update_current = 0;
+	foreach ( $themes as $theme ) {
+		++$this-&gt;update_current;
+
+		$this-&gt;skin-&gt;theme_info = $this-&gt;theme_info( $theme );
+
+		if ( ! isset( $current-&gt;response[ $theme ] ) ) {
+			$this-&gt;skin-&gt;set_result( true );
+			$this-&gt;skin-&gt;before();
+			$this-&gt;skin-&gt;feedback( 'up_to_date' );
+			$this-&gt;skin-&gt;after();
+			$results[ $theme ] = true;
+			continue;
+		}
+
+		// Get the URL to the zip file.
+		$r = $current-&gt;response[ $theme ];
+
+		if ( isset( $r['requires'] ) &amp;&amp; ! is_wp_version_compatible( $r['requires'] ) ) {
+			$result = new WP_Error(
+				'incompatible_wp_required_version',
+				sprintf(
+					/* translators: 1: Current WordPress version, 2: WordPress version required by the new theme version. */
+					__( 'Your WordPress version is %1$s, however the new theme version requires %2$s.' ),
+					$wp_version,
+					$r['requires']
+				)
+			);
+
+			$this-&gt;skin-&gt;before( $result );
+			$this-&gt;skin-&gt;error( $result );
+			$this-&gt;skin-&gt;after();
+		} elseif ( isset( $r['requires_php'] ) &amp;&amp; ! is_php_version_compatible( $r['requires_php'] ) ) {
+			$result = new WP_Error(
+				'incompatible_php_required_version',
+				sprintf(
+					/* translators: 1: Current PHP version, 2: PHP version required by the new theme version. */
+					__( 'The PHP version on your server is %1$s, however the new theme version requires %2$s.' ),
+					PHP_VERSION,
+					$r['requires_php']
+				)
+			);
+
+			$this-&gt;skin-&gt;before( $result );
+			$this-&gt;skin-&gt;error( $result );
+			$this-&gt;skin-&gt;after();
+		} else {
+			add_filter( 'upgrader_source_selection', array( $this, 'check_package' ) );
+			$result = $this-&gt;run(
+				array(
+					'package'           =&gt; $r['package'],
+					'destination'       =&gt; get_theme_root( $theme ),
+					'clear_destination' =&gt; true,
+					'clear_working'     =&gt; true,
+					'is_multi'          =&gt; true,
+					'hook_extra'        =&gt; array(
+						'theme'       =&gt; $theme,
+						'temp_backup' =&gt; array(
+							'slug' =&gt; $theme,
+							'src'  =&gt; get_theme_root( $theme ),
+							'dir'  =&gt; 'themes',
+						),
+					),
+				)
+			);
+			remove_filter( 'upgrader_source_selection', array( $this, 'check_package' ) );
+		}
+
+		$results[ $theme ] = $result;
+
+		// Prevent credentials auth screen from displaying multiple times.
+		if ( false === $result ) {
+			break;
+		}
+	} // End foreach $themes.
+
+	$this-&gt;maintenance_mode( false );
+
+	// Refresh the Theme Update information.
+	wp_clean_themes_cache( $parsed_args['clear_update_cache'] );
+
+	/** This action is documented in wp-admin/includes/class-wp-upgrader.php */
+	do_action(
+		'upgrader_process_complete',
+		$this,
+		array(
+			'action' =&gt; 'update',
+			'type'   =&gt; 'theme',
+			'bulk'   =&gt; true,
+			'themes' =&gt; $themes,
+		)
+	);
+
+	$this-&gt;skin-&gt;bulk_footer();
+
+	$this-&gt;skin-&gt;footer();
+
+	// Cleanup our hooks, in case something else does an upgrade on this connection.
+	remove_filter( 'upgrader_pre_install', array( $this, 'current_before' ) );
+	remove_filter( 'upgrader_post_install', array( $this, 'current_after' ) );
+	remove_filter( 'upgrader_clear_destination', array( $this, 'delete_old_theme' ) );
+
+	/*
+	 * Ensure any future auto-update failures trigger a failure email by removing
+	 * the last failure notification from the list when themes update successfully.
+	 */
+	$past_failure_emails = get_option( 'auto_plugin_theme_update_emails', array() );
+
+	foreach ( $results as $theme =&gt; $result ) {
+		// Maintain last failure notification when themes failed to update manually.
+		if ( ! $result || is_wp_error( $result ) || ! isset( $past_failure_emails[ $theme ] ) ) {
+			continue;
+		}
+
+		unset( $past_failure_emails[ $theme ] );
+	}
+
+	update_option( 'auto_plugin_theme_update_emails', $past_failure_emails );
+
+	return $results;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-theme-upgrader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-theme-upgrader.php#L383">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-theme-upgrader.php#L383-L548">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/upgrader_process_complete"><span class="hook-func">do_action</span>( ‘upgrader_process_complete’, <nobr><span class="arg-type">WP_Upgrader</span> <span class="arg-name">$upgrader</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$hook_extra</span></nobr> )</a></dt>
+<dd>
+<p>Fires when the upgrader process is complete.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td><span class="since-description">The <code>$args</code> parameter was added, making clearing the update cache optional.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/theme_upgrader/bulk_upgrade" class="_attribution-link">https://developer.wordpress.org/reference/classes/theme_upgrader/bulk_upgrade</a>
+  </p>
+</div>

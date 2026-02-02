@@ -1,0 +1,187 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Styles::do_item( <span class="arg-type">string</span> <span class="arg-name">$handle</span>, <span class="arg-type">int|false</span> <span class="arg-name">$group</span> = <span class="arg-default">false</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Processes a style dependency.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="../wp_dependencies/do_item">WP_Dependencies::do_item()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$handle</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The style’s registered handle.</span></div></dd>
+<dt>
+<code>$group</code><span class="type"><span class="int">int</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Group level: level (int), no groups (false).<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="151" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function do_item( $handle, $group = false ) {
+	if ( ! parent::do_item( $handle ) ) {
+		return false;
+	}
+
+	$obj = $this-&gt;registered[ $handle ];
+
+	if ( null === $obj-&gt;ver ) {
+		$ver = '';
+	} else {
+		$ver = $obj-&gt;ver ? $obj-&gt;ver : $this-&gt;default_version;
+	}
+
+	if ( isset( $this-&gt;args[ $handle ] ) ) {
+		$ver = $ver ? $ver . '&amp;amp;' . $this-&gt;args[ $handle ] : $this-&gt;args[ $handle ];
+	}
+
+	$src                   = $obj-&gt;src;
+	$ie_conditional_prefix = '';
+	$ie_conditional_suffix = '';
+	$conditional           = isset( $obj-&gt;extra['conditional'] ) ? $obj-&gt;extra['conditional'] : '';
+
+	if ( $conditional ) {
+		$ie_conditional_prefix = "&lt;!--[if {$conditional}]&gt;\n";
+		$ie_conditional_suffix = "&lt;![endif]--&gt;\n";
+	}
+
+	$inline_style = $this-&gt;print_inline_style( $handle, false );
+
+	if ( $inline_style ) {
+		$inline_style_tag = sprintf(
+			"&lt;style id='%s-inline-css'%s&gt;\n%s\n&lt;/style&gt;\n",
+			esc_attr( $handle ),
+			$this-&gt;type_attr,
+			$inline_style
+		);
+	} else {
+		$inline_style_tag = '';
+	}
+
+	if ( $this-&gt;do_concat ) {
+		if ( $this-&gt;in_default_dir( $src ) &amp;&amp; ! $conditional &amp;&amp; ! isset( $obj-&gt;extra['alt'] ) ) {
+			$this-&gt;concat         .= "$handle,";
+			$this-&gt;concat_version .= "$handle$ver";
+
+			$this-&gt;print_code .= $inline_style;
+
+			return true;
+		}
+	}
+
+	if ( isset( $obj-&gt;args ) ) {
+		$media = esc_attr( $obj-&gt;args );
+	} else {
+		$media = 'all';
+	}
+
+	// A single item may alias a set of items, by having dependencies, but no source.
+	if ( ! $src ) {
+		if ( $inline_style_tag ) {
+			if ( $this-&gt;do_concat ) {
+				$this-&gt;print_html .= $inline_style_tag;
+			} else {
+				echo $inline_style_tag;
+			}
+		}
+
+		return true;
+	}
+
+	$href = $this-&gt;_css_href( $src, $ver, $handle );
+	if ( ! $href ) {
+		return true;
+	}
+
+	$rel   = isset( $obj-&gt;extra['alt'] ) &amp;&amp; $obj-&gt;extra['alt'] ? 'alternate stylesheet' : 'stylesheet';
+	$title = isset( $obj-&gt;extra['title'] ) ? sprintf( " title='%s'", esc_attr( $obj-&gt;extra['title'] ) ) : '';
+
+	$tag = sprintf(
+		"&lt;link rel='%s' id='%s-css'%s href='%s'%s media='%s' /&gt;\n",
+		$rel,
+		$handle,
+		$title,
+		$href,
+		$this-&gt;type_attr,
+		$media
+	);
+
+	/**
+	 * Filters the HTML link tag of an enqueued style.
+	 *
+	 * @since 2.6.0
+	 * @since 4.3.0 Introduced the `$href` parameter.
+	 * @since 4.5.0 Introduced the `$media` parameter.
+	 *
+	 * @param string $tag    The link tag for the enqueued style.
+	 * @param string $handle The style's registered handle.
+	 * @param string $href   The stylesheet's source URL.
+	 * @param string $media  The stylesheet's media attribute.
+	 */
+	$tag = apply_filters( 'style_loader_tag', $tag, $handle, $href, $media );
+
+	if ( 'rtl' === $this-&gt;text_direction &amp;&amp; isset( $obj-&gt;extra['rtl'] ) &amp;&amp; $obj-&gt;extra['rtl'] ) {
+		if ( is_bool( $obj-&gt;extra['rtl'] ) || 'replace' === $obj-&gt;extra['rtl'] ) {
+			$suffix   = isset( $obj-&gt;extra['suffix'] ) ? $obj-&gt;extra['suffix'] : '';
+			$rtl_href = str_replace( "{$suffix}.css", "-rtl{$suffix}.css", $this-&gt;_css_href( $src, $ver, "$handle-rtl" ) );
+		} else {
+			$rtl_href = $this-&gt;_css_href( $obj-&gt;extra['rtl'], $ver, "$handle-rtl" );
+		}
+
+		$rtl_tag = sprintf(
+			"&lt;link rel='%s' id='%s-rtl-css'%s href='%s'%s media='%s' /&gt;\n",
+			$rel,
+			$handle,
+			$title,
+			$rtl_href,
+			$this-&gt;type_attr,
+			$media
+		);
+
+		/** This filter is documented in wp-includes/class-wp-styles.php */
+		$rtl_tag = apply_filters( 'style_loader_tag', $rtl_tag, $handle, $rtl_href, $media );
+
+		if ( 'replace' === $obj-&gt;extra['rtl'] ) {
+			$tag = $rtl_tag;
+		} else {
+			$tag .= $rtl_tag;
+		}
+	}
+
+	if ( $this-&gt;do_concat ) {
+		$this-&gt;print_html .= $ie_conditional_prefix;
+		$this-&gt;print_html .= $tag;
+		if ( $inline_style_tag ) {
+			$this-&gt;print_html .= $inline_style_tag;
+		}
+		$this-&gt;print_html .= $ie_conditional_suffix;
+	} else {
+		echo $ie_conditional_prefix;
+		echo $tag;
+		$this-&gt;print_inline_style( $handle );
+		echo $ie_conditional_suffix;
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes_class-wp-styles-php-2/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-styles.php#L151">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-styles.php#L151-L296">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/style_loader_tag"><span class="hook-func">apply_filters</span>( ‘style_loader_tag’, <nobr><span class="arg-type">string</span> <span class="arg-name">$tag</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$handle</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$href</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$media</span></nobr> )</a></dt>
+<dd>
+<p>Filters the HTML link tag of an enqueued style.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">Added the <code>$group</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_styles/do_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_styles/do_item</a>
+  </p>
+</div>

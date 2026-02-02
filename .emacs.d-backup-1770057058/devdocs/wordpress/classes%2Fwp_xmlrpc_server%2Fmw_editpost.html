@@ -1,0 +1,355 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_xmlrpc_server::mw_editPost( <span class="arg-type">array</span> <span class="arg-name">$args</span> ): <span class="return-type">true|<a href="../ixr_error" rel="class">IXR_Error</a></span>
+</h1> <section><p>Edits a post.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Method arguments. Note: arguments must be ordered as documented.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">int</span><div class="desc">Post ID.</div>
+</li> <li>
+<code>1</code> <span class="type">string</span><div class="desc">Username.</div>
+</li> <li>
+<code>2</code> <span class="type">string</span><div class="desc">Password.</div>
+</li> <li>
+<code>3</code> <span class="type">array</span><div class="desc">Content structure.</div>
+</li> <li>
+<code>4</code> <span class="type">int</span><div class="desc">Optional. Publish flag. 0 for draft, 1 for publish. Default 0.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true|<a href="../ixr_error" rel="class">IXR_Error</a></span> True on success.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="5728" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function mw_editPost( $args ) {
+	$this-&gt;escape( $args );
+
+	$post_id        = (int) $args[0];
+	$username       = $args[1];
+	$password       = $args[2];
+	$content_struct = $args[3];
+	$publish        = isset( $args[4] ) ? $args[4] : 0;
+
+	$user = $this-&gt;login( $username, $password );
+	if ( ! $user ) {
+		return $this-&gt;error;
+	}
+
+	/** This action is documented in wp-includes/class-wp-xmlrpc-server.php */
+	do_action( 'xmlrpc_call', 'metaWeblog.editPost', $args, $this );
+
+	$postdata = get_post( $post_id, ARRAY_A );
+
+	/*
+	 * If there is no post data for the give post ID, stop now and return an error.
+	 * Otherwise a new post will be created (which was the old behavior).
+	 */
+	if ( ! $postdata || empty( $postdata['ID'] ) ) {
+		return new IXR_Error( 404, __( 'Invalid post ID.' ) );
+	}
+
+	if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		return new IXR_Error( 401, __( 'Sorry, you are not allowed to edit this post.' ) );
+	}
+
+	// Use wp.editPost to edit post types other than post and page.
+	if ( ! in_array( $postdata['post_type'], array( 'post', 'page' ), true ) ) {
+		return new IXR_Error( 401, __( 'Invalid post type.' ) );
+	}
+
+	// Thwart attempt to change the post type.
+	if ( ! empty( $content_struct['post_type'] ) &amp;&amp; ( $content_struct['post_type'] != $postdata['post_type'] ) ) {
+		return new IXR_Error( 401, __( 'The post type may not be changed.' ) );
+	}
+
+	// Check for a valid post format if one was given.
+	if ( isset( $content_struct['wp_post_format'] ) ) {
+		$content_struct['wp_post_format'] = sanitize_key( $content_struct['wp_post_format'] );
+		if ( ! array_key_exists( $content_struct['wp_post_format'], get_post_format_strings() ) ) {
+			return new IXR_Error( 404, __( 'Invalid post format.' ) );
+		}
+	}
+
+	$this-&gt;escape( $postdata );
+
+	$ID             = $postdata['ID'];
+	$post_content   = $postdata['post_content'];
+	$post_title     = $postdata['post_title'];
+	$post_excerpt   = $postdata['post_excerpt'];
+	$post_password  = $postdata['post_password'];
+	$post_parent    = $postdata['post_parent'];
+	$post_type      = $postdata['post_type'];
+	$menu_order     = $postdata['menu_order'];
+	$ping_status    = $postdata['ping_status'];
+	$comment_status = $postdata['comment_status'];
+
+	// Let WordPress manage slug if none was provided.
+	$post_name = $postdata['post_name'];
+	if ( isset( $content_struct['wp_slug'] ) ) {
+		$post_name = $content_struct['wp_slug'];
+	}
+
+	// Only use a password if one was given.
+	if ( isset( $content_struct['wp_password'] ) ) {
+		$post_password = $content_struct['wp_password'];
+	}
+
+	// Only set a post parent if one was given.
+	if ( isset( $content_struct['wp_page_parent_id'] ) ) {
+		$post_parent = $content_struct['wp_page_parent_id'];
+	}
+
+	// Only set the 'menu_order' if it was given.
+	if ( isset( $content_struct['wp_page_order'] ) ) {
+		$menu_order = $content_struct['wp_page_order'];
+	}
+
+	$page_template = '';
+	if ( ! empty( $content_struct['wp_page_template'] ) &amp;&amp; 'page' === $post_type ) {
+		$page_template = $content_struct['wp_page_template'];
+	}
+
+	$post_author = $postdata['post_author'];
+
+	// If an author id was provided then use it instead.
+	if ( isset( $content_struct['wp_author_id'] ) ) {
+		// Check permissions if attempting to switch author to or from another user.
+		if ( $user-&gt;ID != $content_struct['wp_author_id'] || $user-&gt;ID != $post_author ) {
+			switch ( $post_type ) {
+				case 'post':
+					if ( ! current_user_can( 'edit_others_posts' ) ) {
+						return new IXR_Error( 401, __( 'Sorry, you are not allowed to change the post author as this user.' ) );
+					}
+					break;
+				case 'page':
+					if ( ! current_user_can( 'edit_others_pages' ) ) {
+						return new IXR_Error( 401, __( 'Sorry, you are not allowed to change the page author as this user.' ) );
+					}
+					break;
+				default:
+					return new IXR_Error( 401, __( 'Invalid post type.' ) );
+			}
+			$post_author = $content_struct['wp_author_id'];
+		}
+	}
+
+	if ( isset( $content_struct['mt_allow_comments'] ) ) {
+		if ( ! is_numeric( $content_struct['mt_allow_comments'] ) ) {
+			switch ( $content_struct['mt_allow_comments'] ) {
+				case 'closed':
+					$comment_status = 'closed';
+					break;
+				case 'open':
+					$comment_status = 'open';
+					break;
+				default:
+					$comment_status = get_default_comment_status( $post_type );
+					break;
+			}
+		} else {
+			switch ( (int) $content_struct['mt_allow_comments'] ) {
+				case 0:
+				case 2:
+					$comment_status = 'closed';
+					break;
+				case 1:
+					$comment_status = 'open';
+					break;
+				default:
+					$comment_status = get_default_comment_status( $post_type );
+					break;
+			}
+		}
+	}
+
+	if ( isset( $content_struct['mt_allow_pings'] ) ) {
+		if ( ! is_numeric( $content_struct['mt_allow_pings'] ) ) {
+			switch ( $content_struct['mt_allow_pings'] ) {
+				case 'closed':
+					$ping_status = 'closed';
+					break;
+				case 'open':
+					$ping_status = 'open';
+					break;
+				default:
+					$ping_status = get_default_comment_status( $post_type, 'pingback' );
+					break;
+			}
+		} else {
+			switch ( (int) $content_struct['mt_allow_pings'] ) {
+				case 0:
+					$ping_status = 'closed';
+					break;
+				case 1:
+					$ping_status = 'open';
+					break;
+				default:
+					$ping_status = get_default_comment_status( $post_type, 'pingback' );
+					break;
+			}
+		}
+	}
+
+	if ( isset( $content_struct['title'] ) ) {
+		$post_title = $content_struct['title'];
+	}
+
+	if ( isset( $content_struct['description'] ) ) {
+		$post_content = $content_struct['description'];
+	}
+
+	$post_category = array();
+	if ( isset( $content_struct['categories'] ) ) {
+		$catnames = $content_struct['categories'];
+		if ( is_array( $catnames ) ) {
+			foreach ( $catnames as $cat ) {
+				$post_category[] = get_cat_ID( $cat );
+			}
+		}
+	}
+
+	if ( isset( $content_struct['mt_excerpt'] ) ) {
+		$post_excerpt = $content_struct['mt_excerpt'];
+	}
+
+	$post_more = isset( $content_struct['mt_text_more'] ) ? $content_struct['mt_text_more'] : '';
+
+	$post_status = $publish ? 'publish' : 'draft';
+	if ( isset( $content_struct[ "{$post_type}_status" ] ) ) {
+		switch ( $content_struct[ "{$post_type}_status" ] ) {
+			case 'draft':
+			case 'pending':
+			case 'private':
+			case 'publish':
+				$post_status = $content_struct[ "{$post_type}_status" ];
+				break;
+			default:
+				$post_status = $publish ? 'publish' : 'draft';
+				break;
+		}
+	}
+
+	$tags_input = isset( $content_struct['mt_keywords'] ) ? $content_struct['mt_keywords'] : array();
+
+	if ( 'publish' === $post_status || 'private' === $post_status ) {
+		if ( 'page' === $post_type &amp;&amp; ! current_user_can( 'publish_pages' ) ) {
+			return new IXR_Error( 401, __( 'Sorry, you are not allowed to publish this page.' ) );
+		} elseif ( ! current_user_can( 'publish_posts' ) ) {
+			return new IXR_Error( 401, __( 'Sorry, you are not allowed to publish this post.' ) );
+		}
+	}
+
+	if ( $post_more ) {
+		$post_content = $post_content . '&lt;!--more--&gt;' . $post_more;
+	}
+
+	$to_ping = '';
+	if ( isset( $content_struct['mt_tb_ping_urls'] ) ) {
+		$to_ping = $content_struct['mt_tb_ping_urls'];
+		if ( is_array( $to_ping ) ) {
+			$to_ping = implode( ' ', $to_ping );
+		}
+	}
+
+	// Do some timestamp voodoo.
+	if ( ! empty( $content_struct['date_created_gmt'] ) ) {
+		// We know this is supposed to be GMT, so we're going to slap that Z on there by force.
+		$dateCreated = rtrim( $content_struct['date_created_gmt']-&gt;getIso(), 'Z' ) . 'Z';
+	} elseif ( ! empty( $content_struct['dateCreated'] ) ) {
+		$dateCreated = $content_struct['dateCreated']-&gt;getIso();
+	}
+
+	// Default to not flagging the post date to be edited unless it's intentional.
+	$edit_date = false;
+
+	if ( ! empty( $dateCreated ) ) {
+		$post_date     = iso8601_to_datetime( $dateCreated );
+		$post_date_gmt = iso8601_to_datetime( $dateCreated, 'gmt' );
+
+		// Flag the post date to be edited.
+		$edit_date = true;
+	} else {
+		$post_date     = $postdata['post_date'];
+		$post_date_gmt = $postdata['post_date_gmt'];
+	}
+
+	// We've got all the data -- post it.
+	$newpost = compact( 'ID', 'post_content', 'post_title', 'post_category', 'post_status', 'post_excerpt', 'comment_status', 'ping_status', 'edit_date', 'post_date', 'post_date_gmt', 'to_ping', 'post_name', 'post_password', 'post_parent', 'menu_order', 'post_author', 'tags_input', 'page_template' );
+
+	$result = wp_update_post( $newpost, true );
+	if ( is_wp_error( $result ) ) {
+		return new IXR_Error( 500, $result-&gt;get_error_message() );
+	}
+
+	if ( ! $result ) {
+		return new IXR_Error( 500, __( 'Sorry, the post could not be updated.' ) );
+	}
+
+	// Only posts can be sticky.
+	if ( 'post' === $post_type &amp;&amp; isset( $content_struct['sticky'] ) ) {
+		$data              = $newpost;
+		$data['sticky']    = $content_struct['sticky'];
+		$data['post_type'] = 'post';
+		$error             = $this-&gt;_toggle_sticky( $data, true );
+		if ( $error ) {
+			return $error;
+		}
+	}
+
+	if ( isset( $content_struct['custom_fields'] ) ) {
+		$this-&gt;set_custom_fields( $post_id, $content_struct['custom_fields'] );
+	}
+
+	if ( isset( $content_struct['wp_post_thumbnail'] ) ) {
+
+		// Empty value deletes, non-empty value adds/updates.
+		if ( empty( $content_struct['wp_post_thumbnail'] ) ) {
+			delete_post_thumbnail( $post_id );
+		} else {
+			if ( set_post_thumbnail( $post_id, $content_struct['wp_post_thumbnail'] ) === false ) {
+				return new IXR_Error( 404, __( 'Invalid attachment ID.' ) );
+			}
+		}
+		unset( $content_struct['wp_post_thumbnail'] );
+	}
+
+	// Handle enclosures.
+	$thisEnclosure = isset( $content_struct['enclosure'] ) ? $content_struct['enclosure'] : null;
+	$this-&gt;add_enclosure_if_new( $post_id, $thisEnclosure );
+
+	$this-&gt;attach_uploads( $ID, $post_content );
+
+	// Handle post formats if assigned, validation is handled earlier in this function.
+	if ( isset( $content_struct['wp_post_format'] ) ) {
+		set_post_format( $post_id, $content_struct['wp_post_format'] );
+	}
+
+	/**
+	 * Fires after a post has been successfully updated via the XML-RPC MovableType API.
+	 *
+	 * @since 3.4.0
+	 *
+	 * @param int   $post_id ID of the updated post.
+	 * @param array $args    An array of arguments to update the post.
+	 */
+	do_action( 'xmlrpc_call_success_mw_editPost', $post_id, $args ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.NotLowercase
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-xmlrpc-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L5728">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L5728-L6042">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/xmlrpc_call"><span class="hook-func">do_action</span>( ‘xmlrpc_call’, <nobr><span class="arg-type">string</span> <span class="arg-name">$name</span></nobr>, <nobr><span class="arg-type">array|string</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">wp_xmlrpc_server</span> <span class="arg-name">$server</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the XML-RPC user has been authenticated but before the rest of the method logic begins.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/xmlrpc_call_success_mw_editpost"><span class="hook-func">do_action</span>( ‘xmlrpc_call_success_mw_editPost’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a post has been successfully updated via the XML-RPC MovableType API.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/mw_editpost" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/mw_editpost</a>
+  </p>
+</div>

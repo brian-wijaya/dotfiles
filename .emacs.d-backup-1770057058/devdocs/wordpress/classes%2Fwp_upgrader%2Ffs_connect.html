@@ -1,0 +1,89 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Upgrader::fs_connect( <span class="arg-type">string[]</span> <span class="arg-name">$directories</span> = <span class="arg-default">array()</span>, <span class="arg-type">bool</span> <span class="arg-name">$allow_relaxed_file_ownership</span> = <span class="arg-default">false</span> ): <span class="return-type">bool|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Connects to the filesystem.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$directories</code><span class="type"><span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of directories. If any of these do not exist, a <a href="../wp_error" rel="class">WP_Error</a> object will be returned.<br> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$allow_relaxed_file_ownership</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to allow relaxed file ownership.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../wp_error" rel="class">WP_Error</a></span> True if able to connect, false or a <a href="../wp_error" rel="class">WP_Error</a> otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="236" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function fs_connect( $directories = array(), $allow_relaxed_file_ownership = false ) {
+	global $wp_filesystem;
+
+	$credentials = $this-&gt;skin-&gt;request_filesystem_credentials( false, $directories[0], $allow_relaxed_file_ownership );
+	if ( false === $credentials ) {
+		return false;
+	}
+
+	if ( ! WP_Filesystem( $credentials, $directories[0], $allow_relaxed_file_ownership ) ) {
+		$error = true;
+		if ( is_object( $wp_filesystem ) &amp;&amp; $wp_filesystem-&gt;errors-&gt;has_errors() ) {
+			$error = $wp_filesystem-&gt;errors;
+		}
+		// Failed to connect. Error and request again.
+		$this-&gt;skin-&gt;request_filesystem_credentials( $error, $directories[0], $allow_relaxed_file_ownership );
+		return false;
+	}
+
+	if ( ! is_object( $wp_filesystem ) ) {
+		return new WP_Error( 'fs_unavailable', $this-&gt;strings['fs_unavailable'] );
+	}
+
+	if ( is_wp_error( $wp_filesystem-&gt;errors ) &amp;&amp; $wp_filesystem-&gt;errors-&gt;has_errors() ) {
+		return new WP_Error( 'fs_error', $this-&gt;strings['fs_error'], $wp_filesystem-&gt;errors );
+	}
+
+	foreach ( (array) $directories as $dir ) {
+		switch ( $dir ) {
+			case ABSPATH:
+				if ( ! $wp_filesystem-&gt;abspath() ) {
+					return new WP_Error( 'fs_no_root_dir', $this-&gt;strings['fs_no_root_dir'] );
+				}
+				break;
+			case WP_CONTENT_DIR:
+				if ( ! $wp_filesystem-&gt;wp_content_dir() ) {
+					return new WP_Error( 'fs_no_content_dir', $this-&gt;strings['fs_no_content_dir'] );
+				}
+				break;
+			case WP_PLUGIN_DIR:
+				if ( ! $wp_filesystem-&gt;wp_plugins_dir() ) {
+					return new WP_Error( 'fs_no_plugins_dir', $this-&gt;strings['fs_no_plugins_dir'] );
+				}
+				break;
+			case get_theme_root():
+				if ( ! $wp_filesystem-&gt;wp_themes_dir() ) {
+					return new WP_Error( 'fs_no_themes_dir', $this-&gt;strings['fs_no_themes_dir'] );
+				}
+				break;
+			default:
+				if ( ! $wp_filesystem-&gt;find_folder( $dir ) ) {
+					return new WP_Error( 'fs_no_folder', sprintf( $this-&gt;strings['fs_no_folder'], esc_html( basename( $dir ) ) ) );
+				}
+				break;
+		}
+	}
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-upgrader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-upgrader.php#L236">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-upgrader.php#L236-L292">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_upgrader/fs_connect" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_upgrader/fs_connect</a>
+  </p>
+</div>

@@ -1,0 +1,102 @@
+<h1 class="wp-block-wporg-code-reference-title">WP::handle_404()</h1> <section><p>Set the Headers for 404, if nothing is found for requested URL.</p> </section> <section><h2 id="description">Description</h2> <p>Issue a 404 if a request doesn’t match any posts and doesn’t match any object (e.g. an existing-but-empty category, tag, author) and a 404 was not already issued, and if the request was not a search or the homepage.</p> <p>Otherwise, issue a 200.</p> <p>This sets headers after posts have been queried. handle_404() really means "handle status".<br>By inspecting the result of querying posts, seemingly successful requests can be switched to a 404 so that canonical redirection logic can kick in.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="716" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function handle_404() {
+	global $wp_query;
+
+	/**
+	 * Filters whether to short-circuit default header status handling.
+	 *
+	 * Returning a non-false value from the filter will short-circuit the handling
+	 * and return early.
+	 *
+	 * @since 4.5.0
+	 *
+	 * @param bool     $preempt  Whether to short-circuit default header status handling. Default false.
+	 * @param WP_Query $wp_query WordPress Query object.
+	 */
+	if ( false !== apply_filters( 'pre_handle_404', false, $wp_query ) ) {
+		return;
+	}
+
+	// If we've already issued a 404, bail.
+	if ( is_404() ) {
+		return;
+	}
+
+	$set_404 = true;
+
+	// Never 404 for the admin, robots, or favicon.
+	if ( is_admin() || is_robots() || is_favicon() ) {
+		$set_404 = false;
+
+		// If posts were found, check for paged content.
+	} elseif ( $wp_query-&gt;posts ) {
+		$content_found = true;
+
+		if ( is_singular() ) {
+			$post = isset( $wp_query-&gt;post ) ? $wp_query-&gt;post : null;
+			$next = '&lt;!--nextpage--&gt;';
+
+			// Check for paged content that exceeds the max number of pages.
+			if ( $post &amp;&amp; ! empty( $this-&gt;query_vars['page'] ) ) {
+				// Check if content is actually intended to be paged.
+				if ( str_contains( $post-&gt;post_content, $next ) ) {
+					$page          = trim( $this-&gt;query_vars['page'], '/' );
+					$content_found = (int) $page &lt;= ( substr_count( $post-&gt;post_content, $next ) + 1 );
+				} else {
+					$content_found = false;
+				}
+			}
+		}
+
+		// The posts page does not support the &lt;!--nextpage--&gt; pagination.
+		if ( $wp_query-&gt;is_posts_page &amp;&amp; ! empty( $this-&gt;query_vars['page'] ) ) {
+			$content_found = false;
+		}
+
+		if ( $content_found ) {
+			$set_404 = false;
+		}
+
+		// We will 404 for paged queries, as no posts were found.
+	} elseif ( ! is_paged() ) {
+		$author = get_query_var( 'author' );
+
+		// Don't 404 for authors without posts as long as they matched an author on this site.
+		if ( is_author() &amp;&amp; is_numeric( $author ) &amp;&amp; $author &gt; 0 &amp;&amp; is_user_member_of_blog( $author )
+			// Don't 404 for these queries if they matched an object.
+			|| ( is_tag() || is_category() || is_tax() || is_post_type_archive() ) &amp;&amp; get_queried_object()
+			// Don't 404 for these queries either.
+			|| is_home() || is_search() || is_feed()
+		) {
+			$set_404 = false;
+		}
+	}
+
+	if ( $set_404 ) {
+		// Guess it's time to 404.
+		$wp_query-&gt;set_404();
+		status_header( 404 );
+		nocache_headers();
+	} else {
+		status_header( 200 );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp.php#L716">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp.php#L716-L797">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/pre_handle_404"><span class="hook-func">apply_filters</span>( ‘pre_handle_404’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$preempt</span></nobr>, <nobr><span class="arg-type">WP_Query</span> <span class="arg-name">$wp_query</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to short-circuit default header status handling.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp/handle_404" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp/handle_404</a>
+  </p>
+</div>

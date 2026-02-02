@@ -1,0 +1,67 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Posts_List_Table::prepare_items()</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="154" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_items() {
+	global $mode, $avail_post_stati, $wp_query, $per_page;
+
+	if ( ! empty( $_REQUEST['mode'] ) ) {
+		$mode = 'excerpt' === $_REQUEST['mode'] ? 'excerpt' : 'list';
+		set_user_setting( 'posts_list_mode', $mode );
+	} else {
+		$mode = get_user_setting( 'posts_list_mode', 'list' );
+	}
+
+	// Is going to call wp().
+	$avail_post_stati = wp_edit_posts_query();
+
+	$this-&gt;set_hierarchical_display(
+		is_post_type_hierarchical( $this-&gt;screen-&gt;post_type )
+		&amp;&amp; 'menu_order title' === $wp_query-&gt;query['orderby']
+	);
+
+	$post_type = $this-&gt;screen-&gt;post_type;
+	$per_page  = $this-&gt;get_items_per_page( 'edit_' . $post_type . '_per_page' );
+
+	/** This filter is documented in wp-admin/includes/post.php */
+	$per_page = apply_filters( 'edit_posts_per_page', $per_page, $post_type );
+
+	if ( $this-&gt;hierarchical_display ) {
+		$total_items = $wp_query-&gt;post_count;
+	} elseif ( $wp_query-&gt;found_posts || $this-&gt;get_pagenum() === 1 ) {
+		$total_items = $wp_query-&gt;found_posts;
+	} else {
+		$post_counts = (array) wp_count_posts( $post_type, 'readable' );
+
+		if ( isset( $_REQUEST['post_status'] ) &amp;&amp; in_array( $_REQUEST['post_status'], $avail_post_stati, true ) ) {
+			$total_items = $post_counts[ $_REQUEST['post_status'] ];
+		} elseif ( isset( $_REQUEST['show_sticky'] ) &amp;&amp; $_REQUEST['show_sticky'] ) {
+			$total_items = $this-&gt;sticky_posts_count;
+		} elseif ( isset( $_GET['author'] ) &amp;&amp; get_current_user_id() === (int) $_GET['author'] ) {
+			$total_items = $this-&gt;user_posts_count;
+		} else {
+			$total_items = array_sum( $post_counts );
+
+			// Subtract post types that are not included in the admin all list.
+			foreach ( get_post_stati( array( 'show_in_admin_all_list' =&gt; false ) ) as $state ) {
+				$total_items -= $post_counts[ $state ];
+			}
+		}
+	}
+
+	$this-&gt;is_trash = isset( $_REQUEST['post_status'] ) &amp;&amp; 'trash' === $_REQUEST['post_status'];
+
+	$this-&gt;set_pagination_args(
+		array(
+			'total_items' =&gt; $total_items,
+			'per_page'    =&gt; $per_page,
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-posts-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-posts-list-table.php#L154">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-posts-list-table.php#L154-L209">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/edit_posts_per_page"><span class="hook-func">apply_filters</span>( ‘edit_posts_per_page’, <nobr><span class="arg-type">int</span> <span class="arg-name">$posts_per_page</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters the number of posts displayed per page when specifically listing “posts”.</p> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_posts_list_table/prepare_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_posts_list_table/prepare_items</a>
+  </p>
+</div>

@@ -1,0 +1,187 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Ajax_Upgrader_Skin {}</h1> <section><p>Upgrader Skin for Ajax WordPress upgrades.</p> </section> <section><h2 id="description">Description</h2> <p>This skin is designed to be used for Ajax updates.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="automatic_upgrader_skin">Automatic_Upgrader_Skin</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_ajax_upgrader_skin/__construct">WP_Ajax_Upgrader_Skin::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_ajax_upgrader_skin/error">WP_Ajax_Upgrader_Skin::error</a></td>
+<td>Stores an error message about the upgrade.</td>
+</tr>
+<tr class="">
+<td><a href="wp_ajax_upgrader_skin/feedback">WP_Ajax_Upgrader_Skin::feedback</a></td>
+<td>Stores a message about the upgrade.</td>
+</tr>
+<tr class="">
+<td><a href="wp_ajax_upgrader_skin/get_error_messages">WP_Ajax_Upgrader_Skin::get_error_messages</a></td>
+<td>Retrieves a string for error messages.</td>
+</tr>
+<tr class="">
+<td><a href="wp_ajax_upgrader_skin/get_errors">WP_Ajax_Upgrader_Skin::get_errors</a></td>
+<td>Retrieves the list of errors.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="19" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Ajax_Upgrader_Skin extends Automatic_Upgrader_Skin {
+
+	/**
+	 * Plugin info.
+	 *
+	 * The Plugin_Upgrader::bulk_upgrade() method will fill this in
+	 * with info retrieved from the get_plugin_data() function.
+	 *
+	 * @var array Plugin data. Values will be empty if not supplied by the plugin.
+	 */
+	public $plugin_info = array();
+
+	/**
+	 * Theme info.
+	 *
+	 * The Theme_Upgrader::bulk_upgrade() method will fill this in
+	 * with info retrieved from the Theme_Upgrader::theme_info() method,
+	 * which in turn calls the wp_get_theme() function.
+	 *
+	 * @var WP_Theme|false The theme's info object, or false.
+	 */
+	public $theme_info = false;
+
+	/**
+	 * Holds the WP_Error object.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @var null|WP_Error
+	 */
+	protected $errors = null;
+
+	/**
+	 * Constructor.
+	 *
+	 * Sets up the WordPress Ajax upgrader skin.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @see WP_Upgrader_Skin::__construct()
+	 *
+	 * @param array $args Optional. The WordPress Ajax upgrader skin arguments to
+	 *                    override default options. See WP_Upgrader_Skin::__construct().
+	 *                    Default empty array.
+	 */
+	public function __construct( $args = array() ) {
+		parent::__construct( $args );
+
+		$this-&gt;errors = new WP_Error();
+	}
+
+	/**
+	 * Retrieves the list of errors.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @return WP_Error Errors during an upgrade.
+	 */
+	public function get_errors() {
+		return $this-&gt;errors;
+	}
+
+	/**
+	 * Retrieves a string for error messages.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @return string Error messages during an upgrade.
+	 */
+	public function get_error_messages() {
+		$messages = array();
+
+		foreach ( $this-&gt;errors-&gt;get_error_codes() as $error_code ) {
+			$error_data = $this-&gt;errors-&gt;get_error_data( $error_code );
+
+			if ( $error_data &amp;&amp; is_string( $error_data ) ) {
+				$messages[] = $this-&gt;errors-&gt;get_error_message( $error_code ) . ' ' . esc_html( strip_tags( $error_data ) );
+			} else {
+				$messages[] = $this-&gt;errors-&gt;get_error_message( $error_code );
+			}
+		}
+
+		return implode( ', ', $messages );
+	}
+
+	/**
+	 * Stores an error message about the upgrade.
+	 *
+	 * @since 4.6.0
+	 * @since 5.3.0 Formalized the existing `...$args` parameter by adding it
+	 *              to the function signature.
+	 *
+	 * @param string|WP_Error $errors  Errors.
+	 * @param mixed           ...$args Optional text replacements.
+	 */
+	public function error( $errors, ...$args ) {
+		if ( is_string( $errors ) ) {
+			$string = $errors;
+			if ( ! empty( $this-&gt;upgrader-&gt;strings[ $string ] ) ) {
+				$string = $this-&gt;upgrader-&gt;strings[ $string ];
+			}
+
+			if ( str_contains( $string, '%' ) ) {
+				if ( ! empty( $args ) ) {
+					$string = vsprintf( $string, $args );
+				}
+			}
+
+			// Count existing errors to generate a unique error code.
+			$errors_count = count( $this-&gt;errors-&gt;get_error_codes() );
+			$this-&gt;errors-&gt;add( 'unknown_upgrade_error_' . ( $errors_count + 1 ), $string );
+		} elseif ( is_wp_error( $errors ) ) {
+			foreach ( $errors-&gt;get_error_codes() as $error_code ) {
+				$this-&gt;errors-&gt;add( $error_code, $errors-&gt;get_error_message( $error_code ), $errors-&gt;get_error_data( $error_code ) );
+			}
+		}
+
+		parent::error( $errors, ...$args );
+	}
+
+	/**
+	 * Stores a message about the upgrade.
+	 *
+	 * @since 4.6.0
+	 * @since 5.3.0 Formalized the existing `...$args` parameter by adding it
+	 *              to the function signature.
+	 * @since 5.9.0 Renamed `$data` to `$feedback` for PHP 8 named parameter support.
+	 *
+	 * @param string|array|WP_Error $feedback Message data.
+	 * @param mixed                 ...$args  Optional text replacements.
+	 */
+	public function feedback( $feedback, ...$args ) {
+		if ( is_wp_error( $feedback ) ) {
+			foreach ( $feedback-&gt;get_error_codes() as $error_code ) {
+				$this-&gt;errors-&gt;add( $error_code, $feedback-&gt;get_error_message( $error_code ), $feedback-&gt;get_error_data( $error_code ) );
+			}
+		}
+
+		parent::feedback( $feedback, ...$args );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-ajax-upgrader-skin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-ajax-upgrader-skin.php#L19">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-ajax-upgrader-skin.php#L19-L159">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_ajax_upgrader_skin" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_ajax_upgrader_skin</a>
+  </p>
+</div>

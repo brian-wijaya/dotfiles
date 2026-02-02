@@ -1,0 +1,103 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Request::has_valid_params(): <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Checks whether this request is valid according to its attributes.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span> True if there are no parameters to validate or if all pass validation, <a href="../wp_error" rel="class">WP_Error</a> if required parameters are missing.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="868" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function has_valid_params() {
+	// If JSON data was passed, check for errors.
+	$json_error = $this-&gt;parse_json_params();
+	if ( is_wp_error( $json_error ) ) {
+		return $json_error;
+	}
+
+	$attributes = $this-&gt;get_attributes();
+	$required   = array();
+
+	$args = empty( $attributes['args'] ) ? array() : $attributes['args'];
+
+	foreach ( $args as $key =&gt; $arg ) {
+		$param = $this-&gt;get_param( $key );
+		if ( isset( $arg['required'] ) &amp;&amp; true === $arg['required'] &amp;&amp; null === $param ) {
+			$required[] = $key;
+		}
+	}
+
+	if ( ! empty( $required ) ) {
+		return new WP_Error(
+			'rest_missing_callback_param',
+			/* translators: %s: List of required parameters. */
+			sprintf( __( 'Missing parameter(s): %s' ), implode( ', ', $required ) ),
+			array(
+				'status' =&gt; 400,
+				'params' =&gt; $required,
+			)
+		);
+	}
+
+	/*
+	 * Check the validation callbacks for each registered arg.
+	 *
+	 * This is done after required checking as required checking is cheaper.
+	 */
+	$invalid_params  = array();
+	$invalid_details = array();
+
+	foreach ( $args as $key =&gt; $arg ) {
+
+		$param = $this-&gt;get_param( $key );
+
+		if ( null !== $param &amp;&amp; ! empty( $arg['validate_callback'] ) ) {
+			/** @var bool|\WP_Error $valid_check */
+			$valid_check = call_user_func( $arg['validate_callback'], $param, $this, $key );
+
+			if ( false === $valid_check ) {
+				$invalid_params[ $key ] = __( 'Invalid parameter.' );
+			}
+
+			if ( is_wp_error( $valid_check ) ) {
+				$invalid_params[ $key ]  = implode( ' ', $valid_check-&gt;get_error_messages() );
+				$invalid_details[ $key ] = rest_convert_error_to_response( $valid_check )-&gt;get_data();
+			}
+		}
+	}
+
+	if ( $invalid_params ) {
+		return new WP_Error(
+			'rest_invalid_param',
+			/* translators: %s: List of invalid parameters. */
+			sprintf( __( 'Invalid parameter(s): %s' ), implode( ', ', array_keys( $invalid_params ) ) ),
+			array(
+				'status'  =&gt; 400,
+				'params'  =&gt; $invalid_params,
+				'details' =&gt; $invalid_details,
+			)
+		);
+	}
+
+	if ( isset( $attributes['validate_callback'] ) ) {
+		$valid_check = call_user_func( $attributes['validate_callback'], $this );
+
+		if ( is_wp_error( $valid_check ) ) {
+			return $valid_check;
+		}
+
+		if ( false === $valid_check ) {
+			// A WP_Error instance is preferred, but false is supported for parity with the per-arg validate_callback.
+			return new WP_Error( 'rest_invalid_params', __( 'Invalid parameters.' ), array( 'status' =&gt; 400 ) );
+		}
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/class-wp-rest-request.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/class-wp-rest-request.php#L868">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/class-wp-rest-request.php#L868-L953">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_request/has_valid_params" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_request/has_valid_params</a>
+  </p>
+</div>

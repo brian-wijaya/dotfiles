@@ -1,0 +1,98 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Http::make_absolute_url( <span class="arg-type">string</span> <span class="arg-name">$maybe_relative_path</span>, <span class="arg-type">string</span> <span class="arg-name">$url</span> ): <span class="return-type">string</span>
+</h1> <section><p>Converts a relative URL to an absolute URL relative to a given URL.</p> </section> <section><h2 id="description">Description</h2> <p>If an Absolute URL is provided, no processing of that URL is done.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$maybe_relative_path</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The URL which might be relative.</span></div></dd>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The URL which $maybe_relative_path is relative to.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> An Absolute URL, in a failure condition where the URL cannot be parsed, the relative URL will be returned.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="967" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function make_absolute_url( $maybe_relative_path, $url ) {
+	if ( empty( $url ) ) {
+		return $maybe_relative_path;
+	}
+
+	$url_parts = wp_parse_url( $url );
+	if ( ! $url_parts ) {
+		return $maybe_relative_path;
+	}
+
+	$relative_url_parts = wp_parse_url( $maybe_relative_path );
+	if ( ! $relative_url_parts ) {
+		return $maybe_relative_path;
+	}
+
+	// Check for a scheme on the 'relative' URL.
+	if ( ! empty( $relative_url_parts['scheme'] ) ) {
+		return $maybe_relative_path;
+	}
+
+	$absolute_path = $url_parts['scheme'] . '://';
+
+	// Schemeless URLs will make it this far, so we check for a host in the relative URL
+	// and convert it to a protocol-URL.
+	if ( isset( $relative_url_parts['host'] ) ) {
+		$absolute_path .= $relative_url_parts['host'];
+		if ( isset( $relative_url_parts['port'] ) ) {
+			$absolute_path .= ':' . $relative_url_parts['port'];
+		}
+	} else {
+		$absolute_path .= $url_parts['host'];
+		if ( isset( $url_parts['port'] ) ) {
+			$absolute_path .= ':' . $url_parts['port'];
+		}
+	}
+
+	// Start off with the absolute URL path.
+	$path = ! empty( $url_parts['path'] ) ? $url_parts['path'] : '/';
+
+	// If it's a root-relative path, then great.
+	if ( ! empty( $relative_url_parts['path'] ) &amp;&amp; '/' === $relative_url_parts['path'][0] ) {
+		$path = $relative_url_parts['path'];
+
+		// Else it's a relative path.
+	} elseif ( ! empty( $relative_url_parts['path'] ) ) {
+		// Strip off any file components from the absolute path.
+		$path = substr( $path, 0, strrpos( $path, '/' ) + 1 );
+
+		// Build the new path.
+		$path .= $relative_url_parts['path'];
+
+		// Strip all /path/../ out of the path.
+		while ( strpos( $path, '../' ) &gt; 1 ) {
+			$path = preg_replace( '![^/]+/\.\./!', '', $path );
+		}
+
+		// Strip any final leading ../ from the path.
+		$path = preg_replace( '!^/(\.\./)+!', '', $path );
+	}
+
+	// Add the query string.
+	if ( ! empty( $relative_url_parts['query'] ) ) {
+		$path .= '?' . $relative_url_parts['query'];
+	}
+
+	// Add the fragment.
+	if ( ! empty( $relative_url_parts['fragment'] ) ) {
+		$path .= '#' . $relative_url_parts['fragment'];
+	}
+
+	return $absolute_path . '/' . ltrim( $path, '/' );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-http.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-http.php#L967">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-http.php#L967-L1038">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_http/make_absolute_url" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_http/make_absolute_url</a>
+  </p>
+</div>

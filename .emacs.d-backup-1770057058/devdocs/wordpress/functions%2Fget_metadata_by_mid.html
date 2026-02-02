@@ -1,0 +1,102 @@
+<h1 class="wp-block-wporg-code-reference-title">get_metadata_by_mid( <span class="arg-type">string</span> <span class="arg-name">$meta_type</span>, <span class="arg-type">int</span> <span class="arg-name">$meta_id</span> ): <span class="return-type">stdClass|false</span>
+</h1> <section><p>Retrieves metadata by meta ID.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$meta_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Type of object metadata is for. Accepts <code>'post'</code>, <code>'comment'</code>, <code>'term'</code>, <code>'user'</code>, or any other object type with an associated meta table.</span></div></dd>
+<dt>
+<code>$meta_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">ID for a specific meta row.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">stdClass|false</span> Metadata object, or boolean <code>false</code> if the metadata doesn’t exist.<br> <ul class="param-hash">
+<li>
+<code>meta_key</code> <span class="type">string</span><div class="desc">The meta key.</div>
+</li> <li>
+<code>meta_value</code> <span class="type">mixed</span><div class="desc">The unserialized meta value.</div>
+</li> <li>
+<code>meta_id</code> <span class="type">string</span><div class="desc">Optional. The meta ID when the meta type is any value except <code>'user'</code>.</div>
+</li> <li>
+<code>umeta_id</code> <span class="type">string</span><div class="desc">Optional. The meta ID when the meta type is <code>'user'</code>.</div>
+</li> <li>
+<code>post_id</code> <span class="type">string</span><div class="desc">Optional. The object ID when the meta type is <code>'post'</code>.</div>
+</li> <li>
+<code>comment_id</code> <span class="type">string</span><div class="desc">Optional. The object ID when the meta type is <code>'comment'</code>.</div>
+</li> <li>
+<code>term_id</code> <span class="type">string</span><div class="desc">Optional. The object ID when the meta type is <code>'term'</code>.</div>
+</li> <li>
+<code>user_id</code> <span class="type">string</span><div class="desc">Optional. The object ID when the meta type is <code>'user'</code>.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="791" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_metadata_by_mid( $meta_type, $meta_id ) {
+	global $wpdb;
+
+	if ( ! $meta_type || ! is_numeric( $meta_id ) || floor( $meta_id ) != $meta_id ) {
+		return false;
+	}
+
+	$meta_id = (int) $meta_id;
+	if ( $meta_id &lt;= 0 ) {
+		return false;
+	}
+
+	$table = _get_meta_table( $meta_type );
+	if ( ! $table ) {
+		return false;
+	}
+
+	/**
+	 * Short-circuits the return value when fetching a meta field by meta ID.
+	 *
+	 * The dynamic portion of the hook name, `$meta_type`, refers to the meta object type
+	 * (post, comment, term, user, or any other type with an associated meta table).
+	 * Returning a non-null value will effectively short-circuit the function.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `get_post_metadata_by_mid`
+	 *  - `get_comment_metadata_by_mid`
+	 *  - `get_term_metadata_by_mid`
+	 *  - `get_user_metadata_by_mid`
+	 *
+	 * @since 5.0.0
+	 *
+	 * @param stdClass|null $value   The value to return.
+	 * @param int           $meta_id Meta ID.
+	 */
+	$check = apply_filters( "get_{$meta_type}_metadata_by_mid", null, $meta_id );
+	if ( null !== $check ) {
+		return $check;
+	}
+
+	$id_column = ( 'user' === $meta_type ) ? 'umeta_id' : 'meta_id';
+
+	$meta = $wpdb-&gt;get_row( $wpdb-&gt;prepare( "SELECT * FROM $table WHERE $id_column = %d", $meta_id ) );
+
+	if ( empty( $meta ) ) {
+		return false;
+	}
+
+	if ( isset( $meta-&gt;meta_value ) ) {
+		$meta-&gt;meta_value = maybe_unserialize( $meta-&gt;meta_value );
+	}
+
+	return $meta;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/meta.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/meta.php#L791">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/meta.php#L791-L845">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_meta_type_metadata_by_mid"><span class="hook-func">apply_filters</span>( “get_{$meta_type}_metadata_by_mid”, <nobr><span class="arg-type">stdClass|null</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$meta_id</span></nobr> )</a></dt>
+<dd>
+<p>Short-circuits the return value when fetching a meta field by meta ID.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_metadata_by_mid" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_metadata_by_mid</a>
+  </p>
+</div>

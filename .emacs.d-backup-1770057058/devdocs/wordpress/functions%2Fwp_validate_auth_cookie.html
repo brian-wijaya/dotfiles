@@ -1,0 +1,199 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_validate_auth_cookie( <span class="arg-type">string</span> <span class="arg-name">$cookie</span> = <span class="arg-default">”</span>, <span class="arg-type">string</span> <span class="arg-name">$scheme</span> = <span class="arg-default">”</span> ): <span class="return-type">int|false</span>
+</h1> <section><p>Validates authentication cookie.</p> </section> <section><h2 id="description">Description</h2> <p>The checks include making sure that the authentication cookie is set and pulling in the contents (if $cookie is not used).</p> <p>Makes sure the cookie is not expired. Verifies the hash in cookie is what is should be and compares the two.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$cookie</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">If used, will validate contents instead of cookie’s.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$scheme</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The cookie scheme to use: <code>'auth'</code>, <code>'secure_auth'</code>, or <code>'logged_in'</code>.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|false</span> User ID if valid cookie, false if invalid.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="693" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_validate_auth_cookie( $cookie = '', $scheme = '' ) {
+	$cookie_elements = wp_parse_auth_cookie( $cookie, $scheme );
+	if ( ! $cookie_elements ) {
+		/**
+		 * Fires if an authentication cookie is malformed.
+		 *
+		 * @since 2.7.0
+		 *
+		 * @param string $cookie Malformed auth cookie.
+		 * @param string $scheme Authentication scheme. Values include 'auth', 'secure_auth',
+		 *                       or 'logged_in'.
+		 */
+		do_action( 'auth_cookie_malformed', $cookie, $scheme );
+		return false;
+	}
+
+	$scheme     = $cookie_elements['scheme'];
+	$username   = $cookie_elements['username'];
+	$hmac       = $cookie_elements['hmac'];
+	$token      = $cookie_elements['token'];
+	$expired    = $cookie_elements['expiration'];
+	$expiration = $cookie_elements['expiration'];
+
+	// Allow a grace period for POST and Ajax requests.
+	if ( wp_doing_ajax() || 'POST' === $_SERVER['REQUEST_METHOD'] ) {
+		$expired += HOUR_IN_SECONDS;
+	}
+
+	// Quick check to see if an honest cookie has expired.
+	if ( $expired &lt; time() ) {
+		/**
+		 * Fires once an authentication cookie has expired.
+		 *
+		 * @since 2.7.0
+		 *
+		 * @param string[] $cookie_elements {
+		 *     Authentication cookie components. None of the components should be assumed
+		 *     to be valid as they come directly from a client-provided cookie value.
+		 *
+		 *     @type string $username   User's username.
+		 *     @type string $expiration The time the cookie expires as a UNIX timestamp.
+		 *     @type string $token      User's session token used.
+		 *     @type string $hmac       The security hash for the cookie.
+		 *     @type string $scheme     The cookie scheme to use.
+		 * }
+		 */
+		do_action( 'auth_cookie_expired', $cookie_elements );
+		return false;
+	}
+
+	$user = get_user_by( 'login', $username );
+	if ( ! $user ) {
+		/**
+		 * Fires if a bad username is entered in the user authentication process.
+		 *
+		 * @since 2.7.0
+		 *
+		 * @param string[] $cookie_elements {
+		 *     Authentication cookie components. None of the components should be assumed
+		 *     to be valid as they come directly from a client-provided cookie value.
+		 *
+		 *     @type string $username   User's username.
+		 *     @type string $expiration The time the cookie expires as a UNIX timestamp.
+		 *     @type string $token      User's session token used.
+		 *     @type string $hmac       The security hash for the cookie.
+		 *     @type string $scheme     The cookie scheme to use.
+		 * }
+		 */
+		do_action( 'auth_cookie_bad_username', $cookie_elements );
+		return false;
+	}
+
+	$pass_frag = substr( $user-&gt;user_pass, 8, 4 );
+
+	$key = wp_hash( $username . '|' . $pass_frag . '|' . $expiration . '|' . $token, $scheme );
+
+	// If ext/hash is not present, compat.php's hash_hmac() does not support sha256.
+	$algo = function_exists( 'hash' ) ? 'sha256' : 'sha1';
+	$hash = hash_hmac( $algo, $username . '|' . $expiration . '|' . $token, $key );
+
+	if ( ! hash_equals( $hash, $hmac ) ) {
+		/**
+		 * Fires if a bad authentication cookie hash is encountered.
+		 *
+		 * @since 2.7.0
+		 *
+		 * @param string[] $cookie_elements {
+		 *     Authentication cookie components. None of the components should be assumed
+		 *     to be valid as they come directly from a client-provided cookie value.
+		 *
+		 *     @type string $username   User's username.
+		 *     @type string $expiration The time the cookie expires as a UNIX timestamp.
+		 *     @type string $token      User's session token used.
+		 *     @type string $hmac       The security hash for the cookie.
+		 *     @type string $scheme     The cookie scheme to use.
+		 * }
+		 */
+		do_action( 'auth_cookie_bad_hash', $cookie_elements );
+		return false;
+	}
+
+	$manager = WP_Session_Tokens::get_instance( $user-&gt;ID );
+	if ( ! $manager-&gt;verify( $token ) ) {
+		/**
+		 * Fires if a bad session token is encountered.
+		 *
+		 * @since 4.0.0
+		 *
+		 * @param string[] $cookie_elements {
+		 *     Authentication cookie components. None of the components should be assumed
+		 *     to be valid as they come directly from a client-provided cookie value.
+		 *
+		 *     @type string $username   User's username.
+		 *     @type string $expiration The time the cookie expires as a UNIX timestamp.
+		 *     @type string $token      User's session token used.
+		 *     @type string $hmac       The security hash for the cookie.
+		 *     @type string $scheme     The cookie scheme to use.
+		 * }
+		 */
+		do_action( 'auth_cookie_bad_session_token', $cookie_elements );
+		return false;
+	}
+
+	// Ajax/POST grace period set above.
+	if ( $expiration &lt; time() ) {
+		$GLOBALS['login_grace_period'] = 1;
+	}
+
+	/**
+	 * Fires once an authentication cookie has been validated.
+	 *
+	 * @since 2.7.0
+	 *
+	 * @param string[] $cookie_elements {
+	 *     Authentication cookie components.
+	 *
+	 *     @type string $username   User's username.
+	 *     @type string $expiration The time the cookie expires as a UNIX timestamp.
+	 *     @type string $token      User's session token used.
+	 *     @type string $hmac       The security hash for the cookie.
+	 *     @type string $scheme     The cookie scheme to use.
+	 * }
+	 * @param WP_User  $user            User object.
+	 */
+	do_action( 'auth_cookie_valid', $cookie_elements, $user );
+
+	return $user-&gt;ID;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/pluggable.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/pluggable.php#L693">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/pluggable.php#L693-L840">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/auth_cookie_bad_hash"><span class="hook-func">do_action</span>( ‘auth_cookie_bad_hash’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$cookie_elements</span></nobr> )</a></dt>
+<dd>
+<p>Fires if a bad authentication cookie hash is encountered.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/auth_cookie_bad_session_token"><span class="hook-func">do_action</span>( ‘auth_cookie_bad_session_token’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$cookie_elements</span></nobr> )</a></dt>
+<dd>
+<p>Fires if a bad session token is encountered.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/auth_cookie_bad_username"><span class="hook-func">do_action</span>( ‘auth_cookie_bad_username’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$cookie_elements</span></nobr> )</a></dt>
+<dd>
+<p>Fires if a bad username is entered in the user authentication process.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/auth_cookie_expired"><span class="hook-func">do_action</span>( ‘auth_cookie_expired’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$cookie_elements</span></nobr> )</a></dt>
+<dd>
+<p>Fires once an authentication cookie has expired.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/auth_cookie_malformed"><span class="hook-func">do_action</span>( ‘auth_cookie_malformed’, <nobr><span class="arg-type">string</span> <span class="arg-name">$cookie</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$scheme</span></nobr> )</a></dt>
+<dd>
+<p>Fires if an authentication cookie is malformed.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/auth_cookie_valid"><span class="hook-func">do_action</span>( ‘auth_cookie_valid’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$cookie_elements</span></nobr>, <nobr><span class="arg-type">WP_User</span> <span class="arg-name">$user</span></nobr> )</a></dt>
+<dd>
+<p>Fires once an authentication cookie has been validated.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_validate_auth_cookie" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_validate_auth_cookie</a>
+  </p>
+</div>

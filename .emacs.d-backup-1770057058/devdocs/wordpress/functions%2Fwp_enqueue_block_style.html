@@ -1,0 +1,130 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_enqueue_block_style( <span class="arg-type">string</span> <span class="arg-name">$block_name</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> )</h1> <section><p>Enqueues a stylesheet for a specific block.</p> </section> <section><h2 id="description">Description</h2> <p>If the theme has opted-in to separate-styles loading, then the stylesheet will be enqueued on-render, otherwise when the block inits.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$block_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The block-name, including namespace.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An array of arguments. See <a href="wp_register_style" rel="function">wp_register_style()</a> for full information about each argument.<br> <ul class="param-hash">
+<li>
+<code>handle</code> <span class="type">string</span><div class="desc">The handle for the stylesheet.</div>
+</li> <li>
+<code>src</code> <span class="type">string|false</span><div class="desc">The source URL of the stylesheet.</div>
+</li> <li>
+<code>deps</code> <span class="type">string[]</span><div class="desc">Array of registered stylesheet handles this stylesheet depends on.</div>
+</li> <li>
+<code>ver</code> <span class="type">string|bool|null</span><div class="desc">Stylesheet version number.</div>
+</li> <li>
+<code>media</code> <span class="type">string</span><div class="desc">The media for which this stylesheet has been defined.</div>
+</li> <li>
+<code>path</code> <span class="type">string|null</span><div class="desc">Absolute path to the stylesheet, so that it can potentially be inlined.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3207" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_enqueue_block_style( $block_name, $args ) {
+	$args = wp_parse_args(
+		$args,
+		array(
+			'handle' =&gt; '',
+			'src'    =&gt; '',
+			'deps'   =&gt; array(),
+			'ver'    =&gt; false,
+			'media'  =&gt; 'all',
+		)
+	);
+
+	/**
+	 * Callback function to register and enqueue styles.
+	 *
+	 * @param string $content When the callback is used for the render_block filter,
+	 *                        the content needs to be returned so the function parameter
+	 *                        is to ensure the content exists.
+	 * @return string Block content.
+	 */
+	$callback = static function ( $content ) use ( $args ) {
+		// Register the stylesheet.
+		if ( ! empty( $args['src'] ) ) {
+			wp_register_style( $args['handle'], $args['src'], $args['deps'], $args['ver'], $args['media'] );
+		}
+
+		// Add `path` data if provided.
+		if ( isset( $args['path'] ) ) {
+			wp_style_add_data( $args['handle'], 'path', $args['path'] );
+
+			// Get the RTL file path.
+			$rtl_file_path = str_replace( '.css', '-rtl.css', $args['path'] );
+
+			// Add RTL stylesheet.
+			if ( file_exists( $rtl_file_path ) ) {
+				wp_style_add_data( $args['handle'], 'rtl', 'replace' );
+
+				if ( is_rtl() ) {
+					wp_style_add_data( $args['handle'], 'path', $rtl_file_path );
+				}
+			}
+		}
+
+		// Enqueue the stylesheet.
+		wp_enqueue_style( $args['handle'] );
+
+		return $content;
+	};
+
+	$hook = did_action( 'wp_enqueue_scripts' ) ? 'wp_footer' : 'wp_enqueue_scripts';
+	if ( wp_should_load_separate_core_block_assets() ) {
+		/**
+		 * Callback function to register and enqueue styles.
+		 *
+		 * @param string $content The block content.
+		 * @param array  $block   The full block, including name and attributes.
+		 * @return string Block content.
+		 */
+		$callback_separate = static function ( $content, $block ) use ( $block_name, $callback ) {
+			if ( ! empty( $block['blockName'] ) &amp;&amp; $block_name === $block['blockName'] ) {
+				return $callback( $content );
+			}
+			return $content;
+		};
+
+		/*
+		 * The filter's callback here is an anonymous function because
+		 * using a named function in this case is not possible.
+		 *
+		 * The function cannot be unhooked, however, users are still able
+		 * to dequeue the stylesheets registered/enqueued by the callback
+		 * which is why in this case, using an anonymous function
+		 * was deemed acceptable.
+		 */
+		add_filter( 'render_block', $callback_separate, 10, 2 );
+		return;
+	}
+
+	/*
+	 * The filter's callback here is an anonymous function because
+	 * using a named function in this case is not possible.
+	 *
+	 * The function cannot be unhooked, however, users are still able
+	 * to dequeue the stylesheets registered/enqueued by the callback
+	 * which is why in this case, using an anonymous function
+	 * was deemed acceptable.
+	 */
+	add_filter( $hook, $callback );
+
+	// Enqueue assets in the editor.
+	add_action( 'enqueue_block_assets', $callback );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/script-loader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/script-loader.php#L3207">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/script-loader.php#L3207-L3298">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_enqueue_block_style" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_enqueue_block_style</a>
+  </p>
+</div>

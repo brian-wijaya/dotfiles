@@ -1,0 +1,47 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Block_Patterns_Controller::get_items( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Retrieves all block patterns.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="104" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_items( $request ) {
+	if ( ! $this-&gt;remote_patterns_loaded ) {
+		// Load block patterns from w.org.
+		_load_remote_block_patterns(); // Patterns with the `core` keyword.
+		_load_remote_featured_patterns(); // Patterns in the `featured` category.
+		_register_remote_theme_patterns(); // Patterns requested by current theme.
+
+		$this-&gt;remote_patterns_loaded = true;
+	}
+
+	$response = array();
+	$patterns = WP_Block_Patterns_Registry::get_instance()-&gt;get_all_registered();
+	foreach ( $patterns as $pattern ) {
+		$migrated_pattern = $this-&gt;migrate_pattern_categories( $pattern );
+		$prepared_pattern = $this-&gt;prepare_item_for_response( $migrated_pattern, $request );
+		$response[]       = $this-&gt;prepare_response_for_collection( $prepared_pattern );
+	}
+	return rest_ensure_response( $response );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-block-patterns-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-patterns-controller.php#L104">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-patterns-controller.php#L104-L122">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.2.0/">6.2.0</a></td>
+<td><span class="since-description">Added migration for old core pattern categories to the new ones.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.0.0/">6.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_block_patterns_controller/get_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_block_patterns_controller/get_items</a>
+  </p>
+</div>

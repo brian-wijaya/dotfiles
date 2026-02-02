@@ -1,0 +1,2 @@
+;; Generated package description from calibre.el  -*- no-byte-compile: t -*-
+(define-package "calibre" "1.5.0" "Interact with Calibre libraries from Emacs" '((emacs "27.1") (compat "29.1.4.1")) :commit "dbbffe75c6a2492099e36dc93b6183800a7d6fcd" :authors '(("Kjartan Oli Agustsson" . "kjartanoli@disroot.org")) :maintainer '("Kjartan Oli Agustsson" . "kjartanoli@disroot.org") :url "https://git.disroot.org/kjartanoli/calibre.el")

@@ -1,0 +1,2 @@
+;; Generated package description from vertico.el  -*- mode: lisp-data; no-byte-compile: t -*-
+(define-package "vertico" "2.7" "VERTical Interactive COmpletion" '((emacs "29.1") (compat "30")) :commit "c12c8f842fd184db44fb2b835b0f954bbc90c7a6" :authors '(("Daniel Mendler" . "mail@daniel-mendler.de")) :maintainer '("Daniel Mendler" . "mail@daniel-mendler.de") :keywords '("convenience" "files" "matching" "completion") :url "https://github.com/minad/vertico")

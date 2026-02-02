@@ -1,0 +1,64 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_delete_nav_menu( <span class="arg-type">int|string|WP_Term</span> <span class="arg-name">$menu</span> ): <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Deletes a navigation menu.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$menu</code><span class="type"><span class="int">int</span>|<span class="string">string</span>|<span class="WP_Term"><a href="../classes/wp_term" rel="class">WP_Term</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Menu ID, slug, name, or object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True on success, false or <a href="../classes/wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="265" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_delete_nav_menu( $menu ) {
+	$menu = wp_get_nav_menu_object( $menu );
+	if ( ! $menu ) {
+		return false;
+	}
+
+	$menu_objects = get_objects_in_term( $menu-&gt;term_id, 'nav_menu' );
+	if ( ! empty( $menu_objects ) ) {
+		foreach ( $menu_objects as $item ) {
+			wp_delete_post( $item );
+		}
+	}
+
+	$result = wp_delete_term( $menu-&gt;term_id, 'nav_menu' );
+
+	// Remove this menu from any locations.
+	$locations = get_nav_menu_locations();
+	foreach ( $locations as $location =&gt; $menu_id ) {
+		if ( $menu_id === $menu-&gt;term_id ) {
+			$locations[ $location ] = 0;
+		}
+	}
+	set_theme_mod( 'nav_menu_locations', $locations );
+
+	if ( $result &amp;&amp; ! is_wp_error( $result ) ) {
+
+		/**
+		 * Fires after a navigation menu has been successfully deleted.
+		 *
+		 * @since 3.0.0
+		 *
+		 * @param int $term_id ID of the deleted menu.
+		 */
+		do_action( 'wp_delete_nav_menu', $menu-&gt;term_id );
+	}
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/nav-menu.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/nav-menu.php#L265">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/nav-menu.php#L265-L302">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_delete_nav_menu"><span class="hook-func">do_action</span>( ‘wp_delete_nav_menu’, <nobr><span class="arg-type">int</span> <span class="arg-name">$term_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a navigation menu has been successfully deleted.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_delete_nav_menu" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_delete_nav_menu</a>
+  </p>
+</div>

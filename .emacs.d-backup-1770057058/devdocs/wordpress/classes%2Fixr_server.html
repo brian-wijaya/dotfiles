@@ -1,0 +1,284 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> IXR_Server {}</h1> <section><p><a href="ixr_server" rel="class">IXR_Server</a></p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="ixr_server/__construct">IXR_Server::__construct</a></td>
+<td>PHP5 constructor.</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/call">IXR_Server::call</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/error">IXR_Server::error</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/getcapabilities">IXR_Server::getCapabilities</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/hasmethod">IXR_Server::hasMethod</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/ixr_server">IXR_Server::IXR_Server</a></td>
+<td>PHP4 constructor.</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/listmethods">IXR_Server::listMethods</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/multicall">IXR_Server::multiCall</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/output">IXR_Server::output</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/serve">IXR_Server::serve</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/setcallbacks">IXR_Server::setCallbacks</a></td>
+<td>–</td>
+</tr>
+<tr class="">
+<td><a href="ixr_server/setcapabilities">IXR_Server::setCapabilities</a></td>
+<td>–</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="9" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class IXR_Server
+{
+    var $data;
+    var $callbacks = array();
+    var $message;
+    var $capabilities;
+
+	/**
+	 * PHP5 constructor.
+	 */
+    function __construct( $callbacks = false, $data = false, $wait = false )
+    {
+        $this-&gt;setCapabilities();
+        if ($callbacks) {
+            $this-&gt;callbacks = $callbacks;
+        }
+        $this-&gt;setCallbacks();
+        if (!$wait) {
+            $this-&gt;serve($data);
+        }
+    }
+
+	/**
+	 * PHP4 constructor.
+	 */
+	public function IXR_Server( $callbacks = false, $data = false, $wait = false ) {
+		self::__construct( $callbacks, $data, $wait );
+	}
+
+    function serve($data = false)
+    {
+        if (!$data) {
+            if (isset($_SERVER['REQUEST_METHOD']) &amp;&amp; $_SERVER['REQUEST_METHOD'] !== 'POST') {
+                if ( function_exists( 'status_header' ) ) {
+                    status_header( 405 ); // WP #20986
+                    header( 'Allow: POST' );
+                }
+                header('Content-Type: text/plain'); // merged from WP #9093
+                die('XML-RPC server accepts POST requests only.');
+            }
+
+            $data = file_get_contents('php://input');
+        }
+        $this-&gt;message = new IXR_Message($data);
+        if (!$this-&gt;message-&gt;parse()) {
+            $this-&gt;error(-32700, 'parse error. not well formed');
+        }
+        if ($this-&gt;message-&gt;messageType != 'methodCall') {
+            $this-&gt;error(-32600, 'server error. invalid xml-rpc. not conforming to spec. Request must be a methodCall');
+        }
+        $result = $this-&gt;call($this-&gt;message-&gt;methodName, $this-&gt;message-&gt;params);
+
+        // Is the result an error?
+        if (is_a($result, 'IXR_Error')) {
+            $this-&gt;error($result);
+        }
+
+        // Encode the result
+        $r = new IXR_Value($result);
+        $resultxml = $r-&gt;getXml();
+
+        // Create the XML
+        $xml = &lt;&lt;&lt;EOD
+&lt;methodResponse&gt;
+  &lt;params&gt;
+    &lt;param&gt;
+      &lt;value&gt;
+      $resultxml
+      &lt;/value&gt;
+    &lt;/param&gt;
+  &lt;/params&gt;
+&lt;/methodResponse&gt;
+
+EOD;
+      // Send it
+      $this-&gt;output($xml);
+    }
+
+    function call($methodname, $args)
+    {
+        if (!$this-&gt;hasMethod($methodname)) {
+            return new IXR_Error(-32601, 'server error. requested method '.$methodname.' does not exist.');
+        }
+        $method = $this-&gt;callbacks[$methodname];
+
+        // Perform the callback and send the response
+        if (count($args) == 1) {
+            // If only one parameter just send that instead of the whole array
+            $args = $args[0];
+        }
+
+        // Are we dealing with a function or a method?
+        if (is_string($method) &amp;&amp; substr($method, 0, 5) == 'this:') {
+            // It's a class method - check it exists
+            $method = substr($method, 5);
+            if (!method_exists($this, $method)) {
+                return new IXR_Error(-32601, 'server error. requested class method "'.$method.'" does not exist.');
+            }
+
+            //Call the method
+            $result = $this-&gt;$method($args);
+        } else {
+            // It's a function - does it exist?
+            if (is_array($method)) {
+                if (!is_callable(array($method[0], $method[1]))) {
+                    return new IXR_Error(-32601, 'server error. requested object method "'.$method[1].'" does not exist.');
+                }
+            } else if (!function_exists($method)) {
+                return new IXR_Error(-32601, 'server error. requested function "'.$method.'" does not exist.');
+            }
+
+            // Call the function
+            $result = call_user_func($method, $args);
+        }
+        return $result;
+    }
+
+    function error($error, $message = false)
+    {
+        // Accepts either an error object or an error code and message
+        if ($message &amp;&amp; !is_object($error)) {
+            $error = new IXR_Error($error, $message);
+        }
+
+        $this-&gt;output($error-&gt;getXml());
+    }
+
+    function output($xml)
+    {
+        $charset = function_exists('get_option') ? get_option('blog_charset') : '';
+        if ($charset)
+            $xml = '&lt;?xml version="1.0" encoding="'.$charset.'"?&gt;'."\n".$xml;
+        else
+            $xml = '&lt;?xml version="1.0"?&gt;'."\n".$xml;
+        $length = strlen($xml);
+        header('Connection: close');
+        if ($charset)
+            header('Content-Type: text/xml; charset='.$charset);
+        else
+            header('Content-Type: text/xml');
+        header('Date: '.gmdate('r'));
+        echo $xml;
+        exit;
+    }
+
+    function hasMethod($method)
+    {
+        return in_array($method, array_keys($this-&gt;callbacks));
+    }
+
+    function setCapabilities()
+    {
+        // Initialises capabilities array
+        $this-&gt;capabilities = array(
+            'xmlrpc' =&gt; array(
+                'specUrl' =&gt; 'http://www.xmlrpc.com/spec',
+                'specVersion' =&gt; 1
+        ),
+            'faults_interop' =&gt; array(
+                'specUrl' =&gt; 'http://xmlrpc-epi.sourceforge.net/specs/rfc.fault_codes.php',
+                'specVersion' =&gt; 20010516
+        ),
+            'system.multicall' =&gt; array(
+                'specUrl' =&gt; 'http://www.xmlrpc.com/discuss/msgReader$1208',
+                'specVersion' =&gt; 1
+        ),
+        );
+    }
+
+    function getCapabilities($args)
+    {
+        return $this-&gt;capabilities;
+    }
+
+    function setCallbacks()
+    {
+        $this-&gt;callbacks['system.getCapabilities'] = 'this:getCapabilities';
+        $this-&gt;callbacks['system.listMethods'] = 'this:listMethods';
+        $this-&gt;callbacks['system.multicall'] = 'this:multiCall';
+    }
+
+    function listMethods($args)
+    {
+        // Returns a list of methods - uses array_reverse to ensure user defined
+        // methods are listed before server defined methods
+        return array_reverse(array_keys($this-&gt;callbacks));
+    }
+
+    function multiCall($methodcalls)
+    {
+        // See http://www.xmlrpc.com/discuss/msgReader$1208
+        $return = array();
+        foreach ($methodcalls as $call) {
+            $method = $call['methodName'];
+            $params = $call['params'];
+            if ($method == 'system.multicall') {
+                $result = new IXR_Error(-32600, 'Recursive calls to system.multicall are forbidden');
+            } else {
+                $result = $this-&gt;call($method, $params);
+            }
+            if (is_a($result, 'IXR_Error')) {
+                $return[] = array(
+                    'faultCode' =&gt; $result-&gt;code,
+                    'faultString' =&gt; $result-&gt;message
+                );
+            } else {
+                $return[] = array($result);
+            }
+        }
+        return $return;
+    }
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ixr/class-ixr-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/IXR/class-IXR-server.php#L9">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/IXR/class-IXR-server.php#L9-L220">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/ixr_server" class="_attribution-link">https://developer.wordpress.org/reference/classes/ixr_server</a>
+  </p>
+</div>

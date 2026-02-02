@@ -1,0 +1,126 @@
+<h1 class="wp-block-wporg-code-reference-title">term_exists( <span class="arg-type">int|string</span> <span class="arg-name">$term</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span> = <span class="arg-default">”</span>, <span class="arg-type">int</span> <span class="arg-name">$parent_term</span> = <span class="arg-default">null</span> ): <span class="return-type">mixed</span>
+</h1> <section><p>Determines whether a taxonomy term exists.</p> </section> <section><h2 id="description">Description</h2> <p>Formerly <a href="is_term" rel="function">is_term()</a> , introduced in 2.3.0.</p> <p>For more information on this and similar theme functions, check out the <a href="https://developer.wordpress.org/themes/basics/conditional-tags/"> Conditional Tags</a> article in the Theme Developer Handbook.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$term</code><span class="type"><span class="int">int</span>|<span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The term to check. Accepts term ID, slug, or name.</span></div></dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The taxonomy name to use.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$parent_term</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">ID of parent term under which to confine the exists search.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed</span> Returns null if the term does not exist.<br> Returns the term ID if no taxonomy is specified and the term ID exists.<br> Returns an array of the term ID and the term taxonomy ID if the taxonomy is specified and the pairing exists.<br> Returns 0 if term ID 0 is passed to the function.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1575" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function term_exists( $term, $taxonomy = '', $parent_term = null ) {
+	global $_wp_suspend_cache_invalidation;
+
+	if ( null === $term ) {
+		return null;
+	}
+
+	$defaults = array(
+		'get'                    =&gt; 'all',
+		'fields'                 =&gt; 'ids',
+		'number'                 =&gt; 1,
+		'update_term_meta_cache' =&gt; false,
+		'order'                  =&gt; 'ASC',
+		'orderby'                =&gt; 'term_id',
+		'suppress_filter'        =&gt; true,
+	);
+
+	// Ensure that while importing, queries are not cached.
+	if ( ! empty( $_wp_suspend_cache_invalidation ) ) {
+		$defaults['cache_results'] = false;
+	}
+
+	if ( ! empty( $taxonomy ) ) {
+		$defaults['taxonomy'] = $taxonomy;
+		$defaults['fields']   = 'all';
+	}
+
+	/**
+	 * Filters default query arguments for checking if a term exists.
+	 *
+	 * @since 6.0.0
+	 *
+	 * @param array      $defaults    An array of arguments passed to get_terms().
+	 * @param int|string $term        The term to check. Accepts term ID, slug, or name.
+	 * @param string     $taxonomy    The taxonomy name to use. An empty string indicates
+	 *                                the search is against all taxonomies.
+	 * @param int|null   $parent_term ID of parent term under which to confine the exists search.
+	 *                                Null indicates the search is unconfined.
+	 */
+	$defaults = apply_filters( 'term_exists_default_query_args', $defaults, $term, $taxonomy, $parent_term );
+
+	if ( is_int( $term ) ) {
+		if ( 0 === $term ) {
+			return 0;
+		}
+		$args  = wp_parse_args( array( 'include' =&gt; array( $term ) ), $defaults );
+		$terms = get_terms( $args );
+	} else {
+		$term = trim( wp_unslash( $term ) );
+		if ( '' === $term ) {
+			return null;
+		}
+
+		if ( ! empty( $taxonomy ) &amp;&amp; is_numeric( $parent_term ) ) {
+			$defaults['parent'] = (int) $parent_term;
+		}
+
+		$args  = wp_parse_args( array( 'slug' =&gt; sanitize_title( $term ) ), $defaults );
+		$terms = get_terms( $args );
+		if ( empty( $terms ) || is_wp_error( $terms ) ) {
+			$args  = wp_parse_args( array( 'name' =&gt; $term ), $defaults );
+			$terms = get_terms( $args );
+		}
+	}
+
+	if ( empty( $terms ) || is_wp_error( $terms ) ) {
+		return null;
+	}
+
+	$_term = array_shift( $terms );
+
+	if ( ! empty( $taxonomy ) ) {
+		return array(
+			'term_id'          =&gt; (string) $_term-&gt;term_id,
+			'term_taxonomy_id' =&gt; (string) $_term-&gt;term_taxonomy_id,
+		);
+	}
+
+	return (string) $_term;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L1575">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L1575-L1654">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/term_exists_default_query_args"><span class="hook-func">apply_filters</span>( ‘term_exists_default_query_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$defaults</span></nobr>, <nobr><span class="arg-type">int|string</span> <span class="arg-name">$term</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr>, <nobr><span class="arg-type">int|null</span> <span class="arg-name">$parent_term</span></nobr> )</a></dt>
+<dd>
+<p>Filters default query arguments for checking if a term exists.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.0.0/">6.0.0</a></td>
+<td><span class="since-description">Converted to use <code>get_terms()</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/term_exists" class="_attribution-link">https://developer.wordpress.org/reference/functions/term_exists</a>
+  </p>
+</div>

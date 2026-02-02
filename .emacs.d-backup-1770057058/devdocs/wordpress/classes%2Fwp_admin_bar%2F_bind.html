@@ -1,0 +1,159 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Admin_Bar::_bind(): <span class="return-type">object|void</span>
+</h1>  <section><h2 id="return">Return</h2> <span class="return-type">object|void</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="312" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">final protected function _bind() {
+	if ( $this-&gt;bound ) {
+		return;
+	}
+
+	/*
+	 * Add the root node.
+	 * Clear it first, just in case. Don't mess with The Root.
+	 */
+	$this-&gt;remove_node( 'root' );
+	$this-&gt;add_node(
+		array(
+			'id'    =&gt; 'root',
+			'group' =&gt; false,
+		)
+	);
+
+	// Normalize nodes: define internal 'children' and 'type' properties.
+	foreach ( $this-&gt;_get_nodes() as $node ) {
+		$node-&gt;children = array();
+		$node-&gt;type     = ( $node-&gt;group ) ? 'group' : 'item';
+		unset( $node-&gt;group );
+
+		// The Root wants your orphans. No lonely items allowed.
+		if ( ! $node-&gt;parent ) {
+			$node-&gt;parent = 'root';
+		}
+	}
+
+	foreach ( $this-&gt;_get_nodes() as $node ) {
+		if ( 'root' === $node-&gt;id ) {
+			continue;
+		}
+
+		// Fetch the parent node. If it isn't registered, ignore the node.
+		$parent = $this-&gt;_get_node( $node-&gt;parent );
+		if ( ! $parent ) {
+			continue;
+		}
+
+		// Generate the group class (we distinguish between top level and other level groups).
+		$group_class = ( 'root' === $node-&gt;parent ) ? 'ab-top-menu' : 'ab-submenu';
+
+		if ( 'group' === $node-&gt;type ) {
+			if ( empty( $node-&gt;meta['class'] ) ) {
+				$node-&gt;meta['class'] = $group_class;
+			} else {
+				$node-&gt;meta['class'] .= ' ' . $group_class;
+			}
+		}
+
+		// Items in items aren't allowed. Wrap nested items in 'default' groups.
+		if ( 'item' === $parent-&gt;type &amp;&amp; 'item' === $node-&gt;type ) {
+			$default_id = $parent-&gt;id . '-default';
+			$default    = $this-&gt;_get_node( $default_id );
+
+			/*
+			 * The default group is added here to allow groups that are
+			 * added before standard menu items to render first.
+			 */
+			if ( ! $default ) {
+				/*
+				 * Use _set_node because add_node can be overloaded.
+				 * Make sure to specify default settings for all properties.
+				 */
+				$this-&gt;_set_node(
+					array(
+						'id'       =&gt; $default_id,
+						'parent'   =&gt; $parent-&gt;id,
+						'type'     =&gt; 'group',
+						'children' =&gt; array(),
+						'meta'     =&gt; array(
+							'class' =&gt; $group_class,
+						),
+						'title'    =&gt; false,
+						'href'     =&gt; false,
+					)
+				);
+				$default            = $this-&gt;_get_node( $default_id );
+				$parent-&gt;children[] = $default;
+			}
+			$parent = $default;
+
+			/*
+			 * Groups in groups aren't allowed. Add a special 'container' node.
+			 * The container will invisibly wrap both groups.
+			 */
+		} elseif ( 'group' === $parent-&gt;type &amp;&amp; 'group' === $node-&gt;type ) {
+			$container_id = $parent-&gt;id . '-container';
+			$container    = $this-&gt;_get_node( $container_id );
+
+			// We need to create a container for this group, life is sad.
+			if ( ! $container ) {
+				/*
+				 * Use _set_node because add_node can be overloaded.
+				 * Make sure to specify default settings for all properties.
+				 */
+				$this-&gt;_set_node(
+					array(
+						'id'       =&gt; $container_id,
+						'type'     =&gt; 'container',
+						'children' =&gt; array( $parent ),
+						'parent'   =&gt; false,
+						'title'    =&gt; false,
+						'href'     =&gt; false,
+						'meta'     =&gt; array(),
+					)
+				);
+
+				$container = $this-&gt;_get_node( $container_id );
+
+				// Link the container node if a grandparent node exists.
+				$grandparent = $this-&gt;_get_node( $parent-&gt;parent );
+
+				if ( $grandparent ) {
+					$container-&gt;parent = $grandparent-&gt;id;
+
+					$index = array_search( $parent, $grandparent-&gt;children, true );
+					if ( false === $index ) {
+						$grandparent-&gt;children[] = $container;
+					} else {
+						array_splice( $grandparent-&gt;children, $index, 1, array( $container ) );
+					}
+				}
+
+				$parent-&gt;parent = $container-&gt;id;
+			}
+
+			$parent = $container;
+		}
+
+		// Update the parent ID (it might have changed).
+		$node-&gt;parent = $parent-&gt;id;
+
+		// Add the node to the tree.
+		$parent-&gt;children[] = $node;
+	}
+
+	$root        = $this-&gt;_get_node( 'root' );
+	$this-&gt;bound = true;
+	return $root;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-admin-bar.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-admin-bar.php#L312">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-admin-bar.php#L312-L453">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_admin_bar/_bind" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_admin_bar/_bind</a>
+  </p>
+</div>

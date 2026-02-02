@@ -1,0 +1,106 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Comments_Controller::delete_item( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Deletes a comment.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or error object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="952" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function delete_item( $request ) {
+	$comment = $this-&gt;get_comment( $request['id'] );
+	if ( is_wp_error( $comment ) ) {
+		return $comment;
+	}
+
+	$force = isset( $request['force'] ) ? (bool) $request['force'] : false;
+
+	/**
+	 * Filters whether a comment can be trashed via the REST API.
+	 *
+	 * Return false to disable trash support for the comment.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param bool       $supports_trash Whether the comment supports trashing.
+	 * @param WP_Comment $comment        The comment object being considered for trashing support.
+	 */
+	$supports_trash = apply_filters( 'rest_comment_trashable', ( EMPTY_TRASH_DAYS &gt; 0 ), $comment );
+
+	$request-&gt;set_param( 'context', 'edit' );
+
+	if ( $force ) {
+		$previous = $this-&gt;prepare_item_for_response( $comment, $request );
+		$result   = wp_delete_comment( $comment-&gt;comment_ID, true );
+		$response = new WP_REST_Response();
+		$response-&gt;set_data(
+			array(
+				'deleted'  =&gt; true,
+				'previous' =&gt; $previous-&gt;get_data(),
+			)
+		);
+	} else {
+		// If this type doesn't support trashing, error out.
+		if ( ! $supports_trash ) {
+			return new WP_Error(
+				'rest_trash_not_supported',
+				/* translators: %s: force=true */
+				sprintf( __( "The comment does not support trashing. Set '%s' to delete." ), 'force=true' ),
+				array( 'status' =&gt; 501 )
+			);
+		}
+
+		if ( 'trash' === $comment-&gt;comment_approved ) {
+			return new WP_Error(
+				'rest_already_trashed',
+				__( 'The comment has already been trashed.' ),
+				array( 'status' =&gt; 410 )
+			);
+		}
+
+		$result   = wp_trash_comment( $comment-&gt;comment_ID );
+		$comment  = get_comment( $comment-&gt;comment_ID );
+		$response = $this-&gt;prepare_item_for_response( $comment, $request );
+	}
+
+	if ( ! $result ) {
+		return new WP_Error(
+			'rest_cannot_delete',
+			__( 'The comment cannot be deleted.' ),
+			array( 'status' =&gt; 500 )
+		);
+	}
+
+	/**
+	 * Fires after a comment is deleted via the REST API.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param WP_Comment       $comment  The deleted comment data.
+	 * @param WP_REST_Response $response The response returned from the API.
+	 * @param WP_REST_Request  $request  The request sent to the API.
+	 */
+	do_action( 'rest_delete_comment', $comment, $response, $request );
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-comments-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-comments-controller.php#L952">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-comments-controller.php#L952-L1028">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_comment_trashable"><span class="hook-func">apply_filters</span>( ‘rest_comment_trashable’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$supports_trash</span></nobr>, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether a comment can be trashed via the REST API.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_delete_comment"><span class="hook-func">do_action</span>( ‘rest_delete_comment’, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr>, <nobr><span class="arg-type">WP_REST_Response</span> <span class="arg-name">$response</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a comment is deleted via the REST API.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_comments_controller/delete_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_comments_controller/delete_item</a>
+  </p>
+</div>

@@ -1,0 +1,203 @@
+<h1 class="wp-block-wporg-code-reference-title">_WP_Editors::editor( <span class="arg-type">string</span> <span class="arg-name">$content</span>, <span class="arg-type">string</span> <span class="arg-name">$editor_id</span>, <span class="arg-type">array</span> <span class="arg-name">$settings</span> = <span class="arg-default">array()</span> )</h1> <section><p>Outputs the HTML for a single instance of the editor.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$content</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Initial content for the editor.</span></div></dd>
+<dt>
+<code>$editor_id</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">HTML ID for the textarea and TinyMCE and Quicktags instances.<br> Should not contain square brackets.</span></div></dd>
+<dt>
+<code>$settings</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">See _WP_Editors::parse_settings() for description.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="159" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function editor( $content, $editor_id, $settings = array() ) {
+	$set            = self::parse_settings( $editor_id, $settings );
+	$editor_class   = ' class="' . trim( esc_attr( $set['editor_class'] ) . ' wp-editor-area' ) . '"';
+	$tabindex       = $set['tabindex'] ? ' tabindex="' . (int) $set['tabindex'] . '"' : '';
+	$default_editor = 'html';
+	$buttons        = '';
+	$autocomplete   = '';
+	$editor_id_attr = esc_attr( $editor_id );
+
+	if ( $set['drag_drop_upload'] ) {
+		self::$drag_drop_upload = true;
+	}
+
+	if ( ! empty( $set['editor_height'] ) ) {
+		$height = ' style="height: ' . (int) $set['editor_height'] . 'px"';
+	} else {
+		$height = ' rows="' . (int) $set['textarea_rows'] . '"';
+	}
+
+	if ( ! current_user_can( 'upload_files' ) ) {
+		$set['media_buttons'] = false;
+	}
+
+	if ( self::$this_tinymce ) {
+		$autocomplete = ' autocomplete="off"';
+
+		if ( self::$this_quicktags ) {
+			$default_editor = $set['default_editor'] ? $set['default_editor'] : wp_default_editor();
+			// 'html' is used for the "Text" editor tab.
+			if ( 'html' !== $default_editor ) {
+				$default_editor = 'tinymce';
+			}
+			$tmce_active = ( 'html' === $default_editor ) ? ' aria-pressed="true"' : '';
+			$html_active = ( 'html' === $default_editor ) ? '' : ' aria-pressed="true"';
+
+			$buttons .= '&lt;button type="button" id="' . $editor_id_attr . '-tmce"' . $html_active . ' class="wp-switch-editor switch-tmce"' .
+				' data-wp-editor-id="' . $editor_id_attr . '"&gt;' . _x( 'Visual', 'Name for the Visual editor tab' ) . "&lt;/button&gt;\n";
+			$buttons .= '&lt;button type="button" id="' . $editor_id_attr . '-html"' . $tmce_active . ' class="wp-switch-editor switch-html"' .
+				' data-wp-editor-id="' . $editor_id_attr . '"&gt;' . _x( 'Text', 'Name for the Text editor tab (formerly HTML)' ) . "&lt;/button&gt;\n";
+		} else {
+			$default_editor = 'tinymce';
+		}
+	}
+
+	$switch_class = 'html' === $default_editor ? 'html-active' : 'tmce-active';
+	$wrap_class   = 'wp-core-ui wp-editor-wrap ' . $switch_class;
+
+	if ( $set['_content_editor_dfw'] ) {
+		$wrap_class .= ' has-dfw';
+	}
+
+	echo '&lt;div id="wp-' . $editor_id_attr . '-wrap" class="' . $wrap_class . '"&gt;';
+
+	if ( self::$editor_buttons_css ) {
+		wp_print_styles( 'editor-buttons' );
+		self::$editor_buttons_css = false;
+	}
+
+	if ( ! empty( $set['editor_css'] ) ) {
+		echo $set['editor_css'] . "\n";
+	}
+
+	if ( ! empty( $buttons ) || $set['media_buttons'] ) {
+		echo '&lt;div id="wp-' . $editor_id_attr . '-editor-tools" class="wp-editor-tools hide-if-no-js"&gt;';
+
+		if ( $set['media_buttons'] ) {
+			self::$has_medialib = true;
+
+			if ( ! function_exists( 'media_buttons' ) ) {
+				require ABSPATH . 'wp-admin/includes/media.php';
+			}
+
+			echo '&lt;div id="wp-' . $editor_id_attr . '-media-buttons" class="wp-media-buttons"&gt;';
+
+			/**
+			 * Fires after the default media button(s) are displayed.
+			 *
+			 * @since 2.5.0
+			 *
+			 * @param string $editor_id Unique editor identifier, e.g. 'content'.
+			 */
+			do_action( 'media_buttons', $editor_id );
+			echo "&lt;/div&gt;\n";
+		}
+
+		echo '&lt;div class="wp-editor-tabs"&gt;' . $buttons . "&lt;/div&gt;\n";
+		echo "&lt;/div&gt;\n";
+	}
+
+	$quicktags_toolbar = '';
+
+	if ( self::$this_quicktags ) {
+		if ( 'content' === $editor_id &amp;&amp; ! empty( $GLOBALS['current_screen'] ) &amp;&amp; 'post' === $GLOBALS['current_screen']-&gt;base ) {
+			$toolbar_id = 'ed_toolbar';
+		} else {
+			$toolbar_id = 'qt_' . $editor_id_attr . '_toolbar';
+		}
+
+		$quicktags_toolbar = '&lt;div id="' . $toolbar_id . '" class="quicktags-toolbar hide-if-no-js"&gt;&lt;/div&gt;';
+	}
+
+	/**
+	 * Filters the HTML markup output that displays the editor.
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param string $output Editor's HTML markup.
+	 */
+	$the_editor = apply_filters(
+		'the_editor',
+		'&lt;div id="wp-' . $editor_id_attr . '-editor-container" class="wp-editor-container"&gt;' .
+		$quicktags_toolbar .
+		'&lt;textarea' . $editor_class . $height . $tabindex . $autocomplete . ' cols="40" name="' . esc_attr( $set['textarea_name'] ) . '" ' .
+		'id="' . $editor_id_attr . '"&gt;%s&lt;/textarea&gt;&lt;/div&gt;'
+	);
+
+	// Prepare the content for the Visual or Text editor, only when TinyMCE is used (back-compat).
+	if ( self::$this_tinymce ) {
+		add_filter( 'the_editor_content', 'format_for_editor', 10, 2 );
+	}
+
+	/**
+	 * Filters the default editor content.
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param string $content        Default editor content.
+	 * @param string $default_editor The default editor for the current user.
+	 *                               Either 'html' or 'tinymce'.
+	 */
+	$content = apply_filters( 'the_editor_content', $content, $default_editor );
+
+	// Remove the filter as the next editor on the same page may not need it.
+	if ( self::$this_tinymce ) {
+		remove_filter( 'the_editor_content', 'format_for_editor' );
+	}
+
+	// Back-compat for the `htmledit_pre` and `richedit_pre` filters.
+	if ( 'html' === $default_editor &amp;&amp; has_filter( 'htmledit_pre' ) ) {
+		/** This filter is documented in wp-includes/deprecated.php */
+		$content = apply_filters_deprecated( 'htmledit_pre', array( $content ), '4.3.0', 'format_for_editor' );
+	} elseif ( 'tinymce' === $default_editor &amp;&amp; has_filter( 'richedit_pre' ) ) {
+		/** This filter is documented in wp-includes/deprecated.php */
+		$content = apply_filters_deprecated( 'richedit_pre', array( $content ), '4.3.0', 'format_for_editor' );
+	}
+
+	if ( false !== stripos( $content, 'textarea' ) ) {
+		$content = preg_replace( '%&lt;/textarea%i', '&amp;lt;/textarea', $content );
+	}
+
+	printf( $the_editor, $content );
+	echo "\n&lt;/div&gt;\n\n";
+
+	self::editor_settings( $editor_id, $set );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-editor.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-editor.php#L159">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-editor.php#L159-L313">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/htmledit_pre"><span class="hook-func">apply_filters</span>( ‘htmledit_pre’, <nobr><span class="arg-type">string</span> <span class="arg-name">$output</span></nobr> )</a></dt>
+<dd>
+<p>Filters the text before it is formatted for the HTML editor.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/media_buttons"><span class="hook-func">do_action</span>( ‘media_buttons’, <nobr><span class="arg-type">string</span> <span class="arg-name">$editor_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the default media button(s) are displayed.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/richedit_pre"><span class="hook-func">apply_filters</span>( ‘richedit_pre’, <nobr><span class="arg-type">string</span> <span class="arg-name">$output</span></nobr> )</a></dt>
+<dd>
+<p>Filters text returned for the rich text editor.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/the_editor"><span class="hook-func">apply_filters</span>( ‘the_editor’, <nobr><span class="arg-type">string</span> <span class="arg-name">$output</span></nobr> )</a></dt>
+<dd>
+<p>Filters the HTML markup output that displays the editor.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/the_editor_content"><span class="hook-func">apply_filters</span>( ‘the_editor_content’, <nobr><span class="arg-type">string</span> <span class="arg-name">$content</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$default_editor</span></nobr> )</a></dt>
+<dd>
+<p>Filters the default editor content.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/_wp_editors/editor" class="_attribution-link">https://developer.wordpress.org/reference/classes/_wp_editors/editor</a>
+  </p>
+</div>

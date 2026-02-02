@@ -1,0 +1,78 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_find_hierarchy_loop_tortoise_hare( <span class="arg-type">callable</span> <span class="arg-name">$callback</span>, <span class="arg-type">int</span> <span class="arg-name">$start</span>, <span class="arg-type">array</span> <span class="arg-name">$override</span> = <span class="arg-default">array()</span>, <span class="arg-type">array</span> <span class="arg-name">$callback_args</span> = <span class="arg-default">array()</span>, <span class="arg-type">bool</span> <span class="arg-name">$_return_loop</span> = <span class="arg-default">false</span> ): <span class="return-type">mixed</span>
+</h1> <section><p>Uses the “The Tortoise and the Hare” algorithm to detect loops.</p> </section> <section><h2 id="description">Description</h2> <p>For every step of the algorithm, the hare takes two steps and the tortoise one.<br>If the hare ever laps the tortoise, there must be a loop.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$callback</code><span class="type"><span class="callable">callable</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Function that accepts ( ID, callback_arg, … ) and outputs parent_ID.</span></div></dd>
+<dt>
+<code>$start</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The ID to start the loop check at.</span></div></dd>
+<dt>
+<code>$override</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">An array of ( ID =&gt; parent_ID, … ) to use instead of $callback.<br> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$callback_args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Additional arguments to send to $callback. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$_return_loop</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Return loop members or just detect presence of loop? Only set to true if you already know the given $start is part of a loop (otherwise the returned array might include branches). </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed</span> Scalar ID of some arbitrary member of the loop, or array of IDs of all members of loop if $_return_loop</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="7097" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_find_hierarchy_loop_tortoise_hare( $callback, $start, $override = array(), $callback_args = array(), $_return_loop = false ) {
+	$tortoise        = $start;
+	$hare            = $start;
+	$evanescent_hare = $start;
+	$return          = array();
+
+	// Set evanescent_hare to one past hare. Increment hare two steps.
+	while (
+		$tortoise
+	&amp;&amp;
+		( $evanescent_hare = isset( $override[ $hare ] ) ? $override[ $hare ] : call_user_func_array( $callback, array_merge( array( $hare ), $callback_args ) ) )
+	&amp;&amp;
+		( $hare = isset( $override[ $evanescent_hare ] ) ? $override[ $evanescent_hare ] : call_user_func_array( $callback, array_merge( array( $evanescent_hare ), $callback_args ) ) )
+	) {
+		if ( $_return_loop ) {
+			$return[ $tortoise ]        = true;
+			$return[ $evanescent_hare ] = true;
+			$return[ $hare ]            = true;
+		}
+
+		// Tortoise got lapped - must be a loop.
+		if ( $tortoise === $evanescent_hare || $tortoise === $hare ) {
+			return $_return_loop ? $return : $tortoise;
+		}
+
+		// Increment tortoise by one step.
+		$tortoise = isset( $override[ $tortoise ] ) ? $override[ $tortoise ] : call_user_func_array( $callback, array_merge( array( $tortoise ), $callback_args ) );
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L7097">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L7097-L7127">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_find_hierarchy_loop_tortoise_hare" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_find_hierarchy_loop_tortoise_hare</a>
+  </p>
+</div>

@@ -1,0 +1,132 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Tax_Query::get_sql_for_clause( <span class="arg-type">array</span> <span class="arg-name">$clause</span>, <span class="arg-type">array</span> <span class="arg-name">$parent_query</span> ): <span class="return-type">array</span>
+</h1> <section><p>Generates SQL JOIN and WHERE clauses for a “first-order” query clause.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$clause</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Query clause (passed by reference).</span></div></dd>
+<dt>
+<code>$parent_query</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Parent query array.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Array containing JOIN and WHERE SQL clauses to append to a first-order query.<br> <ul class="param-hash">
+<li>
+<code>join</code> <span class="type">string[]</span><div class="desc">Array of SQL fragments to append to the main JOIN clause.</div>
+</li> <li>
+<code>where</code> <span class="type">string[]</span><div class="desc">Array of SQL fragments to append to the main WHERE clause.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="384" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_sql_for_clause( &amp;$clause, $parent_query ) {
+	global $wpdb;
+
+	$sql = array(
+		'where' =&gt; array(),
+		'join'  =&gt; array(),
+	);
+
+	$join  = '';
+	$where = '';
+
+	$this-&gt;clean_query( $clause );
+
+	if ( is_wp_error( $clause ) ) {
+		return self::$no_results;
+	}
+
+	$terms    = $clause['terms'];
+	$operator = strtoupper( $clause['operator'] );
+
+	if ( 'IN' === $operator ) {
+
+		if ( empty( $terms ) ) {
+			return self::$no_results;
+		}
+
+		$terms = implode( ',', $terms );
+
+		/*
+		 * Before creating another table join, see if this clause has a
+		 * sibling with an existing join that can be shared.
+		 */
+		$alias = $this-&gt;find_compatible_table_alias( $clause, $parent_query );
+		if ( false === $alias ) {
+			$i     = count( $this-&gt;table_aliases );
+			$alias = $i ? 'tt' . $i : $wpdb-&gt;term_relationships;
+
+			// Store the alias as part of a flat array to build future iterators.
+			$this-&gt;table_aliases[] = $alias;
+
+			// Store the alias with this clause, so later siblings can use it.
+			$clause['alias'] = $alias;
+
+			$join .= " LEFT JOIN $wpdb-&gt;term_relationships";
+			$join .= $i ? " AS $alias" : '';
+			$join .= " ON ($this-&gt;primary_table.$this-&gt;primary_id_column = $alias.object_id)";
+		}
+
+		$where = "$alias.term_taxonomy_id $operator ($terms)";
+
+	} elseif ( 'NOT IN' === $operator ) {
+
+		if ( empty( $terms ) ) {
+			return $sql;
+		}
+
+		$terms = implode( ',', $terms );
+
+		$where = "$this-&gt;primary_table.$this-&gt;primary_id_column NOT IN (
+			SELECT object_id
+			FROM $wpdb-&gt;term_relationships
+			WHERE term_taxonomy_id IN ($terms)
+		)";
+
+	} elseif ( 'AND' === $operator ) {
+
+		if ( empty( $terms ) ) {
+			return $sql;
+		}
+
+		$num_terms = count( $terms );
+
+		$terms = implode( ',', $terms );
+
+		$where = "(
+			SELECT COUNT(1)
+			FROM $wpdb-&gt;term_relationships
+			WHERE term_taxonomy_id IN ($terms)
+			AND object_id = $this-&gt;primary_table.$this-&gt;primary_id_column
+		) = $num_terms";
+
+	} elseif ( 'NOT EXISTS' === $operator || 'EXISTS' === $operator ) {
+
+		$where = $wpdb-&gt;prepare(
+			"$operator (
+				SELECT 1
+				FROM $wpdb-&gt;term_relationships
+				INNER JOIN $wpdb-&gt;term_taxonomy
+				ON $wpdb-&gt;term_taxonomy.term_taxonomy_id = $wpdb-&gt;term_relationships.term_taxonomy_id
+				WHERE $wpdb-&gt;term_taxonomy.taxonomy = %s
+				AND $wpdb-&gt;term_relationships.object_id = $this-&gt;primary_table.$this-&gt;primary_id_column
+			)",
+			$clause['taxonomy']
+		);
+
+	}
+
+	$sql['join'][]  = $join;
+	$sql['where'][] = $where;
+	return $sql;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-tax-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-tax-query.php#L384">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-tax-query.php#L384-L484">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.1.0/">4.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_tax_query/get_sql_for_clause" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_tax_query/get_sql_for_clause</a>
+  </p>
+</div>

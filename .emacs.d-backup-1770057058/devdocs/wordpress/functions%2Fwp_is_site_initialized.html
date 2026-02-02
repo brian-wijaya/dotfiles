@@ -1,0 +1,69 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_is_site_initialized( <span class="arg-type">int|WP_Site</span> <span class="arg-name">$site_id</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Checks whether a site is initialized.</p> </section> <section><h2 id="description">Description</h2> <p>A site is considered initialized when its database tables are present.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$site_id</code><span class="type"><span class="int">int</span>|<span class="WP_Site"><a href="../classes/wp_site" rel="class">WP_Site</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Site ID or object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if the site is initialized, false otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="906" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_is_site_initialized( $site_id ) {
+	global $wpdb;
+
+	if ( is_object( $site_id ) ) {
+		$site_id = $site_id-&gt;blog_id;
+	}
+	$site_id = (int) $site_id;
+
+	/**
+	 * Filters the check for whether a site is initialized before the database is accessed.
+	 *
+	 * Returning a non-null value will effectively short-circuit the function, returning
+	 * that value instead.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param bool|null $pre     The value to return instead. Default null
+	 *                           to continue with the check.
+	 * @param int       $site_id The site ID that is being checked.
+	 */
+	$pre = apply_filters( 'pre_wp_is_site_initialized', null, $site_id );
+	if ( null !== $pre ) {
+		return (bool) $pre;
+	}
+
+	$switch = false;
+	if ( get_current_blog_id() !== $site_id ) {
+		$switch = true;
+		remove_action( 'switch_blog', 'wp_switch_roles_and_user', 1 );
+		switch_to_blog( $site_id );
+	}
+
+	$suppress = $wpdb-&gt;suppress_errors();
+	$result   = (bool) $wpdb-&gt;get_results( "DESCRIBE {$wpdb-&gt;posts}" );
+	$wpdb-&gt;suppress_errors( $suppress );
+
+	if ( $switch ) {
+		restore_current_blog();
+		add_action( 'switch_blog', 'wp_switch_roles_and_user', 1, 2 );
+	}
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-site.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-site.php#L906">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-site.php#L906-L948">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_wp_is_site_initialized"><span class="hook-func">apply_filters</span>( ‘pre_wp_is_site_initialized’, <nobr><span class="arg-type">bool|null</span> <span class="arg-name">$pre</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$site_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the check for whether a site is initialized before the database is accessed.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_is_site_initialized" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_is_site_initialized</a>
+  </p>
+</div>

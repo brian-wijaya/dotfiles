@@ -1,0 +1,67 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Media_Control::to_json()</h1> <section><p>Refresh the parameters passed to the JavaScript via JSON.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="../wp_customize_control/to_json">WP_Customize_Control::to_json()</a></li> </ul></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="80" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function to_json() {
+	parent::to_json();
+	$this-&gt;json['label']         = html_entity_decode( $this-&gt;label, ENT_QUOTES, get_bloginfo( 'charset' ) );
+	$this-&gt;json['mime_type']     = $this-&gt;mime_type;
+	$this-&gt;json['button_labels'] = $this-&gt;button_labels;
+	$this-&gt;json['canUpload']     = current_user_can( 'upload_files' );
+
+	$value = $this-&gt;value();
+
+	if ( is_object( $this-&gt;setting ) ) {
+		if ( $this-&gt;setting-&gt;default ) {
+			/*
+			 * Fake an attachment model - needs all fields used by template.
+			 * Note that the default value must be a URL, NOT an attachment ID.
+			 */
+			$ext  = substr( $this-&gt;setting-&gt;default, -3 );
+			$type = in_array( $ext, array( 'jpg', 'png', 'gif', 'bmp', 'webp', 'avif' ), true ) ? 'image' : 'document';
+
+			$default_attachment = array(
+				'id'    =&gt; 1,
+				'url'   =&gt; $this-&gt;setting-&gt;default,
+				'type'  =&gt; $type,
+				'icon'  =&gt; wp_mime_type_icon( $type, '.svg' ),
+				'title' =&gt; wp_basename( $this-&gt;setting-&gt;default ),
+			);
+
+			if ( 'image' === $type ) {
+				$default_attachment['sizes'] = array(
+					'full' =&gt; array( 'url' =&gt; $this-&gt;setting-&gt;default ),
+				);
+			}
+
+			$this-&gt;json['defaultAttachment'] = $default_attachment;
+		}
+
+		if ( $value &amp;&amp; $this-&gt;setting-&gt;default &amp;&amp; $value === $this-&gt;setting-&gt;default ) {
+			// Set the default as the attachment.
+			$this-&gt;json['attachment'] = $this-&gt;json['defaultAttachment'];
+		} elseif ( $value ) {
+			$this-&gt;json['attachment'] = wp_prepare_attachment_for_js( $value );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/customize/class-wp-customize-media-control.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/customize/class-wp-customize-media-control.php#L80">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/customize/class-wp-customize-media-control.php#L80-L122">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td><span class="since-description">Moved from <a href="../wp_customize_upload_control" rel="class">WP_Customize_Upload_Control</a>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_media_control/to_json" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_media_control/to_json</a>
+  </p>
+</div>

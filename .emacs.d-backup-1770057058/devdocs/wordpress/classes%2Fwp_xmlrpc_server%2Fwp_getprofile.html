@@ -1,0 +1,62 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_xmlrpc_server::wp_getProfile( <span class="arg-type">array</span> <span class="arg-name">$args</span> ): <span class="return-type">array|<a href="../ixr_error" rel="class">IXR_Error</a></span>
+</h1> <section><p>Retrieves information about the requesting user.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Method arguments. Note: arguments must be ordered as documented.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">int</span><div class="desc">Blog ID (unused).</div>
+</li> <li>
+<code>1</code> <span class="type">string</span><div class="desc">Username</div>
+</li> <li>
+<code>2</code> <span class="type">string</span><div class="desc">Password</div>
+</li> <li>
+<code>3</code> <span class="type">array</span><div class="desc">Optional. Fields to return.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../ixr_error" rel="class">IXR_Error</a></span> (@see wp_getUser)</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2828" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function wp_getProfile( $args ) {
+	if ( ! $this-&gt;minimum_args( $args, 3 ) ) {
+		return $this-&gt;error;
+	}
+
+	$this-&gt;escape( $args );
+
+	$username = $args[1];
+	$password = $args[2];
+
+	if ( isset( $args[3] ) ) {
+		$fields = $args[3];
+	} else {
+		/** This action is documented in wp-includes/class-wp-xmlrpc-server.php */
+		$fields = apply_filters( 'xmlrpc_default_user_fields', array( 'all' ), 'wp.getProfile' );
+	}
+
+	$user = $this-&gt;login( $username, $password );
+	if ( ! $user ) {
+		return $this-&gt;error;
+	}
+
+	/** This action is documented in wp-includes/class-wp-xmlrpc-server.php */
+	do_action( 'xmlrpc_call', 'wp.getProfile', $args, $this );
+
+	if ( ! current_user_can( 'edit_user', $user-&gt;ID ) ) {
+		return new IXR_Error( 401, __( 'Sorry, you are not allowed to edit your profile.' ) );
+	}
+
+	$user_data = get_userdata( $user-&gt;ID );
+
+	return $this-&gt;_prepare_user( $user_data, $fields );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-xmlrpc-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L2828">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L2828-L2860">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/xmlrpc_call"><span class="hook-func">do_action</span>( ‘xmlrpc_call’, <nobr><span class="arg-type">string</span> <span class="arg-name">$name</span></nobr>, <nobr><span class="arg-type">array|string</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">wp_xmlrpc_server</span> <span class="arg-name">$server</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the XML-RPC user has been authenticated but before the rest of the method logic begins.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/xmlrpc_default_user_fields"><span class="hook-func">apply_filters</span>( ‘xmlrpc_default_user_fields’, <nobr><span class="arg-type">array</span> <span class="arg-name">$fields</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$method</span></nobr> )</a></dt>
+<dd>
+<p>Filters the default user query fields used by the given XML-RPC method.</p> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/wp_getprofile" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/wp_getprofile</a>
+  </p>
+</div>

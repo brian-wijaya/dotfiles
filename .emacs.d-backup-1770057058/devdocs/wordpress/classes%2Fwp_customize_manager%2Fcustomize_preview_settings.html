@@ -1,0 +1,131 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Manager::customize_preview_settings()</h1> <section><p>Prints JavaScript settings for preview frame.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2116" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function customize_preview_settings() {
+	$post_values                 = $this-&gt;unsanitized_post_values( array( 'exclude_changeset' =&gt; true ) );
+	$setting_validities          = $this-&gt;validate_setting_values( $post_values );
+	$exported_setting_validities = array_map( array( $this, 'prepare_setting_validity_for_js' ), $setting_validities );
+
+	// Note that the REQUEST_URI is not passed into home_url() since this breaks subdirectory installations.
+	$self_url           = empty( $_SERVER['REQUEST_URI'] ) ? home_url( '/' ) : sanitize_url( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+	$state_query_params = array(
+		'customize_theme',
+		'customize_changeset_uuid',
+		'customize_messenger_channel',
+	);
+	$self_url           = remove_query_arg( $state_query_params, $self_url );
+
+	$allowed_urls  = $this-&gt;get_allowed_urls();
+	$allowed_hosts = array();
+	foreach ( $allowed_urls as $allowed_url ) {
+		$parsed = wp_parse_url( $allowed_url );
+		if ( empty( $parsed['host'] ) ) {
+			continue;
+		}
+		$host = $parsed['host'];
+		if ( ! empty( $parsed['port'] ) ) {
+			$host .= ':' . $parsed['port'];
+		}
+		$allowed_hosts[] = $host;
+	}
+
+	$switched_locale = switch_to_user_locale( get_current_user_id() );
+	$l10n            = array(
+		'shiftClickToEdit'  =&gt; __( 'Shift-click to edit this element.' ),
+		'linkUnpreviewable' =&gt; __( 'This link is not live-previewable.' ),
+		'formUnpreviewable' =&gt; __( 'This form is not live-previewable.' ),
+	);
+	if ( $switched_locale ) {
+		restore_previous_locale();
+	}
+
+	$settings = array(
+		'changeset'         =&gt; array(
+			'uuid'      =&gt; $this-&gt;changeset_uuid(),
+			'autosaved' =&gt; $this-&gt;autosaved(),
+		),
+		'timeouts'          =&gt; array(
+			'selectiveRefresh' =&gt; 250,
+			'keepAliveSend'    =&gt; 1000,
+		),
+		'theme'             =&gt; array(
+			'stylesheet' =&gt; $this-&gt;get_stylesheet(),
+			'active'     =&gt; $this-&gt;is_theme_active(),
+		),
+		'url'               =&gt; array(
+			'self'          =&gt; $self_url,
+			'allowed'       =&gt; array_map( 'sanitize_url', $this-&gt;get_allowed_urls() ),
+			'allowedHosts'  =&gt; array_unique( $allowed_hosts ),
+			'isCrossDomain' =&gt; $this-&gt;is_cross_domain(),
+		),
+		'channel'           =&gt; $this-&gt;messenger_channel,
+		'activePanels'      =&gt; array(),
+		'activeSections'    =&gt; array(),
+		'activeControls'    =&gt; array(),
+		'settingValidities' =&gt; $exported_setting_validities,
+		'nonce'             =&gt; current_user_can( 'customize' ) ? $this-&gt;get_nonces() : array(),
+		'l10n'              =&gt; $l10n,
+		'_dirty'            =&gt; array_keys( $post_values ),
+	);
+
+	foreach ( $this-&gt;panels as $panel_id =&gt; $panel ) {
+		if ( $panel-&gt;check_capabilities() ) {
+			$settings['activePanels'][ $panel_id ] = $panel-&gt;active();
+			foreach ( $panel-&gt;sections as $section_id =&gt; $section ) {
+				if ( $section-&gt;check_capabilities() ) {
+					$settings['activeSections'][ $section_id ] = $section-&gt;active();
+				}
+			}
+		}
+	}
+	foreach ( $this-&gt;sections as $id =&gt; $section ) {
+		if ( $section-&gt;check_capabilities() ) {
+			$settings['activeSections'][ $id ] = $section-&gt;active();
+		}
+	}
+	foreach ( $this-&gt;controls as $id =&gt; $control ) {
+		if ( $control-&gt;check_capabilities() ) {
+			$settings['activeControls'][ $id ] = $control-&gt;active();
+		}
+	}
+
+	ob_start();
+	?&gt;
+	&lt;script&gt;
+		var _wpCustomizeSettings = &lt;?php echo wp_json_encode( $settings ); ?&gt;;
+		_wpCustomizeSettings.values = {};
+		(function( v ) {
+			&lt;?php
+			/*
+			 * Serialize settings separately from the initial _wpCustomizeSettings
+			 * serialization in order to avoid a peak memory usage spike.
+			 * @todo We may not even need to export the values at all since the pane syncs them anyway.
+			 */
+			foreach ( $this-&gt;settings as $id =&gt; $setting ) {
+				if ( $setting-&gt;check_capabilities() ) {
+					printf(
+						"v[%s] = %s;\n",
+						wp_json_encode( $id ),
+						wp_json_encode( $setting-&gt;js_value() )
+					);
+				}
+			}
+			?&gt;
+		})( _wpCustomizeSettings.values );
+	&lt;/script&gt;
+	&lt;?php
+	wp_print_inline_script_tag( wp_remove_surrounding_empty_script_tags( ob_get_clean() ) );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-manager.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-manager.php#L2116">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-manager.php#L2116-L2230">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_manager/customize_preview_settings" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_manager/customize_preview_settings</a>
+  </p>
+</div>

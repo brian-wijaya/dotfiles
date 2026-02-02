@@ -1,0 +1,79 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_find_posts()</h1> <section><p>Handles querying posts for the Find Posts modal via AJAX.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="window-findposts">window.findPosts</a></li> </ul></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2237" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_find_posts() {
+	check_ajax_referer( 'find-posts' );
+
+	$post_types = get_post_types( array( 'public' =&gt; true ), 'objects' );
+	unset( $post_types['attachment'] );
+
+	$args = array(
+		'post_type'      =&gt; array_keys( $post_types ),
+		'post_status'    =&gt; 'any',
+		'posts_per_page' =&gt; 50,
+	);
+
+	$search = wp_unslash( $_POST['ps'] );
+
+	if ( '' !== $search ) {
+		$args['s'] = $search;
+	}
+
+	$posts = get_posts( $args );
+
+	if ( ! $posts ) {
+		wp_send_json_error( __( 'No items found.' ) );
+	}
+
+	$html = '&lt;table class="widefat"&gt;&lt;thead&gt;&lt;tr&gt;&lt;th class="found-radio"&gt;&lt;br /&gt;&lt;/th&gt;&lt;th&gt;' . __( 'Title' ) . '&lt;/th&gt;&lt;th class="no-break"&gt;' . __( 'Type' ) . '&lt;/th&gt;&lt;th class="no-break"&gt;' . __( 'Date' ) . '&lt;/th&gt;&lt;th class="no-break"&gt;' . __( 'Status' ) . '&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;';
+	$alt  = '';
+	foreach ( $posts as $post ) {
+		$title = trim( $post-&gt;post_title ) ? $post-&gt;post_title : __( '(no title)' );
+		$alt   = ( 'alternate' === $alt ) ? '' : 'alternate';
+
+		switch ( $post-&gt;post_status ) {
+			case 'publish':
+			case 'private':
+				$stat = __( 'Published' );
+				break;
+			case 'future':
+				$stat = __( 'Scheduled' );
+				break;
+			case 'pending':
+				$stat = __( 'Pending Review' );
+				break;
+			case 'draft':
+				$stat = __( 'Draft' );
+				break;
+		}
+
+		if ( '0000-00-00 00:00:00' === $post-&gt;post_date ) {
+			$time = '';
+		} else {
+			/* translators: Date format in table columns, see https://www.php.net/manual/datetime.format.php */
+			$time = mysql2date( __( 'Y/m/d' ), $post-&gt;post_date );
+		}
+
+		$html .= '&lt;tr class="' . trim( 'found-posts ' . $alt ) . '"&gt;&lt;td class="found-radio"&gt;&lt;input type="radio" id="found-' . $post-&gt;ID . '" name="found_post_id" value="' . esc_attr( $post-&gt;ID ) . '"&gt;&lt;/td&gt;';
+		$html .= '&lt;td&gt;&lt;label for="found-' . $post-&gt;ID . '"&gt;' . esc_html( $title ) . '&lt;/label&gt;&lt;/td&gt;&lt;td class="no-break"&gt;' . esc_html( $post_types[ $post-&gt;post_type ]-&gt;labels-&gt;singular_name ) . '&lt;/td&gt;&lt;td class="no-break"&gt;' . esc_html( $time ) . '&lt;/td&gt;&lt;td class="no-break"&gt;' . esc_html( $stat ) . ' &lt;/td&gt;&lt;/tr&gt;' . "\n\n";
+	}
+
+	$html .= '&lt;/tbody&gt;&lt;/table&gt;';
+
+	wp_send_json_success( $html );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L2237">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L2237-L2297">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_find_posts" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_find_posts</a>
+  </p>
+</div>

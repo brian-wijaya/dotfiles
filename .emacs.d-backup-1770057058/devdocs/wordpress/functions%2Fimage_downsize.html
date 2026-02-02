@@ -1,0 +1,122 @@
+<h1 class="wp-block-wporg-code-reference-title">image_downsize( <span class="arg-type">int</span> <span class="arg-name">$id</span>, <span class="arg-type">string|int[]</span> <span class="arg-name">$size</span> = <span class="arg-default">‘medium’</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Scales an image to fit a particular size (such as ‘thumb’ or ‘medium’).</p> </section> <section><h2 id="description">Description</h2> <p>The URL might be the original image, or it might be a resized version. This function won’t create a new resized copy, it will just return an already resized one if it exists.</p> <p>A plugin may use the <a href="../hooks/image_downsize">‘image_downsize’</a> filter to hook into and offer image resizing services for images. The hook must return an array with the same elements that are normally returned from the function.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Attachment ID for image.</span></div></dd>
+<dt>
+<code>$size</code><span class="type"><span class="string">string</span>|<span class="int[]">int[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Image size. Accepts any registered image size name, or an array of width and height values in pixels (in that order). Default <code>'medium'</code>.</span></div>
+<p class="default">Default:<code>'medium'</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> Array of image data, or boolean false if no image is available.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">string</span><div class="desc">Image source URL.</div>
+</li> <li>
+<code>1</code> <span class="type">int</span><div class="desc">Image width in pixels.</div>
+</li> <li>
+<code>2</code> <span class="type">int</span><div class="desc">Image height in pixels.</div>
+</li> <li>
+<code>3</code> <span class="type">bool</span><div class="desc">Whether the image is a resized image.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="191" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function image_downsize( $id, $size = 'medium' ) {
+	$is_image = wp_attachment_is_image( $id );
+
+	/**
+	 * Filters whether to preempt the output of image_downsize().
+	 *
+	 * Returning a truthy value from the filter will effectively short-circuit
+	 * down-sizing the image, returning that value instead.
+	 *
+	 * @since 2.5.0
+	 *
+	 * @param bool|array   $downsize Whether to short-circuit the image downsize.
+	 * @param int          $id       Attachment ID for image.
+	 * @param string|int[] $size     Requested image size. Can be any registered image size name, or
+	 *                               an array of width and height values in pixels (in that order).
+	 */
+	$out = apply_filters( 'image_downsize', false, $id, $size );
+
+	if ( $out ) {
+		return $out;
+	}
+
+	$img_url          = wp_get_attachment_url( $id );
+	$meta             = wp_get_attachment_metadata( $id );
+	$width            = 0;
+	$height           = 0;
+	$is_intermediate  = false;
+	$img_url_basename = wp_basename( $img_url );
+
+	/*
+	 * If the file isn't an image, attempt to replace its URL with a rendered image from its meta.
+	 * Otherwise, a non-image type could be returned.
+	 */
+	if ( ! $is_image ) {
+		if ( ! empty( $meta['sizes']['full'] ) ) {
+			$img_url          = str_replace( $img_url_basename, $meta['sizes']['full']['file'], $img_url );
+			$img_url_basename = $meta['sizes']['full']['file'];
+			$width            = $meta['sizes']['full']['width'];
+			$height           = $meta['sizes']['full']['height'];
+		} else {
+			return false;
+		}
+	}
+
+	// Try for a new style intermediate size.
+	$intermediate = image_get_intermediate_size( $id, $size );
+
+	if ( $intermediate ) {
+		$img_url         = str_replace( $img_url_basename, $intermediate['file'], $img_url );
+		$width           = $intermediate['width'];
+		$height          = $intermediate['height'];
+		$is_intermediate = true;
+	} elseif ( 'thumbnail' === $size &amp;&amp; ! empty( $meta['thumb'] ) &amp;&amp; is_string( $meta['thumb'] ) ) {
+		// Fall back to the old thumbnail.
+		$imagefile = get_attached_file( $id );
+		$thumbfile = str_replace( wp_basename( $imagefile ), wp_basename( $meta['thumb'] ), $imagefile );
+
+		if ( file_exists( $thumbfile ) ) {
+			$info = wp_getimagesize( $thumbfile );
+
+			if ( $info ) {
+				$img_url         = str_replace( $img_url_basename, wp_basename( $thumbfile ), $img_url );
+				$width           = $info[0];
+				$height          = $info[1];
+				$is_intermediate = true;
+			}
+		}
+	}
+
+	if ( ! $width &amp;&amp; ! $height &amp;&amp; isset( $meta['width'], $meta['height'] ) ) {
+		// Any other type: use the real image.
+		$width  = $meta['width'];
+		$height = $meta['height'];
+	}
+
+	if ( $img_url ) {
+		// We have the actual image size, but might need to further constrain it if content_width is narrower.
+		list( $width, $height ) = image_constrain_size_for_editor( $width, $height, $size );
+
+		return array( $img_url, $width, $height, $is_intermediate );
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/media.php#L191">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/media.php#L191-L274">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/image_downsize" class="_attribution-link">https://developer.wordpress.org/reference/functions/image_downsize</a>
+  </p>
+</div>

@@ -1,0 +1,69 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_dashboard_rss_control( <span class="arg-type">string</span> <span class="arg-name">$widget_id</span>, <span class="arg-type">array</span> <span class="arg-name">$form_inputs</span> = <span class="arg-default">array()</span> )</h1> <section><p>Sets up the RSS dashboard widget control and $args to be used as input to <a href="wp_widget_rss_form" rel="function">wp_widget_rss_form()</a> .</p> </section> <section><h2 id="description">Description</h2> <p>Handles POST data from RSS-type widgets.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$widget_id</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$form_inputs</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1250" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_dashboard_rss_control( $widget_id, $form_inputs = array() ) {
+	$widget_options = get_option( 'dashboard_widget_options' );
+
+	if ( ! $widget_options ) {
+		$widget_options = array();
+	}
+
+	if ( ! isset( $widget_options[ $widget_id ] ) ) {
+		$widget_options[ $widget_id ] = array();
+	}
+
+	$number = 1; // Hack to use wp_widget_rss_form().
+
+	$widget_options[ $widget_id ]['number'] = $number;
+
+	if ( 'POST' === $_SERVER['REQUEST_METHOD'] &amp;&amp; isset( $_POST['widget-rss'][ $number ] ) ) {
+		$_POST['widget-rss'][ $number ]         = wp_unslash( $_POST['widget-rss'][ $number ] );
+		$widget_options[ $widget_id ]           = wp_widget_rss_process( $_POST['widget-rss'][ $number ] );
+		$widget_options[ $widget_id ]['number'] = $number;
+
+		// Title is optional. If black, fill it if possible.
+		if ( ! $widget_options[ $widget_id ]['title'] &amp;&amp; isset( $_POST['widget-rss'][ $number ]['title'] ) ) {
+			$rss = fetch_feed( $widget_options[ $widget_id ]['url'] );
+			if ( is_wp_error( $rss ) ) {
+				$widget_options[ $widget_id ]['title'] = htmlentities( __( 'Unknown Feed' ) );
+			} else {
+				$widget_options[ $widget_id ]['title'] = htmlentities( strip_tags( $rss-&gt;get_title() ) );
+				$rss-&gt;__destruct();
+				unset( $rss );
+			}
+		}
+
+		update_option( 'dashboard_widget_options', $widget_options, false );
+
+		$locale    = get_user_locale();
+		$cache_key = 'dash_v2_' . md5( $widget_id . '_' . $locale );
+		delete_transient( $cache_key );
+	}
+
+	wp_widget_rss_form( $widget_options[ $widget_id ], $form_inputs );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/dashboard.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/dashboard.php#L1250">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/dashboard.php#L1250-L1290">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_dashboard_rss_control" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_dashboard_rss_control</a>
+  </p>
+</div>

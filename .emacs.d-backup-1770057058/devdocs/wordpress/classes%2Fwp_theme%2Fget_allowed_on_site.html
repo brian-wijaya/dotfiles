@@ -1,0 +1,100 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Theme::get_allowed_on_site( <span class="arg-type">int</span> <span class="arg-name">$blog_id</span> = <span class="arg-default">null</span> ): <span class="return-type">string[]</span>
+</h1> <section><p>Returns array of stylesheet names of themes allowed on the site.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$blog_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">ID of the site. Defaults to the current site.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string[]</span> Array of stylesheet names.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1705" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function get_allowed_on_site( $blog_id = null ) {
+	static $allowed_themes = array();
+
+	if ( ! $blog_id || ! is_multisite() ) {
+		$blog_id = get_current_blog_id();
+	}
+
+	if ( isset( $allowed_themes[ $blog_id ] ) ) {
+		/**
+		 * Filters the array of themes allowed on the site.
+		 *
+		 * @since 4.5.0
+		 *
+		 * @param string[] $allowed_themes An array of theme stylesheet names.
+		 * @param int      $blog_id        ID of the site. Defaults to current site.
+		 */
+		return (array) apply_filters( 'site_allowed_themes', $allowed_themes[ $blog_id ], $blog_id );
+	}
+
+	$current = get_current_blog_id() === $blog_id;
+
+	if ( $current ) {
+		$allowed_themes[ $blog_id ] = get_option( 'allowedthemes' );
+	} else {
+		switch_to_blog( $blog_id );
+		$allowed_themes[ $blog_id ] = get_option( 'allowedthemes' );
+		restore_current_blog();
+	}
+
+	/*
+	 * This is all super old MU back compat joy.
+	 * 'allowedthemes' keys things by stylesheet. 'allowed_themes' keyed things by name.
+	 */
+	if ( false === $allowed_themes[ $blog_id ] ) {
+		if ( $current ) {
+			$allowed_themes[ $blog_id ] = get_option( 'allowed_themes' );
+		} else {
+			switch_to_blog( $blog_id );
+			$allowed_themes[ $blog_id ] = get_option( 'allowed_themes' );
+			restore_current_blog();
+		}
+
+		if ( ! is_array( $allowed_themes[ $blog_id ] ) || empty( $allowed_themes[ $blog_id ] ) ) {
+			$allowed_themes[ $blog_id ] = array();
+		} else {
+			$converted = array();
+			$themes    = wp_get_themes();
+			foreach ( $themes as $stylesheet =&gt; $theme_data ) {
+				if ( isset( $allowed_themes[ $blog_id ][ $theme_data-&gt;get( 'Name' ) ] ) ) {
+					$converted[ $stylesheet ] = true;
+				}
+			}
+			$allowed_themes[ $blog_id ] = $converted;
+		}
+		// Set the option so we never have to go through this pain again.
+		if ( is_admin() &amp;&amp; $allowed_themes[ $blog_id ] ) {
+			if ( $current ) {
+				update_option( 'allowedthemes', $allowed_themes[ $blog_id ], false );
+				delete_option( 'allowed_themes' );
+			} else {
+				switch_to_blog( $blog_id );
+				update_option( 'allowedthemes', $allowed_themes[ $blog_id ], false );
+				delete_option( 'allowed_themes' );
+				restore_current_blog();
+			}
+		}
+	}
+
+	/** This filter is documented in wp-includes/class-wp-theme.php */
+	return (array) apply_filters( 'site_allowed_themes', $allowed_themes[ $blog_id ], $blog_id );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-theme.php#L1705">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-theme.php#L1705-L1775">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/site_allowed_themes"><span class="hook-func">apply_filters</span>( ‘site_allowed_themes’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$allowed_themes</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$blog_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the array of themes allowed on the site.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_theme/get_allowed_on_site" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_theme/get_allowed_on_site</a>
+  </p>
+</div>

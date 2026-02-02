@@ -1,0 +1,78 @@
+<div class="container">
+<main>  <h2>
+<code>pMatrix-class</code> Permutation matrices</h2> <h3>Description</h3> <p>The <code>pMatrix</code> class is the class of <em>permutation</em> matrices, stored as 1-based integer permutation vectors. A permutation matrix is a square matrix whose rows <em>and</em> columns are all standard unit vectors. It follows that permutation matrices are a special case of <em>index</em> matrices (hence <code>pMatrix</code> is defined as a direct subclass of <code><a href="indmatrix-class">indMatrix</a></code>). </p> <p>Multiplying a matrix on the left by a permutation matrix is equivalent to permuting its rows. Analogously, multiplying a matrix on the right by a permutation matrix is equivalent to permuting its columns. Indeed, such products are implemented in <span class="pkg">Matrix</span> as indexing operations; see ‘Details’ below. </p> <h3>Details</h3> <p>By definition, a permutation matrix is both a row index matrix and a column index matrix. However, the <code>perm</code> slot of a <code>pMatrix</code> cannot be used interchangeably as a row index vector and column index vector. If <code>margin=1</code>, then <code>perm</code> is a row index vector, and the corresponding column index vector can be computed as <code><a href="invertperm">invPerm</a>(perm)</code>, i.e., by inverting the permutation. Analogously, if <code>margin=2</code>, then <code>perm</code> and <code>invPerm(perm)</code> are column and row index vectors, respectively. </p> <p>Given an <code>n</code>-by-<code>n</code> row permutation matrix <code>P</code> with <code>perm</code> slot <code>p</code> and a matrix <code>M</code> with conformable dimensions, we have </p> <table> <tr> <td style="text-align: left;"> <code class="reqn">P M</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>P %*% M</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>M[p, ]</code>
+</td> </tr> <tr> <td style="text-align: left;"> <code class="reqn">M P</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>M %*% P</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>M[, i(p)]</code>
+</td> </tr> <tr> <td style="text-align: left;"> <code class="reqn">P'M</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>crossprod(P, M)</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>M[i(p), ]</code>
+</td> </tr> <tr> <td style="text-align: left;"> <code class="reqn">MP'</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>tcrossprod(M, P)</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>M[, p]</code>
+</td> </tr> <tr> <td style="text-align: left;"> <code class="reqn">P'P</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>crossprod(P)</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>Diagonal(n)</code>
+</td> </tr> <tr> <td style="text-align: left;"> <code class="reqn">PP'</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>tcrossprod(P)</code> </td>
+<td style="text-align: center;"> = </td>
+<td style="text-align: left;"> <code>Diagonal(n)</code> </td> </tr> </table> <p>where <code>i := invPerm</code>. </p> <h3>Objects from the Class</h3> <p>Objects can be created explicitly with calls of the form <code>new("pMatrix", ...)</code>, but they are more commonly created by coercing 1-based integer index vectors, with calls of the form <code>as(., "pMatrix")</code>; see ‘Methods’ below. </p> <h3>Slots</h3> <dl> <dt>
+<code>margin</code>,<code>perm</code>
+</dt>
+<dd>
+<p>inherited from superclass <code><a href="indmatrix-class">indMatrix</a></code>. Here, <code>perm</code> is an integer vector of length <code>Dim[1]</code> and a permutation of <code>1:Dim[1]</code>.</p> </dd> <dt>
+<code>Dim</code>,<code>Dimnames</code>
+</dt>
+<dd>
+<p>inherited from virtual superclass <code><a href="matrix-class">Matrix</a></code>.</p> </dd> </dl> <h3>Extends</h3> <p>Class <code>"<a href="indmatrix-class">indMatrix</a>"</code>, directly. </p> <h3>Methods</h3> <dl> <dt><code>%*%</code></dt>
+<dd>
+<p><code>signature(x = "pMatrix", y = "Matrix")</code> and others listed by <code>showMethods("%*%", classes = "pMatrix")</code>: matrix products implemented where appropriate as indexing operations.</p> </dd> <dt><code>coerce</code></dt>
+<dd>
+<p><code>signature(from = "numeric", to = "pMatrix")</code>: supporting typical <code>pMatrix</code> construction from a vector of positive integers, specifically a permutation of <code>1:n</code>. Row permutation is assumed.</p> </dd> <dt>t</dt>
+<dd>
+<p><code>signature(x = "pMatrix")</code>: the transpose, which is a <code>pMatrix</code> with identical <code>perm</code> but opposite <code>margin</code>. Coincides with the inverse, as permutation matrices are orthogonal.</p> </dd> <dt>solve</dt>
+<dd>
+<p><code>signature(a = "pMatrix", b = "missing")</code>: the inverse permutation matrix, which is a <code>pMatrix</code> with identical <code>perm</code> but opposite <code>margin</code>. Coincides with the transpose, as permutation matrices are orthogonal. See <code>showMethods("solve", classes = "pMatrix")</code> for more signatures.</p> </dd> <dt>determinant</dt>
+<dd>
+<p><code>signature(x = "pMatrix", logarithm = "logical")</code>: always returning 1 or -1, as permutation matrices are orthogonal. In fact, the result is exactly the <em>sign</em> of the permutation.</p> </dd> </dl> <h3>See Also</h3> <p>Superclass <code><a href="indmatrix-class">indMatrix</a></code> of index matrices, for many inherited methods; <code><a href="invertperm">invPerm</a></code>, for computing inverse permutation vectors. </p> <h3>Examples</h3> <pre data-language="r"><code class="language-R">
+(pm1 &lt;- as(as.integer(c(2,3,1)), "pMatrix"))
+t(pm1) # is the same as
+solve(pm1)
+pm1 %*% t(pm1) # check that the transpose is the inverse
+stopifnot(all(diag(3) == as(pm1 %*% t(pm1), "matrix")),
+          is.logical(as(pm1, "matrix")))
+
+set.seed(11)
+## random permutation matrix :
+(p10 &lt;- as(sample(10),"pMatrix"))
+
+## Permute rows / columns of a numeric matrix :
+(mm &lt;- round(array(rnorm(3 * 3), c(3, 3)), 2))
+mm %*% pm1
+pm1 %*% mm
+try(as(as.integer(c(3,3,1)), "pMatrix"))# Error: not a permutation
+
+as(pm1, "TsparseMatrix")
+p10[1:7, 1:4] # gives an "ngTMatrix" (most economic!)
+
+## row-indexing of a &lt;pMatrix&gt; keeps it as an &lt;indMatrix&gt;:
+p10[1:3, ]
+</code></pre> </main> </div><div class="_attribution">
+  <p class="_attribution-p">
+    Copyright (&copy;) 1999–2012 R Foundation for Statistical Computing.<br>Licensed under the <a href="https://www.gnu.org/copyleft/gpl.html">GNU General Public License</a>.<br>
+    
+  </p>
+</div>

@@ -1,0 +1,102 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_add_tag()</h1> <section><p>Handles adding a tag via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1088" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_add_tag() {
+	check_ajax_referer( 'add-tag', '_wpnonce_add-tag' );
+
+	$taxonomy        = ! empty( $_POST['taxonomy'] ) ? $_POST['taxonomy'] : 'post_tag';
+	$taxonomy_object = get_taxonomy( $taxonomy );
+
+	if ( ! current_user_can( $taxonomy_object-&gt;cap-&gt;edit_terms ) ) {
+		wp_die( -1 );
+	}
+
+	$x = new WP_Ajax_Response();
+
+	$tag = wp_insert_term( $_POST['tag-name'], $taxonomy, $_POST );
+
+	if ( $tag &amp;&amp; ! is_wp_error( $tag ) ) {
+		$tag = get_term( $tag['term_id'], $taxonomy );
+	}
+
+	if ( ! $tag || is_wp_error( $tag ) ) {
+		$message    = __( 'An error has occurred. Please reload the page and try again.' );
+		$error_code = 'error';
+
+		if ( is_wp_error( $tag ) &amp;&amp; $tag-&gt;get_error_message() ) {
+			$message = $tag-&gt;get_error_message();
+		}
+
+		if ( is_wp_error( $tag ) &amp;&amp; $tag-&gt;get_error_code() ) {
+			$error_code = $tag-&gt;get_error_code();
+		}
+
+		$x-&gt;add(
+			array(
+				'what' =&gt; 'taxonomy',
+				'data' =&gt; new WP_Error( $error_code, $message ),
+			)
+		);
+		$x-&gt;send();
+	}
+
+	$wp_list_table = _get_list_table( 'WP_Terms_List_Table', array( 'screen' =&gt; $_POST['screen'] ) );
+
+	$level     = 0;
+	$noparents = '';
+
+	if ( is_taxonomy_hierarchical( $taxonomy ) ) {
+		$level = count( get_ancestors( $tag-&gt;term_id, $taxonomy, 'taxonomy' ) );
+		ob_start();
+		$wp_list_table-&gt;single_row( $tag, $level );
+		$noparents = ob_get_clean();
+	}
+
+	ob_start();
+	$wp_list_table-&gt;single_row( $tag );
+	$parents = ob_get_clean();
+
+	require ABSPATH . 'wp-admin/includes/edit-tag-messages.php';
+
+	$message = '';
+	if ( isset( $messages[ $taxonomy_object-&gt;name ][1] ) ) {
+		$message = $messages[ $taxonomy_object-&gt;name ][1];
+	} elseif ( isset( $messages['_item'][1] ) ) {
+		$message = $messages['_item'][1];
+	}
+
+	$x-&gt;add(
+		array(
+			'what'         =&gt; 'taxonomy',
+			'data'         =&gt; $message,
+			'supplemental' =&gt; array(
+				'parents'   =&gt; $parents,
+				'noparents' =&gt; $noparents,
+				'notice'    =&gt; $message,
+			),
+		)
+	);
+
+	$x-&gt;add(
+		array(
+			'what'         =&gt; 'term',
+			'position'     =&gt; $level,
+			'supplemental' =&gt; (array) $tag,
+		)
+	);
+
+	$x-&gt;send();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L1088">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L1088-L1173">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_add_tag" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_add_tag</a>
+  </p>
+</div>

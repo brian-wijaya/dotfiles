@@ -1,0 +1,158 @@
+<h1 class="wp-block-wporg-code-reference-title">Custom_Image_Header::step_2()</h1> <section><p>Displays second step of custom header image page.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="828" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">	public function step_2() {
+		check_admin_referer( 'custom-header-upload', '_wpnonce-custom-header-upload' );
+
+		if ( ! current_theme_supports( 'custom-header', 'uploads' ) ) {
+			wp_die(
+				'&lt;h1&gt;' . __( 'Something went wrong.' ) . '&lt;/h1&gt;' .
+				'&lt;p&gt;' . __( 'The active theme does not support uploading a custom header image.' ) . '&lt;/p&gt;',
+				403
+			);
+		}
+
+		if ( empty( $_POST ) &amp;&amp; isset( $_GET['file'] ) ) {
+			$attachment_id = absint( $_GET['file'] );
+			$file          = get_attached_file( $attachment_id, true );
+			$url           = wp_get_attachment_image_src( $attachment_id, 'full' );
+			$url           = $url[0];
+		} elseif ( isset( $_POST ) ) {
+			$data          = $this-&gt;step_2_manage_upload();
+			$attachment_id = $data['attachment_id'];
+			$file          = $data['file'];
+			$url           = $data['url'];
+		}
+
+		if ( file_exists( $file ) ) {
+			list( $width, $height, $type, $attr ) = wp_getimagesize( $file );
+		} else {
+			$data   = wp_get_attachment_metadata( $attachment_id );
+			$height = isset( $data['height'] ) ? (int) $data['height'] : 0;
+			$width  = isset( $data['width'] ) ? (int) $data['width'] : 0;
+			unset( $data );
+		}
+
+		$max_width = 0;
+
+		// For flex, limit size of image displayed to 1500px unless theme says otherwise.
+		if ( current_theme_supports( 'custom-header', 'flex-width' ) ) {
+			$max_width = 1500;
+		}
+
+		if ( current_theme_supports( 'custom-header', 'max-width' ) ) {
+			$max_width = max( $max_width, get_theme_support( 'custom-header', 'max-width' ) );
+		}
+
+		$max_width = max( $max_width, get_theme_support( 'custom-header', 'width' ) );
+
+		// If flexible height isn't supported and the image is the exact right size.
+		if ( ! current_theme_supports( 'custom-header', 'flex-height' )
+			&amp;&amp; ! current_theme_supports( 'custom-header', 'flex-width' )
+			&amp;&amp; (int) get_theme_support( 'custom-header', 'width' ) === $width
+			&amp;&amp; (int) get_theme_support( 'custom-header', 'height' ) === $height
+		) {
+			// Add the metadata.
+			if ( file_exists( $file ) ) {
+				wp_update_attachment_metadata( $attachment_id, wp_generate_attachment_metadata( $attachment_id, $file ) );
+			}
+
+			$this-&gt;set_header_image( compact( 'url', 'attachment_id', 'width', 'height' ) );
+
+			/**
+			 * Filters the attachment file path after the custom header or background image is set.
+			 *
+			 * Used for file replication.
+			 *
+			 * @since 2.1.0
+			 *
+			 * @param string $file          Path to the file.
+			 * @param int    $attachment_id Attachment ID.
+			 */
+			$file = apply_filters( 'wp_create_file_in_uploads', $file, $attachment_id ); // For replication.
+
+			return $this-&gt;finished();
+		} elseif ( $width &gt; $max_width ) {
+			$oitar = $width / $max_width;
+
+			$image = wp_crop_image(
+				$attachment_id,
+				0,
+				0,
+				$width,
+				$height,
+				$max_width,
+				$height / $oitar,
+				false,
+				str_replace( wp_basename( $file ), 'midsize-' . wp_basename( $file ), $file )
+			);
+
+			if ( ! $image || is_wp_error( $image ) ) {
+				wp_die( __( 'Image could not be processed. Please go back and try again.' ), __( 'Image Processing Error' ) );
+			}
+
+			/** This filter is documented in wp-admin/includes/class-custom-image-header.php */
+			$image = apply_filters( 'wp_create_file_in_uploads', $image, $attachment_id ); // For replication.
+
+			$url    = str_replace( wp_basename( $url ), wp_basename( $image ), $url );
+			$width  = $width / $oitar;
+			$height = $height / $oitar;
+		} else {
+			$oitar = 1;
+		}
+		?&gt;
+
+&lt;div class="wrap"&gt;
+&lt;h1&gt;&lt;?php _e( 'Crop Header Image' ); ?&gt;&lt;/h1&gt;
+
+&lt;form method="post" action="&lt;?php echo esc_url( add_query_arg( 'step', 3 ) ); ?&gt;"&gt;
+	&lt;p class="hide-if-no-js"&gt;&lt;?php _e( 'Choose the part of the image you want to use as your header.' ); ?&gt;&lt;/p&gt;
+	&lt;p class="hide-if-js"&gt;&lt;strong&gt;&lt;?php _e( 'You need JavaScript to choose a part of the image.' ); ?&gt;&lt;/strong&gt;&lt;/p&gt;
+
+	&lt;div id="crop_image" style="position: relative"&gt;
+		&lt;img src="&lt;?php echo esc_url( $url ); ?&gt;" id="upload" width="&lt;?php echo esc_attr( $width ); ?&gt;" height="&lt;?php echo esc_attr( $height ); ?&gt;" alt="" /&gt;
+	&lt;/div&gt;
+
+	&lt;input type="hidden" name="x1" id="x1" value="0" /&gt;
+	&lt;input type="hidden" name="y1" id="y1" value="0" /&gt;
+	&lt;input type="hidden" name="width" id="width" value="&lt;?php echo esc_attr( $width ); ?&gt;" /&gt;
+	&lt;input type="hidden" name="height" id="height" value="&lt;?php echo esc_attr( $height ); ?&gt;" /&gt;
+	&lt;input type="hidden" name="attachment_id" id="attachment_id" value="&lt;?php echo esc_attr( $attachment_id ); ?&gt;" /&gt;
+	&lt;input type="hidden" name="oitar" id="oitar" value="&lt;?php echo esc_attr( $oitar ); ?&gt;" /&gt;
+		&lt;?php if ( empty( $_POST ) &amp;&amp; isset( $_GET['file'] ) ) { ?&gt;
+	&lt;input type="hidden" name="create-new-attachment" value="true" /&gt;
+	&lt;?php } ?&gt;
+		&lt;?php wp_nonce_field( 'custom-header-crop-image' ); ?&gt;
+
+	&lt;p class="submit"&gt;
+		&lt;?php submit_button( __( 'Crop and Publish' ), 'primary', 'submit', false ); ?&gt;
+		&lt;?php
+		if ( isset( $oitar ) &amp;&amp; 1 === $oitar
+			&amp;&amp; ( current_theme_supports( 'custom-header', 'flex-height' )
+				|| current_theme_supports( 'custom-header', 'flex-width' ) )
+		) {
+			submit_button( __( 'Skip Cropping, Publish Image as Is' ), '', 'skip-cropping', false );
+		}
+		?&gt;
+	&lt;/p&gt;
+&lt;/form&gt;
+&lt;/div&gt;
+		&lt;?php
+	}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-custom-image-header.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-custom-image-header.php#L828">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-custom-image-header.php#L828-L965">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/wp_create_file_in_uploads"><span class="hook-func">apply_filters</span>( ‘wp_create_file_in_uploads’, <nobr><span class="arg-type">string</span> <span class="arg-name">$file</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the attachment file path after the custom header or background image is set.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/custom_image_header/step_2" class="_attribution-link">https://developer.wordpress.org/reference/classes/custom_image_header/step_2</a>
+  </p>
+</div>

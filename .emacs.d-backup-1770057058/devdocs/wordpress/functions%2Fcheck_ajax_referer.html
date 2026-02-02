@@ -1,0 +1,81 @@
+<h1 class="wp-block-wporg-code-reference-title">check_ajax_referer( <span class="arg-type">int|string</span> <span class="arg-name">$action</span> = <span class="arg-default">-1</span>, <span class="arg-type">false|string</span> <span class="arg-name">$query_arg</span> = <span class="arg-default">false</span>, <span class="arg-type">bool</span> <span class="arg-name">$stop</span> = <span class="arg-default">true</span> ): <span class="return-type">int|false</span>
+</h1> <section><p>Verifies the Ajax request to prevent processing requests external of the blog.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$action</code><span class="type"><span class="int">int</span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Action nonce.</span></div>
+<p class="default">Default:<code>-1</code></p>
+</dd>
+<dt>
+<code>$query_arg</code><span class="type"><span class="false">false</span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Key to check for the nonce in <code>$_REQUEST</code> (since 2.5). If false, <code>$_REQUEST</code> values will be evaluated for <code>'_ajax_nonce'</code>, and <code>'_wpnonce'</code> (in that order). </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$stop</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to stop early when the nonce cannot be verified.<br> </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|false</span> 1 if the nonce is valid and generated between 0-12 hours ago, 2 if the nonce is valid and generated between 12-24 hours ago.<br> False if the nonce is invalid.</section> <section><h2 id="more-information">More Information</h2> <p>Nonces should never be relied on for authentication, authorization, or access control. Protect your functions using <a title="Function Reference/current user can" href="current_user_can"><tt>current_user_can()</tt></a> and always assume that nonces can be compromised.</p> <p>This function can be replaced via <a title="Glossary" href="https://codex.wordpress.org/Glossary#plugins">plugins</a>. If plugins do not redefine these functions, then this will be used instead.</p> <p>If <tt>$query_arg</tt> is not specified (i.e. defaults to false), then the function will look for the nonce in <tt>'_ajax_nonce'</tt>. If that is not set, then it will assume that the nonce is in <tt>'_wpnonce'</tt>, regardless of whether that query arg actually exists.</p> <p>If <tt>$die</tt> is set to <tt>true</tt>, execution of the script will be stopped if the nonce cannot be verified, and the output will be <tt>'-1'</tt>.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1317" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function check_ajax_referer( $action = -1, $query_arg = false, $stop = true ) {
+	if ( -1 === $action ) {
+		_doing_it_wrong( __FUNCTION__, __( 'You should specify an action to be verified by using the first parameter.' ), '4.7.0' );
+	}
+
+	$nonce = '';
+
+	if ( $query_arg &amp;&amp; isset( $_REQUEST[ $query_arg ] ) ) {
+		$nonce = $_REQUEST[ $query_arg ];
+	} elseif ( isset( $_REQUEST['_ajax_nonce'] ) ) {
+		$nonce = $_REQUEST['_ajax_nonce'];
+	} elseif ( isset( $_REQUEST['_wpnonce'] ) ) {
+		$nonce = $_REQUEST['_wpnonce'];
+	}
+
+	$result = wp_verify_nonce( $nonce, $action );
+
+	/**
+	 * Fires once the Ajax request has been validated or not.
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param string    $action The Ajax nonce action.
+	 * @param false|int $result False if the nonce is invalid, 1 if the nonce is valid and generated between
+	 *                          0-12 hours ago, 2 if the nonce is valid and generated between 12-24 hours ago.
+	 */
+	do_action( 'check_ajax_referer', $action, $result );
+
+	if ( $stop &amp;&amp; false === $result ) {
+		if ( wp_doing_ajax() ) {
+			wp_die( -1, 403 );
+		} else {
+			die( '-1' );
+		}
+	}
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/pluggable.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/pluggable.php#L1317">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/pluggable.php#L1317-L1354">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/check_ajax_referer"><span class="hook-func">do_action</span>( ‘check_ajax_referer’, <nobr><span class="arg-type">string</span> <span class="arg-name">$action</span></nobr>, <nobr><span class="arg-type">false|int</span> <span class="arg-name">$result</span></nobr> )</a></dt>
+<dd>
+<p>Fires once the Ajax request has been validated or not.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.3/">2.0.3</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/check_ajax_referer" class="_attribution-link">https://developer.wordpress.org/reference/functions/check_ajax_referer</a>
+  </p>
+</div>

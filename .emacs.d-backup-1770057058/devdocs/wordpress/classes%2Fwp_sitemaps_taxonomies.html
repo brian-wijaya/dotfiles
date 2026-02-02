@@ -1,0 +1,242 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Sitemaps_Taxonomies {}</h1> <section><p>Taxonomies XML sitemap provider.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_sitemaps_taxonomies/__construct">WP_Sitemaps_Taxonomies::__construct</a></td>
+<td>
+<a href="wp_sitemaps_taxonomies" rel="class">WP_Sitemaps_Taxonomies</a> constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps_taxonomies/get_max_num_pages">WP_Sitemaps_Taxonomies::get_max_num_pages</a></td>
+<td>Gets the max number of pages available for the object type.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps_taxonomies/get_object_subtypes">WP_Sitemaps_Taxonomies::get_object_subtypes</a></td>
+<td>Returns all public, registered taxonomies.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps_taxonomies/get_taxonomies_query_args">WP_Sitemaps_Taxonomies::get_taxonomies_query_args</a></td>
+<td>Returns the query args for retrieving taxonomy terms to list in the sitemap.</td>
+</tr>
+<tr class="">
+<td><a href="wp_sitemaps_taxonomies/get_url_list">WP_Sitemaps_Taxonomies::get_url_list</a></td>
+<td>Gets a URL list for a taxonomy sitemap.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Sitemaps_Taxonomies extends WP_Sitemaps_Provider {
+	/**
+	 * WP_Sitemaps_Taxonomies constructor.
+	 *
+	 * @since 5.5.0
+	 */
+	public function __construct() {
+		$this-&gt;name        = 'taxonomies';
+		$this-&gt;object_type = 'term';
+	}
+
+	/**
+	 * Returns all public, registered taxonomies.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @return WP_Taxonomy[] Array of registered taxonomy objects keyed by their name.
+	 */
+	public function get_object_subtypes() {
+		$taxonomies = get_taxonomies( array( 'public' =&gt; true ), 'objects' );
+
+		$taxonomies = array_filter( $taxonomies, 'is_taxonomy_viewable' );
+
+		/**
+		 * Filters the list of taxonomy object subtypes available within the sitemap.
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param WP_Taxonomy[] $taxonomies Array of registered taxonomy objects keyed by their name.
+		 */
+		return apply_filters( 'wp_sitemaps_taxonomies', $taxonomies );
+	}
+
+	/**
+	 * Gets a URL list for a taxonomy sitemap.
+	 *
+	 * @since 5.5.0
+	 * @since 5.9.0 Renamed `$taxonomy` to `$object_subtype` to match parent class
+	 *              for PHP 8 named parameter support.
+	 *
+	 * @param int    $page_num       Page of results.
+	 * @param string $object_subtype Optional. Taxonomy name. Default empty.
+	 * @return array[] Array of URL information for a sitemap.
+	 */
+	public function get_url_list( $page_num, $object_subtype = '' ) {
+		// Restores the more descriptive, specific name for use within this method.
+		$taxonomy = $object_subtype;
+
+		$supported_types = $this-&gt;get_object_subtypes();
+
+		// Bail early if the queried taxonomy is not supported.
+		if ( ! isset( $supported_types[ $taxonomy ] ) ) {
+			return array();
+		}
+
+		/**
+		 * Filters the taxonomies URL list before it is generated.
+		 *
+		 * Returning a non-null value will effectively short-circuit the generation,
+		 * returning that value instead.
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param array[]|null $url_list The URL list. Default null.
+		 * @param string       $taxonomy Taxonomy name.
+		 * @param int          $page_num Page of results.
+		 */
+		$url_list = apply_filters(
+			'wp_sitemaps_taxonomies_pre_url_list',
+			null,
+			$taxonomy,
+			$page_num
+		);
+
+		if ( null !== $url_list ) {
+			return $url_list;
+		}
+
+		$url_list = array();
+
+		// Offset by how many terms should be included in previous pages.
+		$offset = ( $page_num - 1 ) * wp_sitemaps_get_max_urls( $this-&gt;object_type );
+
+		$args           = $this-&gt;get_taxonomies_query_args( $taxonomy );
+		$args['fields'] = 'all';
+		$args['offset'] = $offset;
+
+		$taxonomy_terms = new WP_Term_Query( $args );
+
+		if ( ! empty( $taxonomy_terms-&gt;terms ) ) {
+			foreach ( $taxonomy_terms-&gt;terms as $term ) {
+				$term_link = get_term_link( $term, $taxonomy );
+
+				if ( is_wp_error( $term_link ) ) {
+					continue;
+				}
+
+				$sitemap_entry = array(
+					'loc' =&gt; $term_link,
+				);
+
+				/**
+				 * Filters the sitemap entry for an individual term.
+				 *
+				 * @since 5.5.0
+				 * @since 6.0.0 Added `$term` argument containing the term object.
+				 *
+				 * @param array   $sitemap_entry Sitemap entry for the term.
+				 * @param int     $term_id       Term ID.
+				 * @param string  $taxonomy      Taxonomy name.
+				 * @param WP_Term $term          Term object.
+				 */
+				$sitemap_entry = apply_filters( 'wp_sitemaps_taxonomies_entry', $sitemap_entry, $term-&gt;term_id, $taxonomy, $term );
+				$url_list[]    = $sitemap_entry;
+			}
+		}
+
+		return $url_list;
+	}
+
+	/**
+	 * Gets the max number of pages available for the object type.
+	 *
+	 * @since 5.5.0
+	 * @since 5.9.0 Renamed `$taxonomy` to `$object_subtype` to match parent class
+	 *              for PHP 8 named parameter support.
+	 *
+	 * @param string $object_subtype Optional. Taxonomy name. Default empty.
+	 * @return int Total number of pages.
+	 */
+	public function get_max_num_pages( $object_subtype = '' ) {
+		if ( empty( $object_subtype ) ) {
+			return 0;
+		}
+
+		// Restores the more descriptive, specific name for use within this method.
+		$taxonomy = $object_subtype;
+
+		/**
+		 * Filters the max number of pages for a taxonomy sitemap before it is generated.
+		 *
+		 * Passing a non-null value will short-circuit the generation,
+		 * returning that value instead.
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param int|null $max_num_pages The maximum number of pages. Default null.
+		 * @param string   $taxonomy      Taxonomy name.
+		 */
+		$max_num_pages = apply_filters( 'wp_sitemaps_taxonomies_pre_max_num_pages', null, $taxonomy );
+
+		if ( null !== $max_num_pages ) {
+			return $max_num_pages;
+		}
+
+		$term_count = wp_count_terms( $this-&gt;get_taxonomies_query_args( $taxonomy ) );
+
+		return (int) ceil( $term_count / wp_sitemaps_get_max_urls( $this-&gt;object_type ) );
+	}
+
+	/**
+	 * Returns the query args for retrieving taxonomy terms to list in the sitemap.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param string $taxonomy Taxonomy name.
+	 * @return array Array of WP_Term_Query arguments.
+	 */
+	protected function get_taxonomies_query_args( $taxonomy ) {
+		/**
+		 * Filters the taxonomy terms query arguments.
+		 *
+		 * Allows modification of the taxonomy query arguments before querying.
+		 *
+		 * @see WP_Term_Query for a full list of arguments
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param array  $args     Array of WP_Term_Query arguments.
+		 * @param string $taxonomy Taxonomy name.
+		 */
+		$args = apply_filters(
+			'wp_sitemaps_taxonomies_query_args',
+			array(
+				'taxonomy'               =&gt; $taxonomy,
+				'orderby'                =&gt; 'term_order',
+				'number'                 =&gt; wp_sitemaps_get_max_urls( $this-&gt;object_type ),
+				'hide_empty'             =&gt; true,
+				'hierarchical'           =&gt; false,
+				'update_term_meta_cache' =&gt; false,
+			),
+			$taxonomy
+		);
+
+		return $args;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/sitemaps/providers/class-wp-sitemaps-taxonomies.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/sitemaps/providers/class-wp-sitemaps-taxonomies.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/sitemaps/providers/class-wp-sitemaps-taxonomies.php#L17-L213">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_sitemaps_taxonomies" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_sitemaps_taxonomies</a>
+  </p>
+</div>

@@ -1,8 +1,9 @@
-;;; ui-doom.el --- doom theme, modeline, solaire, font -*- lexical-binding: t; -*-
+;;; ui-doom.el --- Modern dark theme, modeline, solaire, font -*- lexical-binding: t; -*-
 (use-package doom-themes
   :demand t
   :config
-  (load-theme 'doom-one t)
+  ;; Use doom-gruvbox - modern, sleek, high-contrast alternative to doom-one
+  (load-theme 'doom-gruvbox t)
   (doom-themes-org-config))
 
 (use-package doom-modeline

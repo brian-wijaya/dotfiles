@@ -1,0 +1,164 @@
+<h1 class="wp-block-wporg-code-reference-title">translations_api( <span class="arg-type">string</span> <span class="arg-name">$type</span>, <span class="arg-type">array|object</span> <span class="arg-name">$args</span> = <span class="arg-default">null</span> ): <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Retrieve translations from WordPress Translation API.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Type of translations. Accepts <code>'plugins'</code>, <code>'themes'</code>, <code>'core'</code>.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span>|<span class="object">object</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Translation API arguments. Optional.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span> On success an associative array of translations, <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.<br> <ul class="param-hash"><li>
+<code>translations</code> <span class="type">array</span><div class="desc"> List of translations, each an array of data.<ul class="param-hash"> <li>
+<code>...$0</code> <span class="type">array</span><div class="desc">
+<ul class="param-hash"> <li>
+<code>language</code> <span class="type">string</span><div class="desc">Language code.</div>
+</li> <li>
+<code>version</code> <span class="type">string</span><div class="desc">WordPress version.</div>
+</li> <li>
+<code>updated</code> <span class="type">string</span><div class="desc">Date the translation was last updated, in MySQL datetime format.</div>
+</li> <li>
+<code>english_name</code> <span class="type">string</span><div class="desc">English name of the language.</div>
+</li> <li>
+<code>native_name</code> <span class="type">string</span><div class="desc">Native name of the language.</div>
+</li> <li>
+<code>package</code> <span class="type">string</span><div class="desc">URL to download the translation package.</div>
+</li> <li>
+<code>iso</code> <span class="type">string[]</span><div class="desc">Array of ISO language codes.</div>
+</li> <li>
+<code>strings</code> <span class="type">array</span><div class="desc">Array of translated strings used in the installation process.<br> } </div>
+</li> </ul> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="36" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function translations_api( $type, $args = null ) {
+	if ( ! in_array( $type, array( 'plugins', 'themes', 'core' ), true ) ) {
+		return new WP_Error( 'invalid_type', __( 'Invalid translation type.' ) );
+	}
+
+	/**
+	 * Allows a plugin to override the WordPress.org Translation Installation API entirely.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param false|array $result The result array. Default false.
+	 * @param string      $type   The type of translations being requested.
+	 * @param object      $args   Translation API arguments.
+	 */
+	$res = apply_filters( 'translations_api', false, $type, $args );
+
+	if ( false === $res ) {
+		$url      = 'https://api.wordpress.org/translations/' . $type . '/1.0/';
+		$http_url = $url;
+		$ssl      = wp_http_supports( array( 'ssl' ) );
+		if ( $ssl ) {
+			$url = set_url_scheme( $url, 'https' );
+		}
+
+		$options = array(
+			'timeout' =&gt; 3,
+			'body'    =&gt; array(
+				'wp_version' =&gt; wp_get_wp_version(),
+				'locale'     =&gt; get_locale(),
+				'version'    =&gt; $args['version'], // Version of plugin, theme or core.
+			),
+		);
+
+		if ( 'core' !== $type ) {
+			$options['body']['slug'] = $args['slug']; // Plugin or theme slug.
+		}
+
+		$request = wp_remote_post( $url, $options );
+
+		if ( $ssl &amp;&amp; is_wp_error( $request ) ) {
+			wp_trigger_error(
+				__FUNCTION__,
+				sprintf(
+					/* translators: %s: Support forums URL. */
+					__( 'An unexpected error occurred. Something may be wrong with WordPress.org or this server&amp;#8217;s configuration. If you continue to have problems, please try the &lt;a href="%s"&gt;support forums&lt;/a&gt;.' ),
+					__( 'https://wordpress.org/support/forums/' )
+				) . ' ' . __( '(WordPress could not establish a secure connection to WordPress.org. Please contact your server administrator.)' ),
+				headers_sent() || WP_DEBUG ? E_USER_WARNING : E_USER_NOTICE
+			);
+
+			$request = wp_remote_post( $http_url, $options );
+		}
+
+		if ( is_wp_error( $request ) ) {
+			$res = new WP_Error(
+				'translations_api_failed',
+				sprintf(
+					/* translators: %s: Support forums URL. */
+					__( 'An unexpected error occurred. Something may be wrong with WordPress.org or this server&amp;#8217;s configuration. If you continue to have problems, please try the &lt;a href="%s"&gt;support forums&lt;/a&gt;.' ),
+					__( 'https://wordpress.org/support/forums/' )
+				),
+				$request-&gt;get_error_message()
+			);
+		} else {
+			$res = json_decode( wp_remote_retrieve_body( $request ), true );
+			if ( ! is_object( $res ) &amp;&amp; ! is_array( $res ) ) {
+				$res = new WP_Error(
+					'translations_api_failed',
+					sprintf(
+						/* translators: %s: Support forums URL. */
+						__( 'An unexpected error occurred. Something may be wrong with WordPress.org or this server&amp;#8217;s configuration. If you continue to have problems, please try the &lt;a href="%s"&gt;support forums&lt;/a&gt;.' ),
+						__( 'https://wordpress.org/support/forums/' )
+					),
+					wp_remote_retrieve_body( $request )
+				);
+			}
+		}
+	}
+
+	/**
+	 * Filters the Translation Installation API response results.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param array|WP_Error $res  {
+	 *     On success an associative array of translations, WP_Error on failure.
+	 *
+	 *     @type array $translations {
+	 *         List of translations, each an array of data.
+	 *
+	 *         @type array ...$0 {
+	 *             @type string   $language     Language code.
+	 *             @type string   $version      WordPress version.
+	 *             @type string   $updated      Date the translation was last updated, in MySQL datetime format.
+	 *             @type string   $english_name English name of the language.
+	 *             @type string   $native_name  Native name of the language.
+	 *             @type string   $package      URL to download the translation package.
+	 *             @type string[] $iso          Array of ISO language codes.
+	 *             @type array    $strings      Array of translated strings used in the installation process.
+	 *         }
+	 *     }
+	 * }
+	 * @param string         $type The type of translations being requested.
+	 * @param object         $args Translation API arguments.
+	 */
+	return apply_filters( 'translations_api_result', $res, $type, $args );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/translation-install.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/translation-install.php#L36">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/translation-install.php#L36-L142">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/translations_api"><span class="hook-func">apply_filters</span>( ‘translations_api’, <nobr><span class="arg-type">false|array</span> <span class="arg-name">$result</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$type</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Allows a plugin to override the WordPress.org Translation Installation API entirely.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/translations_api_result"><span class="hook-func">apply_filters</span>( ‘translations_api_result’, <nobr><span class="arg-type">array|WP_Error</span> <span class="arg-name">$res</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$type</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the Translation Installation API response results.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.0.0/">4.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section>  </div> <section> <p>You must <a href="https://login.wordpress.org/?redirect_to=https%3A%2F%2Fdeveloper.wordpress.org%2Freference%2Ffunctions%2Ftranslations_api%2F">log in</a> before being able to contribute a note or feedback.</p></section> </li>
+</ul>
+</div> </li></ul></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/translations_api" class="_attribution-link">https://developer.wordpress.org/reference/functions/translations_api</a>
+  </p>
+</div>

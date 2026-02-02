@@ -1,0 +1,53 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_update_term_count_now( <span class="arg-type">array</span> <span class="arg-name">$terms</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span> ): <span class="return-type">true</span>
+</h1> <section><p>Performs term count update immediately.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$terms</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The term_taxonomy_id of terms to update.</span></div></dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The context of the term.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true</span> Always true when complete.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3562" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_update_term_count_now( $terms, $taxonomy ) {
+	$terms = array_map( 'intval', $terms );
+
+	$taxonomy = get_taxonomy( $taxonomy );
+	if ( ! empty( $taxonomy-&gt;update_count_callback ) ) {
+		call_user_func( $taxonomy-&gt;update_count_callback, $terms, $taxonomy );
+	} else {
+		$object_types = (array) $taxonomy-&gt;object_type;
+		foreach ( $object_types as &amp;$object_type ) {
+			if ( str_starts_with( $object_type, 'attachment:' ) ) {
+				list( $object_type ) = explode( ':', $object_type );
+			}
+		}
+
+		if ( array_filter( $object_types, 'post_type_exists' ) == $object_types ) {
+			// Only post types are attached to this taxonomy.
+			_update_post_term_count( $terms, $taxonomy );
+		} else {
+			// Default count updater.
+			_update_generic_term_count( $terms, $taxonomy );
+		}
+	}
+
+	clean_term_cache( $terms, '', false );
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L3562">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L3562-L3588">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_update_term_count_now" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_update_term_count_now</a>
+  </p>
+</div>

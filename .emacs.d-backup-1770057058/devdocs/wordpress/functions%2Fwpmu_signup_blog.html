@@ -1,0 +1,102 @@
+<h1 class="wp-block-wporg-code-reference-title">wpmu_signup_blog( <span class="arg-type">string</span> <span class="arg-name">$domain</span>, <span class="arg-type">string</span> <span class="arg-name">$path</span>, <span class="arg-type">string</span> <span class="arg-name">$title</span>, <span class="arg-type">string</span> <span class="arg-name">$user</span>, <span class="arg-type">string</span> <span class="arg-name">$user_email</span>, <span class="arg-type">array</span> <span class="arg-name">$meta</span> = <span class="arg-default">array()</span> )</h1> <section><p>Records site signup information for future activation.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$domain</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The requested domain.</span></div></dd>
+<dt>
+<code>$path</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The requested path.</span></div></dd>
+<dt>
+<code>$title</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The requested site title.</span></div></dd>
+<dt>
+<code>$user</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The user’s requested login name.</span></div></dd>
+<dt>
+<code>$user_email</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The user’s email address.</span></div></dd>
+<dt>
+<code>$meta</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Signup meta data. By default, contains the requested privacy setting and lang_id.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="785" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wpmu_signup_blog( $domain, $path, $title, $user, $user_email, $meta = array() ) {
+	global $wpdb;
+
+	$key = substr( md5( time() . wp_rand() . $domain ), 0, 16 );
+
+	/**
+	 * Filters the metadata for a site signup.
+	 *
+	 * The metadata will be serialized prior to storing it in the database.
+	 *
+	 * @since 4.8.0
+	 *
+	 * @param array  $meta       Signup meta data. Default empty array.
+	 * @param string $domain     The requested domain.
+	 * @param string $path       The requested path.
+	 * @param string $title      The requested site title.
+	 * @param string $user       The user's requested login name.
+	 * @param string $user_email The user's email address.
+	 * @param string $key        The user's activation key.
+	 */
+	$meta = apply_filters( 'signup_site_meta', $meta, $domain, $path, $title, $user, $user_email, $key );
+
+	$wpdb-&gt;insert(
+		$wpdb-&gt;signups,
+		array(
+			'domain'         =&gt; $domain,
+			'path'           =&gt; $path,
+			'title'          =&gt; $title,
+			'user_login'     =&gt; $user,
+			'user_email'     =&gt; $user_email,
+			'registered'     =&gt; current_time( 'mysql', true ),
+			'activation_key' =&gt; $key,
+			'meta'           =&gt; serialize( $meta ),
+		)
+	);
+
+	/**
+	 * Fires after site signup information has been written to the database.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param string $domain     The requested domain.
+	 * @param string $path       The requested path.
+	 * @param string $title      The requested site title.
+	 * @param string $user       The user's requested login name.
+	 * @param string $user_email The user's email address.
+	 * @param string $key        The user's activation key.
+	 * @param array  $meta       Signup meta data. By default, contains the requested privacy setting and lang_id.
+	 */
+	do_action( 'after_signup_site', $domain, $path, $title, $user, $user_email, $key, $meta );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-functions.php#L785">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-functions.php#L785-L835">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/after_signup_site"><span class="hook-func">do_action</span>( ‘after_signup_site’, <nobr><span class="arg-type">string</span> <span class="arg-name">$domain</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$path</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$title</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user_email</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$key</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$meta</span></nobr> )</a></dt>
+<dd>
+<p>Fires after site signup information has been written to the database.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/signup_site_meta"><span class="hook-func">apply_filters</span>( ‘signup_site_meta’, <nobr><span class="arg-type">array</span> <span class="arg-name">$meta</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$domain</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$path</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$title</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$user_email</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$key</span></nobr> )</a></dt>
+<dd>
+<p>Filters the metadata for a site signup.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wpmu_signup_blog" class="_attribution-link">https://developer.wordpress.org/reference/functions/wpmu_signup_blog</a>
+  </p>
+</div>

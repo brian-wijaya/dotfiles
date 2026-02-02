@@ -1,0 +1,133 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Comment_Query::fill_descendants( <span class="arg-type">WP_Comment[]</span> <span class="arg-name">$comments</span> ): <span class="return-type">array</span>
+</h1> <section><p>Fetch descendants for located comments.</p> </section> <section><h2 id="description">Description</h2> <p>Instead of calling <code>get_children()</code> separately on each child comment, we do a single set of queries to fetch the descendant trees for all matched top-level comments.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$comments</code><span class="type"><span class="WP_Comment[]"><a href="../wp_comment" rel="class">WP_Comment</a>[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array of top-level comments whose descendants should be filled in.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1030" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function fill_descendants( $comments ) {
+	$levels = array(
+		0 =&gt; wp_list_pluck( $comments, 'comment_ID' ),
+	);
+
+	$key          = md5( serialize( wp_array_slice_assoc( $this-&gt;query_vars, array_keys( $this-&gt;query_var_defaults ) ) ) );
+	$last_changed = wp_cache_get_last_changed( 'comment' );
+
+	// Fetch an entire level of the descendant tree at a time.
+	$level        = 0;
+	$exclude_keys = array( 'parent', 'parent__in', 'parent__not_in' );
+	do {
+		// Parent-child relationships may be cached. Only query for those that are not.
+		$child_ids           = array();
+		$uncached_parent_ids = array();
+		$_parent_ids         = $levels[ $level ];
+		if ( $_parent_ids ) {
+			$cache_keys = array();
+			foreach ( $_parent_ids as $parent_id ) {
+				$cache_keys[ $parent_id ] = "get_comment_child_ids:$parent_id:$key:$last_changed";
+			}
+			$cache_data = wp_cache_get_multiple( array_values( $cache_keys ), 'comment-queries' );
+			foreach ( $_parent_ids as $parent_id ) {
+				$parent_child_ids = $cache_data[ $cache_keys[ $parent_id ] ];
+				if ( false !== $parent_child_ids ) {
+					$child_ids = array_merge( $child_ids, $parent_child_ids );
+				} else {
+					$uncached_parent_ids[] = $parent_id;
+				}
+			}
+		}
+
+		if ( $uncached_parent_ids ) {
+			// Fetch this level of comments.
+			$parent_query_args = $this-&gt;query_vars;
+			foreach ( $exclude_keys as $exclude_key ) {
+				$parent_query_args[ $exclude_key ] = '';
+			}
+			$parent_query_args['parent__in']    = $uncached_parent_ids;
+			$parent_query_args['no_found_rows'] = true;
+			$parent_query_args['hierarchical']  = false;
+			$parent_query_args['offset']        = 0;
+			$parent_query_args['number']        = 0;
+
+			$level_comments = get_comments( $parent_query_args );
+
+			// Cache parent-child relationships.
+			$parent_map = array_fill_keys( $uncached_parent_ids, array() );
+			foreach ( $level_comments as $level_comment ) {
+				$parent_map[ $level_comment-&gt;comment_parent ][] = $level_comment-&gt;comment_ID;
+				$child_ids[]                                    = $level_comment-&gt;comment_ID;
+			}
+
+			$data = array();
+			foreach ( $parent_map as $parent_id =&gt; $children ) {
+				$cache_key          = "get_comment_child_ids:$parent_id:$key:$last_changed";
+				$data[ $cache_key ] = $children;
+			}
+			wp_cache_set_multiple( $data, 'comment-queries' );
+		}
+
+		++$level;
+		$levels[ $level ] = $child_ids;
+	} while ( $child_ids );
+
+	// Prime comment caches for non-top-level comments.
+	$descendant_ids = array();
+	for ( $i = 1, $c = count( $levels ); $i &lt; $c; $i++ ) {
+		$descendant_ids = array_merge( $descendant_ids, $levels[ $i ] );
+	}
+
+	_prime_comment_caches( $descendant_ids, $this-&gt;query_vars['update_comment_meta_cache'] );
+
+	// Assemble a flat array of all comments + descendants.
+	$all_comments = $comments;
+	foreach ( $descendant_ids as $descendant_id ) {
+		$all_comments[] = get_comment( $descendant_id );
+	}
+
+	// If a threaded representation was requested, build the tree.
+	if ( 'threaded' === $this-&gt;query_vars['hierarchical'] ) {
+		$threaded_comments = array();
+		$ref               = array();
+		foreach ( $all_comments as $k =&gt; $c ) {
+			$_c = get_comment( $c-&gt;comment_ID );
+
+			// If the comment isn't in the reference array, it goes in the top level of the thread.
+			if ( ! isset( $ref[ $c-&gt;comment_parent ] ) ) {
+				$threaded_comments[ $_c-&gt;comment_ID ] = $_c;
+				$ref[ $_c-&gt;comment_ID ]               = $threaded_comments[ $_c-&gt;comment_ID ];
+
+				// Otherwise, set it as a child of its parent.
+			} else {
+
+				$ref[ $_c-&gt;comment_parent ]-&gt;add_child( $_c );
+				$ref[ $_c-&gt;comment_ID ] = $ref[ $_c-&gt;comment_parent ]-&gt;get_child( $_c-&gt;comment_ID );
+			}
+		}
+
+		// Set the 'populated_children' flag, to ensure additional database queries aren't run.
+		foreach ( $ref as $_ref ) {
+			$_ref-&gt;populated_children( true );
+		}
+
+		$comments = $threaded_comments;
+	} else {
+		$comments = $all_comments;
+	}
+
+	return $comments;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-comment-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-comment-query.php#L1030">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-comment-query.php#L1030-L1140">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_comment_query/fill_descendants" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_comment_query/fill_descendants</a>
+  </p>
+</div>

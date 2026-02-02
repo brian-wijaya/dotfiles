@@ -1,0 +1,302 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> Bulk_Upgrader_Skin {}</h1> <section><p>Generic Bulk Upgrader Skin for WordPress Upgrades.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_upgrader_skin">WP_Upgrader_Skin</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="bulk_upgrader_skin/__construct">Bulk_Upgrader_Skin::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/add_strings">Bulk_Upgrader_Skin::add_strings</a></td>
+<td>Sets up the strings used in the update process.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/after">Bulk_Upgrader_Skin::after</a></td>
+<td>Performs an action following a bulk update.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/before">Bulk_Upgrader_Skin::before</a></td>
+<td>Performs an action before a bulk update.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/bulk_footer">Bulk_Upgrader_Skin::bulk_footer</a></td>
+<td>Displays the footer following the bulk update process.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/bulk_header">Bulk_Upgrader_Skin::bulk_header</a></td>
+<td>Displays the header before the bulk update process.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/error">Bulk_Upgrader_Skin::error</a></td>
+<td>Displays an error message about the update.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/feedback">Bulk_Upgrader_Skin::feedback</a></td>
+<td>Displays a message about the update.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/flush_output">Bulk_Upgrader_Skin::flush_output</a></td>
+<td>Flushes all output buffers.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/footer">Bulk_Upgrader_Skin::footer</a></td>
+<td>Displays the footer following the update process.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/header">Bulk_Upgrader_Skin::header</a></td>
+<td>Displays the header before the update process.</td>
+</tr>
+<tr class="">
+<td><a href="bulk_upgrader_skin/reset">Bulk_Upgrader_Skin::reset</a></td>
+<td>Resets the properties used in the update process.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="18" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class Bulk_Upgrader_Skin extends WP_Upgrader_Skin {
+
+	/**
+	 * Whether the bulk update process has started.
+	 *
+	 * @since 3.0.0
+	 * @var bool
+	 */
+	public $in_loop = false;
+
+	/**
+	 * Stores an error message about the update.
+	 *
+	 * @since 3.0.0
+	 * @var string|false
+	 */
+	public $error = false;
+
+	/**
+	 * Constructor.
+	 *
+	 * Sets up the generic skin for the Bulk Upgrader classes.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param array $args
+	 */
+	public function __construct( $args = array() ) {
+		$defaults = array(
+			'url'   =&gt; '',
+			'nonce' =&gt; '',
+		);
+		$args     = wp_parse_args( $args, $defaults );
+
+		parent::__construct( $args );
+	}
+
+	/**
+	 * Sets up the strings used in the update process.
+	 *
+	 * @since 3.0.0
+	 */
+	public function add_strings() {
+		$this-&gt;upgrader-&gt;strings['skin_upgrade_start'] = __( 'The update process is starting. This process may take a while on some hosts, so please be patient.' );
+		/* translators: 1: Title of an update, 2: Error message. */
+		$this-&gt;upgrader-&gt;strings['skin_update_failed_error'] = __( 'An error occurred while updating %1$s: %2$s' );
+		/* translators: %s: Title of an update. */
+		$this-&gt;upgrader-&gt;strings['skin_update_failed'] = __( 'The update of %s failed.' );
+		/* translators: %s: Title of an update. */
+		$this-&gt;upgrader-&gt;strings['skin_update_successful'] = __( '%s updated successfully.' );
+		$this-&gt;upgrader-&gt;strings['skin_upgrade_end']       = __( 'All updates have been completed.' );
+	}
+
+	/**
+	 * Displays a message about the update.
+	 *
+	 * @since 3.0.0
+	 * @since 5.9.0 Renamed `$string` (a PHP reserved keyword) to `$feedback` for PHP 8 named parameter support.
+	 *
+	 * @param string $feedback Message data.
+	 * @param mixed  ...$args  Optional text replacements.
+	 */
+	public function feedback( $feedback, ...$args ) {
+		if ( isset( $this-&gt;upgrader-&gt;strings[ $feedback ] ) ) {
+			$feedback = $this-&gt;upgrader-&gt;strings[ $feedback ];
+		}
+
+		if ( str_contains( $feedback, '%' ) ) {
+			if ( $args ) {
+				$args     = array_map( 'strip_tags', $args );
+				$args     = array_map( 'esc_html', $args );
+				$feedback = vsprintf( $feedback, $args );
+			}
+		}
+		if ( empty( $feedback ) ) {
+			return;
+		}
+		if ( $this-&gt;in_loop ) {
+			echo "$feedback&lt;br /&gt;\n";
+		} else {
+			echo "&lt;p&gt;$feedback&lt;/p&gt;\n";
+		}
+	}
+
+	/**
+	 * Displays the header before the update process.
+	 *
+	 * @since 3.0.0
+	 */
+	public function header() {
+		// Nothing. This will be displayed within an iframe.
+	}
+
+	/**
+	 * Displays the footer following the update process.
+	 *
+	 * @since 3.0.0
+	 */
+	public function footer() {
+		// Nothing. This will be displayed within an iframe.
+	}
+
+	/**
+	 * Displays an error message about the update.
+	 *
+	 * @since 3.0.0
+	 * @since 5.9.0 Renamed `$error` to `$errors` for PHP 8 named parameter support.
+	 *
+	 * @param string|WP_Error $errors Errors.
+	 */
+	public function error( $errors ) {
+		if ( is_string( $errors ) &amp;&amp; isset( $this-&gt;upgrader-&gt;strings[ $errors ] ) ) {
+			$this-&gt;error = $this-&gt;upgrader-&gt;strings[ $errors ];
+		}
+
+		if ( is_wp_error( $errors ) ) {
+			$messages = array();
+			foreach ( $errors-&gt;get_error_messages() as $emessage ) {
+				if ( $errors-&gt;get_error_data() &amp;&amp; is_string( $errors-&gt;get_error_data() ) ) {
+					$messages[] = $emessage . ' ' . esc_html( strip_tags( $errors-&gt;get_error_data() ) );
+				} else {
+					$messages[] = $emessage;
+				}
+			}
+			$this-&gt;error = implode( ', ', $messages );
+		}
+		echo '&lt;script type="text/javascript"&gt;jQuery(\'.waiting-' . esc_js( $this-&gt;upgrader-&gt;update_current ) . '\').hide();&lt;/script&gt;';
+	}
+
+	/**
+	 * Displays the header before the bulk update process.
+	 *
+	 * @since 3.0.0
+	 */
+	public function bulk_header() {
+		$this-&gt;feedback( 'skin_upgrade_start' );
+	}
+
+	/**
+	 * Displays the footer following the bulk update process.
+	 *
+	 * @since 3.0.0
+	 */
+	public function bulk_footer() {
+		$this-&gt;feedback( 'skin_upgrade_end' );
+	}
+
+	/**
+	 * Performs an action before a bulk update.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param string $title
+	 */
+	public function before( $title = '' ) {
+		$this-&gt;in_loop = true;
+		printf( '&lt;h2&gt;' . $this-&gt;upgrader-&gt;strings['skin_before_update_header'] . ' &lt;span class="spinner waiting-' . $this-&gt;upgrader-&gt;update_current . '"&gt;&lt;/span&gt;&lt;/h2&gt;', $title, $this-&gt;upgrader-&gt;update_current, $this-&gt;upgrader-&gt;update_count );
+		echo '&lt;script type="text/javascript"&gt;jQuery(\'.waiting-' . esc_js( $this-&gt;upgrader-&gt;update_current ) . '\').css("display", "inline-block");&lt;/script&gt;';
+		// This progress messages div gets moved via JavaScript when clicking on "More details.".
+		echo '&lt;div class="update-messages hide-if-js" id="progress-' . esc_attr( $this-&gt;upgrader-&gt;update_current ) . '"&gt;&lt;p&gt;';
+		$this-&gt;flush_output();
+	}
+
+	/**
+	 * Performs an action following a bulk update.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param string $title
+	 */
+	public function after( $title = '' ) {
+		echo '&lt;/p&gt;&lt;/div&gt;';
+		if ( $this-&gt;error || ! $this-&gt;result ) {
+			if ( $this-&gt;error ) {
+				$after_error_message = sprintf( $this-&gt;upgrader-&gt;strings['skin_update_failed_error'], $title, '&lt;strong&gt;' . $this-&gt;error . '&lt;/strong&gt;' );
+			} else {
+				$after_error_message = sprintf( $this-&gt;upgrader-&gt;strings['skin_update_failed'], $title );
+			}
+			wp_admin_notice(
+				$after_error_message,
+				array(
+					'additional_classes' =&gt; array( 'error' ),
+				)
+			);
+
+			echo '&lt;script type="text/javascript"&gt;jQuery(\'#progress-' . esc_js( $this-&gt;upgrader-&gt;update_current ) . '\').show();&lt;/script&gt;';
+		}
+		if ( $this-&gt;result &amp;&amp; ! is_wp_error( $this-&gt;result ) ) {
+			if ( ! $this-&gt;error ) {
+				echo '&lt;div class="updated js-update-details" data-update-details="progress-' . esc_attr( $this-&gt;upgrader-&gt;update_current ) . '"&gt;' .
+					'&lt;p&gt;' . sprintf( $this-&gt;upgrader-&gt;strings['skin_update_successful'], $title ) .
+					' &lt;button type="button" class="hide-if-no-js button-link js-update-details-toggle" aria-expanded="false"&gt;' . __( 'More details.' ) . '&lt;span class="dashicons dashicons-arrow-down" aria-hidden="true"&gt;&lt;/span&gt;&lt;/button&gt;' .
+					'&lt;/p&gt;&lt;/div&gt;';
+			}
+
+			echo '&lt;script type="text/javascript"&gt;jQuery(\'.waiting-' . esc_js( $this-&gt;upgrader-&gt;update_current ) . '\').hide();&lt;/script&gt;';
+		}
+
+		$this-&gt;reset();
+		$this-&gt;flush_output();
+	}
+
+	/**
+	 * Resets the properties used in the update process.
+	 *
+	 * @since 3.0.0
+	 */
+	public function reset() {
+		$this-&gt;in_loop = false;
+		$this-&gt;error   = false;
+	}
+
+	/**
+	 * Flushes all output buffers.
+	 *
+	 * @since 3.0.0
+	 */
+	public function flush_output() {
+		wp_ob_end_flush_all();
+		flush();
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-bulk-upgrader-skin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-bulk-upgrader-skin.php#L18">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-bulk-upgrader-skin.php#L18-L239">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td><span class="since-description">Moved to its own file from wp-admin/includes/class-wp-upgrader-skins.php.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/bulk_upgrader_skin" class="_attribution-link">https://developer.wordpress.org/reference/classes/bulk_upgrader_skin</a>
+  </p>
+</div>

@@ -1,0 +1,67 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_match_mime_types( <span class="arg-type">string|string[]</span> <span class="arg-name">$wildcard_mime_types</span>, <span class="arg-type">string|string[]</span> <span class="arg-name">$real_mime_types</span> ): <span class="return-type">array</span>
+</h1> <section><p>Checks a MIME-Type against a list.</p> </section> <section><h2 id="description">Description</h2> <p>If the <code>$wildcard_mime_types</code> parameter is a string, it must be comma separated list. If the <code>$real_mime_types</code> is a string, it is also comma separated to create the list.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$wildcard_mime_types</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Mime types, e.g. <code>audio/mpeg</code>, <code>image</code> (same as <code>image/*</code>), or <code>flash</code> (same as <code>*flash*</code>).</span></div></dd>
+<dt>
+<code>$real_mime_types</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Real post mime type values.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> array(wildcard=&gt;array(real types)).</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3534" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_match_mime_types( $wildcard_mime_types, $real_mime_types ) {
+	$matches = array();
+	if ( is_string( $wildcard_mime_types ) ) {
+		$wildcard_mime_types = array_map( 'trim', explode( ',', $wildcard_mime_types ) );
+	}
+	if ( is_string( $real_mime_types ) ) {
+		$real_mime_types = array_map( 'trim', explode( ',', $real_mime_types ) );
+	}
+
+	$patternses = array();
+	$wild       = '[-._a-z0-9]*';
+
+	foreach ( (array) $wildcard_mime_types as $type ) {
+		$mimes = array_map( 'trim', explode( ',', $type ) );
+		foreach ( $mimes as $mime ) {
+			$regex = str_replace( '__wildcard__', $wild, preg_quote( str_replace( '*', '__wildcard__', $mime ) ) );
+
+			$patternses[][ $type ] = "^$regex$";
+
+			if ( ! str_contains( $mime, '/' ) ) {
+				$patternses[][ $type ] = "^$regex/";
+				$patternses[][ $type ] = $regex;
+			}
+		}
+	}
+	asort( $patternses );
+
+	foreach ( $patternses as $patterns ) {
+		foreach ( $patterns as $type =&gt; $pattern ) {
+			foreach ( (array) $real_mime_types as $real ) {
+				if ( preg_match( "#$pattern#", $real )
+					&amp;&amp; ( empty( $matches[ $type ] ) || false === array_search( $real, $matches[ $type ], true ) )
+				) {
+					$matches[ $type ][] = $real;
+				}
+			}
+		}
+	}
+
+	return $matches;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L3534">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L3534-L3574">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_match_mime_types" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_match_mime_types</a>
+  </p>
+</div>

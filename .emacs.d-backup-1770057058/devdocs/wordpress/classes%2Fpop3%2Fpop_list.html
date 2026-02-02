@@ -1,0 +1,81 @@
+<h1 class="wp-block-wporg-code-reference-title">POP3::pop_list( <span class="arg-name">$msgNum</span> = <span class="arg-default">""</span> )</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="279" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function pop_list ($msgNum = "") {
+    //  If called with an argument, returns that msgs' size in octets
+    //  No argument returns an associative array of undeleted
+    //  msg numbers and their sizes in octets
+
+    if(!isset($this-&gt;FP))
+    {
+        $this-&gt;ERROR = "POP3 pop_list: " . _("No connection to server");
+        return false;
+    }
+    $fp = $this-&gt;FP;
+    $Total = $this-&gt;COUNT;
+    if( (!$Total) or ($Total == -1) )
+    {
+        return false;
+    }
+    if($Total == 0)
+    {
+        return array("0","0");
+        // return -1;   // mailbox empty
+    }
+
+    $this-&gt;update_timer();
+
+    if(!empty($msgNum))
+    {
+        $cmd = "LIST $msgNum";
+        fwrite($fp,"$cmd\r\n");
+        $reply = fgets($fp,$this-&gt;BUFFER);
+        $reply = $this-&gt;strip_clf($reply);
+        if($this-&gt;DEBUG) {
+            @error_log("POP3 SEND [$cmd] GOT [$reply]",0);
+        }
+        if(!$this-&gt;is_ok($reply))
+        {
+            $this-&gt;ERROR = "POP3 pop_list: " . _("Error ") . "[$reply]";
+            return false;
+        }
+        list($junk,$num,$size) = preg_split('/\s+/',$reply);
+        return $size;
+    }
+    $cmd = "LIST";
+    $reply = $this-&gt;send_cmd($cmd);
+    if(!$this-&gt;is_ok($reply))
+    {
+        $reply = $this-&gt;strip_clf($reply);
+        $this-&gt;ERROR = "POP3 pop_list: " . _("Error ") .  "[$reply]";
+        return false;
+    }
+    $MsgArray = array();
+    $MsgArray[0] = $Total;
+    for($msgC=1;$msgC &lt;= $Total; $msgC++)
+    {
+        if($msgC &gt; $Total) { break; }
+        $line = fgets($fp,$this-&gt;BUFFER);
+        $line = $this-&gt;strip_clf($line);
+        if(strpos($line, '.') === 0)
+        {
+            $this-&gt;ERROR = "POP3 pop_list: " . _("Premature end of list");
+            return false;
+        }
+        list($thisMsg,$msgSize) = preg_split('/\s+/',$line);
+        settype($thisMsg,"integer");
+        if($thisMsg != $msgC)
+        {
+            $MsgArray[$msgC] = "deleted";
+        }
+        else
+        {
+            $MsgArray[$msgC] = $msgSize;
+        }
+    }
+    return $MsgArray;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-pop3.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-pop3.php#L279">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-pop3.php#L279-L352">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/pop3/pop_list" class="_attribution-link">https://developer.wordpress.org/reference/classes/pop3/pop_list</a>
+  </p>
+</div>

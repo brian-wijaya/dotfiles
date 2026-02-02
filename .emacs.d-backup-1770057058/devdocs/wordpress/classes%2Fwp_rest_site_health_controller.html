@@ -1,0 +1,465 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_REST_Site_Health_Controller {}</h1> <section><p>Core class for interacting with Site Health tests.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_rest_controller">WP_REST_Controller</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/__construct">WP_REST_Site_Health_Controller::__construct</a></td>
+<td>Site Health controller constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/get_directory_sizes">WP_REST_Site_Health_Controller::get_directory_sizes</a></td>
+<td>Gets the current directory sizes for this install.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/get_item_schema">WP_REST_Site_Health_Controller::get_item_schema</a></td>
+<td>Gets the schema for each site health test.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/load_admin_textdomain">WP_REST_Site_Health_Controller::load_admin_textdomain</a></td>
+<td>Loads the admin textdomain for Site Health tests.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/register_routes">WP_REST_Site_Health_Controller::register_routes</a></td>
+<td>Registers API routes.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/test_authorization_header">WP_REST_Site_Health_Controller::test_authorization_header</a></td>
+<td>Checks that the authorization header is valid.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/test_background_updates">WP_REST_Site_Health_Controller::test_background_updates</a></td>
+<td>Checks if background updates work as expected.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/test_dotorg_communication">WP_REST_Site_Health_Controller::test_dotorg_communication</a></td>
+<td>Checks that the site can reach the WordPress.org API.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/test_https_status">WP_REST_Site_Health_Controller::test_https_status</a></td>
+<td>Checks that the site’s frontend can be accessed over HTTPS.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/test_loopback_requests">WP_REST_Site_Health_Controller::test_loopback_requests</a></td>
+<td>Checks that loopbacks can be performed.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/test_page_cache">WP_REST_Site_Health_Controller::test_page_cache</a></td>
+<td>Checks that full page cache is active.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_site_health_controller/validate_request_permission">WP_REST_Site_Health_Controller::validate_request_permission</a></td>
+<td>Validates if the current user can request this REST endpoint.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_REST_Site_Health_Controller extends WP_REST_Controller {
+
+	/**
+	 * An instance of the site health class.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @var WP_Site_Health
+	 */
+	private $site_health;
+
+	/**
+	 * Site Health controller constructor.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @param WP_Site_Health $site_health An instance of the site health class.
+	 */
+	public function __construct( $site_health ) {
+		$this-&gt;namespace = 'wp-site-health/v1';
+		$this-&gt;rest_base = 'tests';
+
+		$this-&gt;site_health = $site_health;
+	}
+
+	/**
+	 * Registers API routes.
+	 *
+	 * @since 5.6.0
+	 * @since 6.1.0 Adds page-cache async test.
+	 *
+	 * @see register_rest_route()
+	 */
+	public function register_routes() {
+		register_rest_route(
+			$this-&gt;namespace,
+			sprintf(
+				'/%s/%s',
+				$this-&gt;rest_base,
+				'background-updates'
+			),
+			array(
+				array(
+					'methods'             =&gt; 'GET',
+					'callback'            =&gt; array( $this, 'test_background_updates' ),
+					'permission_callback' =&gt; function () {
+						return $this-&gt;validate_request_permission( 'background_updates' );
+					},
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+
+		register_rest_route(
+			$this-&gt;namespace,
+			sprintf(
+				'/%s/%s',
+				$this-&gt;rest_base,
+				'loopback-requests'
+			),
+			array(
+				array(
+					'methods'             =&gt; 'GET',
+					'callback'            =&gt; array( $this, 'test_loopback_requests' ),
+					'permission_callback' =&gt; function () {
+						return $this-&gt;validate_request_permission( 'loopback_requests' );
+					},
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+
+		register_rest_route(
+			$this-&gt;namespace,
+			sprintf(
+				'/%s/%s',
+				$this-&gt;rest_base,
+				'https-status'
+			),
+			array(
+				array(
+					'methods'             =&gt; 'GET',
+					'callback'            =&gt; array( $this, 'test_https_status' ),
+					'permission_callback' =&gt; function () {
+						return $this-&gt;validate_request_permission( 'https_status' );
+					},
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+
+		register_rest_route(
+			$this-&gt;namespace,
+			sprintf(
+				'/%s/%s',
+				$this-&gt;rest_base,
+				'dotorg-communication'
+			),
+			array(
+				array(
+					'methods'             =&gt; 'GET',
+					'callback'            =&gt; array( $this, 'test_dotorg_communication' ),
+					'permission_callback' =&gt; function () {
+						return $this-&gt;validate_request_permission( 'dotorg_communication' );
+					},
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+
+		register_rest_route(
+			$this-&gt;namespace,
+			sprintf(
+				'/%s/%s',
+				$this-&gt;rest_base,
+				'authorization-header'
+			),
+			array(
+				array(
+					'methods'             =&gt; 'GET',
+					'callback'            =&gt; array( $this, 'test_authorization_header' ),
+					'permission_callback' =&gt; function () {
+						return $this-&gt;validate_request_permission( 'authorization_header' );
+					},
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+
+		register_rest_route(
+			$this-&gt;namespace,
+			sprintf(
+				'/%s',
+				'directory-sizes'
+			),
+			array(
+				'methods'             =&gt; 'GET',
+				'callback'            =&gt; array( $this, 'get_directory_sizes' ),
+				'permission_callback' =&gt; function () {
+					return $this-&gt;validate_request_permission( 'directory_sizes' ) &amp;&amp; ! is_multisite();
+				},
+			)
+		);
+
+		register_rest_route(
+			$this-&gt;namespace,
+			sprintf(
+				'/%s/%s',
+				$this-&gt;rest_base,
+				'page-cache'
+			),
+			array(
+				array(
+					'methods'             =&gt; 'GET',
+					'callback'            =&gt; array( $this, 'test_page_cache' ),
+					'permission_callback' =&gt; function () {
+						return $this-&gt;validate_request_permission( 'page_cache' );
+					},
+				),
+			)
+		);
+	}
+
+	/**
+	 * Validates if the current user can request this REST endpoint.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @param string $check The endpoint check being ran.
+	 * @return bool
+	 */
+	protected function validate_request_permission( $check ) {
+		$default_capability = 'view_site_health_checks';
+
+		/**
+		 * Filters the capability needed to run a given Site Health check.
+		 *
+		 * @since 5.6.0
+		 *
+		 * @param string $default_capability The default capability required for this check.
+		 * @param string $check              The Site Health check being performed.
+		 */
+		$capability = apply_filters( "site_health_test_rest_capability_{$check}", $default_capability, $check );
+
+		return current_user_can( $capability );
+	}
+
+	/**
+	 * Checks if background updates work as expected.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @return array
+	 */
+	public function test_background_updates() {
+		$this-&gt;load_admin_textdomain();
+		return $this-&gt;site_health-&gt;get_test_background_updates();
+	}
+
+	/**
+	 * Checks that the site can reach the WordPress.org API.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @return array
+	 */
+	public function test_dotorg_communication() {
+		$this-&gt;load_admin_textdomain();
+		return $this-&gt;site_health-&gt;get_test_dotorg_communication();
+	}
+
+	/**
+	 * Checks that loopbacks can be performed.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @return array
+	 */
+	public function test_loopback_requests() {
+		$this-&gt;load_admin_textdomain();
+		return $this-&gt;site_health-&gt;get_test_loopback_requests();
+	}
+
+	/**
+	 * Checks that the site's frontend can be accessed over HTTPS.
+	 *
+	 * @since 5.7.0
+	 *
+	 * @return array
+	 */
+	public function test_https_status() {
+		$this-&gt;load_admin_textdomain();
+		return $this-&gt;site_health-&gt;get_test_https_status();
+	}
+
+	/**
+	 * Checks that the authorization header is valid.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @return array
+	 */
+	public function test_authorization_header() {
+		$this-&gt;load_admin_textdomain();
+		return $this-&gt;site_health-&gt;get_test_authorization_header();
+	}
+
+	/**
+	 * Checks that full page cache is active.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @return array The test result.
+	 */
+	public function test_page_cache() {
+		$this-&gt;load_admin_textdomain();
+		return $this-&gt;site_health-&gt;get_test_page_cache();
+	}
+
+	/**
+	 * Gets the current directory sizes for this install.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @return array|WP_Error
+	 */
+	public function get_directory_sizes() {
+		if ( ! class_exists( 'WP_Debug_Data' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-wp-debug-data.php';
+		}
+
+		$this-&gt;load_admin_textdomain();
+
+		$sizes_data = WP_Debug_Data::get_sizes();
+		$all_sizes  = array( 'raw' =&gt; 0 );
+
+		foreach ( $sizes_data as $name =&gt; $value ) {
+			$name = sanitize_text_field( $name );
+			$data = array();
+
+			if ( isset( $value['size'] ) ) {
+				if ( is_string( $value['size'] ) ) {
+					$data['size'] = sanitize_text_field( $value['size'] );
+				} else {
+					$data['size'] = (int) $value['size'];
+				}
+			}
+
+			if ( isset( $value['debug'] ) ) {
+				if ( is_string( $value['debug'] ) ) {
+					$data['debug'] = sanitize_text_field( $value['debug'] );
+				} else {
+					$data['debug'] = (int) $value['debug'];
+				}
+			}
+
+			if ( ! empty( $value['raw'] ) ) {
+				$data['raw'] = (int) $value['raw'];
+			}
+
+			$all_sizes[ $name ] = $data;
+		}
+
+		if ( isset( $all_sizes['total_size']['debug'] ) &amp;&amp; 'not available' === $all_sizes['total_size']['debug'] ) {
+			return new WP_Error( 'not_available', __( 'Directory sizes could not be returned.' ), array( 'status' =&gt; 500 ) );
+		}
+
+		return $all_sizes;
+	}
+
+	/**
+	 * Loads the admin textdomain for Site Health tests.
+	 *
+	 * The <a href="wp_site_health">WP_Site_Health</a> class is defined in WP-Admin, while the REST API operates in a front-end context.
+	 * This means that the translations for Site Health won't be loaded by default in <a href="../functions/load_default_textdomain">load_default_textdomain()</a>.
+	 *
+	 * @since 5.6.0
+	 */
+	protected function load_admin_textdomain() {
+		// Accounts for inner REST API requests in the admin.
+		if ( ! is_admin() ) {
+			$locale = determine_locale();
+			load_textdomain( 'default', WP_LANG_DIR . "/admin-$locale.mo", $locale );
+		}
+	}
+
+	/**
+	 * Gets the schema for each site health test.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @return array The test schema.
+	 */
+	public function get_item_schema() {
+		if ( $this-&gt;schema ) {
+			return $this-&gt;schema;
+		}
+
+		$this-&gt;schema = array(
+			'$schema'    =&gt; 'http://json-schema.org/draft-04/schema#',
+			'title'      =&gt; 'wp-site-health-test',
+			'type'       =&gt; 'object',
+			'properties' =&gt; array(
+				'test'        =&gt; array(
+					'type'        =&gt; 'string',
+					'description' =&gt; __( 'The name of the test being run.' ),
+					'readonly'    =&gt; true,
+				),
+				'label'       =&gt; array(
+					'type'        =&gt; 'string',
+					'description' =&gt; __( 'A label describing the test.' ),
+					'readonly'    =&gt; true,
+				),
+				'status'      =&gt; array(
+					'type'        =&gt; 'string',
+					'description' =&gt; __( 'The status of the test.' ),
+					'enum'        =&gt; array( 'good', 'recommended', 'critical' ),
+					'readonly'    =&gt; true,
+				),
+				'badge'       =&gt; array(
+					'type'        =&gt; 'object',
+					'description' =&gt; __( 'The category this test is grouped in.' ),
+					'properties'  =&gt; array(
+						'label' =&gt; array(
+							'type'     =&gt; 'string',
+							'readonly' =&gt; true,
+						),
+						'color' =&gt; array(
+							'type'     =&gt; 'string',
+							'enum'     =&gt; array( 'blue', 'orange', 'red', 'green', 'purple', 'gray' ),
+							'readonly' =&gt; true,
+						),
+					),
+					'readonly'    =&gt; true,
+				),
+				'description' =&gt; array(
+					'type'        =&gt; 'string',
+					'description' =&gt; __( 'A more descriptive explanation of what the test looks for, and why it is important for the user.' ),
+					'readonly'    =&gt; true,
+				),
+				'actions'     =&gt; array(
+					'type'        =&gt; 'string',
+					'description' =&gt; __( 'HTML containing an action to direct the user to where they can resolve the issue.' ),
+					'readonly'    =&gt; true,
+				),
+			),
+		);
+
+		return $this-&gt;schema;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-site-health-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-site-health-controller.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-site-health-controller.php#L17-L407">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_site_health_controller" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_site_health_controller</a>
+  </p>
+</div>

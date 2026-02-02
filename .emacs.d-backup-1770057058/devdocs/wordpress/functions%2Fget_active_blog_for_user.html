@@ -1,0 +1,79 @@
+<h1 class="wp-block-wporg-code-reference-title">get_active_blog_for_user( <span class="arg-type">int</span> <span class="arg-name">$user_id</span> ): <span class="return-type"><a href="../classes/wp_site" rel="class">WP_Site</a>|void</span>
+</h1> <section><p>Gets one of a user’s active blogs.</p> </section> <section><h2 id="description">Description</h2> <p>Returns the user’s primary blog, if they have one and it is active. If it’s inactive, function returns another active blog of the user. If none are found, the user is added as a Subscriber to the Dashboard Blog and that blog is returned.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$user_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The unique ID of the user</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../classes/wp_site" rel="class">WP_Site</a>|void</span> The blog object</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="45" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_active_blog_for_user( $user_id ) {
+	$blogs = get_blogs_of_user( $user_id );
+	if ( empty( $blogs ) ) {
+		return;
+	}
+
+	if ( ! is_multisite() ) {
+		return $blogs[ get_current_blog_id() ];
+	}
+
+	$primary_blog = get_user_meta( $user_id, 'primary_blog', true );
+	$first_blog   = current( $blogs );
+	if ( false !== $primary_blog ) {
+		if ( ! isset( $blogs[ $primary_blog ] ) ) {
+			update_user_meta( $user_id, 'primary_blog', $first_blog-&gt;userblog_id );
+			$primary = get_site( $first_blog-&gt;userblog_id );
+		} else {
+			$primary = get_site( $primary_blog );
+		}
+	} else {
+		// TODO: Review this call to add_user_to_blog too - to get here the user must have a role on this blog?
+		$result = add_user_to_blog( $first_blog-&gt;userblog_id, $user_id, 'subscriber' );
+
+		if ( ! is_wp_error( $result ) ) {
+			update_user_meta( $user_id, 'primary_blog', $first_blog-&gt;userblog_id );
+			$primary = $first_blog;
+		}
+	}
+
+	if ( ( ! is_object( $primary ) ) || ( 1 == $primary-&gt;archived || 1 == $primary-&gt;spam || 1 == $primary-&gt;deleted ) ) {
+		$blogs = get_blogs_of_user( $user_id, true ); // If a user's primary blog is shut down, check their other blogs.
+		$ret   = false;
+		if ( is_array( $blogs ) &amp;&amp; count( $blogs ) &gt; 0 ) {
+			foreach ( (array) $blogs as $blog_id =&gt; $blog ) {
+				if ( get_current_network_id() != $blog-&gt;site_id ) {
+					continue;
+				}
+				$details = get_site( $blog_id );
+				if ( is_object( $details ) &amp;&amp; 0 == $details-&gt;archived &amp;&amp; 0 == $details-&gt;spam &amp;&amp; 0 == $details-&gt;deleted ) {
+					$ret = $details;
+					if ( get_user_meta( $user_id, 'primary_blog', true ) != $blog_id ) {
+						update_user_meta( $user_id, 'primary_blog', $blog_id );
+					}
+					if ( ! get_user_meta( $user_id, 'source_domain', true ) ) {
+						update_user_meta( $user_id, 'source_domain', $details-&gt;domain );
+					}
+					break;
+				}
+			}
+		} else {
+			return;
+		}
+		return $ret;
+	} else {
+		return $primary;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-functions.php#L45">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-functions.php#L45-L101">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_active_blog_for_user" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_active_blog_for_user</a>
+  </p>
+</div>

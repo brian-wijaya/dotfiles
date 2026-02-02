@@ -1,0 +1,191 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Block_Supports {}</h1> <section><p>Class encapsulating and implementing Block Supports.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_block_supports/apply_block_supports">WP_Block_Supports::apply_block_supports</a></td>
+<td>Generates an array of HTML attributes, such as classes, by applying to the given block all of the features that the block supports.</td>
+</tr>
+<tr class="">
+<td><a href="wp_block_supports/get_instance">WP_Block_Supports::get_instance</a></td>
+<td>Utility method to retrieve the main instance of the class.</td>
+</tr>
+<tr class="">
+<td><a href="wp_block_supports/init">WP_Block_Supports::init</a></td>
+<td>Initializes the block supports. It registers the block supports block attributes.</td>
+</tr>
+<tr class="">
+<td><a href="wp_block_supports/register">WP_Block_Supports::register</a></td>
+<td>Registers a block support.</td>
+</tr>
+<tr class="">
+<td><a href="wp_block_supports/register_attributes">WP_Block_Supports::register_attributes</a></td>
+<td>Registers the block attributes required by the different block supports.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="18" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Block_Supports {
+
+	/**
+	 * Config.
+	 *
+	 * @since 5.6.0
+	 * @var array
+	 */
+	private $block_supports = array();
+
+	/**
+	 * Tracks the current block to be rendered.
+	 *
+	 * @since 5.6.0
+	 * @var array
+	 */
+	public static $block_to_render = null;
+
+	/**
+	 * Container for the main instance of the class.
+	 *
+	 * @since 5.6.0
+	 * @var WP_Block_Supports|null
+	 */
+	private static $instance = null;
+
+	/**
+	 * Utility method to retrieve the main instance of the class.
+	 *
+	 * The instance will be created if it does not exist yet.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @return WP_Block_Supports The main instance.
+	 */
+	public static function get_instance() {
+		if ( null === self::$instance ) {
+			self::$instance = new self();
+		}
+
+		return self::$instance;
+	}
+
+	/**
+	 * Initializes the block supports. It registers the block supports block attributes.
+	 *
+	 * @since 5.6.0
+	 */
+	public static function init() {
+		$instance = self::get_instance();
+		$instance-&gt;register_attributes();
+	}
+
+	/**
+	 * Registers a block support.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @link https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/
+	 *
+	 * @param string $block_support_name   Block support name.
+	 * @param array  $block_support_config Array containing the properties of the block support.
+	 */
+	public function register( $block_support_name, $block_support_config ) {
+		$this-&gt;block_supports[ $block_support_name ] = array_merge(
+			$block_support_config,
+			array( 'name' =&gt; $block_support_name )
+		);
+	}
+
+	/**
+	 * Generates an array of HTML attributes, such as classes, by applying to
+	 * the given block all of the features that the block supports.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @return string[] Array of HTML attribute values keyed by their name.
+	 */
+	public function apply_block_supports() {
+		$block_type = WP_Block_Type_Registry::get_instance()-&gt;get_registered(
+			self::$block_to_render['blockName']
+		);
+
+		// If no render_callback, assume styles have been previously handled.
+		if ( ! $block_type || empty( $block_type ) ) {
+			return array();
+		}
+
+		$block_attributes = array_key_exists( 'attrs', self::$block_to_render ) &amp;&amp; is_array( self::$block_to_render['attrs'] )
+			? $block_type-&gt;prepare_attributes_for_render( self::$block_to_render['attrs'] )
+			: array();
+
+		$output = array();
+		foreach ( $this-&gt;block_supports as $block_support_config ) {
+			if ( ! isset( $block_support_config['apply'] ) ) {
+				continue;
+			}
+
+			$new_attributes = call_user_func(
+				$block_support_config['apply'],
+				$block_type,
+				$block_attributes
+			);
+
+			if ( ! empty( $new_attributes ) ) {
+				foreach ( $new_attributes as $attribute_name =&gt; $attribute_value ) {
+					if ( empty( $output[ $attribute_name ] ) ) {
+						$output[ $attribute_name ] = $attribute_value;
+					} else {
+						$output[ $attribute_name ] .= " $attribute_value";
+					}
+				}
+			}
+		}
+
+		return $output;
+	}
+
+	/**
+	 * Registers the block attributes required by the different block supports.
+	 *
+	 * @since 5.6.0
+	 */
+	private function register_attributes() {
+		$block_registry         = WP_Block_Type_Registry::get_instance();
+		$registered_block_types = $block_registry-&gt;get_all_registered();
+		foreach ( $registered_block_types as $block_type ) {
+			if ( ! ( $block_type instanceof WP_Block_Type ) ) {
+				continue;
+			}
+			if ( ! $block_type-&gt;attributes ) {
+				$block_type-&gt;attributes = array();
+			}
+
+			foreach ( $this-&gt;block_supports as $block_support_config ) {
+				if ( ! isset( $block_support_config['register_attribute'] ) ) {
+					continue;
+				}
+
+				call_user_func(
+					$block_support_config['register_attribute'],
+					$block_type
+				);
+			}
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-block-supports.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-block-supports.php#L18">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-block-supports.php#L18-L164">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_block_supports" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_block_supports</a>
+  </p>
+</div>

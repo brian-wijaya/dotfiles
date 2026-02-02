@@ -1,0 +1,164 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_die( <span class="arg-type">string|WP_Error</span> <span class="arg-name">$message</span> = <span class="arg-default">”</span>, <span class="arg-type">string|int</span> <span class="arg-name">$title</span> = <span class="arg-default">”</span>, <span class="arg-type">string|array|int</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> )</h1> <section><p>Kills WordPress execution and displays HTML page with an error message.</p> </section> <section><h2 id="description">Description</h2> <p>This function complements the <code>die()</code> PHP function. The difference is that HTML will be displayed to the user. It is recommended to use this function only when the execution should not continue any further. It is not recommended to call this function very often, and try to handle as many errors as possible silently or more gracefully.</p> <p>As a shorthand, the desired HTTP response code may be passed as an integer to the <code>$title</code> parameter (the default title would apply) or the <code>$args</code> parameter.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$message</code><span class="type"><span class="string">string</span>|<span class="WP_Error"><a href="../classes/wp_error" rel="class">WP_Error</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Error message. If this is a <a href="../classes/wp_error" rel="class">WP_Error</a> object, and not an Ajax or XML-RPC request, the error’s messages are used.<br> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$title</code><span class="type"><span class="string">string</span>|<span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Error title. If <code>$message</code> is a <code>WP_Error</code> object, error data with the key <code>'title'</code> may be used to specify the title.<br> If <code>$title</code> is an integer, then it is treated as the response code.<br> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$args</code><span class="type"><span class="string">string</span>|<span class="array">array</span>|<span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Arguments to control behavior. If <code>$args</code> is an integer, then it is treated as the response code. <br> <ul class="param-hash">
+<li>
+<code>response</code> <span class="type">int</span><div class="desc">The HTTP response code. Default 200 for Ajax requests, 500 otherwise.</div>
+</li> <li>
+<code>link_url</code> <span class="type">string</span><div class="desc">A URL to include a link to. Only works in combination with $link_text.<br> Default empty string.</div>
+</li> <li>
+<code>link_text</code> <span class="type">string</span><div class="desc">A label for the link to include. Only works in combination with $link_url.<br> Default empty string.</div>
+</li> <li>
+<code>back_link</code> <span class="type">bool</span><div class="desc">Whether to include a link to go back. Default false.</div>
+</li> <li>
+<code>text_direction</code> <span class="type">string</span><div class="desc">The text direction. This is only useful internally, when WordPress is still loading and the site’s locale is not set up yet. Accepts <code>'rtl'</code> and <code>'ltr'</code>.<br> Default is the value of <a href="is_rtl" rel="function">is_rtl()</a> .</div>
+</li> <li>
+<code>charset</code> <span class="type">string</span><div class="desc">Character set of the HTML output. Default <code>'utf-8'</code>.</div>
+</li> <li>
+<code>code</code> <span class="type">string</span><div class="desc">Error code to use. Default is <code>'wp_die'</code>, or the main error code if $message is a <a href="../classes/wp_error" rel="class">WP_Error</a>.</div>
+</li> <li>
+<code>exit</code> <span class="type">bool</span><div class="desc">Whether to exit the process after completion. Default true.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="more-information">More Information</h2> <p>You can add a <tt><a title="Class Reference/WP Error" href="https://codex.wordpress.org/Class_Reference/WP_Error">WP_Error</a></tt> object. If you’ve done so, you can add <tt>$data['title']</tt> to the error object and it will automatically be taken as (default/overwriteable) title for the die page</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3754" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_die( $message = '', $title = '', $args = array() ) {
+	global $wp_query;
+
+	if ( is_int( $args ) ) {
+		$args = array( 'response' =&gt; $args );
+	} elseif ( is_int( $title ) ) {
+		$args  = array( 'response' =&gt; $title );
+		$title = '';
+	}
+
+	if ( wp_doing_ajax() ) {
+		/**
+		 * Filters the callback for killing WordPress execution for Ajax requests.
+		 *
+		 * @since 3.4.0
+		 *
+		 * @param callable $callback Callback function name.
+		 */
+		$callback = apply_filters( 'wp_die_ajax_handler', '_ajax_wp_die_handler' );
+	} elseif ( wp_is_json_request() ) {
+		/**
+		 * Filters the callback for killing WordPress execution for JSON requests.
+		 *
+		 * @since 5.1.0
+		 *
+		 * @param callable $callback Callback function name.
+		 */
+		$callback = apply_filters( 'wp_die_json_handler', '_json_wp_die_handler' );
+	} elseif ( wp_is_serving_rest_request() &amp;&amp; wp_is_jsonp_request() ) {
+		/**
+		 * Filters the callback for killing WordPress execution for JSONP REST requests.
+		 *
+		 * @since 5.2.0
+		 *
+		 * @param callable $callback Callback function name.
+		 */
+		$callback = apply_filters( 'wp_die_jsonp_handler', '_jsonp_wp_die_handler' );
+	} elseif ( defined( 'XMLRPC_REQUEST' ) &amp;&amp; XMLRPC_REQUEST ) {
+		/**
+		 * Filters the callback for killing WordPress execution for XML-RPC requests.
+		 *
+		 * @since 3.4.0
+		 *
+		 * @param callable $callback Callback function name.
+		 */
+		$callback = apply_filters( 'wp_die_xmlrpc_handler', '_xmlrpc_wp_die_handler' );
+	} elseif ( wp_is_xml_request()
+		|| isset( $wp_query ) &amp;&amp;
+			( function_exists( 'is_feed' ) &amp;&amp; is_feed()
+			|| function_exists( 'is_comment_feed' ) &amp;&amp; is_comment_feed()
+			|| function_exists( 'is_trackback' ) &amp;&amp; is_trackback() ) ) {
+		/**
+		 * Filters the callback for killing WordPress execution for XML requests.
+		 *
+		 * @since 5.2.0
+		 *
+		 * @param callable $callback Callback function name.
+		 */
+		$callback = apply_filters( 'wp_die_xml_handler', '_xml_wp_die_handler' );
+	} else {
+		/**
+		 * Filters the callback for killing WordPress execution for all non-Ajax, non-JSON, non-XML requests.
+		 *
+		 * @since 3.0.0
+		 *
+		 * @param callable $callback Callback function name.
+		 */
+		$callback = apply_filters( 'wp_die_handler', '_default_wp_die_handler' );
+	}
+
+	call_user_func( $callback, $message, $title, $args );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L3754">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L3754-L3825">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_die_ajax_handler"><span class="hook-func">apply_filters</span>( ‘wp_die_ajax_handler’, <nobr><span class="arg-type">callable</span> <span class="arg-name">$callback</span></nobr> )</a></dt>
+<dd>
+<p>Filters the callback for killing WordPress execution for Ajax requests.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_die_handler"><span class="hook-func">apply_filters</span>( ‘wp_die_handler’, <nobr><span class="arg-type">callable</span> <span class="arg-name">$callback</span></nobr> )</a></dt>
+<dd>
+<p>Filters the callback for killing WordPress execution for all non-Ajax, non-JSON, non-XML requests.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_die_jsonp_handler"><span class="hook-func">apply_filters</span>( ‘wp_die_jsonp_handler’, <nobr><span class="arg-type">callable</span> <span class="arg-name">$callback</span></nobr> )</a></dt>
+<dd>
+<p>Filters the callback for killing WordPress execution for JSONP REST requests.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_die_json_handler"><span class="hook-func">apply_filters</span>( ‘wp_die_json_handler’, <nobr><span class="arg-type">callable</span> <span class="arg-name">$callback</span></nobr> )</a></dt>
+<dd>
+<p>Filters the callback for killing WordPress execution for JSON requests.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_die_xmlrpc_handler"><span class="hook-func">apply_filters</span>( ‘wp_die_xmlrpc_handler’, <nobr><span class="arg-type">callable</span> <span class="arg-name">$callback</span></nobr> )</a></dt>
+<dd>
+<p>Filters the callback for killing WordPress execution for XML-RPC requests.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_die_xml_handler"><span class="hook-func">apply_filters</span>( ‘wp_die_xml_handler’, <nobr><span class="arg-type">callable</span> <span class="arg-name">$callback</span></nobr> )</a></dt>
+<dd>
+<p>Filters the callback for killing WordPress execution for XML requests.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">The <code>$text_direction</code> argument has a priority over <a href="get_language_attributes" rel="function">get_language_attributes()</a> in the default handler.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">The <code>$charset</code> argument was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td><span class="since-description">The <code>$link_url</code>, <code>$link_text</code>, and <code>$exit</code> arguments were added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.1.0/">4.1.0</a></td>
+<td><span class="since-description">The <code>$title</code> and <code>$args</code> parameters were changed to optionally accept an integer to be used as the response code.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.4/">2.0.4</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_die" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_die</a>
+  </p>
+</div>

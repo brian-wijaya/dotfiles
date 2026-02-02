@@ -1,0 +1,120 @@
+<mdn-survey></mdn-survey> <h1>String.prototype.matchAll()</h1> <details class="baseline-indicator high" data-glean-toggle-open="baseline_toggle_open"> <summary>  <div class="status-title"> Baseline <span class="not-bold"> Widely available </span> </div>   </summary> <div class="extra"> <p> This feature is well established and works across many devices and browser versions. It’s been available across browsers since ⁨January 2020⁩. </p> <ul> <li> <a href="https://developer.mozilla.org/en-US/docs/Glossary/Baseline/Compatibility" data-glean-id="baseline_link_learn_more" target="_blank" class="learn-more"> Learn more </a> </li> <li> <a href="#browser_compatibility" data-glean-id="baseline_link_bcd_table"> See full compatibility </a> </li> <li> <a href="https://survey.alchemer.com/s3/7634825/MDN-baseline-feedback?page=%2Fen-US%2Fdocs%2FWeb%2FJavaScript%2FReference%2FGlobal_Objects%2FString%2FmatchAll&amp;level=high" data-glean-id="baseline_link_feedback" class="feedback-link" target="_blank" rel="noreferrer"> Report feedback </a> </li> </ul> </div> </details><section class="content-section"> <p>The <code>matchAll()</code> method of <a href="../string"><code>String</code></a> values returns an iterator of all results matching this string against a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions">regular expression</a>, including <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions/Groups_and_backreferences">capturing groups</a>.</p> </section>    <section class="content-section" aria-labelledby="try_it"> <h2 id="try_it" class="heading">Try it</h2> <interactive-example name="JavaScript Demo: String.prototype.matchAll()"></interactive-example> <div class="code-example"><pre data-language="js">const regexp = /t(e)(st(\d?))/g;
+const str = "test1test2";
+
+const array = [...str.matchAll(regexp)];
+
+console.log(array[0]);
+// Expected output: Array ["test1", "e", "st1", "1"]
+
+console.log(array[1]);
+// Expected output: Array ["test2", "e", "st2", "2"]
+</pre></div> </section><section class="content-section" aria-labelledby="syntax"> <h2 id="syntax" class="heading">Syntax</h2> <div class="code-example"><pre data-language="js">matchAll(regexp)
+</pre></div> </section><section class="content-section" aria-labelledby="parameters"> <h3 id="parameters" class="heading">Parameters</h3> <dl> <dt id="regexp"><a href="#regexp"><code>regexp</code></a></dt> <dd> <p>A regular expression object, or any object that has a <a href="../symbol/matchall"><code>Symbol.matchAll</code></a> method.</p> <p>If <code>regexp</code> is not a <code>RegExp</code> object and does not have a <code>Symbol.matchAll</code> method, it is implicitly converted to a <a href="../regexp"><code>RegExp</code></a> by using <code>new RegExp(regexp, 'g')</code>.</p> <p>If <code>regexp</code> <a href="../regexp#special_handling_for_regexes">is a regex</a>, then it must have the global (<code>g</code>) flag set, or a <a href="../typeerror"><code>TypeError</code></a> is thrown.</p> </dd> </dl> </section><section class="content-section" aria-labelledby="return_value"> <h3 id="return_value" class="heading">Return value</h3> <p>An <a href="../iterator">iterable iterator object</a> (which is not restartable) of matches or an empty iterator if no matches are found. Each value yielded by the iterator is an array with the same shape as the return value of <a href="../regexp/exec"><code>RegExp.prototype.exec()</code></a>.</p> </section><section class="content-section" aria-labelledby="exceptions"> <h3 id="exceptions" class="heading">Exceptions</h3> <dl> <dt id="typeerror"><a href="../typeerror"><code>TypeError</code></a></dt> <dd> <p>Thrown if the <code>regexp</code> <a href="../regexp#special_handling_for_regexes">is a regex</a> that does not have the global (<code>g</code>) flag set (its <a href="../regexp/flags"><code>flags</code></a> property does not contain <code>"g"</code>).</p> </dd> </dl> </section><section class="content-section" aria-labelledby="description"> <h2 id="description" class="heading">Description</h2> <p>The implementation of <code>String.prototype.matchAll</code> doesn't do much other than calling the <code>Symbol.matchAll</code> method of the argument with the string as the first parameter (apart from the extra input validation that the regex is global). The actual implementation comes from <a href="../regexp/symbol.matchall"><code>RegExp.prototype[Symbol.matchAll]()</code></a>.</p> </section><section class="content-section" aria-labelledby="examples"> <h2 id="examples" class="heading">Examples</h2> &gt; </section><section class="content-section" aria-labelledby="regexp.prototype.exec_and_matchall"> <h3 id="regexp.prototype.exec_and_matchall" class="heading">Regexp.prototype.exec() and matchAll()</h3> <p>Without <code>matchAll()</code>, it's possible to use calls to <a href="../regexp/exec"><code>regexp.exec()</code></a> (and regexes with the <code>g</code> flag) in a loop to obtain all the matches:</p> <div class="code-example"><pre data-language="js">const regexp = /foo[a-z]*/g;
+const str = "table football, foosball";
+let match;
+
+while ((match = regexp.exec(str)) !== null) {
+  console.log(
+    `Found ${match[0]} start=${match.index} end=${regexp.lastIndex}.`,
+  );
+}
+// Found football start=6 end=14.
+// Found foosball start=16 end=24.
+</pre></div> <p>With <code>matchAll()</code> available, you can avoid the <a href="../../statements/while"><code>while</code></a> loop and <code>exec</code> with <code>g</code>. Instead, you get an iterator to use with the more convenient <a href="../../statements/for...of"><code>for...of</code></a>, <a href="../../operators/spread_syntax">array spreading</a>, or <a href="../array/from"><code>Array.from()</code></a> constructs:</p> <div class="code-example"><pre data-language="js">const regexp = /foo[a-z]*/g;
+const str = "table football, foosball";
+const matches = str.matchAll(regexp);
+
+for (const match of matches) {
+  console.log(
+    `Found ${match[0]} start=${match.index} end=${
+      match.index + match[0].length
+    }.`,
+  );
+}
+// Found football start=6 end=14.
+// Found foosball start=16 end=24.
+
+// matches iterator is exhausted after the for...of iteration
+// Call matchAll again to create a new iterator
+Array.from(str.matchAll(regexp), (m) =&gt; m[0]);
+// [ "football", "foosball" ]
+</pre></div> <p><code>matchAll</code> will throw an exception if the <code>g</code> flag is missing.</p> <div class="code-example"><pre data-language="js">const regexp = /[a-c]/;
+const str = "abc";
+str.matchAll(regexp);
+// TypeError
+</pre></div> <p><code>matchAll</code> internally makes a clone of the <code>regexp</code> — so, unlike <a href="../regexp/exec"><code>regexp.exec()</code></a>, <code>lastIndex</code> does not change as the string is scanned.</p> <div class="code-example"><pre data-language="js">const regexp = /[a-c]/g;
+regexp.lastIndex = 1;
+const str = "abc";
+Array.from(str.matchAll(regexp), (m) =&gt; `${regexp.lastIndex} ${m[0]}`);
+// [ "1 b", "1 c" ]
+</pre></div> <p>However, this means that unlike using <a href="../regexp/exec"><code>regexp.exec()</code></a> in a loop, you can't mutate <code>lastIndex</code> to make the regex advance or rewind.</p> </section><section class="content-section" aria-labelledby="better_access_to_capturing_groups_than_string.prototype.match"> <h3 id="better_access_to_capturing_groups_than_string.prototype.match" class="heading">Better access to capturing groups (than String.prototype.match())</h3> <p>Another compelling reason for <code>matchAll</code> is the improved access to capture groups.</p> <p>Capture groups are ignored when using <a href="match"><code>match()</code></a> with the global <code>g</code> flag:</p> <div class="code-example"><pre data-language="js">const regexp = /t(e)(st(\d?))/g;
+const str = "test1test2";
+
+str.match(regexp); // ['test1', 'test2']
+</pre></div> <p>Using <code>matchAll</code>, you can access capture groups easily:</p> <div class="code-example"><pre data-language="js">const array = [...str.matchAll(regexp)];
+
+array[0];
+// ['test1', 'e', 'st1', '1', index: 0, input: 'test1test2', length: 4]
+array[1];
+// ['test2', 'e', 'st2', '2', index: 5, input: 'test1test2', length: 4]
+</pre></div> </section><section class="content-section" aria-labelledby="using_matchall_with_a_non-regexp_implementing_symbol.matchall"> <h3 id="using_matchall_with_a_non-regexp_implementing_symbol.matchall" class="heading">Using matchAll() with a non-RegExp implementing <code>[Symbol.matchAll]()</code>
+</h3> <p>If an object has a <code>Symbol.matchAll</code> method, it can be used as a custom matcher. The return value of <code>Symbol.matchAll</code> becomes the return value of <code>matchAll()</code>.</p> <div class="code-example"><pre data-language="js">const str = "Hmm, this is interesting.";
+
+str.matchAll({
+  [Symbol.matchAll](str) {
+    return [["Yes, it's interesting."]];
+  },
+}); // returns [["Yes, it's interesting."]]
+</pre></div> </section><section class="content-section" aria-labelledby="specifications"> <h2 id="specifications" class="heading">Specifications</h2> <div class="_table"><table> <thead> <tr> <th scope="col">Specification</th> </tr> </thead> <tbody> <tr> <td><a href="https://tc39.es/ecma262/multipage/text-processing.html#sec-string.prototype.matchall" rel="noopener" target="_blank">ECMAScript® 2026 Language Specification&gt;<br># sec-string.prototype.matchall&gt;</a></td> </tr> </tbody> </table></div> </section><section class="content-section" aria-labelledby="browser_compatibility"> <h2 id="browser_compatibility" class="heading">Browser compatibility</h2> <div class="_table"><table>
+<thead>
+<tr id="bct-browser-type">
+<th></th>
+<th colspan="5">Desktop</th>
+<th colspan="7">Mobile</th>
+<th colspan="3">Server</th>
+</tr>
+<tr id="bct-browsers">
+<th></th>
+<th>Chrome</th>
+<th>Edge</th>
+<th>Firefox</th>
+<th>Opera</th>
+<th>Safari</th>
+<th>Chrome Android</th>
+<th>Firefox for Android</th>
+<th>Opera Android</th>
+<th>Safari on IOS</th>
+<th>Samsung Internet</th>
+<th>WebView Android</th>
+<th>WebView on iOS</th>
+<th>Bun</th>
+<th>Deno</th>
+<th>Node.js</th>
+</tr>
+</thead>
+<tbody><tr>
+<th><code>matchAll</code></th>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-03-12">73</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2020-01-15">79</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-05-21">67</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-04-09">60</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-09-19">13</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-03-12">73</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-05-21">67</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-05-17">52</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-09-19">13</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-12-05">11.0</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-03-12">73</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-09-19">13</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2023-09-08">1.0.0</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2020-05-13">1.0</abbr></td>
+<td class="bc-supports-yes"><abbr title="Release date: 2019-04-23">12.0.0</abbr></td>
+</tr></tbody>
+</table></div> </section><section class="content-section" aria-labelledby="see_also"> <h2 id="see_also" class="heading">See also</h2> <ul> <li><a href="https://github.com/zloirock/core-js#ecmascript-string-and-regexp" target="_blank">Polyfill of <code>String.prototype.matchAll</code> in <code>core-js</code></a></li> <li><a href="https://www.npmjs.com/package/string.prototype.matchall" target="_blank">es-shims polyfill of <code>String.prototype.matchAll</code></a></li> <li>
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions">Regular expressions</a> guide</li> <li>
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions/Groups_and_backreferences">Groups and backreferences</a> guide</li> <li><a href="match"><code>String.prototype.match()</code></a></li> <li><a href="../regexp"><code>RegExp</code></a></li> <li><a href="../regexp/exec"><code>RegExp.prototype.exec()</code></a></li> <li><a href="../regexp/test"><code>RegExp.prototype.test()</code></a></li> <li><a href="../regexp/symbol.matchall"><code>RegExp.prototype[Symbol.matchAll]()</code></a></li> </ul> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2005&ndash;2025 MDN contributors.<br>Licensed under the Creative Commons Attribution-ShareAlike License v2.5 or later.<br>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/matchAll" class="_attribution-link">https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/matchAll</a>
+  </p>
+</div>

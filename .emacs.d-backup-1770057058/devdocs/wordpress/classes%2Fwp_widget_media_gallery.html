@@ -1,0 +1,295 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Widget_Media_Gallery {}</h1> <section><p>Core class that implements a gallery widget.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_widget_media">WP_Widget_Media</a></li> <li><a href="wp_widget">WP_Widget</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_widget_media_gallery/__construct">WP_Widget_Media_Gallery::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_media_gallery/enqueue_admin_scripts">WP_Widget_Media_Gallery::enqueue_admin_scripts</a></td>
+<td>Loads the required media files for the media manager and scripts for media widgets.</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_media_gallery/get_instance_schema">WP_Widget_Media_Gallery::get_instance_schema</a></td>
+<td>Get schema for properties of a widget instance (item).</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_media_gallery/has_content">WP_Widget_Media_Gallery::has_content</a></td>
+<td>Whether the widget has content to show.</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_media_gallery/render_control_template_scripts">WP_Widget_Media_Gallery::render_control_template_scripts</a></td>
+<td>Render form template scripts.</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_media_gallery/render_media">WP_Widget_Media_Gallery::render_media</a></td>
+<td>Render the media on the frontend.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="18" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Widget_Media_Gallery extends WP_Widget_Media {
+
+	/**
+	 * Constructor.
+	 *
+	 * @since 4.9.0
+	 */
+	public function __construct() {
+		parent::__construct(
+			'media_gallery',
+			__( 'Gallery' ),
+			array(
+				'description' =&gt; __( 'Displays an image gallery.' ),
+				'mime_type'   =&gt; 'image',
+			)
+		);
+
+		$this-&gt;l10n = array_merge(
+			$this-&gt;l10n,
+			array(
+				'no_media_selected' =&gt; __( 'No images selected' ),
+				'add_media'         =&gt; _x( 'Add Images', 'label for button in the gallery widget; should not be longer than ~13 characters long' ),
+				'replace_media'     =&gt; '',
+				'edit_media'        =&gt; _x( 'Edit Gallery', 'label for button in the gallery widget; should not be longer than ~13 characters long' ),
+			)
+		);
+	}
+
+	/**
+	 * Get schema for properties of a widget instance (item).
+	 *
+	 * @since 4.9.0
+	 *
+	 * @see WP_REST_Controller::get_item_schema()
+	 * @see WP_REST_Controller::get_additional_fields()
+	 * @link https://core.trac.wordpress.org/ticket/35574
+	 *
+	 * @return array Schema for properties.
+	 */
+	public function get_instance_schema() {
+		$schema = array(
+			'title'          =&gt; array(
+				'type'                  =&gt; 'string',
+				'default'               =&gt; '',
+				'sanitize_callback'     =&gt; 'sanitize_text_field',
+				'description'           =&gt; __( 'Title for the widget' ),
+				'should_preview_update' =&gt; false,
+			),
+			'ids'            =&gt; array(
+				'type'              =&gt; 'array',
+				'items'             =&gt; array(
+					'type' =&gt; 'integer',
+				),
+				'default'           =&gt; array(),
+				'sanitize_callback' =&gt; 'wp_parse_id_list',
+			),
+			'columns'        =&gt; array(
+				'type'    =&gt; 'integer',
+				'default' =&gt; 3,
+				'minimum' =&gt; 1,
+				'maximum' =&gt; 9,
+			),
+			'size'           =&gt; array(
+				'type'    =&gt; 'string',
+				'enum'    =&gt; array_merge( get_intermediate_image_sizes(), array( 'full', 'custom' ) ),
+				'default' =&gt; 'thumbnail',
+			),
+			'link_type'      =&gt; array(
+				'type'                  =&gt; 'string',
+				'enum'                  =&gt; array( 'post', 'file', 'none' ),
+				'default'               =&gt; 'post',
+				'media_prop'            =&gt; 'link',
+				'should_preview_update' =&gt; false,
+			),
+			'orderby_random' =&gt; array(
+				'type'                  =&gt; 'boolean',
+				'default'               =&gt; false,
+				'media_prop'            =&gt; '_orderbyRandom',
+				'should_preview_update' =&gt; false,
+			),
+		);
+
+		/** This filter is documented in wp-includes/widgets/class-wp-widget-media.php */
+		$schema = apply_filters( "widget_{$this-&gt;id_base}_instance_schema", $schema, $this );
+
+		return $schema;
+	}
+
+	/**
+	 * Render the media on the frontend.
+	 *
+	 * @since 4.9.0
+	 *
+	 * @param array $instance Widget instance props.
+	 */
+	public function render_media( $instance ) {
+		$instance = array_merge( wp_list_pluck( $this-&gt;get_instance_schema(), 'default' ), $instance );
+
+		$shortcode_atts = array_merge(
+			$instance,
+			array(
+				'link' =&gt; $instance['link_type'],
+			)
+		);
+
+		// @codeCoverageIgnoreStart
+		if ( $instance['orderby_random'] ) {
+			$shortcode_atts['orderby'] = 'rand';
+		}
+
+		// @codeCoverageIgnoreEnd
+		echo gallery_shortcode( $shortcode_atts );
+	}
+
+	/**
+	 * Loads the required media files for the media manager and scripts for media widgets.
+	 *
+	 * @since 4.9.0
+	 */
+	public function enqueue_admin_scripts() {
+		parent::enqueue_admin_scripts();
+
+		$handle = 'media-gallery-widget';
+		wp_enqueue_script( $handle );
+
+		$exported_schema = array();
+		foreach ( $this-&gt;get_instance_schema() as $field =&gt; $field_schema ) {
+			$exported_schema[ $field ] = wp_array_slice_assoc( $field_schema, array( 'type', 'default', 'enum', 'minimum', 'format', 'media_prop', 'should_preview_update', 'items' ) );
+		}
+		wp_add_inline_script(
+			$handle,
+			sprintf(
+				'wp.mediaWidgets.modelConstructors[ %s ].prototype.schema = %s;',
+				wp_json_encode( $this-&gt;id_base ),
+				wp_json_encode( $exported_schema )
+			)
+		);
+
+		wp_add_inline_script(
+			$handle,
+			sprintf(
+				'
+					wp.mediaWidgets.controlConstructors[ %1$s ].prototype.mime_type = %2$s;
+					_.extend( wp.mediaWidgets.controlConstructors[ %1$s ].prototype.l10n, %3$s );
+				',
+				wp_json_encode( $this-&gt;id_base ),
+				wp_json_encode( $this-&gt;widget_options['mime_type'] ),
+				wp_json_encode( $this-&gt;l10n )
+			)
+		);
+	}
+
+	/**
+	 * Render form template scripts.
+	 *
+	 * @since 4.9.0
+	 */
+	public function render_control_template_scripts() {
+		parent::render_control_template_scripts();
+		?&gt;
+		&lt;script type="text/html" id="tmpl-wp-media-widget-gallery-preview"&gt;
+			&lt;#
+			var ids = _.filter( data.ids, function( id ) {
+				return ( id in data.attachments );
+			} );
+			#&gt;
+			&lt;# if ( ids.length ) { #&gt;
+				&lt;ul class="gallery media-widget-gallery-preview" role="list"&gt;
+					&lt;# _.each( ids, function( id, index ) { #&gt;
+						&lt;# var attachment = data.attachments[ id ]; #&gt;
+						&lt;# if ( index &lt; 6 ) { #&gt;
+							&lt;li class="gallery-item"&gt;
+								&lt;div class="gallery-icon"&gt;
+									&lt;img alt="{{ attachment.alt }}"
+										&lt;# if ( index === 5 &amp;&amp; data.ids.length &gt; 6 ) { #&gt; aria-hidden="true" &lt;# } #&gt;
+										&lt;# if ( attachment.sizes.thumbnail ) { #&gt;
+											src="{{ attachment.sizes.thumbnail.url }}" width="{{ attachment.sizes.thumbnail.width }}" height="{{ attachment.sizes.thumbnail.height }}"
+										&lt;# } else { #&gt;
+											src="{{ attachment.url }}"
+										&lt;# } #&gt;
+										&lt;# if ( ! attachment.alt &amp;&amp; attachment.filename ) { #&gt;
+											aria-label="
+											&lt;?php
+											echo esc_attr(
+												sprintf(
+													/* translators: %s: The image file name. */
+													__( 'The current image has no alternative text. The file name is: %s' ),
+													'{{ attachment.filename }}'
+												)
+											);
+											?&gt;
+											"
+										&lt;# } #&gt;
+									/&gt;
+									&lt;# if ( index === 5 &amp;&amp; data.ids.length &gt; 6 ) { #&gt;
+									&lt;div class="gallery-icon-placeholder"&gt;
+										&lt;p class="gallery-icon-placeholder-text" aria-label="
+										&lt;?php
+											printf(
+												/* translators: %s: The amount of additional, not visible images in the gallery widget preview. */
+												__( 'Additional images added to this gallery: %s' ),
+												'{{ data.ids.length - 5 }}'
+											);
+										?&gt;
+										"&gt;+{{ data.ids.length - 5 }}&lt;/p&gt;
+									&lt;/div&gt;
+									&lt;# } #&gt;
+								&lt;/div&gt;
+							&lt;/li&gt;
+						&lt;# } #&gt;
+					&lt;# } ); #&gt;
+				&lt;/ul&gt;
+			&lt;# } else { #&gt;
+				&lt;div class="attachment-media-view"&gt;
+					&lt;button type="button" class="placeholder button-add-media"&gt;&lt;?php echo esc_html( $this-&gt;l10n['add_media'] ); ?&gt;&lt;/button&gt;
+				&lt;/div&gt;
+			&lt;# } #&gt;
+		&lt;/script&gt;
+		&lt;?php
+	}
+
+	/**
+	 * Whether the widget has content to show.
+	 *
+	 * @since 4.9.0
+	 * @access protected
+	 *
+	 * @param array $instance Widget instance props.
+	 * @return bool Whether widget has content.
+	 */
+	protected function has_content( $instance ) {
+		if ( ! empty( $instance['ids'] ) ) {
+			$attachments = wp_parse_id_list( $instance['ids'] );
+			// Prime attachment post caches.
+			_prime_post_caches( $attachments, false, false );
+			foreach ( $attachments as $attachment ) {
+				if ( 'attachment' !== get_post_type( $attachment ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/widgets/class-wp-widget-media-gallery.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/widgets/class-wp-widget-media-gallery.php#L18">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/widgets/class-wp-widget-media-gallery.php#L18-L262">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.0/">4.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_widget_media_gallery" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_widget_media_gallery</a>
+  </p>
+</div>

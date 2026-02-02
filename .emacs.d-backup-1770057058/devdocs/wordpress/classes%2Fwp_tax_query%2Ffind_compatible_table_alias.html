@@ -1,0 +1,59 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Tax_Query::find_compatible_table_alias( <span class="arg-type">array</span> <span class="arg-name">$clause</span>, <span class="arg-type">array</span> <span class="arg-name">$parent_query</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Identifies an existing table alias that is compatible with the current query clause.</p> </section> <section><h2 id="description">Description</h2> <p>We avoid unnecessary table joins by allowing each clause to look for an existing table alias that is compatible with the query that it needs to perform.</p> <p>An existing alias is compatible if (a) it is a sibling of <code>$clause</code> (ie, it’s under the scope of the same relation), and (b) the combination of operator and relation between the clauses allows for a shared table join. In the case of <a href="../wp_tax_query" rel="class">WP_Tax_Query</a>, this only applies to ‘IN’ clauses that are connected by the relation ‘OR’.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$clause</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Query clause.</span></div></dd>
+<dt>
+<code>$parent_query</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Parent query of $clause.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> Table alias if found, otherwise false.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="505" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function find_compatible_table_alias( $clause, $parent_query ) {
+	$alias = false;
+
+	// Confidence check. Only IN queries use the JOIN syntax.
+	if ( ! isset( $clause['operator'] ) || 'IN' !== $clause['operator'] ) {
+		return $alias;
+	}
+
+	// Since we're only checking IN queries, we're only concerned with OR relations.
+	if ( ! isset( $parent_query['relation'] ) || 'OR' !== $parent_query['relation'] ) {
+		return $alias;
+	}
+
+	$compatible_operators = array( 'IN' );
+
+	foreach ( $parent_query as $sibling ) {
+		if ( ! is_array( $sibling ) || ! $this-&gt;is_first_order_clause( $sibling ) ) {
+			continue;
+		}
+
+		if ( empty( $sibling['alias'] ) || empty( $sibling['operator'] ) ) {
+			continue;
+		}
+
+		// The sibling must both have compatible operator to share its alias.
+		if ( in_array( strtoupper( $sibling['operator'] ), $compatible_operators, true ) ) {
+			$alias = preg_replace( '/\W/', '_', $sibling['alias'] );
+			break;
+		}
+	}
+
+	return $alias;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-tax-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-tax-query.php#L505">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-tax-query.php#L505-L537">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.1.0/">4.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_tax_query/find_compatible_table_alias" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_tax_query/find_compatible_table_alias</a>
+  </p>
+</div>

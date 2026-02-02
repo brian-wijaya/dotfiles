@@ -1,0 +1,103 @@
+<h1 class="wp-block-wporg-code-reference-title">current_theme_supports( <span class="arg-type">string</span> <span class="arg-name">$feature</span>, <span class="arg-type">mixed</span> <span class="arg-name">$args</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Checks a theme’s support for a given feature.</p> </section> <section><h2 id="description">Description</h2> <p>Example usage:</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">current_theme_supports( 'custom-logo' );
+current_theme_supports( 'html5', 'comment-form' );</code></pre></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$feature</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc">
+<span class="description">The feature being checked. See <a href="add_theme_support" rel="function">add_theme_support()</a> for the list of possible values.</span><details class="extended-description"><summary>More Arguments from add_theme_support( … $feature )</summary><span class="description">The feature being added. Likely core values include:<br> <ul>
+<li><code>'admin-bar'</code></li> <li><code>'align-wide'</code></li> <li><code>'appearance-tools'</code></li> <li><code>'automatic-feed-links'</code></li> <li><code>'block-templates'</code></li> <li><code>'block-template-parts'</code></li> <li><code>'border'</code></li> <li><code>'core-block-patterns'</code></li> <li><code>'custom-background'</code></li> <li><code>'custom-header'</code></li> <li><code>'custom-line-height'</code></li> <li><code>'custom-logo'</code></li> <li><code>'customize-selective-refresh-widgets'</code></li> <li><code>'custom-spacing'</code></li> <li><code>'custom-units'</code></li> <li><code>'dark-editor-style'</code></li> <li><code>'disable-custom-colors'</code></li> <li><code>'disable-custom-font-sizes'</code></li> <li><code>'disable-custom-gradients'</code></li> <li><code>'disable-layout-styles'</code></li> <li><code>'editor-color-palette'</code></li> <li><code>'editor-gradient-presets'</code></li> <li><code>'editor-font-sizes'</code></li> <li><code>'editor-spacing-sizes'</code></li> <li><code>'editor-styles'</code></li> <li><code>'featured-content'</code></li> <li><code>'html5'</code></li> <li><code>'link-color'</code></li> <li><code>'menus'</code></li> <li><code>'post-formats'</code></li> <li><code>'post-thumbnails'</code></li> <li><code>'responsive-embeds'</code></li> <li><code>'starter-content'</code></li> <li><code>'title-tag'</code></li> <li><code>'widgets'</code></li> <li><code>'widgets-block-editor'</code></li> <li><code>'wp-block-styles'</code></li>
+</ul></span></details>
+</div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="mixed">mixed</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Optional extra arguments to be checked against certain features.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if the active theme supports the feature, false otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3160" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function current_theme_supports( $feature, ...$args ) {
+	global $_wp_theme_features;
+
+	if ( 'custom-header-uploads' === $feature ) {
+		return current_theme_supports( 'custom-header', 'uploads' );
+	}
+
+	if ( ! isset( $_wp_theme_features[ $feature ] ) ) {
+		return false;
+	}
+
+	// If no args passed then no extra checks need to be performed.
+	if ( ! $args ) {
+		/** This filter is documented in wp-includes/theme.php */
+		return apply_filters( "current_theme_supports-{$feature}", true, $args, $_wp_theme_features[ $feature ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+	}
+
+	switch ( $feature ) {
+		case 'post-thumbnails':
+			/*
+			 * post-thumbnails can be registered for only certain content/post types
+			 * by passing an array of types to add_theme_support().
+			 * If no array was passed, then any type is accepted.
+			 */
+			if ( true === $_wp_theme_features[ $feature ] ) {  // Registered for all types.
+				return true;
+			}
+			$content_type = $args[0];
+			return in_array( $content_type, $_wp_theme_features[ $feature ][0], true );
+
+		case 'html5':
+		case 'post-formats':
+			/*
+			 * Specific post formats can be registered by passing an array of types
+			 * to add_theme_support().
+			 *
+			 * Specific areas of HTML5 support *must* be passed via an array to add_theme_support().
+			 */
+			$type = $args[0];
+			return in_array( $type, $_wp_theme_features[ $feature ][0], true );
+
+		case 'custom-logo':
+		case 'custom-header':
+		case 'custom-background':
+			// Specific capabilities can be registered by passing an array to add_theme_support().
+			return ( isset( $_wp_theme_features[ $feature ][0][ $args[0] ] ) &amp;&amp; $_wp_theme_features[ $feature ][0][ $args[0] ] );
+	}
+
+	/**
+	 * Filters whether the active theme supports a specific feature.
+	 *
+	 * The dynamic portion of the hook name, `$feature`, refers to the specific
+	 * theme feature. See add_theme_support() for the list of possible values.
+	 *
+	 * @since 3.4.0
+	 *
+	 * @param bool   $supports Whether the active theme supports the given feature. Default true.
+	 * @param array  $args     Array of arguments for the feature.
+	 * @param string $feature  The theme feature.
+	 */
+	return apply_filters( "current_theme_supports-{$feature}", true, $args, $_wp_theme_features[ $feature ] ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/theme.php#L3160">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/theme.php#L3160-L3221">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/current_theme_supports-feature"><span class="hook-func">apply_filters</span>( “current_theme_supports-{$feature}”, <nobr><span class="arg-type">bool</span> <span class="arg-name">$supports</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$feature</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether the active theme supports a specific feature.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">Formalized the existing and already documented <code>...$args</code> parameter by adding it to the function signature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.9.0/">2.9.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/current_theme_supports" class="_attribution-link">https://developer.wordpress.org/reference/functions/current_theme_supports</a>
+  </p>
+</div>

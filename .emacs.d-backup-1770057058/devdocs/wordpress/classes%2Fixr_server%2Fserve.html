@@ -1,0 +1,55 @@
+<h1 class="wp-block-wporg-code-reference-title">IXR_Server::serve( <span class="arg-name">$data</span> = <span class="arg-default">false</span> )</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="38" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">    function serve($data = false)
+    {
+        if (!$data) {
+            if (isset($_SERVER['REQUEST_METHOD']) &amp;&amp; $_SERVER['REQUEST_METHOD'] !== 'POST') {
+                if ( function_exists( 'status_header' ) ) {
+                    status_header( 405 ); // WP #20986
+                    header( 'Allow: POST' );
+                }
+                header('Content-Type: text/plain'); // merged from WP #9093
+                die('XML-RPC server accepts POST requests only.');
+            }
+
+            $data = file_get_contents('php://input');
+        }
+        $this-&gt;message = new IXR_Message($data);
+        if (!$this-&gt;message-&gt;parse()) {
+            $this-&gt;error(-32700, 'parse error. not well formed');
+        }
+        if ($this-&gt;message-&gt;messageType != 'methodCall') {
+            $this-&gt;error(-32600, 'server error. invalid xml-rpc. not conforming to spec. Request must be a methodCall');
+        }
+        $result = $this-&gt;call($this-&gt;message-&gt;methodName, $this-&gt;message-&gt;params);
+
+        // Is the result an error?
+        if (is_a($result, 'IXR_Error')) {
+            $this-&gt;error($result);
+        }
+
+        // Encode the result
+        $r = new IXR_Value($result);
+        $resultxml = $r-&gt;getXml();
+
+        // Create the XML
+        $xml = &lt;&lt;&lt;EOD
+&lt;methodResponse&gt;
+  &lt;params&gt;
+    &lt;param&gt;
+      &lt;value&gt;
+      $resultxml
+      &lt;/value&gt;
+    &lt;/param&gt;
+  &lt;/params&gt;
+&lt;/methodResponse&gt;
+
+EOD;
+      // Send it
+      $this-&gt;output($xml);
+    }
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ixr/class-ixr-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/IXR/class-IXR-server.php#L38">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/IXR/class-IXR-server.php#L38-L85">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/ixr_server/serve" class="_attribution-link">https://developer.wordpress.org/reference/classes/ixr_server/serve</a>
+  </p>
+</div>

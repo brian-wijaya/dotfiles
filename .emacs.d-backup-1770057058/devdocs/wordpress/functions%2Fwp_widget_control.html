@@ -1,0 +1,154 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_widget_control( <span class="arg-type">array</span> <span class="arg-name">$sidebar_args</span> ): <span class="return-type">array</span>
+</h1> <section><p>Meta widget used to display the control form for a widget.</p> </section> <section><h2 id="description">Description</h2> <p>Called from <a href="dynamic_sidebar" rel="function">dynamic_sidebar()</a> .</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$sidebar_args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="190" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_widget_control( $sidebar_args ) {
+	global $wp_registered_widgets, $wp_registered_widget_controls, $sidebars_widgets;
+
+	$widget_id  = $sidebar_args['widget_id'];
+	$sidebar_id = isset( $sidebar_args['id'] ) ? $sidebar_args['id'] : false;
+	$key        = $sidebar_id ? array_search( $widget_id, $sidebars_widgets[ $sidebar_id ], true ) : '-1'; // Position of widget in sidebar.
+	$control    = isset( $wp_registered_widget_controls[ $widget_id ] ) ? $wp_registered_widget_controls[ $widget_id ] : array();
+	$widget     = $wp_registered_widgets[ $widget_id ];
+
+	$id_format     = $widget['id'];
+	$widget_number = isset( $control['params'][0]['number'] ) ? $control['params'][0]['number'] : '';
+	$id_base       = isset( $control['id_base'] ) ? $control['id_base'] : $widget_id;
+	$width         = isset( $control['width'] ) ? $control['width'] : '';
+	$height        = isset( $control['height'] ) ? $control['height'] : '';
+	$multi_number  = isset( $sidebar_args['_multi_num'] ) ? $sidebar_args['_multi_num'] : '';
+	$add_new       = isset( $sidebar_args['_add'] ) ? $sidebar_args['_add'] : '';
+
+	$before_form           = isset( $sidebar_args['before_form'] ) ? $sidebar_args['before_form'] : '&lt;form method="post"&gt;';
+	$after_form            = isset( $sidebar_args['after_form'] ) ? $sidebar_args['after_form'] : '&lt;/form&gt;';
+	$before_widget_content = isset( $sidebar_args['before_widget_content'] ) ? $sidebar_args['before_widget_content'] : '&lt;div class="widget-content"&gt;';
+	$after_widget_content  = isset( $sidebar_args['after_widget_content'] ) ? $sidebar_args['after_widget_content'] : '&lt;/div&gt;';
+
+	$query_arg = array( 'editwidget' =&gt; $widget['id'] );
+	if ( $add_new ) {
+		$query_arg['addnew'] = 1;
+		if ( $multi_number ) {
+			$query_arg['num']  = $multi_number;
+			$query_arg['base'] = $id_base;
+		}
+	} else {
+		$query_arg['sidebar'] = $sidebar_id;
+		$query_arg['key']     = $key;
+	}
+
+	/*
+	 * We aren't showing a widget control, we're outputting a template
+	 * for a multi-widget control.
+	 */
+	if ( isset( $sidebar_args['_display'] ) &amp;&amp; 'template' === $sidebar_args['_display'] &amp;&amp; $widget_number ) {
+		// number == -1 implies a template where id numbers are replaced by a generic '__i__'.
+		$control['params'][0]['number'] = -1;
+		// With id_base widget ID's are constructed like {$id_base}-{$id_number}.
+		if ( isset( $control['id_base'] ) ) {
+			$id_format = $control['id_base'] . '-__i__';
+		}
+	}
+
+	$wp_registered_widgets[ $widget_id ]['callback'] = $wp_registered_widgets[ $widget_id ]['_callback'];
+	unset( $wp_registered_widgets[ $widget_id ]['_callback'] );
+
+	$widget_title = esc_html( strip_tags( $sidebar_args['widget_name'] ) );
+	$has_form     = 'noform';
+
+	echo $sidebar_args['before_widget'];
+	?&gt;
+	&lt;div class="widget-top"&gt;
+	&lt;div class="widget-title-action"&gt;
+		&lt;button type="button" class="widget-action hide-if-no-js" aria-expanded="false"&gt;
+			&lt;span class="screen-reader-text edit"&gt;
+				&lt;?php
+				/* translators: Hidden accessibility text. %s: Widget title. */
+				printf( __( 'Edit widget: %s' ), $widget_title );
+				?&gt;
+			&lt;/span&gt;
+			&lt;span class="screen-reader-text add"&gt;
+				&lt;?php
+				/* translators: Hidden accessibility text. %s: Widget title. */
+				printf( __( 'Add widget: %s' ), $widget_title );
+				?&gt;
+			&lt;/span&gt;
+			&lt;span class="toggle-indicator" aria-hidden="true"&gt;&lt;/span&gt;
+		&lt;/button&gt;
+		&lt;a class="widget-control-edit hide-if-js" href="&lt;?php echo esc_url( add_query_arg( $query_arg ) ); ?&gt;"&gt;
+			&lt;span class="edit"&gt;&lt;?php _ex( 'Edit', 'widget' ); ?&gt;&lt;/span&gt;
+			&lt;span class="add"&gt;&lt;?php _ex( 'Add', 'widget' ); ?&gt;&lt;/span&gt;
+			&lt;span class="screen-reader-text"&gt;&lt;?php echo $widget_title; ?&gt;&lt;/span&gt;
+		&lt;/a&gt;
+	&lt;/div&gt;
+	&lt;div class="widget-title"&gt;&lt;h3&gt;&lt;?php echo $widget_title; ?&gt;&lt;span class="in-widget-title"&gt;&lt;/span&gt;&lt;/h3&gt;&lt;/div&gt;
+	&lt;/div&gt;
+
+	&lt;div class="widget-inside"&gt;
+	&lt;?php echo $before_form; ?&gt;
+	&lt;?php echo $before_widget_content; ?&gt;
+	&lt;?php
+	if ( isset( $control['callback'] ) ) {
+		$has_form = call_user_func_array( $control['callback'], $control['params'] );
+	} else {
+		echo "\t\t&lt;p&gt;" . __( 'There are no options for this widget.' ) . "&lt;/p&gt;\n";
+	}
+
+	$noform_class = '';
+	if ( 'noform' === $has_form ) {
+		$noform_class = ' widget-control-noform';
+	}
+	?&gt;
+	&lt;?php echo $after_widget_content; ?&gt;
+	&lt;input type="hidden" name="widget-id" class="widget-id" value="&lt;?php echo esc_attr( $id_format ); ?&gt;" /&gt;
+	&lt;input type="hidden" name="id_base" class="id_base" value="&lt;?php echo esc_attr( $id_base ); ?&gt;" /&gt;
+	&lt;input type="hidden" name="widget-width" class="widget-width" value="&lt;?php echo esc_attr( $width ); ?&gt;" /&gt;
+	&lt;input type="hidden" name="widget-height" class="widget-height" value="&lt;?php echo esc_attr( $height ); ?&gt;" /&gt;
+	&lt;input type="hidden" name="widget_number" class="widget_number" value="&lt;?php echo esc_attr( $widget_number ); ?&gt;" /&gt;
+	&lt;input type="hidden" name="multi_number" class="multi_number" value="&lt;?php echo esc_attr( $multi_number ); ?&gt;" /&gt;
+	&lt;input type="hidden" name="add_new" class="add_new" value="&lt;?php echo esc_attr( $add_new ); ?&gt;" /&gt;
+
+	&lt;div class="widget-control-actions"&gt;
+		&lt;div class="alignleft"&gt;
+			&lt;button type="button" class="button-link button-link-delete widget-control-remove"&gt;&lt;?php _e( 'Delete' ); ?&gt;&lt;/button&gt;
+			&lt;span class="widget-control-close-wrapper"&gt;
+				| &lt;button type="button" class="button-link widget-control-close"&gt;&lt;?php _e( 'Done' ); ?&gt;&lt;/button&gt;
+			&lt;/span&gt;
+		&lt;/div&gt;
+		&lt;div class="alignright&lt;?php echo $noform_class; ?&gt;"&gt;
+			&lt;?php submit_button( __( 'Save' ), 'primary widget-control-save right', 'savewidget', false, array( 'id' =&gt; 'widget-' . esc_attr( $id_format ) . '-savewidget' ) ); ?&gt;
+			&lt;span class="spinner"&gt;&lt;/span&gt;
+		&lt;/div&gt;
+		&lt;br class="clear" /&gt;
+	&lt;/div&gt;
+	&lt;?php echo $after_form; ?&gt;
+	&lt;/div&gt;
+
+	&lt;div class="widget-description"&gt;
+	&lt;?php
+	$widget_description = wp_widget_description( $widget_id );
+	echo ( $widget_description ) ? "$widget_description\n" : "$widget_title\n";
+	?&gt;
+	&lt;/div&gt;
+	&lt;?php
+	echo $sidebar_args['after_widget'];
+
+	return $sidebar_args;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/widgets.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/widgets.php#L190">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/widgets.php#L190-L321">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_widget_control" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_widget_control</a>
+  </p>
+</div>

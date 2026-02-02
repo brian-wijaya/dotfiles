@@ -1,0 +1,126 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_resource_hints()</h1> <section><p>Prints resource hints to browsers for pre-fetching, pre-rendering and pre-connecting to websites.</p> </section> <section><h2 id="description">Description</h2> <p>Gives hints to browsers to prefetch specific pages or render them in the background, to perform DNS lookups or to begin the connection handshake (DNS, TCP, TLS) in the background.</p> <p>These performance improving indicators work by using <code>&lt;link rel"…"&gt;</code>.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3486" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_resource_hints() {
+	$hints = array(
+		'dns-prefetch' =&gt; wp_dependencies_unique_hosts(),
+		'preconnect'   =&gt; array(),
+		'prefetch'     =&gt; array(),
+		'prerender'    =&gt; array(),
+	);
+
+	foreach ( $hints as $relation_type =&gt; $urls ) {
+		$unique_urls = array();
+
+		/**
+		 * Filters domains and URLs for resource hints of the given relation type.
+		 *
+		 * @since 4.6.0
+		 * @since 4.7.0 The `$urls` parameter accepts arrays of specific HTML attributes
+		 *              as its child elements.
+		 *
+		 * @param array  $urls {
+		 *     Array of resources and their attributes, or URLs to print for resource hints.
+		 *
+		 *     @type array|string ...$0 {
+		 *         Array of resource attributes, or a URL string.
+		 *
+		 *         @type string $href        URL to include in resource hints. Required.
+		 *         @type string $as          How the browser should treat the resource
+		 *                                   (`script`, `style`, `image`, `document`, etc).
+		 *         @type string $crossorigin Indicates the CORS policy of the specified resource.
+		 *         @type float  $pr          Expected probability that the resource hint will be used.
+		 *         @type string $type        Type of the resource (`text/html`, `text/css`, etc).
+		 *     }
+		 * }
+		 * @param string $relation_type The relation type the URLs are printed for. One of
+		 *                              'dns-prefetch', 'preconnect', 'prefetch', or 'prerender'.
+		 */
+		$urls = apply_filters( 'wp_resource_hints', $urls, $relation_type );
+
+		foreach ( $urls as $key =&gt; $url ) {
+			$atts = array();
+
+			if ( is_array( $url ) ) {
+				if ( isset( $url['href'] ) ) {
+					$atts = $url;
+					$url  = $url['href'];
+				} else {
+					continue;
+				}
+			}
+
+			$url = esc_url( $url, array( 'http', 'https' ) );
+
+			if ( ! $url ) {
+				continue;
+			}
+
+			if ( isset( $unique_urls[ $url ] ) ) {
+				continue;
+			}
+
+			if ( in_array( $relation_type, array( 'preconnect', 'dns-prefetch' ), true ) ) {
+				$parsed = wp_parse_url( $url );
+
+				if ( empty( $parsed['host'] ) ) {
+					continue;
+				}
+
+				if ( 'preconnect' === $relation_type &amp;&amp; ! empty( $parsed['scheme'] ) ) {
+					$url = $parsed['scheme'] . '://' . $parsed['host'];
+				} else {
+					// Use protocol-relative URLs for dns-prefetch or if scheme is missing.
+					$url = '//' . $parsed['host'];
+				}
+			}
+
+			$atts['rel']  = $relation_type;
+			$atts['href'] = $url;
+
+			$unique_urls[ $url ] = $atts;
+		}
+
+		foreach ( $unique_urls as $atts ) {
+			$html = '';
+
+			foreach ( $atts as $attr =&gt; $value ) {
+				if ( ! is_scalar( $value )
+					|| ( ! in_array( $attr, array( 'as', 'crossorigin', 'href', 'pr', 'rel', 'type' ), true ) &amp;&amp; ! is_numeric( $attr ) )
+				) {
+
+					continue;
+				}
+
+				$value = ( 'href' === $attr ) ? esc_url( $value ) : esc_attr( $value );
+
+				if ( ! is_string( $attr ) ) {
+					$html .= " $value";
+				} else {
+					$html .= " $attr='$value'";
+				}
+			}
+
+			$html = trim( $html );
+
+			echo "&lt;link $html /&gt;\n";
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/general-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/general-template.php#L3486">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/general-template.php#L3486-L3591">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_resource_hints"><span class="hook-func">apply_filters</span>( ‘wp_resource_hints’, <nobr><span class="arg-type">array</span> <span class="arg-name">$urls</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$relation_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters domains and URLs for resource hints of the given relation type.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_resource_hints" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_resource_hints</a>
+  </p>
+</div>

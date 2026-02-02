@@ -1,0 +1,193 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_map_sidebars_widgets( <span class="arg-type">array</span> <span class="arg-name">$existing_sidebars_widgets</span> ): <span class="return-type">array</span>
+</h1> <section><p>Compares a list of sidebars with their widgets against an allowed list.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$existing_sidebars_widgets</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">List of sidebars and their widget instance IDs.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Mapped sidebars widgets.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1386" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_map_sidebars_widgets( $existing_sidebars_widgets ) {
+	global $wp_registered_sidebars;
+
+	$new_sidebars_widgets = array(
+		'wp_inactive_widgets' =&gt; array(),
+	);
+
+	// Short-circuit if there are no sidebars to map.
+	if ( ! is_array( $existing_sidebars_widgets ) || empty( $existing_sidebars_widgets ) ) {
+		return $new_sidebars_widgets;
+	}
+
+	foreach ( $existing_sidebars_widgets as $sidebar =&gt; $widgets ) {
+		if ( 'wp_inactive_widgets' === $sidebar || str_starts_with( $sidebar, 'orphaned_widgets' ) ) {
+			$new_sidebars_widgets['wp_inactive_widgets'] = array_merge( $new_sidebars_widgets['wp_inactive_widgets'], (array) $widgets );
+			unset( $existing_sidebars_widgets[ $sidebar ] );
+		}
+	}
+
+	// If old and new theme have just one sidebar, map it and we're done.
+	if ( 1 === count( $existing_sidebars_widgets ) &amp;&amp; 1 === count( $wp_registered_sidebars ) ) {
+		$new_sidebars_widgets[ key( $wp_registered_sidebars ) ] = array_pop( $existing_sidebars_widgets );
+
+		return $new_sidebars_widgets;
+	}
+
+	// Map locations with the same slug.
+	$existing_sidebars = array_keys( $existing_sidebars_widgets );
+
+	foreach ( $wp_registered_sidebars as $sidebar =&gt; $name ) {
+		if ( in_array( $sidebar, $existing_sidebars, true ) ) {
+			$new_sidebars_widgets[ $sidebar ] = $existing_sidebars_widgets[ $sidebar ];
+			unset( $existing_sidebars_widgets[ $sidebar ] );
+		} elseif ( ! array_key_exists( $sidebar, $new_sidebars_widgets ) ) {
+			$new_sidebars_widgets[ $sidebar ] = array();
+		}
+	}
+
+	// If there are more sidebars, try to map them.
+	if ( ! empty( $existing_sidebars_widgets ) ) {
+
+		/*
+		 * If old and new theme both have sidebars that contain phrases
+		 * from within the same group, make an educated guess and map it.
+		 */
+		$common_slug_groups = array(
+			array( 'sidebar', 'primary', 'main', 'right' ),
+			array( 'second', 'left' ),
+			array( 'sidebar-2', 'footer', 'bottom' ),
+			array( 'header', 'top' ),
+		);
+
+		// Go through each group...
+		foreach ( $common_slug_groups as $slug_group ) {
+
+			// ...and see if any of these slugs...
+			foreach ( $slug_group as $slug ) {
+
+				// ...and any of the new sidebars...
+				foreach ( $wp_registered_sidebars as $new_sidebar =&gt; $args ) {
+
+					// ...actually match!
+					if ( false === stripos( $new_sidebar, $slug ) &amp;&amp; false === stripos( $slug, $new_sidebar ) ) {
+						continue;
+					}
+
+					// Then see if any of the existing sidebars...
+					foreach ( $existing_sidebars_widgets as $sidebar =&gt; $widgets ) {
+
+						// ...and any slug in the same group...
+						foreach ( $slug_group as $slug ) {
+
+							// ... have a match as well.
+							if ( false === stripos( $sidebar, $slug ) &amp;&amp; false === stripos( $slug, $sidebar ) ) {
+								continue;
+							}
+
+							// Make sure this sidebar wasn't mapped and removed previously.
+							if ( ! empty( $existing_sidebars_widgets[ $sidebar ] ) ) {
+
+								// We have a match that can be mapped!
+								$new_sidebars_widgets[ $new_sidebar ] = array_merge( $new_sidebars_widgets[ $new_sidebar ], $existing_sidebars_widgets[ $sidebar ] );
+
+								// Remove the mapped sidebar so it can't be mapped again.
+								unset( $existing_sidebars_widgets[ $sidebar ] );
+
+								// Go back and check the next new sidebar.
+								continue 3;
+							}
+						} // End foreach ( $slug_group as $slug ).
+					} // End foreach ( $existing_sidebars_widgets as $sidebar =&gt; $widgets ).
+				} // End foreach ( $wp_registered_sidebars as $new_sidebar =&gt; $args ).
+			} // End foreach ( $slug_group as $slug ).
+		} // End foreach ( $common_slug_groups as $slug_group ).
+	}
+
+	// Move any left over widgets to inactive sidebar.
+	foreach ( $existing_sidebars_widgets as $widgets ) {
+		if ( is_array( $widgets ) &amp;&amp; ! empty( $widgets ) ) {
+			$new_sidebars_widgets['wp_inactive_widgets'] = array_merge( $new_sidebars_widgets['wp_inactive_widgets'], $widgets );
+		}
+	}
+
+	// Sidebars_widgets settings from when this theme was previously active.
+	$old_sidebars_widgets = get_theme_mod( 'sidebars_widgets' );
+	$old_sidebars_widgets = isset( $old_sidebars_widgets['data'] ) ? $old_sidebars_widgets['data'] : false;
+
+	if ( is_array( $old_sidebars_widgets ) ) {
+
+		// Remove empty sidebars, no need to map those.
+		$old_sidebars_widgets = array_filter( $old_sidebars_widgets );
+
+		// Only check sidebars that are empty or have not been mapped to yet.
+		foreach ( $new_sidebars_widgets as $new_sidebar =&gt; $new_widgets ) {
+			if ( array_key_exists( $new_sidebar, $old_sidebars_widgets ) &amp;&amp; ! empty( $new_widgets ) ) {
+				unset( $old_sidebars_widgets[ $new_sidebar ] );
+			}
+		}
+
+		// Remove orphaned widgets, we're only interested in previously active sidebars.
+		foreach ( $old_sidebars_widgets as $sidebar =&gt; $widgets ) {
+			if ( str_starts_with( $sidebar, 'orphaned_widgets' ) ) {
+				unset( $old_sidebars_widgets[ $sidebar ] );
+			}
+		}
+
+		$old_sidebars_widgets = _wp_remove_unregistered_widgets( $old_sidebars_widgets );
+
+		if ( ! empty( $old_sidebars_widgets ) ) {
+
+			// Go through each remaining sidebar...
+			foreach ( $old_sidebars_widgets as $old_sidebar =&gt; $old_widgets ) {
+
+				// ...and check every new sidebar...
+				foreach ( $new_sidebars_widgets as $new_sidebar =&gt; $new_widgets ) {
+
+					// ...for every widget we're trying to revive.
+					foreach ( $old_widgets as $key =&gt; $widget_id ) {
+						$active_key = array_search( $widget_id, $new_widgets, true );
+
+						// If the widget is used elsewhere...
+						if ( false !== $active_key ) {
+
+							// ...and that elsewhere is inactive widgets...
+							if ( 'wp_inactive_widgets' === $new_sidebar ) {
+
+								// ...remove it from there and keep the active version...
+								unset( $new_sidebars_widgets['wp_inactive_widgets'][ $active_key ] );
+							} else {
+
+								// ...otherwise remove it from the old sidebar and keep it in the new one.
+								unset( $old_sidebars_widgets[ $old_sidebar ][ $key ] );
+							}
+						} // End if ( $active_key ).
+					} // End foreach ( $old_widgets as $key =&gt; $widget_id ).
+				} // End foreach ( $new_sidebars_widgets as $new_sidebar =&gt; $new_widgets ).
+			} // End foreach ( $old_sidebars_widgets as $old_sidebar =&gt; $old_widgets ).
+		} // End if ( ! empty( $old_sidebars_widgets ) ).
+
+		// Restore widget settings from when theme was previously active.
+		$new_sidebars_widgets = array_merge( $new_sidebars_widgets, $old_sidebars_widgets );
+	}
+
+	return $new_sidebars_widgets;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/widgets.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/widgets.php#L1386">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/widgets.php#L1386-L1550">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.2/">4.9.2</a></td>
+<td><span class="since-description">Always tries to restore widget assignments from previous data, not just if sidebars needed mapping.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.0/">4.9.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_map_sidebars_widgets" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_map_sidebars_widgets</a>
+  </p>
+</div>

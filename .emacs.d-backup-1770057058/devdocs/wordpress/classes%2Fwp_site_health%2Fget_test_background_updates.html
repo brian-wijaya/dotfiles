@@ -1,0 +1,84 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Site_Health::get_test_background_updates(): <span class="return-type">array</span>
+</h1> <section><p>Tests if WordPress can run automated background updates.</p> </section> <section><h2 id="description">Description</h2> <p>Background updates in WordPress are primarily used for minor releases and security updates.<br>It’s important to either have these working, or be aware that they are intentionally disabled for whatever reason.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The test results.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1705" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_test_background_updates() {
+	$result = array(
+		'label'       =&gt; __( 'Background updates are working' ),
+		'status'      =&gt; 'good',
+		'badge'       =&gt; array(
+			'label' =&gt; __( 'Security' ),
+			'color' =&gt; 'blue',
+		),
+		'description' =&gt; sprintf(
+			'&lt;p&gt;%s&lt;/p&gt;',
+			__( 'Background updates ensure that WordPress can auto-update if a security update is released for the version you are currently using.' )
+		),
+		'actions'     =&gt; '',
+		'test'        =&gt; 'background_updates',
+	);
+
+	if ( ! class_exists( 'WP_Site_Health_Auto_Updates' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/class-wp-site-health-auto-updates.php';
+	}
+
+	/*
+	 * Run the auto-update tests in a separate class,
+	 * as there are many considerations to be made.
+	 */
+	$automatic_updates = new WP_Site_Health_Auto_Updates();
+	$tests             = $automatic_updates-&gt;run_tests();
+
+	$output = '&lt;ul&gt;';
+
+	foreach ( $tests as $test ) {
+		/* translators: Hidden accessibility text. */
+		$severity_string = __( 'Passed' );
+
+		if ( 'fail' === $test-&gt;severity ) {
+			$result['label'] = __( 'Background updates are not working as expected' );
+
+			$result['status'] = 'critical';
+
+			/* translators: Hidden accessibility text. */
+			$severity_string = __( 'Error' );
+		}
+
+		if ( 'warning' === $test-&gt;severity &amp;&amp; 'good' === $result['status'] ) {
+			$result['label'] = __( 'Background updates may not be working properly' );
+
+			$result['status'] = 'recommended';
+
+			/* translators: Hidden accessibility text. */
+			$severity_string = __( 'Warning' );
+		}
+
+		$output .= sprintf(
+			'&lt;li&gt;&lt;span class="dashicons %s"&gt;&lt;span class="screen-reader-text"&gt;%s&lt;/span&gt;&lt;/span&gt; %s&lt;/li&gt;',
+			esc_attr( $test-&gt;severity ),
+			$severity_string,
+			$test-&gt;description
+		);
+	}
+
+	$output .= '&lt;/ul&gt;';
+
+	if ( 'good' !== $result['status'] ) {
+		$result['description'] .= $output;
+	}
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-site-health.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-site-health.php#L1705">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-site-health.php#L1705-L1771">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_site_health/get_test_background_updates" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_site_health/get_test_background_updates</a>
+  </p>
+</div>

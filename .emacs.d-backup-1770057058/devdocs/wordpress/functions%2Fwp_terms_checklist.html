@@ -1,0 +1,168 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_terms_checklist( <span class="arg-type">int</span> <span class="arg-name">$post_id</span>, <span class="arg-type">array|string</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">string</span>
+</h1> <section><p>Outputs an unordered list of checkbox input elements labelled with term names.</p> </section> <section><h2 id="description">Description</h2> <p>Taxonomy-independent version of <a href="wp_category_checklist" rel="function">wp_category_checklist()</a> .</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID. Default 0.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array or string of arguments for generating a terms checklist. <br> <ul class="param-hash">
+<li>
+<code>descendants_and_self</code> <span class="type">int</span><div class="desc">ID of the category to output along with its descendants.<br> Default 0.</div>
+</li> <li>
+<code>selected_cats</code> <span class="type">int[]</span><div class="desc">Array of category IDs to mark as checked. Default false.</div>
+</li> <li>
+<code>popular_cats</code> <span class="type">int[]</span><div class="desc">Array of category IDs to receive the "popular-category" class.<br> Default false.</div>
+</li> <li>
+<code>walker</code> <span class="type"><a href="../classes/walker" rel="class">Walker</a></span><div class="desc">
+<a href="../classes/walker" rel="class">Walker</a> object to use to build the output. Default empty which results in a <a href="../classes/walker_category_checklist" rel="class">Walker_Category_Checklist</a> instance being used.</div>
+</li> <li>
+<code>taxonomy</code> <span class="type">string</span><div class="desc">Taxonomy to generate the checklist for. Default <code>'category'</code>.</div>
+</li> <li>
+<code>checked_ontop</code> <span class="type">bool</span><div class="desc">Whether to move checked items out of the hierarchy and to the top of the list. Default true.</div>
+</li> <li>
+<code>echo</code> <span class="type">bool</span><div class="desc">Whether to echo the generated markup. False to return the markup instead of echoing it. Default true.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> HTML list of input elements.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="81" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_terms_checklist( $post_id = 0, $args = array() ) {
+	$defaults = array(
+		'descendants_and_self' =&gt; 0,
+		'selected_cats'        =&gt; false,
+		'popular_cats'         =&gt; false,
+		'walker'               =&gt; null,
+		'taxonomy'             =&gt; 'category',
+		'checked_ontop'        =&gt; true,
+		'echo'                 =&gt; true,
+	);
+
+	/**
+	 * Filters the taxonomy terms checklist arguments.
+	 *
+	 * @since 3.4.0
+	 *
+	 * @see wp_terms_checklist()
+	 *
+	 * @param array|string $args    An array or string of arguments.
+	 * @param int          $post_id The post ID.
+	 */
+	$params = apply_filters( 'wp_terms_checklist_args', $args, $post_id );
+
+	$parsed_args = wp_parse_args( $params, $defaults );
+
+	if ( empty( $parsed_args['walker'] ) || ! ( $parsed_args['walker'] instanceof Walker ) ) {
+		$walker = new Walker_Category_Checklist();
+	} else {
+		$walker = $parsed_args['walker'];
+	}
+
+	$taxonomy             = $parsed_args['taxonomy'];
+	$descendants_and_self = (int) $parsed_args['descendants_and_self'];
+
+	$args = array( 'taxonomy' =&gt; $taxonomy );
+
+	$tax              = get_taxonomy( $taxonomy );
+	$args['disabled'] = ! current_user_can( $tax-&gt;cap-&gt;assign_terms );
+
+	$args['list_only'] = ! empty( $parsed_args['list_only'] );
+
+	if ( is_array( $parsed_args['selected_cats'] ) ) {
+		$args['selected_cats'] = array_map( 'intval', $parsed_args['selected_cats'] );
+	} elseif ( $post_id ) {
+		$args['selected_cats'] = wp_get_object_terms( $post_id, $taxonomy, array_merge( $args, array( 'fields' =&gt; 'ids' ) ) );
+	} else {
+		$args['selected_cats'] = array();
+	}
+
+	if ( is_array( $parsed_args['popular_cats'] ) ) {
+		$args['popular_cats'] = array_map( 'intval', $parsed_args['popular_cats'] );
+	} else {
+		$args['popular_cats'] = get_terms(
+			array(
+				'taxonomy'     =&gt; $taxonomy,
+				'fields'       =&gt; 'ids',
+				'orderby'      =&gt; 'count',
+				'order'        =&gt; 'DESC',
+				'number'       =&gt; 10,
+				'hierarchical' =&gt; false,
+			)
+		);
+	}
+
+	if ( $descendants_and_self ) {
+		$categories = (array) get_terms(
+			array(
+				'taxonomy'     =&gt; $taxonomy,
+				'child_of'     =&gt; $descendants_and_self,
+				'hierarchical' =&gt; 0,
+				'hide_empty'   =&gt; 0,
+			)
+		);
+		$self       = get_term( $descendants_and_self, $taxonomy );
+		array_unshift( $categories, $self );
+	} else {
+		$categories = (array) get_terms(
+			array(
+				'taxonomy' =&gt; $taxonomy,
+				'get'      =&gt; 'all',
+			)
+		);
+	}
+
+	$output = '';
+
+	if ( $parsed_args['checked_ontop'] ) {
+		/*
+		 * Post-process $categories rather than adding an exclude to the get_terms() query
+		 * to keep the query the same across all posts (for any query cache).
+		 */
+		$checked_categories = array();
+		$keys               = array_keys( $categories );
+
+		foreach ( $keys as $k ) {
+			if ( in_array( $categories[ $k ]-&gt;term_id, $args['selected_cats'], true ) ) {
+				$checked_categories[] = $categories[ $k ];
+				unset( $categories[ $k ] );
+			}
+		}
+
+		// Put checked categories on top.
+		$output .= $walker-&gt;walk( $checked_categories, 0, $args );
+	}
+	// Then the rest of them.
+	$output .= $walker-&gt;walk( $categories, 0, $args );
+
+	if ( $parsed_args['echo'] ) {
+		echo $output;
+	}
+
+	return $output;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/template.php#L81">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/template.php#L81-L193">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_terms_checklist_args"><span class="hook-func">apply_filters</span>( ‘wp_terms_checklist_args’, <nobr><span class="arg-type">array|string</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the taxonomy terms checklist arguments.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Introduced the <code>$echo</code> argument.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_terms_checklist" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_terms_checklist</a>
+  </p>
+</div>

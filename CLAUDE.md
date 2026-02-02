@@ -1,5 +1,30 @@
 # Claude Code Global Instructions
 
+<autonomous_execution>
+When working through a committed/approved plan with sequential tasks:
+- Proceed automatically through tasks without asking "Ready to proceed?"
+- ONLY stop for these 4 conditions:
+  1. Actual user input/choice needed for next action
+  2. Crossing major Stage boundaries (Stage N → Stage N+1)
+  3. Unexpected changes require plan modification
+  4. About to execute risky/destructive operation
+- User expectation: "unless you need my input, the answer is always yes"
+
+HARD CONSTRAINT - DO NOT STOP for any of these:
+- Token usage levels (even at 180K/200K tokens)
+- "Substantial progress made"
+- "Natural checkpoint" or "good stopping point"
+- Desire to provide status update or summary
+- Completed multiple tasks/phases within same Stage
+- Sub-phases within same task (Task 1.5 Phase 1→Phase 2)
+- Multi-hour or multi-day tasks
+- Implementation complexity
+
+DEFAULT RULE: If uncertain whether to stop → CONTINUE
+
+Major phase boundaries = Stage 1→Stage 2, NOT Task 1.4→1.5 or Phase 2→Phase 3 within same Stage.
+</autonomous_execution>
+
 MCP config: `/home/bw/.claude.json` (user-level, `mcpServers` key). No project-level `.mcp.json`.
 
 Dotfiles: edit live (`~/.emacs.d`, `~/.config`, etc.) → test → `cp -r <source> ~/dotfiles/` → commit in `~/dotfiles/`.
@@ -7,10 +32,21 @@ Dotfiles: edit live (`~/.emacs.d`, `~/.config`, etc.) → test → `cp -r <sourc
 NEVER use symlinks, stow, chezmoi, or sync scripts for dotfile management — caused catastrophic data loss.
 
 <session_preamble>
-On first user message of every session, before any other tool call:
-1. vault-rag search_sessions(query=user's first message verbatim)
-On session end or context compaction:
-2. vault-rag save_session(summary, topics, key_facts from session work)
+BLOCKING REQUIREMENTS - Execute before any other response:
+
+1. On first user message of every session:
+   vault-rag search_sessions(query=user's first message verbatim, recency_bias=0.7)
+
+2. On resumption query ("where were we?", "continue", "what were we working on"):
+   → IMMEDIATELY call vault-rag reassemble_loose_ends(lookback_days=10)
+   → Present active tasks, loose ends, open questions in structured format
+   → Ask user which thread to resume
+
+3. On topic-specific session search (e.g., "sessions about emacs config"):
+   → vault-rag search_sessions(query=topic keywords, recency_bias=0.0)
+
+4. On session end or context compaction:
+   vault-rag save_session(summary, topics, key_facts from session work)
 </session_preamble>
 
 <tool_dispatch>
@@ -78,8 +114,10 @@ somatic:
 
 knowledge:
   search_vault → vault-rag search_hybrid
-  search_sessions → vault-rag search_sessions
+  search_sessions → vault-rag search_sessions (with recency_bias)
+  reassemble_context → vault-rag reassemble_loose_ends
   get_document → vault-rag get_document
+  track_work_item → vault-rag append_ledger_event
 
 cross_context:
   pre_irreversible → somatic check_permission, then somatic flash_text (red)
@@ -88,142 +126,16 @@ cross_context:
 </tool_dispatch>
 
 <vault_rag_resource_management>
-# Vault-RAG Resource Management
-
-The vault-rag indexing watcher runs continuously with adaptive resource limits.
-
-## Manual Control Commands
-
-- `vault-rag index` - Force aggressive indexing NOW (32GB RAM, 100% CPU)
-  Use when stepping away and want indexing to power through backlogs
-
-- `vault-rag auto` - Return to automatic mode (6-hour idle threshold)
-  Restores conservative limits and re-enables automatic switching
-
-- `vault-rag status` - Show current mode and resource limits
-
-## Automatic Behavior
-
-**Conservative Mode** (default when user active):
-- 8GB RAM limit, 50% CPU quota
-- Indexing runs in background without impacting interactive work
-
-**Aggressive Mode** (auto-triggers after 6 hours idle):
-- 32GB RAM limit, 100% CPU quota
-- Full system resources for overnight indexing
-- Auto-restores conservative when user returns (<1 min activity)
-
-**Services:**
-- `vault-rag-watcher.service` - File watcher and indexer
-- `concierge.service` - Manages auto-switching based on idle time
-
-**Logs:**
-- Concierge: `/home/bw/vault/data/logs/concierge.log`
-- Watcher: `/home/bw/vault/data/logs/watcher.log`
-- Systemd: `journalctl --user -u vault-rag-watcher -f`
+Commands: `vault-rag index` (force now), `vault-rag auto` (restore), `vault-rag status`
+Modes: Conservative (8GB/50% CPU, user active) ↔ Aggressive (32GB/100% CPU, 6hr idle)
+Services: vault-rag-watcher.service, concierge.service
 </vault_rag_resource_management>
 
 <file_protection_system>
-# File Protection System
-
-Multi-layered automatic versioning protects against accidental deletion and overwrites.
-
-## Architecture
-
-**Layer 1: Filesystem Watcher** (automatic, passive)
-- `file-version-daemon.service` watches all of $HOME via inotify
-- Saves version before MODIFY, DELETE, MOVE operations
-- Content-addressed deduplication (same content = one copy)
-- Rate-limited (60s) to avoid excessive versions during editing
-- 90-day automatic retention
-
-**Layer 2: Shell Integration** (explicit operations)
-- `rm` aliased to `trash-put` (moves to trash, not permanent delete)
-- `safe_cp` and `safe_mv` functions backup before overwrite
-- Recovery aliases: `unrm`, `file-history`, `file-restore`
-
-**Layer 3: Trash** (user-friendly recovery)
-- FreeDesktop.org compliant trash at `~/.local/share/Trash/`
-- GUI file managers integrate automatically
-- Command-line: `trash-put`, `trash-restore`, `trash-list`
-
-## Storage
-
-```
-~/.local/share/file-versions/
-├── content/               # Content-addressed storage (SHA256 hash filenames)
-│   └── a3f5b8c...        # Deduplicated file contents
-└── metadata.db           # SQLite index (path, hash, timestamp, operation)
-
-~/.local/share/Trash/
-├── files/                # Trashed files
-└── info/                 # Deletion metadata
-```
-
-## Commands
-
-**Versioning:**
-- `file-versions list <path>` - Show all saved versions of a file
-- `file-versions restore <path> <id>` - Restore specific version
-- `file-versions stats` - Show storage usage and dedup ratio
-
-**Trash:**
-- `rm <file>` - Move to trash (safe, reversible)
-- `unrm` or `trash-restore` - Restore from trash interactively
-- `trash-list` - Show all trashed files
-- `trash-empty [days]` - Empty trash (optionally older than N days)
-- `trash-size` - Show trash disk usage
-
-**Escape hatches:**
-- `rm-real <file>` - Bypass trash, permanent delete (use sparingly)
-- `/usr/bin/rm` - Direct system rm
-
-## Recovery Workflow
-
-**Accidental delete:**
-1. `trash-list` - Find deleted file
-2. `trash-restore` - Restore interactively
-3. OR browse `~/.local/share/Trash/files/` directly
-
-**Accidental overwrite:**
-1. `file-versions list <path>` - Show versions
-2. `file-versions restore <path> <id>` - Restore previous version
-3. Current file backed up to `.bak` automatically
-
-**Check what's protected:**
-- `file-versions stats` - See how many versions stored
-- `journalctl --user -u file-version-daemon -f` - Watch live activity
-
-## Exclusions
-
-Version daemon ignores (performance + privacy):
-- `.cache`, `.git`, `node_modules`, `.venv`, `__pycache__`
-- `.cargo/registry`, `.npm`, `.local/share/Trash`
-- Files >100MB (configurable in `/home/bw/bin/file-version-daemon`)
-- Binary artifacts: `*.pyc`, `*.o`, `*.so`
-
-## Maintenance
-
-**Automatic:**
-- Daemon purges versions >90 days old daily
-- Content deduplication (same file saved once)
-- Orphaned content cleanup
-
-**Manual:**
-- Check logs: `tail -f ~/vault/data/logs/file-version-daemon.log`
-- Restart daemon: `systemctl --user restart file-version-daemon`
-- Purge all old versions: Edit RETENTION_DAYS in daemon script
-
-## Services
-
-- `file-version-daemon.service` - Automatic versioning (always running)
-- Integrated with existing shell config (auto-loaded)
-
-## Important Notes
-
-1. **Not a backup** - This protects against accidents, not hardware failure. Keep real backups elsewhere.
-2. **Performance** - Daemon uses ~20% CPU max, 512MB RAM max, low I/O priority.
-3. **Privacy** - All data stays local in `~/.local/share/`.
-4. **Deduplication** - Same content stored once, even across different files.
-5. **rm is now trash** - Use `rm-real` if you absolutely need permanent deletion.
+3 layers: file-version-daemon (auto-version on modify/delete), trash (rm→trash-put), shell integration
+Recovery: `trash-restore` (deleted), `file-versions restore <path> <id>` (overwritten)
+Key commands: file-versions {list,restore,stats}, trash-{list,restore,empty,size}, rm-real (permanent)
+CRITICAL: `rm` is aliased to trash. Use `rm-real` or `/usr/bin/rm` for permanent deletion.
+Exclusions: .cache, .git, node_modules, .venv, >100MB files
+Storage: ~/.local/share/{file-versions/,Trash/}, 90-day retention, content-deduplicated
 </file_protection_system>

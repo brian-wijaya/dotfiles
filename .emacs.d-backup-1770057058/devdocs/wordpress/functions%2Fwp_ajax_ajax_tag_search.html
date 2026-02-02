@@ -1,0 +1,96 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_ajax_tag_search()</h1> <section><p>Handles tag search via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="106" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_ajax_tag_search() {
+	if ( ! isset( $_GET['tax'] ) ) {
+		wp_die( 0 );
+	}
+
+	$taxonomy        = sanitize_key( $_GET['tax'] );
+	$taxonomy_object = get_taxonomy( $taxonomy );
+
+	if ( ! $taxonomy_object ) {
+		wp_die( 0 );
+	}
+
+	if ( ! current_user_can( $taxonomy_object-&gt;cap-&gt;assign_terms ) ) {
+		wp_die( -1 );
+	}
+
+	$search = wp_unslash( $_GET['q'] );
+
+	$comma = _x( ',', 'tag delimiter' );
+	if ( ',' !== $comma ) {
+		$search = str_replace( $comma, ',', $search );
+	}
+
+	if ( str_contains( $search, ',' ) ) {
+		$search = explode( ',', $search );
+		$search = $search[ count( $search ) - 1 ];
+	}
+
+	$search = trim( $search );
+
+	/**
+	 * Filters the minimum number of characters required to fire a tag search via Ajax.
+	 *
+	 * @since 4.0.0
+	 *
+	 * @param int         $characters      The minimum number of characters required. Default 2.
+	 * @param WP_Taxonomy $taxonomy_object The taxonomy object.
+	 * @param string      $search          The search term.
+	 */
+	$term_search_min_chars = (int) apply_filters( 'term_search_min_chars', 2, $taxonomy_object, $search );
+
+	/*
+	 * Require $term_search_min_chars chars for matching (default: 2)
+	 * ensure it's a non-negative, non-zero integer.
+	 */
+	if ( ( 0 === $term_search_min_chars ) || ( strlen( $search ) &lt; $term_search_min_chars ) ) {
+		wp_die();
+	}
+
+	$results = get_terms(
+		array(
+			'taxonomy'   =&gt; $taxonomy,
+			'name__like' =&gt; $search,
+			'fields'     =&gt; 'names',
+			'hide_empty' =&gt; false,
+			'number'     =&gt; isset( $_GET['number'] ) ? (int) $_GET['number'] : 0,
+		)
+	);
+
+	/**
+	 * Filters the Ajax term search results.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param string[]    $results         Array of term names.
+	 * @param WP_Taxonomy $taxonomy_object The taxonomy object.
+	 * @param string      $search          The search term.
+	 */
+	$results = apply_filters( 'ajax_term_search_results', $results, $taxonomy_object, $search );
+
+	echo implode( "\n", $results );
+	wp_die();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L106">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L106-L178">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/ajax_term_search_results"><span class="hook-func">apply_filters</span>( ‘ajax_term_search_results’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$results</span></nobr>, <nobr><span class="arg-type">WP_Taxonomy</span> <span class="arg-name">$taxonomy_object</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$search</span></nobr> )</a></dt>
+<dd>
+<p>Filters the Ajax term search results.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/term_search_min_chars"><span class="hook-func">apply_filters</span>( ‘term_search_min_chars’, <nobr><span class="arg-type">int</span> <span class="arg-name">$characters</span></nobr>, <nobr><span class="arg-type">WP_Taxonomy</span> <span class="arg-name">$taxonomy_object</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$search</span></nobr> )</a></dt>
+<dd>
+<p>Filters the minimum number of characters required to fire a tag search via Ajax.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_ajax_tag_search" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_ajax_tag_search</a>
+  </p>
+</div>

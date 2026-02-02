@@ -1,0 +1,197 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_theme_update_row( <span class="arg-type">string</span> <span class="arg-name">$theme_key</span>, <span class="arg-type">WP_Theme</span> <span class="arg-name">$theme</span> ): <span class="return-type">void|false</span>
+</h1> <section><p>Displays update information for a theme.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$theme_key</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Theme stylesheet.</span></div></dd>
+<dt>
+<code>$theme</code><span class="type"><span class="WP_Theme"><a href="../classes/wp_theme" rel="class">WP_Theme</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Theme object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">void|false</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="676" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_theme_update_row( $theme_key, $theme ) {
+	$current = get_site_transient( 'update_themes' );
+
+	if ( ! isset( $current-&gt;response[ $theme_key ] ) ) {
+		return false;
+	}
+
+	$response = $current-&gt;response[ $theme_key ];
+
+	$details_url = add_query_arg(
+		array(
+			'TB_iframe' =&gt; 'true',
+			'width'     =&gt; 1024,
+			'height'    =&gt; 800,
+		),
+		$current-&gt;response[ $theme_key ]['url']
+	);
+
+	/** @var WP_MS_Themes_List_Table $wp_list_table */
+	$wp_list_table = _get_list_table( 'WP_MS_Themes_List_Table' );
+
+	$active = $theme-&gt;is_allowed( 'network' ) ? ' active' : '';
+
+	$requires_wp  = isset( $response['requires'] ) ? $response['requires'] : null;
+	$requires_php = isset( $response['requires_php'] ) ? $response['requires_php'] : null;
+
+	$compatible_wp  = is_wp_version_compatible( $requires_wp );
+	$compatible_php = is_php_version_compatible( $requires_php );
+
+	printf(
+		'&lt;tr class="plugin-update-tr%s" id="%s" data-slug="%s"&gt;' .
+		'&lt;td colspan="%s" class="plugin-update colspanchange"&gt;' .
+		'&lt;div class="update-message notice inline notice-warning notice-alt"&gt;&lt;p&gt;',
+		$active,
+		esc_attr( $theme-&gt;get_stylesheet() . '-update' ),
+		esc_attr( $theme-&gt;get_stylesheet() ),
+		$wp_list_table-&gt;get_column_count()
+	);
+
+	if ( $compatible_wp &amp;&amp; $compatible_php ) {
+		if ( ! current_user_can( 'update_themes' ) ) {
+			printf(
+				/* translators: 1: Theme name, 2: Details URL, 3: Additional link attributes, 4: Version number. */
+				__( 'There is a new version of %1$s available. &lt;a href="%2$s" %3$s&gt;View version %4$s details&lt;/a&gt;.' ),
+				$theme['Name'],
+				esc_url( $details_url ),
+				sprintf(
+					'class="thickbox open-plugin-details-modal" aria-label="%s"',
+					/* translators: 1: Theme name, 2: Version number. */
+					esc_attr( sprintf( __( 'View %1$s version %2$s details' ), $theme['Name'], $response['new_version'] ) )
+				),
+				$response['new_version']
+			);
+		} elseif ( empty( $response['package'] ) ) {
+			printf(
+				/* translators: 1: Theme name, 2: Details URL, 3: Additional link attributes, 4: Version number. */
+				__( 'There is a new version of %1$s available. &lt;a href="%2$s" %3$s&gt;View version %4$s details&lt;/a&gt;. &lt;em&gt;Automatic update is unavailable for this theme.&lt;/em&gt;' ),
+				$theme['Name'],
+				esc_url( $details_url ),
+				sprintf(
+					'class="thickbox open-plugin-details-modal" aria-label="%s"',
+					/* translators: 1: Theme name, 2: Version number. */
+					esc_attr( sprintf( __( 'View %1$s version %2$s details' ), $theme['Name'], $response['new_version'] ) )
+				),
+				$response['new_version']
+			);
+		} else {
+			printf(
+				/* translators: 1: Theme name, 2: Details URL, 3: Additional link attributes, 4: Version number, 5: Update URL, 6: Additional link attributes. */
+				__( 'There is a new version of %1$s available. &lt;a href="%2$s" %3$s&gt;View version %4$s details&lt;/a&gt; or &lt;a href="%5$s" %6$s&gt;update now&lt;/a&gt;.' ),
+				$theme['Name'],
+				esc_url( $details_url ),
+				sprintf(
+					'class="thickbox open-plugin-details-modal" aria-label="%s"',
+					/* translators: 1: Theme name, 2: Version number. */
+					esc_attr( sprintf( __( 'View %1$s version %2$s details' ), $theme['Name'], $response['new_version'] ) )
+				),
+				$response['new_version'],
+				wp_nonce_url( self_admin_url( 'update.php?action=upgrade-theme&amp;theme=' ) . $theme_key, 'upgrade-theme_' . $theme_key ),
+				sprintf(
+					'class="update-link" aria-label="%s"',
+					/* translators: %s: Theme name. */
+					esc_attr( sprintf( _x( 'Update %s now', 'theme' ), $theme['Name'] ) )
+				)
+			);
+		}
+	} else {
+		if ( ! $compatible_wp &amp;&amp; ! $compatible_php ) {
+			printf(
+				/* translators: %s: Theme name. */
+				__( 'There is a new version of %s available, but it does not work with your versions of WordPress and PHP.' ),
+				$theme['Name']
+			);
+			if ( current_user_can( 'update_core' ) &amp;&amp; current_user_can( 'update_php' ) ) {
+				printf(
+					/* translators: 1: URL to WordPress Updates screen, 2: URL to Update PHP page. */
+					' ' . __( '&lt;a href="%1$s"&gt;Please update WordPress&lt;/a&gt;, and then &lt;a href="%2$s"&gt;learn more about updating PHP&lt;/a&gt;.' ),
+					self_admin_url( 'update-core.php' ),
+					esc_url( wp_get_update_php_url() )
+				);
+				wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;' );
+			} elseif ( current_user_can( 'update_core' ) ) {
+				printf(
+					/* translators: %s: URL to WordPress Updates screen. */
+					' ' . __( '&lt;a href="%s"&gt;Please update WordPress&lt;/a&gt;.' ),
+					self_admin_url( 'update-core.php' )
+				);
+			} elseif ( current_user_can( 'update_php' ) ) {
+				printf(
+					/* translators: %s: URL to Update PHP page. */
+					' ' . __( '&lt;a href="%s"&gt;Learn more about updating PHP&lt;/a&gt;.' ),
+					esc_url( wp_get_update_php_url() )
+				);
+				wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;' );
+			}
+		} elseif ( ! $compatible_wp ) {
+			printf(
+				/* translators: %s: Theme name. */
+				__( 'There is a new version of %s available, but it does not work with your version of WordPress.' ),
+				$theme['Name']
+			);
+			if ( current_user_can( 'update_core' ) ) {
+				printf(
+					/* translators: %s: URL to WordPress Updates screen. */
+					' ' . __( '&lt;a href="%s"&gt;Please update WordPress&lt;/a&gt;.' ),
+					self_admin_url( 'update-core.php' )
+				);
+			}
+		} elseif ( ! $compatible_php ) {
+			printf(
+				/* translators: %s: Theme name. */
+				__( 'There is a new version of %s available, but it does not work with your version of PHP.' ),
+				$theme['Name']
+			);
+			if ( current_user_can( 'update_php' ) ) {
+				printf(
+					/* translators: %s: URL to Update PHP page. */
+					' ' . __( '&lt;a href="%s"&gt;Learn more about updating PHP&lt;/a&gt;.' ),
+					esc_url( wp_get_update_php_url() )
+				);
+				wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;' );
+			}
+		}
+	}
+
+	/**
+	 * Fires at the end of the update message container in each
+	 * row of the themes list table.
+	 *
+	 * The dynamic portion of the hook name, `$theme_key`, refers to
+	 * the theme slug as found in the WordPress.org themes repository.
+	 *
+	 * @since 3.1.0
+	 *
+	 * @param WP_Theme $theme    The WP_Theme object.
+	 * @param array    $response {
+	 *     An array of metadata about the available theme update.
+	 *
+	 *     @type string $new_version New theme version.
+	 *     @type string $url         Theme URL.
+	 *     @type string $package     Theme update package URL.
+	 * }
+	 */
+	do_action( "in_theme_update_message-{$theme_key}", $theme, $response ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores
+
+	echo '&lt;/p&gt;&lt;/div&gt;&lt;/td&gt;&lt;/tr&gt;';
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/update.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/update.php#L676">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/update.php#L676-L842">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/in_theme_update_message-theme_key"><span class="hook-func">do_action</span>( “in_theme_update_message-{$theme_key}”, <nobr><span class="arg-type">WP_Theme</span> <span class="arg-name">$theme</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$response</span></nobr> )</a></dt>
+<dd>
+<p>Fires at the end of the update message container in each row of the themes list table.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_theme_update_row" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_theme_update_row</a>
+  </p>
+</div>

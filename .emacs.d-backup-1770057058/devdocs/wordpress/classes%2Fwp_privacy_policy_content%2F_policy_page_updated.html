@@ -1,0 +1,61 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Privacy_Policy_Content::_policy_page_updated( <span class="arg-type">int</span> <span class="arg-name">$post_id</span> )</h1> <section><p>Updates the cached policy info when the policy page is updated.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The ID of the updated post.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="165" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public static function _policy_page_updated( $post_id ) {
+	$policy_page_id = (int) get_option( 'wp_page_for_privacy_policy' );
+
+	if ( ! $policy_page_id || $policy_page_id !== (int) $post_id ) {
+		return;
+	}
+
+	// Remove updated|removed status.
+	$old          = (array) get_post_meta( $policy_page_id, '_wp_suggested_privacy_policy_content' );
+	$done         = array();
+	$update_cache = false;
+
+	foreach ( $old as $old_key =&gt; $old_data ) {
+		if ( ! empty( $old_data['removed'] ) ) {
+			// Remove the old policy text.
+			$update_cache = true;
+			continue;
+		}
+
+		if ( ! empty( $old_data['updated'] ) ) {
+			// 'updated' is now 'added'.
+			$done[]       = array(
+				'plugin_name' =&gt; $old_data['plugin_name'],
+				'policy_text' =&gt; $old_data['policy_text'],
+				'added'       =&gt; $old_data['updated'],
+			);
+			$update_cache = true;
+		} else {
+			$done[] = $old_data;
+		}
+	}
+
+	if ( $update_cache ) {
+		delete_post_meta( $policy_page_id, '_wp_suggested_privacy_policy_content' );
+		// Update the cache.
+		foreach ( $done as $data ) {
+			add_post_meta( $policy_page_id, '_wp_suggested_privacy_policy_content', $data );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-privacy-policy-content.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-privacy-policy-content.php#L165">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-privacy-policy-content.php#L165-L204">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.6/">4.9.6</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_privacy_policy_content/_policy_page_updated" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_privacy_policy_content/_policy_page_updated</a>
+  </p>
+</div>

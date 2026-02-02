@@ -1,0 +1,359 @@
+<h1 class="wp-block-wporg-code-reference-title">network_step2( <span class="arg-type">false|WP_Error</span> <span class="arg-name">$errors</span> = <span class="arg-default">false</span> )</h1> <section><p>Prints step 2 for Network installation process.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$errors</code><span class="type"><span class="false">false</span>|<span class="WP_Error"><a href="../classes/wp_error" rel="class">WP_Error</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Error object. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="409" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function network_step2( $errors = false ) {
+	global $wpdb, $is_nginx;
+
+	$hostname          = get_clean_basedomain();
+	$slashed_home      = trailingslashit( get_option( 'home' ) );
+	$base              = parse_url( $slashed_home, PHP_URL_PATH );
+	$document_root_fix = str_replace( '\\', '/', realpath( $_SERVER['DOCUMENT_ROOT'] ) );
+	$abspath_fix       = str_replace( '\\', '/', ABSPATH );
+	$home_path         = str_starts_with( $abspath_fix, $document_root_fix ) ? $document_root_fix . $base : get_home_path();
+	$wp_siteurl_subdir = preg_replace( '#^' . preg_quote( $home_path, '#' ) . '#', '', $abspath_fix );
+	$rewrite_base      = ! empty( $wp_siteurl_subdir ) ? ltrim( trailingslashit( $wp_siteurl_subdir ), '/' ) : '';
+
+	$location_of_wp_config = $abspath_fix;
+	if ( ! file_exists( ABSPATH . 'wp-config.php' ) &amp;&amp; file_exists( dirname( ABSPATH ) . '/wp-config.php' ) ) {
+		$location_of_wp_config = dirname( $abspath_fix );
+	}
+	$location_of_wp_config = trailingslashit( $location_of_wp_config );
+
+	// Wildcard DNS message.
+	if ( is_wp_error( $errors ) ) {
+		wp_admin_notice(
+			$errors-&gt;get_error_message(),
+			array(
+				'additional_classes' =&gt; array( 'error' ),
+			)
+		);
+	}
+
+	if ( $_POST ) {
+		if ( allow_subdomain_install() ) {
+			$subdomain_install = allow_subdirectory_install() ? ! empty( $_POST['subdomain_install'] ) : true;
+		} else {
+			$subdomain_install = false;
+		}
+	} else {
+		if ( is_multisite() ) {
+			$subdomain_install = is_subdomain_install();
+			?&gt;
+	&lt;p&gt;&lt;?php _e( 'The original configuration steps are shown here for reference.' ); ?&gt;&lt;/p&gt;
+			&lt;?php
+		} else {
+			$subdomain_install = (bool) $wpdb-&gt;get_var( "SELECT meta_value FROM $wpdb-&gt;sitemeta WHERE site_id = 1 AND meta_key = 'subdomain_install'" );
+
+			wp_admin_notice(
+				'&lt;strong&gt;' . __( 'Warning:' ) . '&lt;/strong&gt; ' . __( 'An existing WordPress network was detected.' ),
+				array(
+					'additional_classes' =&gt; array( 'error' ),
+				)
+			);
+			?&gt;
+	&lt;p&gt;&lt;?php _e( 'Please complete the configuration steps. To create a new network, you will need to empty or remove the network database tables.' ); ?&gt;&lt;/p&gt;
+			&lt;?php
+		}
+	}
+
+	$subdir_match          = $subdomain_install ? '' : '([_0-9a-zA-Z-]+/)?';
+	$subdir_replacement_01 = $subdomain_install ? '' : '$1';
+	$subdir_replacement_12 = $subdomain_install ? '$1' : '$2';
+
+	if ( $_POST || ! is_multisite() ) {
+		?&gt;
+		&lt;h3&gt;&lt;?php esc_html_e( 'Enabling the Network' ); ?&gt;&lt;/h3&gt;
+		&lt;p&gt;&lt;?php _e( 'Complete the following steps to enable the features for creating a network of sites.' ); ?&gt;&lt;/p&gt;
+		&lt;?php
+		$notice_message = '&lt;strong&gt;' . __( 'Caution:' ) . '&lt;/strong&gt; ';
+		$notice_args    = array(
+			'type'               =&gt; 'warning',
+			'additional_classes' =&gt; array( 'inline' ),
+		);
+
+		if ( file_exists( $home_path . '.htaccess' ) ) {
+			$notice_message .= sprintf(
+				/* translators: 1: wp-config.php, 2: .htaccess */
+				__( 'You should back up your existing %1$s and %2$s files.' ),
+				'&lt;code&gt;wp-config.php&lt;/code&gt;',
+				'&lt;code&gt;.htaccess&lt;/code&gt;'
+			);
+		} elseif ( file_exists( $home_path . 'web.config' ) ) {
+			$notice_message .= sprintf(
+				/* translators: 1: wp-config.php, 2: web.config */
+				__( 'You should back up your existing %1$s and %2$s files.' ),
+				'&lt;code&gt;wp-config.php&lt;/code&gt;',
+				'&lt;code&gt;web.config&lt;/code&gt;'
+			);
+		} else {
+			$notice_message .= sprintf(
+				/* translators: %s: wp-config.php */
+				__( 'You should back up your existing %s file.' ),
+				'&lt;code&gt;wp-config.php&lt;/code&gt;'
+			);
+		}
+
+		wp_admin_notice( $notice_message, $notice_args );
+	}
+	?&gt;
+	&lt;ol&gt;
+		&lt;li&gt;&lt;p id="network-wpconfig-rules-description"&gt;
+		&lt;?php
+		printf(
+			/* translators: 1: wp-config.php, 2: Location of wp-config file, 3: Translated version of "That's all, stop editing! Happy publishing." */
+			__( 'Add the following to your %1$s file in %2$s &lt;strong&gt;above&lt;/strong&gt; the line reading %3$s:' ),
+			'&lt;code&gt;wp-config.php&lt;/code&gt;',
+			'&lt;code&gt;' . $location_of_wp_config . '&lt;/code&gt;',
+			/*
+			 * translators: This string should only be translated if wp-config-sample.php is localized.
+			 * You can check the localized release package or
+			 * https://i18n.svn.wordpress.org/&lt;locale code&gt;/branches/&lt;wp version&gt;/dist/wp-config-sample.php
+			 */
+			'&lt;code&gt;/* ' . __( 'That&amp;#8217;s all, stop editing! Happy publishing.' ) . ' */&lt;/code&gt;'
+		);
+		?&gt;
+		&lt;/p&gt;
+		&lt;p class="configuration-rules-label"&gt;&lt;label for="network-wpconfig-rules"&gt;
+			&lt;?php
+			printf(
+				/* translators: %s: File name (wp-config.php, .htaccess or web.config). */
+				__( 'Network configuration rules for %s' ),
+				'&lt;code&gt;wp-config.php&lt;/code&gt;'
+			);
+			?&gt;
+		&lt;/label&gt;&lt;/p&gt;
+		&lt;textarea id="network-wpconfig-rules" class="code" readonly="readonly" cols="100" rows="7" aria-describedby="network-wpconfig-rules-description"&gt;
+define( 'MULTISITE', true );
+define( 'SUBDOMAIN_INSTALL', &lt;?php echo $subdomain_install ? 'true' : 'false'; ?&gt; );
+define( 'DOMAIN_CURRENT_SITE', '&lt;?php echo $hostname; ?&gt;' );
+define( 'PATH_CURRENT_SITE', '&lt;?php echo $base; ?&gt;' );
+define( 'SITE_ID_CURRENT_SITE', 1 );
+define( 'BLOG_ID_CURRENT_SITE', 1 );
+&lt;/textarea&gt;
+		&lt;?php
+		$keys_salts = array(
+			'AUTH_KEY'         =&gt; '',
+			'SECURE_AUTH_KEY'  =&gt; '',
+			'LOGGED_IN_KEY'    =&gt; '',
+			'NONCE_KEY'        =&gt; '',
+			'AUTH_SALT'        =&gt; '',
+			'SECURE_AUTH_SALT' =&gt; '',
+			'LOGGED_IN_SALT'   =&gt; '',
+			'NONCE_SALT'       =&gt; '',
+		);
+		foreach ( $keys_salts as $c =&gt; $v ) {
+			if ( defined( $c ) ) {
+				unset( $keys_salts[ $c ] );
+			}
+		}
+
+		if ( ! empty( $keys_salts ) ) {
+			$keys_salts_str = '';
+			$from_api       = wp_remote_get( 'https://api.wordpress.org/secret-key/1.1/salt/' );
+			if ( is_wp_error( $from_api ) ) {
+				foreach ( $keys_salts as $c =&gt; $v ) {
+					$keys_salts_str .= "\ndefine( '$c', '" . wp_generate_password( 64, true, true ) . "' );";
+				}
+			} else {
+				$from_api = explode( "\n", wp_remote_retrieve_body( $from_api ) );
+				foreach ( $keys_salts as $c =&gt; $v ) {
+					$keys_salts_str .= "\ndefine( '$c', '" . substr( array_shift( $from_api ), 28, 64 ) . "' );";
+				}
+			}
+			$num_keys_salts = count( $keys_salts );
+			?&gt;
+		&lt;p id="network-wpconfig-authentication-description"&gt;
+			&lt;?php
+			if ( 1 === $num_keys_salts ) {
+				printf(
+					/* translators: %s: wp-config.php */
+					__( 'This unique authentication key is also missing from your %s file.' ),
+					'&lt;code&gt;wp-config.php&lt;/code&gt;'
+				);
+			} else {
+				printf(
+					/* translators: %s: wp-config.php */
+					__( 'These unique authentication keys are also missing from your %s file.' ),
+					'&lt;code&gt;wp-config.php&lt;/code&gt;'
+				);
+			}
+			?&gt;
+			&lt;?php _e( 'To make your installation more secure, you should also add:' ); ?&gt;
+		&lt;/p&gt;
+		&lt;p class="configuration-rules-label"&gt;&lt;label for="network-wpconfig-authentication"&gt;&lt;?php _e( 'Network configuration authentication keys' ); ?&gt;&lt;/label&gt;&lt;/p&gt;
+		&lt;textarea id="network-wpconfig-authentication" class="code" readonly="readonly" cols="100" rows="&lt;?php echo $num_keys_salts; ?&gt;" aria-describedby="network-wpconfig-authentication-description"&gt;&lt;?php echo esc_textarea( $keys_salts_str ); ?&gt;&lt;/textarea&gt;
+			&lt;?php
+		}
+		?&gt;
+		&lt;/li&gt;
+	&lt;?php
+	if ( iis7_supports_permalinks() ) :
+		// IIS doesn't support RewriteBase, all your RewriteBase are belong to us.
+		$iis_subdir_match       = ltrim( $base, '/' ) . $subdir_match;
+		$iis_rewrite_base       = ltrim( $base, '/' ) . $rewrite_base;
+		$iis_subdir_replacement = $subdomain_install ? '' : '{R:1}';
+
+		$web_config_file = '&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;configuration&gt;
+    &lt;system.webServer&gt;
+        &lt;rewrite&gt;
+            &lt;rules&gt;
+                &lt;rule name="WordPress Rule 1" stopProcessing="true"&gt;
+                    &lt;match url="^index\.php$" ignoreCase="false" /&gt;
+                    &lt;action type="None" /&gt;
+                &lt;/rule&gt;';
+		if ( is_multisite() &amp;&amp; get_site_option( 'ms_files_rewriting' ) ) {
+			$web_config_file .= '
+                &lt;rule name="WordPress Rule for Files" stopProcessing="true"&gt;
+                    &lt;match url="^' . $iis_subdir_match . 'files/(.+)" ignoreCase="false" /&gt;
+                    &lt;action type="Rewrite" url="' . $iis_rewrite_base . WPINC . '/ms-files.php?file={R:1}" appendQueryString="false" /&gt;
+                &lt;/rule&gt;';
+		}
+			$web_config_file .= '
+                &lt;rule name="WordPress Rule 2" stopProcessing="true"&gt;
+                    &lt;match url="^' . $iis_subdir_match . 'wp-admin$" ignoreCase="false" /&gt;
+                    &lt;action type="Redirect" url="' . $iis_subdir_replacement . 'wp-admin/" redirectType="Permanent" /&gt;
+                &lt;/rule&gt;
+                &lt;rule name="WordPress Rule 3" stopProcessing="true"&gt;
+                    &lt;match url="^" ignoreCase="false" /&gt;
+                    &lt;conditions logicalGrouping="MatchAny"&gt;
+                        &lt;add input="{REQUEST_FILENAME}" matchType="IsFile" ignoreCase="false" /&gt;
+                        &lt;add input="{REQUEST_FILENAME}" matchType="IsDirectory" ignoreCase="false" /&gt;
+                    &lt;/conditions&gt;
+                    &lt;action type="None" /&gt;
+                &lt;/rule&gt;
+                &lt;rule name="WordPress Rule 4" stopProcessing="true"&gt;
+                    &lt;match url="^' . $iis_subdir_match . '(wp-(content|admin|includes).*)" ignoreCase="false" /&gt;
+                    &lt;action type="Rewrite" url="' . $iis_rewrite_base . '{R:1}" /&gt;
+                &lt;/rule&gt;
+                &lt;rule name="WordPress Rule 5" stopProcessing="true"&gt;
+                    &lt;match url="^' . $iis_subdir_match . '([_0-9a-zA-Z-]+/)?(.*\.php)$" ignoreCase="false" /&gt;
+                    &lt;action type="Rewrite" url="' . $iis_rewrite_base . '{R:2}" /&gt;
+                &lt;/rule&gt;
+                &lt;rule name="WordPress Rule 6" stopProcessing="true"&gt;
+                    &lt;match url="." ignoreCase="false" /&gt;
+                    &lt;action type="Rewrite" url="index.php" /&gt;
+                &lt;/rule&gt;
+            &lt;/rules&gt;
+        &lt;/rewrite&gt;
+    &lt;/system.webServer&gt;
+&lt;/configuration&gt;
+';
+
+			echo '&lt;li&gt;&lt;p id="network-webconfig-rules-description"&gt;';
+			printf(
+				/* translators: 1: File name (.htaccess or web.config), 2: File path. */
+				__( 'Add the following to your %1$s file in %2$s, &lt;strong&gt;replacing&lt;/strong&gt; other WordPress rules:' ),
+				'&lt;code&gt;web.config&lt;/code&gt;',
+				'&lt;code&gt;' . $home_path . '&lt;/code&gt;'
+			);
+		echo '&lt;/p&gt;';
+		if ( ! $subdomain_install &amp;&amp; WP_CONTENT_DIR !== ABSPATH . 'wp-content' ) {
+			echo '&lt;p&gt;&lt;strong&gt;' . __( 'Warning:' ) . ' ' . __( 'Subdirectory networks may not be fully compatible with custom wp-content directories.' ) . '&lt;/strong&gt;&lt;/p&gt;';
+		}
+		?&gt;
+			&lt;p class="configuration-rules-label"&gt;&lt;label for="network-webconfig-rules"&gt;
+				&lt;?php
+				printf(
+					/* translators: %s: File name (wp-config.php, .htaccess or web.config). */
+					__( 'Network configuration rules for %s' ),
+					'&lt;code&gt;web.config&lt;/code&gt;'
+				);
+				?&gt;
+			&lt;/label&gt;&lt;/p&gt;
+			&lt;textarea id="network-webconfig-rules" class="code" readonly="readonly" cols="100" rows="20" aria-describedby="network-webconfig-rules-description"&gt;&lt;?php echo esc_textarea( $web_config_file ); ?&gt;&lt;/textarea&gt;
+		&lt;/li&gt;
+	&lt;/ol&gt;
+
+		&lt;?php
+	elseif ( $is_nginx ) : // End iis7_supports_permalinks(). Link to Nginx documentation instead:
+
+		echo '&lt;li&gt;&lt;p&gt;';
+		printf(
+			/* translators: %s: Documentation URL. */
+			__( 'It seems your network is running with Nginx web server. &lt;a href="%s"&gt;Learn more about further configuration&lt;/a&gt;.' ),
+			__( 'https://developer.wordpress.org/advanced-administration/server/web-server/nginx/' )
+		);
+		echo '&lt;/p&gt;&lt;/li&gt;';
+
+	else : // End $is_nginx. Construct an .htaccess file instead:
+
+		$ms_files_rewriting = '';
+		if ( is_multisite() &amp;&amp; get_site_option( 'ms_files_rewriting' ) ) {
+			$ms_files_rewriting  = "\n# uploaded files\nRewriteRule ^";
+			$ms_files_rewriting .= $subdir_match . "files/(.+) {$rewrite_base}" . WPINC . "/ms-files.php?file={$subdir_replacement_12} [L]" . "\n";
+		}
+
+		$htaccess_file = &lt;&lt;&lt;EOF
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase {$base}
+RewriteRule ^index\.php$ - [L]
+{$ms_files_rewriting}
+# add a trailing slash to /wp-admin
+RewriteRule ^{$subdir_match}wp-admin$ {$subdir_replacement_01}wp-admin/ [R=301,L]
+
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+RewriteRule ^{$subdir_match}(wp-(content|admin|includes).*) {$rewrite_base}{$subdir_replacement_12} [L]
+RewriteRule ^{$subdir_match}(.*\.php)$ {$rewrite_base}$subdir_replacement_12 [L]
+RewriteRule . index.php [L]
+
+EOF;
+
+		echo '&lt;li&gt;&lt;p id="network-htaccess-rules-description"&gt;';
+		printf(
+			/* translators: 1: File name (.htaccess or web.config), 2: File path. */
+			__( 'Add the following to your %1$s file in %2$s, &lt;strong&gt;replacing&lt;/strong&gt; other WordPress rules:' ),
+			'&lt;code&gt;.htaccess&lt;/code&gt;',
+			'&lt;code&gt;' . $home_path . '&lt;/code&gt;'
+		);
+		echo '&lt;/p&gt;';
+		if ( ! $subdomain_install &amp;&amp; WP_CONTENT_DIR !== ABSPATH . 'wp-content' ) {
+			echo '&lt;p&gt;&lt;strong&gt;' . __( 'Warning:' ) . ' ' . __( 'Subdirectory networks may not be fully compatible with custom wp-content directories.' ) . '&lt;/strong&gt;&lt;/p&gt;';
+		}
+		?&gt;
+			&lt;p class="configuration-rules-label"&gt;&lt;label for="network-htaccess-rules"&gt;
+				&lt;?php
+				printf(
+					/* translators: %s: File name (wp-config.php, .htaccess or web.config). */
+					__( 'Network configuration rules for %s' ),
+					'&lt;code&gt;.htaccess&lt;/code&gt;'
+				);
+				?&gt;
+			&lt;/label&gt;&lt;/p&gt;
+			&lt;textarea id="network-htaccess-rules" class="code" readonly="readonly" cols="100" rows="&lt;?php echo substr_count( $htaccess_file, "\n" ) + 1; ?&gt;" aria-describedby="network-htaccess-rules-description"&gt;&lt;?php echo esc_textarea( $htaccess_file ); ?&gt;&lt;/textarea&gt;
+		&lt;/li&gt;
+	&lt;/ol&gt;
+
+		&lt;?php
+	endif; // End IIS/Nginx/Apache code branches.
+
+	if ( ! is_multisite() ) {
+		?&gt;
+		&lt;p&gt;&lt;?php _e( 'Once you complete these steps, your network is enabled and configured. You will have to log in again.' ); ?&gt; &lt;a href="&lt;?php echo esc_url( wp_login_url() ); ?&gt;"&gt;&lt;?php _e( 'Log In' ); ?&gt;&lt;/a&gt;&lt;/p&gt;
+		&lt;?php
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/network.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/network.php#L409">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/network.php#L409-L743">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/network_step2" class="_attribution-link">https://developer.wordpress.org/reference/functions/network_step2</a>
+  </p>
+</div>

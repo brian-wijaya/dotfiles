@@ -1,0 +1,247 @@
+<h1 class="wp-block-wporg-code-reference-title">_wp_dashboard_recent_comments_row( <span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span>, <span class="arg-type">bool</span> <span class="arg-name">$show_date</span> = <span class="arg-default">true</span> )</h1> <section><p>Outputs a row for the Recent Comments widget.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$comment</code><span class="type"><span class="WP_Comment"><a href="../classes/wp_comment" rel="class">WP_Comment</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The current comment.</span></div></dd>
+<dt>
+<code>$show_date</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to display the date.</span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="704" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _wp_dashboard_recent_comments_row( &amp;$comment, $show_date = true ) {
+	$GLOBALS['comment'] = clone $comment;
+
+	if ( $comment-&gt;comment_post_ID &gt; 0 ) {
+		$comment_post_title = _draft_or_post_title( $comment-&gt;comment_post_ID );
+		$comment_post_url   = get_the_permalink( $comment-&gt;comment_post_ID );
+		$comment_post_link  = '&lt;a href="' . esc_url( $comment_post_url ) . '"&gt;' . $comment_post_title . '&lt;/a&gt;';
+	} else {
+		$comment_post_link = '';
+	}
+
+	$actions_string = '';
+	if ( current_user_can( 'edit_comment', $comment-&gt;comment_ID ) ) {
+		// Pre-order it: Approve | Reply | Edit | Spam | Trash.
+		$actions = array(
+			'approve'   =&gt; '',
+			'unapprove' =&gt; '',
+			'reply'     =&gt; '',
+			'edit'      =&gt; '',
+			'spam'      =&gt; '',
+			'trash'     =&gt; '',
+			'delete'    =&gt; '',
+			'view'      =&gt; '',
+		);
+
+		$approve_nonce = esc_html( '_wpnonce=' . wp_create_nonce( 'approve-comment_' . $comment-&gt;comment_ID ) );
+		$del_nonce     = esc_html( '_wpnonce=' . wp_create_nonce( 'delete-comment_' . $comment-&gt;comment_ID ) );
+
+		$action_string = 'comment.php?action=%s&amp;p=' . $comment-&gt;comment_post_ID . '&amp;c=' . $comment-&gt;comment_ID . '&amp;%s';
+
+		$approve_url   = sprintf( $action_string, 'approvecomment', $approve_nonce );
+		$unapprove_url = sprintf( $action_string, 'unapprovecomment', $approve_nonce );
+		$spam_url      = sprintf( $action_string, 'spamcomment', $del_nonce );
+		$trash_url     = sprintf( $action_string, 'trashcomment', $del_nonce );
+		$delete_url    = sprintf( $action_string, 'deletecomment', $del_nonce );
+
+		$actions['approve'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="vim-a aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $approve_url ),
+			"dim:the-comment-list:comment-{$comment-&gt;comment_ID}:unapproved:e7e7d3:e7e7d3:new=approved",
+			esc_attr__( 'Approve this comment' ),
+			__( 'Approve' )
+		);
+
+		$actions['unapprove'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="vim-u aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $unapprove_url ),
+			"dim:the-comment-list:comment-{$comment-&gt;comment_ID}:unapproved:e7e7d3:e7e7d3:new=unapproved",
+			esc_attr__( 'Unapprove this comment' ),
+			__( 'Unapprove' )
+		);
+
+		$actions['edit'] = sprintf(
+			'&lt;a href="%s" aria-label="%s"&gt;%s&lt;/a&gt;',
+			"comment.php?action=editcomment&amp;amp;c={$comment-&gt;comment_ID}",
+			esc_attr__( 'Edit this comment' ),
+			__( 'Edit' )
+		);
+
+		$actions['reply'] = sprintf(
+			'&lt;button type="button" onclick="window.commentReply &amp;&amp; commentReply.open(\'%s\',\'%s\');" class="vim-r button-link hide-if-no-js" aria-label="%s"&gt;%s&lt;/button&gt;',
+			$comment-&gt;comment_ID,
+			$comment-&gt;comment_post_ID,
+			esc_attr__( 'Reply to this comment' ),
+			__( 'Reply' )
+		);
+
+		$actions['spam'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="vim-s vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $spam_url ),
+			"delete:the-comment-list:comment-{$comment-&gt;comment_ID}::spam=1",
+			esc_attr__( 'Mark this comment as spam' ),
+			/* translators: "Mark as spam" link. */
+			_x( 'Spam', 'verb' )
+		);
+
+		if ( ! EMPTY_TRASH_DAYS ) {
+			$actions['delete'] = sprintf(
+				'&lt;a href="%s" data-wp-lists="%s" class="delete vim-d vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+				esc_url( $delete_url ),
+				"delete:the-comment-list:comment-{$comment-&gt;comment_ID}::trash=1",
+				esc_attr__( 'Delete this comment permanently' ),
+				__( 'Delete Permanently' )
+			);
+		} else {
+			$actions['trash'] = sprintf(
+				'&lt;a href="%s" data-wp-lists="%s" class="delete vim-d vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+				esc_url( $trash_url ),
+				"delete:the-comment-list:comment-{$comment-&gt;comment_ID}::trash=1",
+				esc_attr__( 'Move this comment to the Trash' ),
+				_x( 'Trash', 'verb' )
+			);
+		}
+
+		$actions['view'] = sprintf(
+			'&lt;a class="comment-link" href="%s" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( get_comment_link( $comment ) ),
+			esc_attr__( 'View this comment' ),
+			__( 'View' )
+		);
+
+		/** This filter is documented in wp-admin/includes/class-wp-comments-list-table.php */
+		$actions = apply_filters( 'comment_row_actions', array_filter( $actions ), $comment );
+
+		$i = 0;
+
+		foreach ( $actions as $action =&gt; $link ) {
+			++$i;
+
+			if ( ( ( 'approve' === $action || 'unapprove' === $action ) &amp;&amp; 2 === $i )
+				|| 1 === $i
+			) {
+				$separator = '';
+			} else {
+				$separator = ' | ';
+			}
+
+			// Reply and quickedit need a hide-if-no-js span.
+			if ( 'reply' === $action || 'quickedit' === $action ) {
+				$action .= ' hide-if-no-js';
+			}
+
+			if ( 'view' === $action &amp;&amp; '1' !== $comment-&gt;comment_approved ) {
+				$action .= ' hidden';
+			}
+
+			$actions_string .= "&lt;span class='$action'&gt;{$separator}{$link}&lt;/span&gt;";
+		}
+	}
+	?&gt;
+
+		&lt;li id="comment-&lt;?php echo $comment-&gt;comment_ID; ?&gt;" &lt;?php comment_class( array( 'comment-item', wp_get_comment_status( $comment ) ), $comment ); ?&gt;&gt;
+
+			&lt;?php
+			$comment_row_class = '';
+
+			if ( get_option( 'show_avatars' ) ) {
+				echo get_avatar( $comment, 50, 'mystery' );
+				$comment_row_class .= ' has-avatar';
+			}
+			?&gt;
+
+			&lt;?php if ( ! $comment-&gt;comment_type || 'comment' === $comment-&gt;comment_type ) : ?&gt;
+
+			&lt;div class="dashboard-comment-wrap has-row-actions &lt;?php echo $comment_row_class; ?&gt;"&gt;
+			&lt;p class="comment-meta"&gt;
+				&lt;?php
+				// Comments might not have a post they relate to, e.g. programmatically created ones.
+				if ( $comment_post_link ) {
+					printf(
+						/* translators: 1: Comment author, 2: Post link, 3: Notification if the comment is pending. */
+						__( 'From %1$s on %2$s %3$s' ),
+						'&lt;cite class="comment-author"&gt;' . get_comment_author_link( $comment ) . '&lt;/cite&gt;',
+						$comment_post_link,
+						'&lt;span class="approve"&gt;' . __( '[Pending]' ) . '&lt;/span&gt;'
+					);
+				} else {
+					printf(
+						/* translators: 1: Comment author, 2: Notification if the comment is pending. */
+						__( 'From %1$s %2$s' ),
+						'&lt;cite class="comment-author"&gt;' . get_comment_author_link( $comment ) . '&lt;/cite&gt;',
+						'&lt;span class="approve"&gt;' . __( '[Pending]' ) . '&lt;/span&gt;'
+					);
+				}
+				?&gt;
+			&lt;/p&gt;
+
+				&lt;?php
+			else :
+				switch ( $comment-&gt;comment_type ) {
+					case 'pingback':
+						$type = __( 'Pingback' );
+						break;
+					case 'trackback':
+						$type = __( 'Trackback' );
+						break;
+					default:
+						$type = ucwords( $comment-&gt;comment_type );
+				}
+				$type = esc_html( $type );
+				?&gt;
+			&lt;div class="dashboard-comment-wrap has-row-actions"&gt;
+			&lt;p class="comment-meta"&gt;
+				&lt;?php
+				// Pingbacks, Trackbacks or custom comment types might not have a post they relate to, e.g. programmatically created ones.
+				if ( $comment_post_link ) {
+					printf(
+						/* translators: 1: Type of comment, 2: Post link, 3: Notification if the comment is pending. */
+						_x( '%1$s on %2$s %3$s', 'dashboard' ),
+						"&lt;strong&gt;$type&lt;/strong&gt;",
+						$comment_post_link,
+						'&lt;span class="approve"&gt;' . __( '[Pending]' ) . '&lt;/span&gt;'
+					);
+				} else {
+					printf(
+						/* translators: 1: Type of comment, 2: Notification if the comment is pending. */
+						_x( '%1$s %2$s', 'dashboard' ),
+						"&lt;strong&gt;$type&lt;/strong&gt;",
+						'&lt;span class="approve"&gt;' . __( '[Pending]' ) . '&lt;/span&gt;'
+					);
+				}
+				?&gt;
+			&lt;/p&gt;
+			&lt;p class="comment-author"&gt;&lt;?php comment_author_link( $comment ); ?&gt;&lt;/p&gt;
+
+			&lt;?php endif; // comment_type ?&gt;
+			&lt;blockquote&gt;&lt;p&gt;&lt;?php comment_excerpt( $comment ); ?&gt;&lt;/p&gt;&lt;/blockquote&gt;
+			&lt;?php if ( $actions_string ) : ?&gt;
+			&lt;p class="row-actions"&gt;&lt;?php echo $actions_string; ?&gt;&lt;/p&gt;
+			&lt;?php endif; ?&gt;
+			&lt;/div&gt;
+		&lt;/li&gt;
+	&lt;?php
+	$GLOBALS['comment'] = null;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/dashboard.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/dashboard.php#L704">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/dashboard.php#L704-L918">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/comment_row_actions"><span class="hook-func">apply_filters</span>( ‘comment_row_actions’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$actions</span></nobr>, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr> )</a></dt>
+<dd>
+<p>Filters the action links displayed for each comment in the Comments list table.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_wp_dashboard_recent_comments_row" class="_attribution-link">https://developer.wordpress.org/reference/functions/_wp_dashboard_recent_comments_row</a>
+  </p>
+</div>

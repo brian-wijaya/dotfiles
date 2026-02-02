@@ -1,0 +1,76 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_post_mime_type_where( <span class="arg-type">string|string[]</span> <span class="arg-name">$post_mime_types</span>, <span class="arg-type">string</span> <span class="arg-name">$table_alias</span> = <span class="arg-default">”</span> ): <span class="return-type">string</span>
+</h1> <section><p>Converts MIME types into SQL.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_mime_types</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">List of mime types or comma separated string of mime types.</span></div></dd>
+<dt>
+<code>$table_alias</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Specify a table alias, if needed.<br> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The SQL AND clause for mime searching.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3587" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_post_mime_type_where( $post_mime_types, $table_alias = '' ) {
+	$where     = '';
+	$wildcards = array( '', '%', '%/%' );
+	if ( is_string( $post_mime_types ) ) {
+		$post_mime_types = array_map( 'trim', explode( ',', $post_mime_types ) );
+	}
+
+	$where_clauses = array();
+
+	foreach ( (array) $post_mime_types as $mime_type ) {
+		$mime_type = preg_replace( '/\s/', '', $mime_type );
+		$slashpos  = strpos( $mime_type, '/' );
+		if ( false !== $slashpos ) {
+			$mime_group    = preg_replace( '/[^-*.a-zA-Z0-9]/', '', substr( $mime_type, 0, $slashpos ) );
+			$mime_subgroup = preg_replace( '/[^-*.+a-zA-Z0-9]/', '', substr( $mime_type, $slashpos + 1 ) );
+			if ( empty( $mime_subgroup ) ) {
+				$mime_subgroup = '*';
+			} else {
+				$mime_subgroup = str_replace( '/', '', $mime_subgroup );
+			}
+			$mime_pattern = "$mime_group/$mime_subgroup";
+		} else {
+			$mime_pattern = preg_replace( '/[^-*.a-zA-Z0-9]/', '', $mime_type );
+			if ( ! str_contains( $mime_pattern, '*' ) ) {
+				$mime_pattern .= '/*';
+			}
+		}
+
+		$mime_pattern = preg_replace( '/\*+/', '%', $mime_pattern );
+
+		if ( in_array( $mime_type, $wildcards, true ) ) {
+			return '';
+		}
+
+		if ( str_contains( $mime_pattern, '%' ) ) {
+			$where_clauses[] = empty( $table_alias ) ? "post_mime_type LIKE '$mime_pattern'" : "$table_alias.post_mime_type LIKE '$mime_pattern'";
+		} else {
+			$where_clauses[] = empty( $table_alias ) ? "post_mime_type = '$mime_pattern'" : "$table_alias.post_mime_type = '$mime_pattern'";
+		}
+	}
+
+	if ( ! empty( $where_clauses ) ) {
+		$where = ' AND (' . implode( ' OR ', $where_clauses ) . ') ';
+	}
+
+	return $where;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L3587">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L3587-L3633">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_post_mime_type_where" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_post_mime_type_where</a>
+  </p>
+</div>

@@ -1,0 +1,46 @@
+<h1 class="wp-block-wporg-code-reference-title">iis7_save_url_rewrite_rules(): <span class="return-type">bool|null</span>
+</h1> <section><p>Updates the IIS web.config file with the current rules if it is writable.</p> </section> <section><h2 id="description">Description</h2> <p>If the permalinks do not require rewrite rules then the rules are deleted from the web.config file.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">bool|null</span> True on write success, false on failure. Null in multisite.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="302" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function iis7_save_url_rewrite_rules() {
+	global $wp_rewrite;
+
+	if ( is_multisite() ) {
+		return;
+	}
+
+	// Ensure get_home_path() is declared.
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+
+	$home_path       = get_home_path();
+	$web_config_file = $home_path . 'web.config';
+
+	// Using win_is_writable() instead of is_writable() because of a bug in Windows PHP.
+	if ( iis7_supports_permalinks()
+		&amp;&amp; ( ! file_exists( $web_config_file ) &amp;&amp; win_is_writable( $home_path ) &amp;&amp; $wp_rewrite-&gt;using_mod_rewrite_permalinks()
+			|| win_is_writable( $web_config_file ) )
+	) {
+		$rule = $wp_rewrite-&gt;iis7_url_rewrite_rules( false );
+
+		if ( ! empty( $rule ) ) {
+			return iis7_add_rewrite_rule( $web_config_file, $rule );
+		} else {
+			return iis7_delete_rewrite_rule( $web_config_file );
+		}
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/misc.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/misc.php#L302">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/misc.php#L302-L330">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/iis7_save_url_rewrite_rules" class="_attribution-link">https://developer.wordpress.org/reference/functions/iis7_save_url_rewrite_rules</a>
+  </p>
+</div>

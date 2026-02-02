@@ -1,0 +1,69 @@
+<h1 class="wp-block-wporg-code-reference-title">ms_subdomain_constants()</h1> <section><p>Defines Multisite subdomain constants and handles warnings and notices.</p> </section> <section><h2 id="description">Description</h2> <p>VHOST is deprecated in favor of SUBDOMAIN_INSTALL, which is a bool.</p> <p>On first call, the constants are checked and defined. On second call, we will have translations loaded and can trigger warnings easily.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="131" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function ms_subdomain_constants() {
+	static $subdomain_error      = null;
+	static $subdomain_error_warn = null;
+
+	if ( false === $subdomain_error ) {
+		return;
+	}
+
+	if ( $subdomain_error ) {
+		$vhost_deprecated = sprintf(
+			/* translators: 1: VHOST, 2: SUBDOMAIN_INSTALL, 3: wp-config.php, 4: is_subdomain_install() */
+			__( 'The constant %1$s &lt;strong&gt;is deprecated&lt;/strong&gt;. Use the boolean constant %2$s in %3$s to enable a subdomain configuration. Use %4$s to check whether a subdomain configuration is enabled.' ),
+			'&lt;code&gt;VHOST&lt;/code&gt;',
+			'&lt;code&gt;SUBDOMAIN_INSTALL&lt;/code&gt;',
+			'&lt;code&gt;wp-config.php&lt;/code&gt;',
+			'&lt;code&gt;is_subdomain_install()&lt;/code&gt;'
+		);
+
+		if ( $subdomain_error_warn ) {
+			wp_trigger_error(
+				__FUNCTION__,
+				sprintf(
+					/* translators: 1: VHOST, 2: SUBDOMAIN_INSTALL */
+					__( '&lt;strong&gt;Conflicting values for the constants %1$s and %2$s.&lt;/strong&gt; The value of %2$s will be assumed to be your subdomain configuration setting.' ),
+					'&lt;code&gt;VHOST&lt;/code&gt;',
+					'&lt;code&gt;SUBDOMAIN_INSTALL&lt;/code&gt;'
+				) . ' ' . $vhost_deprecated,
+				E_USER_WARNING
+			);
+		} else {
+			_deprecated_argument( 'define()', '3.0.0', $vhost_deprecated );
+		}
+
+		return;
+	}
+
+	if ( defined( 'SUBDOMAIN_INSTALL' ) &amp;&amp; defined( 'VHOST' ) ) {
+		$subdomain_error = true;
+		if ( SUBDOMAIN_INSTALL !== ( 'yes' === VHOST ) ) {
+			$subdomain_error_warn = true;
+		}
+	} elseif ( defined( 'SUBDOMAIN_INSTALL' ) ) {
+		$subdomain_error = false;
+		define( 'VHOST', SUBDOMAIN_INSTALL ? 'yes' : 'no' );
+	} elseif ( defined( 'VHOST' ) ) {
+		$subdomain_error = true;
+		define( 'SUBDOMAIN_INSTALL', 'yes' === VHOST );
+	} else {
+		$subdomain_error = false;
+		define( 'SUBDOMAIN_INSTALL', false );
+		define( 'VHOST', 'no' );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-default-constants.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-default-constants.php#L131">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-default-constants.php#L131-L183">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/ms_subdomain_constants" class="_attribution-link">https://developer.wordpress.org/reference/functions/ms_subdomain_constants</a>
+  </p>
+</div>

@@ -1,0 +1,120 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Query::generate_postdata( <span class="arg-type">WP_Post|object|int</span> <span class="arg-name">$post</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Generates post data.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../wp_post" rel="class">WP_Post</a></span>|<span class="object">object</span>|<span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description"><a href="../wp_post" rel="class">WP_Post</a> instance or Post ID/object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> Elements of post or false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="4768" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function generate_postdata( $post ) {
+
+	if ( ! ( $post instanceof WP_Post ) ) {
+		$post = get_post( $post );
+	}
+
+	if ( ! $post ) {
+		return false;
+	}
+
+	$id = (int) $post-&gt;ID;
+
+	$authordata = get_userdata( $post-&gt;post_author );
+
+	$currentday   = false;
+	$currentmonth = false;
+
+	$post_date = $post-&gt;post_date;
+	if ( ! empty( $post_date ) &amp;&amp; '0000-00-00 00:00:00' !== $post_date ) {
+		// Avoid using mysql2date for performance reasons.
+		$currentmonth = substr( $post_date, 5, 2 );
+		$day          = substr( $post_date, 8, 2 );
+		$year         = substr( $post_date, 2, 2 );
+
+		$currentday = sprintf( '%s.%s.%s', $day, $currentmonth, $year );
+	}
+
+	$numpages  = 1;
+	$multipage = 0;
+	$page      = $this-&gt;get( 'page' );
+	if ( ! $page ) {
+		$page = 1;
+	}
+
+	/*
+	 * Force full post content when viewing the permalink for the $post,
+	 * or when on an RSS feed. Otherwise respect the 'more' tag.
+	 */
+	if ( get_queried_object_id() === $post-&gt;ID &amp;&amp; ( $this-&gt;is_page() || $this-&gt;is_single() ) ) {
+		$more = 1;
+	} elseif ( $this-&gt;is_feed() ) {
+		$more = 1;
+	} else {
+		$more = 0;
+	}
+
+	$content = $post-&gt;post_content;
+	if ( str_contains( $content, '&lt;!--nextpage--&gt;' ) ) {
+		$content = str_replace( "\n&lt;!--nextpage--&gt;\n", '&lt;!--nextpage--&gt;', $content );
+		$content = str_replace( "\n&lt;!--nextpage--&gt;", '&lt;!--nextpage--&gt;', $content );
+		$content = str_replace( "&lt;!--nextpage--&gt;\n", '&lt;!--nextpage--&gt;', $content );
+
+		// Remove the nextpage block delimiters, to avoid invalid block structures in the split content.
+		$content = str_replace( '&lt;!-- wp:nextpage --&gt;', '', $content );
+		$content = str_replace( '&lt;!-- /wp:nextpage --&gt;', '', $content );
+
+		// Ignore nextpage at the beginning of the content.
+		if ( str_starts_with( $content, '&lt;!--nextpage--&gt;' ) ) {
+			$content = substr( $content, 15 );
+		}
+
+		$pages = explode( '&lt;!--nextpage--&gt;', $content );
+	} else {
+		$pages = array( $post-&gt;post_content );
+	}
+
+	/**
+	 * Filters the "pages" derived from splitting the post content.
+	 *
+	 * "Pages" are determined by splitting the post content based on the presence
+	 * of `&lt;!-- nextpage --&gt;` tags.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param string[] $pages Array of "pages" from the post content split by `&lt;!-- nextpage --&gt;` tags.
+	 * @param WP_Post  $post  Current post object.
+	 */
+	$pages = apply_filters( 'content_pagination', $pages, $post );
+
+	$numpages = count( $pages );
+
+	if ( $numpages &gt; 1 ) {
+		if ( $page &gt; 1 ) {
+			$more = 1;
+		}
+		$multipage = 1;
+	} else {
+		$multipage = 0;
+	}
+
+	$elements = compact( 'id', 'authordata', 'currentday', 'currentmonth', 'page', 'pages', 'multipage', 'more', 'numpages' );
+
+	return $elements;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-query.php#L4768">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-query.php#L4768-L4861">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/content_pagination"><span class="hook-func">apply_filters</span>( ‘content_pagination’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$pages</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters the “pages” derived from splitting the post content.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_query/generate_postdata" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_query/generate_postdata</a>
+  </p>
+</div>

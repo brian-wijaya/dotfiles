@@ -1,0 +1,76 @@
+<h1 class="wp-block-wporg-code-reference-title">update_usermeta( <span class="arg-type">int</span> <span class="arg-name">$user_id</span>, <span class="arg-type">string</span> <span class="arg-name">$meta_key</span>, <span class="arg-type">mixed</span> <span class="arg-name">$meta_value</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Update metadata of user.</p> </section> <section><h2 id="description">Description</h2> <p>There is no need to serialize values, they will be serialized if it is needed. The metadata key can only be a string with underscores. All else will be removed.</p> <p>Will remove the metadata, if the meta value is empty.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="update_user_meta">update_user_meta()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$user_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">User ID</span></div></dd>
+<dt>
+<code>$meta_key</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Metadata key.</span></div></dd>
+<dt>
+<code>$meta_value</code><span class="type"><span class="mixed">mixed</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Metadata value.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on successful update, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2332" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function update_usermeta( $user_id, $meta_key, $meta_value ) {
+	_deprecated_function( __FUNCTION__, '3.0.0', 'update_user_meta()' );
+	global $wpdb;
+	if ( !is_numeric( $user_id ) )
+		return false;
+	$meta_key = preg_replace('|[^a-z0-9_]|i', '', $meta_key);
+
+	/** @todo Might need fix because usermeta data is assumed to be already escaped */
+	if ( is_string($meta_value) )
+		$meta_value = stripslashes($meta_value);
+	$meta_value = maybe_serialize($meta_value);
+
+	if (empty($meta_value)) {
+		return delete_usermeta($user_id, $meta_key);
+	}
+
+	$cur = $wpdb-&gt;get_row( $wpdb-&gt;prepare("SELECT * FROM $wpdb-&gt;usermeta WHERE user_id = %d AND meta_key = %s", $user_id, $meta_key) );
+
+	if ( $cur )
+		do_action( 'update_usermeta', $cur-&gt;umeta_id, $user_id, $meta_key, $meta_value );
+
+	if ( !$cur )
+		$wpdb-&gt;insert($wpdb-&gt;usermeta, compact('user_id', 'meta_key', 'meta_value') );
+	elseif ( $cur-&gt;meta_value != $meta_value )
+		$wpdb-&gt;update($wpdb-&gt;usermeta, compact('meta_value'), compact('user_id', 'meta_key') );
+	else
+		return false;
+
+	clean_user_cache( $user_id );
+	wp_cache_delete( $user_id, 'user_meta' );
+
+	if ( !$cur )
+		do_action( 'added_usermeta', $wpdb-&gt;insert_id, $user_id, $meta_key, $meta_value );
+	else
+		do_action( 'updated_usermeta', $cur-&gt;umeta_id, $user_id, $meta_key, $meta_value );
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/deprecated.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/deprecated.php#L2332">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/deprecated.php#L2332-L2369">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td><span class="since-description">Use <a href="update_user_meta" rel="function">update_user_meta()</a> </span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/update_usermeta" class="_attribution-link">https://developer.wordpress.org/reference/functions/update_usermeta</a>
+  </p>
+</div>

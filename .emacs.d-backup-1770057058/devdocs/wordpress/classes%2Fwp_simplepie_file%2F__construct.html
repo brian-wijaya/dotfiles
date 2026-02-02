@@ -1,0 +1,128 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_SimplePie_File::__construct( <span class="arg-type">string</span> <span class="arg-name">$url</span>, <span class="arg-type">int</span> <span class="arg-name">$timeout</span> = <span class="arg-default">10</span>, <span class="arg-type">int</span> <span class="arg-name">$redirects</span> = <span class="arg-default">5</span>, <span class="arg-type">string|array</span> <span class="arg-name">$headers</span> = <span class="arg-default">null</span>, <span class="arg-type">string</span> <span class="arg-name">$useragent</span> = <span class="arg-default">null</span>, <span class="arg-type">bool</span> <span class="arg-name">$force_fsockopen</span> = <span class="arg-default">false</span> )</h1> <section><p>Constructor.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Remote file URL.</span></div></dd>
+<dt>
+<code>$timeout</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">How long the connection should stay open in seconds.<br> </span></div>
+<p class="default">Default:<code>10</code></p>
+</dd>
+<dt>
+<code>$redirects</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The number of allowed redirects. </span></div>
+<p class="default">Default:<code>5</code></p>
+</dd>
+<dt>
+<code>$headers</code><span class="type"><span class="string">string</span>|<span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array or string of headers to send with the request.<br> </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$useragent</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">User-agent value sent. </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$force_fsockopen</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to force opening internet or unix domain socket connection or not. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="46" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function __construct( $url, $timeout = 10, $redirects = 5, $headers = null, $useragent = null, $force_fsockopen = false ) {
+	$this-&gt;url       = $url;
+	$this-&gt;timeout   = $timeout;
+	$this-&gt;redirects = $redirects;
+	$this-&gt;headers   = $headers;
+	$this-&gt;useragent = $useragent;
+
+	$this-&gt;method = SimplePie\SimplePie::FILE_SOURCE_REMOTE;
+
+	if ( preg_match( '/^http(s)?:\/\//i', $url ) ) {
+		$args = array(
+			'timeout'     =&gt; $this-&gt;timeout,
+			'redirection' =&gt; $this-&gt;redirects,
+		);
+
+		if ( ! empty( $this-&gt;headers ) ) {
+			$args['headers'] = $this-&gt;headers;
+		}
+
+		if ( SimplePie\Misc::get_default_useragent() !== $this-&gt;useragent ) { // Use default WP user agent unless custom has been specified.
+			$args['user-agent'] = $this-&gt;useragent;
+		}
+
+		$res = wp_safe_remote_request( $url, $args );
+
+		if ( is_wp_error( $res ) ) {
+			$this-&gt;error   = 'WP HTTP Error: ' . $res-&gt;get_error_message();
+			$this-&gt;success = false;
+
+		} else {
+			$this-&gt;headers = wp_remote_retrieve_headers( $res );
+
+			/*
+			 * SimplePie expects multiple headers to be stored as a comma-separated string,
+			 * but `wp_remote_retrieve_headers()` returns them as an array, so they need
+			 * to be converted.
+			 *
+			 * The only exception to that is the `content-type` header, which should ignore
+			 * any previous values and only use the last one.
+			 *
+			 * @see SimplePie\HTTP\Parser::new_line().
+			 */
+			foreach ( $this-&gt;headers as $name =&gt; $value ) {
+				if ( ! is_array( $value ) ) {
+					continue;
+				}
+
+				if ( 'content-type' === $name ) {
+					$this-&gt;headers[ $name ] = array_pop( $value );
+				} else {
+					$this-&gt;headers[ $name ] = implode( ', ', $value );
+				}
+			}
+
+			$this-&gt;body        = wp_remote_retrieve_body( $res );
+			$this-&gt;status_code = wp_remote_retrieve_response_code( $res );
+		}
+	} else {
+		$this-&gt;error   = '';
+		$this-&gt;success = false;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-simplepie-file.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-simplepie-file.php#L46">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-simplepie-file.php#L46-L107">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.1/">5.6.1</a></td>
+<td><span class="since-description">Multiple headers are concatenated into a comma-separated string, rather than remaining an array.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.2.0/">3.2.0</a></td>
+<td><span class="since-description">Updated to use a PHP5 constructor.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_simplepie_file/__construct" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_simplepie_file/__construct</a>
+  </p>
+</div>

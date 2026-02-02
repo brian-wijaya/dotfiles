@@ -1,0 +1,166 @@
+<h1 class="wp-block-wporg-code-reference-title">get_theme_feature_list( <span class="arg-type">bool</span> <span class="arg-name">$api</span> = <span class="arg-default">true</span> ): <span class="return-type">array</span>
+</h1> <section><p>Retrieves list of WordPress theme features (aka theme tags).</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$api</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether try to fetch tags from the WordPress.org API. Defaults to true.</span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Array of features keyed by category with translations keyed by slug.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="314" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_theme_feature_list( $api = true ) {
+	// Hard-coded list is used if API is not accessible.
+	$features = array(
+
+		__( 'Subject' )  =&gt; array(
+			'blog'           =&gt; __( 'Blog' ),
+			'e-commerce'     =&gt; __( 'E-Commerce' ),
+			'education'      =&gt; __( 'Education' ),
+			'entertainment'  =&gt; __( 'Entertainment' ),
+			'food-and-drink' =&gt; __( 'Food &amp; Drink' ),
+			'holiday'        =&gt; __( 'Holiday' ),
+			'news'           =&gt; __( 'News' ),
+			'photography'    =&gt; __( 'Photography' ),
+			'portfolio'      =&gt; __( 'Portfolio' ),
+		),
+
+		__( 'Features' ) =&gt; array(
+			'accessibility-ready'   =&gt; __( 'Accessibility Ready' ),
+			'block-patterns'        =&gt; __( 'Block Editor Patterns' ),
+			'block-styles'          =&gt; __( 'Block Editor Styles' ),
+			'custom-background'     =&gt; __( 'Custom Background' ),
+			'custom-colors'         =&gt; __( 'Custom Colors' ),
+			'custom-header'         =&gt; __( 'Custom Header' ),
+			'custom-logo'           =&gt; __( 'Custom Logo' ),
+			'editor-style'          =&gt; __( 'Editor Style' ),
+			'featured-image-header' =&gt; __( 'Featured Image Header' ),
+			'featured-images'       =&gt; __( 'Featured Images' ),
+			'footer-widgets'        =&gt; __( 'Footer Widgets' ),
+			'full-site-editing'     =&gt; __( 'Site Editor' ),
+			'full-width-template'   =&gt; __( 'Full Width Template' ),
+			'post-formats'          =&gt; __( 'Post Formats' ),
+			'sticky-post'           =&gt; __( 'Sticky Post' ),
+			'style-variations'      =&gt; __( 'Style Variations' ),
+			'template-editing'      =&gt; __( 'Template Editing' ),
+			'theme-options'         =&gt; __( 'Theme Options' ),
+		),
+
+		__( 'Layout' )   =&gt; array(
+			'grid-layout'   =&gt; __( 'Grid Layout' ),
+			'one-column'    =&gt; __( 'One Column' ),
+			'two-columns'   =&gt; __( 'Two Columns' ),
+			'three-columns' =&gt; __( 'Three Columns' ),
+			'four-columns'  =&gt; __( 'Four Columns' ),
+			'left-sidebar'  =&gt; __( 'Left Sidebar' ),
+			'right-sidebar' =&gt; __( 'Right Sidebar' ),
+			'wide-blocks'   =&gt; __( 'Wide Blocks' ),
+		),
+
+	);
+
+	if ( ! $api || ! current_user_can( 'install_themes' ) ) {
+		return $features;
+	}
+
+	$feature_list = get_site_transient( 'wporg_theme_feature_list' );
+	if ( ! $feature_list ) {
+		set_site_transient( 'wporg_theme_feature_list', array(), 3 * HOUR_IN_SECONDS );
+	}
+
+	if ( ! $feature_list ) {
+		$feature_list = themes_api( 'feature_list', array() );
+		if ( is_wp_error( $feature_list ) ) {
+			return $features;
+		}
+	}
+
+	if ( ! $feature_list ) {
+		return $features;
+	}
+
+	set_site_transient( 'wporg_theme_feature_list', $feature_list, 3 * HOUR_IN_SECONDS );
+
+	$category_translations = array(
+		'Layout'   =&gt; __( 'Layout' ),
+		'Features' =&gt; __( 'Features' ),
+		'Subject'  =&gt; __( 'Subject' ),
+	);
+
+	$wporg_features = array();
+
+	// Loop over the wp.org canonical list and apply translations.
+	foreach ( (array) $feature_list as $feature_category =&gt; $feature_items ) {
+		if ( isset( $category_translations[ $feature_category ] ) ) {
+			$feature_category = $category_translations[ $feature_category ];
+		}
+
+		$wporg_features[ $feature_category ] = array();
+
+		foreach ( $feature_items as $feature ) {
+			if ( isset( $features[ $feature_category ][ $feature ] ) ) {
+				$wporg_features[ $feature_category ][ $feature ] = $features[ $feature_category ][ $feature ];
+			} else {
+				$wporg_features[ $feature_category ][ $feature ] = $feature;
+			}
+		}
+	}
+
+	return $wporg_features;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/theme.php#L314">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/theme.php#L314-L412">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.2.0/">6.2.0</a></td>
+<td><span class="since-description">Added ‘Style Variations’ feature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.1/">6.1.1</a></td>
+<td><span class="since-description">Replaced ‘Full Site Editing’ feature name with ‘Site Editor’.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.1/">5.8.1</a></td>
+<td><span class="since-description">Added ‘Template Editing’ feature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">Added ‘Wide Blocks’ layout option.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.0/">4.9.0</a></td>
+<td><span class="since-description">Removed <code>'BuddyPress'</code>, ‘Custom Menu’, ‘Flexible Header’, ‘Front Page Posting’, <code>'Microformats'</code>, ‘RTL Language Support’, ‘Threaded Comments’, and ‘Translation Ready’ features.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td><span class="since-description">Added <code>'Blog'</code>, <code>'E-Commerce'</code>, <code>'Education'</code>, <code>'Entertainment'</code>, ‘Food &amp; Drink’, <code>'Holiday'</code>, <code>'News'</code>, <code>'Photography'</code>, and <code>'Portfolio'</code> subjects.<br> Removed <code>'Photoblogging'</code> and <code>'Seasonal'</code> subjects.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/3.9.0/">3.9.0</a></td>
+<td><span class="since-description">Combined <code>'Layout'</code> and <code>'Columns'</code> filters.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/3.8.0/">3.8.0</a></td>
+<td><span class="since-description">Added ‘Accessibility Ready’ feature and ‘Responsive Layout’ option.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/3.5.0/">3.5.0</a></td>
+<td><span class="since-description">Added ‘Flexible Header’ feature.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/3.2.0/">3.2.0</a></td>
+<td><span class="since-description">Added <code>'Gray'</code> color and ‘Featured Image Header’, ‘Featured Images’, ‘Full Width Template’, and ‘Post Formats’ features.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure><a class="wp-block-wporg-code-table-show-more" href="#">Show 6 more</a><a class="wp-block-wporg-code-table-show-less" href="#">Show less</a></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_theme_feature_list" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_theme_feature_list</a>
+  </p>
+</div>

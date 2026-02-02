@@ -1,0 +1,99 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_xmlrpc_server::blogger_newPost( <span class="arg-type">array</span> <span class="arg-name">$args</span> ): <span class="return-type">int|<a href="../ixr_error" rel="class">IXR_Error</a></span>
+</h1> <section><p>Creates a new post.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Method arguments. Note: arguments must be ordered as documented.<br> <ul class="param-hash">
+<li>
+<code>0</code> <span class="type">string</span><div class="desc">App key (unused).</div>
+</li> <li>
+<code>1</code> <span class="type">int</span><div class="desc">Blog ID (unused).</div>
+</li> <li>
+<code>2</code> <span class="type">string</span><div class="desc">Username.</div>
+</li> <li>
+<code>3</code> <span class="type">string</span><div class="desc">Password.</div>
+</li> <li>
+<code>4</code> <span class="type">string</span><div class="desc">Content.</div>
+</li> <li>
+<code>5</code> <span class="type">int</span><div class="desc">Publish flag. 0 for draft, 1 for publish.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../ixr_error" rel="class">IXR_Error</a></span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="5113" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function blogger_newPost( $args ) {
+	$this-&gt;escape( $args );
+
+	$username = $args[2];
+	$password = $args[3];
+	$content  = $args[4];
+	$publish  = $args[5];
+
+	$user = $this-&gt;login( $username, $password );
+	if ( ! $user ) {
+		return $this-&gt;error;
+	}
+
+	/** This action is documented in wp-includes/class-wp-xmlrpc-server.php */
+	do_action( 'xmlrpc_call', 'blogger.newPost', $args, $this );
+
+	$cap = ( $publish ) ? 'publish_posts' : 'edit_posts';
+	if ( ! current_user_can( get_post_type_object( 'post' )-&gt;cap-&gt;create_posts ) || ! current_user_can( $cap ) ) {
+		return new IXR_Error( 401, __( 'Sorry, you are not allowed to post on this site.' ) );
+	}
+
+	$post_status = ( $publish ) ? 'publish' : 'draft';
+
+	$post_author = $user-&gt;ID;
+
+	$post_title    = xmlrpc_getposttitle( $content );
+	$post_category = xmlrpc_getpostcategory( $content );
+	$post_content  = xmlrpc_removepostdata( $content );
+
+	$post_date     = current_time( 'mysql' );
+	$post_date_gmt = current_time( 'mysql', 1 );
+
+	$post_data = compact( 'post_author', 'post_date', 'post_date_gmt', 'post_content', 'post_title', 'post_category', 'post_status' );
+
+	$post_id = wp_insert_post( $post_data );
+	if ( is_wp_error( $post_id ) ) {
+		return new IXR_Error( 500, $post_id-&gt;get_error_message() );
+	}
+
+	if ( ! $post_id ) {
+		return new IXR_Error( 500, __( 'Sorry, the post could not be created.' ) );
+	}
+
+	$this-&gt;attach_uploads( $post_id, $post_content );
+
+	/**
+	 * Fires after a new post has been successfully created via the XML-RPC Blogger API.
+	 *
+	 * @since 3.4.0
+	 *
+	 * @param int   $post_id ID of the new post.
+	 * @param array $args    An array of new post arguments.
+	 */
+	do_action( 'xmlrpc_call_success_blogger_newPost', $post_id, $args ); // phpcs:ignore WordPress.NamingConventions.ValidHookName.NotLowercase
+
+	return $post_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-xmlrpc-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L5113">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-xmlrpc-server.php#L5113-L5169">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/xmlrpc_call"><span class="hook-func">do_action</span>( ‘xmlrpc_call’, <nobr><span class="arg-type">string</span> <span class="arg-name">$name</span></nobr>, <nobr><span class="arg-type">array|string</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">wp_xmlrpc_server</span> <span class="arg-name">$server</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the XML-RPC user has been authenticated but before the rest of the method logic begins.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/xmlrpc_call_success_blogger_newpost"><span class="hook-func">do_action</span>( ‘xmlrpc_call_success_blogger_newPost’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a new post has been successfully created via the XML-RPC Blogger API.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/blogger_newpost" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_xmlrpc_server/blogger_newpost</a>
+  </p>
+</div>

@@ -1,0 +1,127 @@
+<h1 class="wp-block-wporg-code-reference-title">send_confirmation_on_profile_email()</h1> <section><p>Sends a confirmation request email when a change of user email address is attempted.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3707" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function send_confirmation_on_profile_email() {
+	global $errors;
+
+	$current_user = wp_get_current_user();
+	if ( ! is_object( $errors ) ) {
+		$errors = new WP_Error();
+	}
+
+	if ( $current_user-&gt;ID !== (int) $_POST['user_id'] ) {
+		return false;
+	}
+
+	if ( $current_user-&gt;user_email !== $_POST['email'] ) {
+		if ( ! is_email( $_POST['email'] ) ) {
+			$errors-&gt;add(
+				'user_email',
+				__( '&lt;strong&gt;Error:&lt;/strong&gt; The email address is not correct.' ),
+				array(
+					'form-field' =&gt; 'email',
+				)
+			);
+
+			return;
+		}
+
+		if ( email_exists( $_POST['email'] ) ) {
+			$errors-&gt;add(
+				'user_email',
+				__( '&lt;strong&gt;Error:&lt;/strong&gt; The email address is already used.' ),
+				array(
+					'form-field' =&gt; 'email',
+				)
+			);
+			delete_user_meta( $current_user-&gt;ID, '_new_email' );
+
+			return;
+		}
+
+		$hash           = md5( $_POST['email'] . time() . wp_rand() );
+		$new_user_email = array(
+			'hash'     =&gt; $hash,
+			'newemail' =&gt; $_POST['email'],
+		);
+		update_user_meta( $current_user-&gt;ID, '_new_email', $new_user_email );
+
+		$sitename = wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES );
+
+		/* translators: Do not translate USERNAME, ADMIN_URL, EMAIL, SITENAME, SITEURL: those are placeholders. */
+		$email_text = __(
+			'Howdy ###USERNAME###,
+
+You recently requested to have the email address on your account changed.
+
+If this is correct, please click on the following link to change it:
+###ADMIN_URL###
+
+You can safely ignore and delete this email if you do not want to
+take this action.
+
+This email has been sent to ###EMAIL###
+
+Regards,
+All at ###SITENAME###
+###SITEURL###'
+		);
+
+		/**
+		 * Filters the text of the email sent when a change of user email address is attempted.
+		 *
+		 * The following strings have a special meaning and will get replaced dynamically:
+		 * - ###USERNAME###  The current user's username.
+		 * - ###ADMIN_URL### The link to click on to confirm the email change.
+		 * - ###EMAIL###     The new email.
+		 * - ###SITENAME###  The name of the site.
+		 * - ###SITEURL###   The URL to the site.
+		 *
+		 * @since MU (3.0.0)
+		 * @since 4.9.0 This filter is no longer Multisite specific.
+		 *
+		 * @param string $email_text     Text in the email.
+		 * @param array  $new_user_email {
+		 *     Data relating to the new user email address.
+		 *
+		 *     @type string $hash     The secure hash used in the confirmation link URL.
+		 *     @type string $newemail The proposed new email address.
+		 * }
+		 */
+		$content = apply_filters( 'new_user_email_content', $email_text, $new_user_email );
+
+		$content = str_replace( '###USERNAME###', $current_user-&gt;user_login, $content );
+		$content = str_replace( '###ADMIN_URL###', esc_url( self_admin_url( 'profile.php?newuseremail=' . $hash ) ), $content );
+		$content = str_replace( '###EMAIL###', $_POST['email'], $content );
+		$content = str_replace( '###SITENAME###', $sitename, $content );
+		$content = str_replace( '###SITEURL###', home_url(), $content );
+
+		/* translators: New email address notification email subject. %s: Site title. */
+		wp_mail( $_POST['email'], sprintf( __( '[%s] Email Change Request' ), $sitename ), $content );
+
+		$_POST['email'] = $current_user-&gt;user_email;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/user.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/user.php#L3707">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/user.php#L3707-L3807">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/new_user_email_content"><span class="hook-func">apply_filters</span>( ‘new_user_email_content’, <nobr><span class="arg-type">string</span> <span class="arg-name">$email_text</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$new_user_email</span></nobr> )</a></dt>
+<dd>
+<p>Filters the text of the email sent when a change of user email address is attempted.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.0/">4.9.0</a></td>
+<td><span class="since-description">This function was moved from wp-admin/includes/ms.php so it’s no longer Multisite specific.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/send_confirmation_on_profile_email" class="_attribution-link">https://developer.wordpress.org/reference/functions/send_confirmation_on_profile_email</a>
+  </p>
+</div>

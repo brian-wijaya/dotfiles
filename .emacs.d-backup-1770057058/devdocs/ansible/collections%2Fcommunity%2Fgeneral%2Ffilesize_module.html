@@ -1,0 +1,185 @@
+<section id="community-general-filesize-module-create-a-file-with-a-given-size-or-resize-it-if-it-exists"> <h1>community.general.filesize module – Create a file with a given size, or resize it if it exists</h1> <div class="admonition note"> <p class="admonition-title">Note</p> <p>This module is part of the <a class="reference external" href="https://galaxy.ansible.com/ui/repo/published/community/general/">community.general collection</a> (version 10.7.3).</p> <p>You might already have this collection installed if you are using the <code>ansible</code> package. It is not included in <code>ansible-core</code>. To check whether it is installed, run <code>ansible-galaxy collection list</code>.</p> <p>To install it, use: <code>ansible-galaxy collection install community.general</code>. You need further requirements to be able to use this module, see <a class="reference internal" href="#ansible-collections-community-general-filesize-module-requirements"><span class="std std-ref">Requirements</span></a> for details.</p> <p>To use it in a playbook, specify: <code>community.general.filesize</code>.</p> </div> <p class="ansible-version-added">New in community.general 3.0.0</p>  <ul class="simple"> <li><a class="reference internal" href="#synopsis" id="id1">Synopsis</a></li> <li><a class="reference internal" href="#requirements" id="id2">Requirements</a></li> <li><a class="reference internal" href="#parameters" id="id3">Parameters</a></li> <li><a class="reference internal" href="#attributes" id="id4">Attributes</a></li> <li><a class="reference internal" href="#see-also" id="id5">See Also</a></li> <li><a class="reference internal" href="#examples" id="id6">Examples</a></li> <li><a class="reference internal" href="#return-values" id="id7">Return Values</a></li> </ul>  <section id="synopsis"> <h2>Synopsis</h2> <ul class="simple"> <li>This module is a simple wrapper around <code>dd</code> to create, extend or truncate a file, given its size. It can be used to manage swap files (that require contiguous blocks) or alternatively, huge sparse files.</li> </ul> </section> <section id="requirements"> <h2 id="ansible-collections-community-general-filesize-module-requirements">Requirements</h2> <p>The below requirements are needed on the host that executes this module.</p> <ul class="simple"> <li>dd (Data Duplicator) in PATH</li> </ul> </section> <section id="parameters"> <h2>Parameters</h2> <table class="longtable ansible-option-table docutils align-default" style="width: 100%"> <thead> <tr>
+<th class="head"><p>Parameter</p></th> <th class="head"><p>Comments</p></th> </tr> </thead>  <tr>
+<td><div class="ansible-option-cell">  
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-attributes"><strong id="ansible-collections-community-general-filesize-module-parameter-attr">attributes</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-aliases">aliases: attr</span></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The attributes the resulting filesystem object should have.</p> <p>To get supported flags look at the man page for <code>chattr</code> on the target system.</p> <p>This string should contain the attributes in the same order as the one displayed by <code>lsattr</code>.</p> <p>The <code>=</code> operator is assumed as default, otherwise <code>+</code> or <code>-</code> operators need to be included in the string.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-blocksize"><strong>blocksize</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">any</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Size of blocks, in bytes if not followed by a multiplicative suffix.</p> <p>The numeric value (before the unit) <strong>MUST</strong> be an integer (or a <code>float</code> if it equals an integer).</p> <p>If not set, the size of blocks is guessed from the OS and commonly results in <code>512</code> or <code>4096</code> bytes, that is used internally by the module or when <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-size"><span class="std std-ref">size</span></a></strong></code> has no unit.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-force"><strong>force</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Whether or not to overwrite the file if it exists, in other words, to truncate it from 0. When <code>true</code>, the module is not idempotent, that means it always reports <code>changed=true</code>.</p> <p><code><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-force"><span class="std std-ref">force=true</span></a></code> and <code><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-sparse"><span class="std std-ref">sparse=true</span></a></code> are mutually exclusive.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li>
+<code><strong>false</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> <li><code>true</code></li> </ul> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-group"><strong>group</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Name of the group that should own the filesystem object, as would be fed to <code>chown</code>.</p> <p>When left unspecified, it uses the current group of the current user unless you are root, in which case it can preserve the previous ownership.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-mode"><strong>mode</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">any</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The permissions the resulting filesystem object should have.</p> <p>For those used to <code>/usr/bin/chmod</code> remember that modes are actually octal numbers. You must give Ansible enough information to parse them correctly. For consistent results, quote octal numbers (for example, <code>'644'</code> or <code>'1777'</code>) so Ansible receives a string and can do its own conversion from string into number. Adding a leading zero (for example, <code>0755</code>) works sometimes, but can fail in loops and some other circumstances.</p> <p>Giving Ansible a number without following either of these rules will end up with a decimal number which will have unexpected results.</p> <p>As of Ansible 1.8, the mode may be specified as a symbolic mode (for example, <code>u+rwx</code> or <code>u=rw,g=r,o=r</code>).</p> <p>If <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-mode"><span class="std std-ref">mode</span></a></strong></code> is not specified and the destination filesystem object <strong>does not</strong> exist, the default <code>umask</code> on the system will be used when setting the mode for the newly created filesystem object.</p> <p>If <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-mode"><span class="std std-ref">mode</span></a></strong></code> is not specified and the destination filesystem object <strong>does</strong> exist, the mode of the existing filesystem object will be used.</p> <p>Specifying <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-mode"><span class="std std-ref">mode</span></a></strong></code> is the best way to ensure filesystem objects are created with the correct permissions. See CVE-2020-1736 for further details.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-owner"><strong>owner</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Name of the user that should own the filesystem object, as would be fed to <code>chown</code>.</p> <p>When left unspecified, it uses the current user unless you are root, in which case it can preserve the previous ownership.</p> <p>Specifying a numeric username will be assumed to be a user ID and not a username. Avoid numeric usernames to avoid this confusion.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-path"><strong>path</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">path</span> / <span class="ansible-option-required">required</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Path of the regular file to create or resize.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-selevel"><strong>selevel</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The level part of the SELinux filesystem object context.</p> <p>This is the MLS/MCS attribute, sometimes known as the <code>range</code>.</p> <p>When set to <code>_default</code>, it will use the <code>level</code> portion of the policy if available.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-serole"><strong>serole</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The role part of the SELinux filesystem object context.</p> <p>When set to <code>_default</code>, it will use the <code>role</code> portion of the policy if available.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-setype"><strong>setype</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The type part of the SELinux filesystem object context.</p> <p>When set to <code>_default</code>, it will use the <code>type</code> portion of the policy if available.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-seuser"><strong>seuser</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The user part of the SELinux filesystem object context.</p> <p>By default it uses the <code>system</code> policy, where applicable.</p> <p>When set to <code>_default</code>, it will use the <code>user</code> portion of the policy if available.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-size"><strong>size</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">any</span> / <span class="ansible-option-required">required</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Requested size of the file.</p> <p>The value is a number (either <code>int</code> or <code>float</code>) optionally followed by a multiplicative suffix, that can be one of <code>B</code> (bytes), <code>KB</code> or <code>kB</code> (= 1000B), <code>MB</code> or <code>mB</code> (= 1000kB), <code>GB</code> or <code>gB</code> (= 1000MB), and so on for <code>T</code>, <code>P</code>, <code>E</code>, <code>Z</code> and <code>Y</code>; or alternatively one of <code>K</code>, <code>k</code> or <code>KiB</code> (= 1024B); <code>M</code>, <code>m</code> or <code>MiB</code> (= 1024KiB); <code>G</code>, <code>g</code> or <code>GiB</code> (= 1024MiB); and so on.</p> <p>If the multiplicative suffix is not provided, the value is treated as an integer number of blocks of <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-blocksize"><span class="std std-ref">blocksize</span></a></strong></code> bytes each (float values are rounded to the closest integer).</p> <p>When the <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-size"><span class="std std-ref">size</span></a></strong></code> value is equal to the current file size, does nothing.</p> <p>When the <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-size"><span class="std std-ref">size</span></a></strong></code> value is bigger than the current file size, bytes from <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-source"><span class="std std-ref">source</span></a></strong></code> (if <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-sparse"><span class="std std-ref">sparse</span></a></strong></code> is not <code>false</code>) are appended to the file without truncating it, in other words, without modifying the existing bytes of the file.</p> <p>When the <code><strong><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-size"><span class="std std-ref">size</span></a></strong></code> value is smaller than the current file size, it is truncated to the requested value without modifying bytes before this value.</p> <p>That means that a file of any arbitrary size can be grown to any other arbitrary size, and then resized down to its initial size without modifying its initial content.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-source"><strong>source</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Device or file that provides input data to provision the file.</p> <p>This parameter is ignored when <code><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-sparse"><span class="std std-ref">sparse=true</span></a></code>.</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>"/dev/zero"</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-sparse"><strong>sparse</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Whether or not the file to create should be a sparse file.</p> <p>This option is effective only on newly created files, or when growing a file, only for the bytes to append.</p> <p>This option is not supported on OSes or filesystems not supporting sparse files.</p> <p><code><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-force"><span class="std std-ref">force=true</span></a></code> and <code><a class="reference internal" href="#ansible-collections-community-general-filesize-module-parameter-sparse"><span class="std std-ref">sparse=true</span></a></code> are mutually exclusive.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li>
+<code><strong>false</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> <li><code>true</code></li> </ul> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-parameter-unsafe-writes"><strong>unsafe_writes</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>This option is silently ignored. This module always modifies file size in-place.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li>
+<code><strong>false</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> <li><code>true</code></li> </ul> </div></td> </tr>  </table> </section> <section id="attributes"> <h2>Attributes</h2> <table class="longtable ansible-option-table docutils align-default" style="width: 100%"> <thead> <tr>
+<th class="head"><p>Attribute</p></th> <th class="head"><p>Support</p></th> <th class="head"><p>Description</p></th> </tr> </thead>  <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-attribute-check-mode"><strong>check_mode</strong></p> 
+</div></td> <td><div class="ansible-option-cell">
+<p><strong class="ansible-attribute-support-label">Support: </strong><strong class="ansible-attribute-support-full">full</strong></p> </div></td> <td><div class="ansible-option-cell">
+<p>Can run in <code>check_mode</code> and return changed status prediction without modifying target.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-attribute-diff-mode"><strong>diff_mode</strong></p> 
+</div></td> <td><div class="ansible-option-cell">
+<p><strong class="ansible-attribute-support-label">Support: </strong><strong class="ansible-attribute-support-full">full</strong></p> </div></td> <td><div class="ansible-option-cell">
+<p>Will return details on what has changed (or possibly needs changing in <code>check_mode</code>), when in diff mode.</p> </div></td> </tr>  </table> </section> <section id="see-also"> <h2>See Also</h2> <div class="admonition seealso"> <p class="admonition-title">See also</p> <dl class="simple"> <dt><a class="reference external" href="https://man7.org/linux/man-pages/man1/dd.1.html">dd(1) manpage for Linux</a></dt>
+<dd>
+<p>Manual page of the GNU/Linux’s dd implementation (from GNU coreutils).</p> </dd> <dt><a class="reference external" href="https://www.ibm.com/support/knowledgecenter/ssw_aix_72/d_commands/dd.html">dd(1) manpage for IBM AIX</a></dt>
+<dd>
+<p>Manual page of the IBM AIX’s dd implementation.</p> </dd> <dt><a class="reference external" href="https://www.unix.com/man-page/osx/1/dd/">dd(1) manpage for Mac OSX</a></dt>
+<dd>
+<p>Manual page of the Mac OSX’s dd implementation.</p> </dd> <dt><a class="reference external" href="https://docs.oracle.com/cd/E36784_01/html/E36871/dd-1m.html">dd(1M) manpage for Solaris</a></dt>
+<dd>
+<p>Manual page of the Oracle Solaris’s dd implementation.</p> </dd> <dt><a class="reference external" href="https://www.freebsd.org/cgi/man.cgi?dd(1)">dd(1) manpage for FreeBSD</a></dt>
+<dd>
+<p>Manual page of the FreeBSD’s dd implementation.</p> </dd> <dt><a class="reference external" href="https://man.openbsd.org/dd">dd(1) manpage for OpenBSD</a></dt>
+<dd>
+<p>Manual page of the OpenBSD’s dd implementation.</p> </dd> <dt><a class="reference external" href="https://man.netbsd.org/dd.1">dd(1) manpage for NetBSD</a></dt>
+<dd>
+<p>Manual page of the NetBSD’s dd implementation.</p> </dd> <dt><a class="reference external" href="https://www.unix.com/man-page/linux/1/busybox">busybox(1) manpage for Linux</a></dt>
+<dd>
+<p>Manual page of the GNU/Linux’s busybox, that provides its own dd implementation.</p> </dd> </dl> </div> </section> <section id="examples"> <h2>Examples</h2> <pre data-language="yaml+jinja">- name: Create a file of 1G filled with null bytes
+  community.general.filesize:
+    path: /var/bigfile
+    size: 1G
+
+- name: Extend the file to 2G (2*1024^3)
+  community.general.filesize:
+    path: /var/bigfile
+    size: 2G
+
+- name: Reduce the file to 2GB (2*1000^3)
+  community.general.filesize:
+    path: /var/bigfile
+    size: 2GB
+
+- name: Fill a file with random bytes for backing a LUKS device
+  community.general.filesize:
+    path: ~/diskimage.luks
+    size: 512.0 MiB
+    source: /dev/urandom
+
+- name: Take a backup of MBR boot code into a file, overwriting it if it exists
+  community.general.filesize:
+    path: /media/sdb1/mbr.bin
+    size: 440B
+    source: /dev/sda
+    force: true
+
+- name: Create/resize a sparse file of/to 8TB
+  community.general.filesize:
+    path: /var/local/sparsefile
+    size: 8TB
+    sparse: true
+
+- name: Create a file with specific size and attributes, to be used as swap space
+  community.general.filesize:
+    path: /var/swapfile
+    size: 2G
+    blocksize: 512B
+    mode: u=rw,go=
+    owner: root
+    group: root
+</pre> </section> <section id="return-values"> <h2>Return Values</h2> <p>Common return values are documented <a class="reference internal" href="../../../reference_appendices/common_return_values#common-return-values"><span class="std std-ref">here</span></a>, the following are the fields unique to this module:</p> <table class="longtable ansible-option-table docutils align-default" style="width: 100%"> <thead> <tr>
+<th class="head"><p>Key</p></th> <th class="head"><p>Description</p></th> </tr> </thead>  <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-return-cmd"><strong>cmd</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Command executed to create or resize the file.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> when changed or failed</p> <p class="ansible-option-line ansible-option-sample"><strong class="ansible-option-sample-bold">Sample:</strong> <code>"/usr/bin/dd if=/dev/zero of=/var/swapfile bs=1048576 seek=3072 count=1024"</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-return-filesize"><strong>filesize</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">dictionary</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Dictionary of sizes related to the file.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> always</p> </div></td> </tr> <tr>
+<td>
+
+<div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-return-filesize-blocks"><strong>blocks</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p> </div>
+</td> <td>
+
+<div class="ansible-option-cell">
+<p>Number of blocks in the file.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> success</p> <p class="ansible-option-line ansible-option-sample"><strong class="ansible-option-sample-bold">Sample:</strong> <code>500</code></p> </div>
+</td> </tr> <tr>
+<td>
+
+<div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-return-filesize-blocksize"><strong>blocksize</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p> </div>
+</td> <td>
+
+<div class="ansible-option-cell">
+<p>Size of the blocks in bytes.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> success</p> <p class="ansible-option-line ansible-option-sample"><strong class="ansible-option-sample-bold">Sample:</strong> <code>1024</code></p> </div>
+</td> </tr> <tr>
+<td>
+
+<div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-return-filesize-bytes"><strong>bytes</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p> </div>
+</td> <td>
+
+<div class="ansible-option-cell">
+<p>Size of the file, in bytes, as the product of <code><a class="reference internal" href="#ansible-collections-community-general-filesize-module-return-filesize-blocks"><span class="std std-ref">filesize.blocks</span></a></code> and <code><a class="reference internal" href="#ansible-collections-community-general-filesize-module-return-filesize-blocksize"><span class="std std-ref">filesize.blocksize</span></a></code>.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> success</p> <p class="ansible-option-line ansible-option-sample"><strong class="ansible-option-sample-bold">Sample:</strong> <code>512000</code></p> </div>
+</td> </tr> <tr>
+<td>
+
+<div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-return-filesize-iec"><strong>iec</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div>
+</td> <td>
+
+<div class="ansible-option-cell">
+<p>Size of the file, in human-readable format, following IEC standard.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> success</p> <p class="ansible-option-line ansible-option-sample"><strong class="ansible-option-sample-bold">Sample:</strong> <code>"500.0 KiB"</code></p> </div>
+</td> </tr> <tr>
+<td>
+
+<div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-return-filesize-si"><strong>si</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div>
+</td> <td>
+
+<div class="ansible-option-cell">
+<p>Size of the file, in human-readable format, following SI standard.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> success</p> <p class="ansible-option-line ansible-option-sample"><strong class="ansible-option-sample-bold">Sample:</strong> <code>"512.0 kB"</code></p> </div>
+</td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-return-path"><strong>path</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Realpath of the file if it is a symlink, otherwise the same than module’s param.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> always</p> <p class="ansible-option-line ansible-option-sample"><strong class="ansible-option-sample-bold">Sample:</strong> <code>"/var/swap0"</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-filesize-module-return-size-diff"><strong>size_diff</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Difference (positive or negative) between old size and new size, in bytes.</p> <p class="ansible-option-line"><strong class="ansible-option-returned-bold">Returned:</strong> always</p> <p class="ansible-option-line ansible-option-sample"><strong class="ansible-option-sample-bold">Sample:</strong> <code>-1234567890</code></p> </div></td> </tr>  </table> <section id="authors"> <h3>Authors</h3> <ul class="simple"> <li>quidame (@quidame)</li> </ul> </section> <section id="collection-links"> <h3>Collection links</h3> <ul class="ansible-links"> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/community.general/issues" rel="noopener external" target="_blank">Issue Tracker</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/community.general" rel="noopener external" target="_blank">Repository (Sources)</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://forum.ansible.com/c/help/6/none" rel="noopener external" target="_blank">Ask for help</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/community.general/issues/new?assignees=&amp;labels=&amp;template=bug_report.yml" rel="noopener external" target="_blank">Submit a bug report</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/community.general/issues/new?assignees=&amp;labels=&amp;template=feature_request.yml" rel="noopener external" target="_blank">Request a feature</a></span></li> <li><span><a class="reference internal" href="index#communication-for-community-general"><span class="std std-ref">Communication</span></a></span></li> </ul> </section> </section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2012&ndash;2018 Michael DeHaan<br>&copy; 2018&ndash;2025 Red Hat, Inc.<br>Licensed under the GNU General Public License version 3.<br>
+    <a href="https://docs.ansible.com/ansible/latest/collections/community/general/filesize_module.html" class="_attribution-link">https://docs.ansible.com/ansible/latest/collections/community/general/filesize_module.html</a>
+  </p>
+</div>

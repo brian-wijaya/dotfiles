@@ -1,0 +1,260 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Comments_List_Table::handle_row_actions( <span class="arg-type">WP_Comment</span> <span class="arg-name">$item</span>, <span class="arg-type">string</span> <span class="arg-name">$column_name</span>, <span class="arg-type">string</span> <span class="arg-name">$primary</span> ): <span class="return-type">string</span>
+</h1> <section><p>Generates and displays row actions links.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$item</code><span class="type"><span class="WP_Comment"><a href="../wp_comment" rel="class">WP_Comment</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The comment object.</span></div></dd>
+<dt>
+<code>$column_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Current column name.</span></div></dd>
+<dt>
+<code>$primary</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Primary column name.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Row actions output for comments. An empty string if the current column is not the primary column, or if the current user cannot edit the comment.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="690" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function handle_row_actions( $item, $column_name, $primary ) {
+	global $comment_status;
+
+	if ( $primary !== $column_name ) {
+		return '';
+	}
+
+	if ( ! $this-&gt;user_can ) {
+		return '';
+	}
+
+	// Restores the more descriptive, specific name for use within this method.
+	$comment = $item;
+
+	$the_comment_status = wp_get_comment_status( $comment );
+
+	$output = '';
+
+	$approve_nonce = esc_html( '_wpnonce=' . wp_create_nonce( 'approve-comment_' . $comment-&gt;comment_ID ) );
+	$del_nonce     = esc_html( '_wpnonce=' . wp_create_nonce( 'delete-comment_' . $comment-&gt;comment_ID ) );
+
+	$action_string = 'comment.php?action=%s&amp;c=' . $comment-&gt;comment_ID . '&amp;%s';
+
+	$approve_url   = sprintf( $action_string, 'approvecomment', $approve_nonce );
+	$unapprove_url = sprintf( $action_string, 'unapprovecomment', $approve_nonce );
+	$spam_url      = sprintf( $action_string, 'spamcomment', $del_nonce );
+	$unspam_url    = sprintf( $action_string, 'unspamcomment', $del_nonce );
+	$trash_url     = sprintf( $action_string, 'trashcomment', $del_nonce );
+	$untrash_url   = sprintf( $action_string, 'untrashcomment', $del_nonce );
+	$delete_url    = sprintf( $action_string, 'deletecomment', $del_nonce );
+
+	// Preorder it: Approve | Reply | Quick Edit | Edit | Spam | Trash.
+	$actions = array(
+		'approve'   =&gt; '',
+		'unapprove' =&gt; '',
+		'reply'     =&gt; '',
+		'quickedit' =&gt; '',
+		'edit'      =&gt; '',
+		'spam'      =&gt; '',
+		'unspam'    =&gt; '',
+		'trash'     =&gt; '',
+		'untrash'   =&gt; '',
+		'delete'    =&gt; '',
+	);
+
+	// Not looking at all comments.
+	if ( $comment_status &amp;&amp; 'all' !== $comment_status ) {
+		if ( 'approved' === $the_comment_status ) {
+			$actions['unapprove'] = sprintf(
+				'&lt;a href="%s" data-wp-lists="%s" class="vim-u vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+				esc_url( $unapprove_url ),
+				"delete:the-comment-list:comment-{$comment-&gt;comment_ID}:e7e7d3:action=dim-comment&amp;amp;new=unapproved",
+				esc_attr__( 'Unapprove this comment' ),
+				__( 'Unapprove' )
+			);
+		} elseif ( 'unapproved' === $the_comment_status ) {
+			$actions['approve'] = sprintf(
+				'&lt;a href="%s" data-wp-lists="%s" class="vim-a vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+				esc_url( $approve_url ),
+				"delete:the-comment-list:comment-{$comment-&gt;comment_ID}:e7e7d3:action=dim-comment&amp;amp;new=approved",
+				esc_attr__( 'Approve this comment' ),
+				__( 'Approve' )
+			);
+		}
+	} else {
+		$actions['approve'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="vim-a aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $approve_url ),
+			"dim:the-comment-list:comment-{$comment-&gt;comment_ID}:unapproved:e7e7d3:e7e7d3:new=approved",
+			esc_attr__( 'Approve this comment' ),
+			__( 'Approve' )
+		);
+
+		$actions['unapprove'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="vim-u aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $unapprove_url ),
+			"dim:the-comment-list:comment-{$comment-&gt;comment_ID}:unapproved:e7e7d3:e7e7d3:new=unapproved",
+			esc_attr__( 'Unapprove this comment' ),
+			__( 'Unapprove' )
+		);
+	}
+
+	if ( 'spam' !== $the_comment_status ) {
+		$actions['spam'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="vim-s vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $spam_url ),
+			"delete:the-comment-list:comment-{$comment-&gt;comment_ID}::spam=1",
+			esc_attr__( 'Mark this comment as spam' ),
+			/* translators: "Mark as spam" link. */
+			_x( 'Spam', 'verb' )
+		);
+	} elseif ( 'spam' === $the_comment_status ) {
+		$actions['unspam'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="vim-z vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $unspam_url ),
+			"delete:the-comment-list:comment-{$comment-&gt;comment_ID}:66cc66:unspam=1",
+			esc_attr__( 'Restore this comment from the spam' ),
+			_x( 'Not Spam', 'comment' )
+		);
+	}
+
+	if ( 'trash' === $the_comment_status ) {
+		$actions['untrash'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="vim-z vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $untrash_url ),
+			"delete:the-comment-list:comment-{$comment-&gt;comment_ID}:66cc66:untrash=1",
+			esc_attr__( 'Restore this comment from the Trash' ),
+			__( 'Restore' )
+		);
+	}
+
+	if ( 'spam' === $the_comment_status || 'trash' === $the_comment_status || ! EMPTY_TRASH_DAYS ) {
+		$actions['delete'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="delete vim-d vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $delete_url ),
+			"delete:the-comment-list:comment-{$comment-&gt;comment_ID}::delete=1",
+			esc_attr__( 'Delete this comment permanently' ),
+			__( 'Delete Permanently' )
+		);
+	} else {
+		$actions['trash'] = sprintf(
+			'&lt;a href="%s" data-wp-lists="%s" class="delete vim-d vim-destructive aria-button-if-js" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $trash_url ),
+			"delete:the-comment-list:comment-{$comment-&gt;comment_ID}::trash=1",
+			esc_attr__( 'Move this comment to the Trash' ),
+			_x( 'Trash', 'verb' )
+		);
+	}
+
+	if ( 'spam' !== $the_comment_status &amp;&amp; 'trash' !== $the_comment_status ) {
+		$actions['edit'] = sprintf(
+			'&lt;a href="%s" aria-label="%s"&gt;%s&lt;/a&gt;',
+			"comment.php?action=editcomment&amp;amp;c={$comment-&gt;comment_ID}",
+			esc_attr__( 'Edit this comment' ),
+			__( 'Edit' )
+		);
+
+		$format = '&lt;button type="button" data-comment-id="%d" data-post-id="%d" data-action="%s" class="%s button-link" aria-expanded="false" aria-label="%s"&gt;%s&lt;/button&gt;';
+
+		$actions['quickedit'] = sprintf(
+			$format,
+			$comment-&gt;comment_ID,
+			$comment-&gt;comment_post_ID,
+			'edit',
+			'vim-q comment-inline',
+			esc_attr__( 'Quick edit this comment inline' ),
+			__( 'Quick&amp;nbsp;Edit' )
+		);
+
+		$actions['reply'] = sprintf(
+			$format,
+			$comment-&gt;comment_ID,
+			$comment-&gt;comment_post_ID,
+			'replyto',
+			'vim-r comment-inline',
+			esc_attr__( 'Reply to this comment' ),
+			__( 'Reply' )
+		);
+	}
+
+	/**
+	 * Filters the action links displayed for each comment in the Comments list table.
+	 *
+	 * @since 2.6.0
+	 *
+	 * @param string[]   $actions An array of comment actions. Default actions include:
+	 *                            'Approve', 'Unapprove', 'Edit', 'Reply', 'Spam',
+	 *                            'Delete', and 'Trash'.
+	 * @param WP_Comment $comment The comment object.
+	 */
+	$actions = apply_filters( 'comment_row_actions', array_filter( $actions ), $comment );
+
+	$always_visible = false;
+
+	$mode = get_user_setting( 'posts_list_mode', 'list' );
+
+	if ( 'excerpt' === $mode ) {
+		$always_visible = true;
+	}
+
+	$output .= '&lt;div class="' . ( $always_visible ? 'row-actions visible' : 'row-actions' ) . '"&gt;';
+
+	$i = 0;
+
+	foreach ( $actions as $action =&gt; $link ) {
+		++$i;
+
+		if ( ( ( 'approve' === $action || 'unapprove' === $action ) &amp;&amp; 2 === $i )
+			|| 1 === $i
+		) {
+			$separator = '';
+		} else {
+			$separator = ' | ';
+		}
+
+		// Reply and quickedit need a hide-if-no-js span when not added with Ajax.
+		if ( ( 'reply' === $action || 'quickedit' === $action ) &amp;&amp; ! wp_doing_ajax() ) {
+			$action .= ' hide-if-no-js';
+		} elseif ( ( 'untrash' === $action &amp;&amp; 'trash' === $the_comment_status )
+			|| ( 'unspam' === $action &amp;&amp; 'spam' === $the_comment_status )
+		) {
+			if ( '1' === get_comment_meta( $comment-&gt;comment_ID, '_wp_trash_meta_status', true ) ) {
+				$action .= ' approve';
+			} else {
+				$action .= ' unapprove';
+			}
+		}
+
+		$output .= "&lt;span class='$action'&gt;{$separator}{$link}&lt;/span&gt;";
+	}
+
+	$output .= '&lt;/div&gt;';
+
+	$output .= '&lt;button type="button" class="toggle-row"&gt;&lt;span class="screen-reader-text"&gt;' .
+		/* translators: Hidden accessibility text. */
+		__( 'Show more details' ) .
+	'&lt;/span&gt;&lt;/button&gt;';
+
+	return $output;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-comments-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-comments-list-table.php#L690">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-comments-list-table.php#L690-L909">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/comment_row_actions"><span class="hook-func">apply_filters</span>( ‘comment_row_actions’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$actions</span></nobr>, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr> )</a></dt>
+<dd>
+<p>Filters the action links displayed for each comment in the Comments list table.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Renamed <code>$comment</code> to <code>$item</code> to match parent class for PHP 8 named parameter support.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.3.0/">4.3.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_comments_list_table/handle_row_actions" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_comments_list_table/handle_row_actions</a>
+  </p>
+</div>

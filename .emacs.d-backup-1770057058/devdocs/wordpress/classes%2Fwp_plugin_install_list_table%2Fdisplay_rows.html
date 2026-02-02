@@ -1,0 +1,298 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Plugin_Install_List_Table::display_rows()</h1> <section><p>Generates the list table rows.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="472" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function display_rows() {
+	$plugins_allowedtags = array(
+		'a'       =&gt; array(
+			'href'   =&gt; array(),
+			'title'  =&gt; array(),
+			'target' =&gt; array(),
+		),
+		'abbr'    =&gt; array( 'title' =&gt; array() ),
+		'acronym' =&gt; array( 'title' =&gt; array() ),
+		'code'    =&gt; array(),
+		'pre'     =&gt; array(),
+		'em'      =&gt; array(),
+		'strong'  =&gt; array(),
+		'ul'      =&gt; array(),
+		'ol'      =&gt; array(),
+		'li'      =&gt; array(),
+		'p'       =&gt; array(),
+		'br'      =&gt; array(),
+	);
+
+	$plugins_group_titles = array(
+		'Performance' =&gt; _x( 'Performance', 'Plugin installer group title' ),
+		'Social'      =&gt; _x( 'Social', 'Plugin installer group title' ),
+		'Tools'       =&gt; _x( 'Tools', 'Plugin installer group title' ),
+	);
+
+	$group = null;
+
+	foreach ( (array) $this-&gt;items as $plugin ) {
+		if ( is_object( $plugin ) ) {
+			$plugin = (array) $plugin;
+		}
+
+		// Display the group heading if there is one.
+		if ( isset( $plugin['group'] ) &amp;&amp; $plugin['group'] !== $group ) {
+			if ( isset( $this-&gt;groups[ $plugin['group'] ] ) ) {
+				$group_name = $this-&gt;groups[ $plugin['group'] ];
+				if ( isset( $plugins_group_titles[ $group_name ] ) ) {
+					$group_name = $plugins_group_titles[ $group_name ];
+				}
+			} else {
+				$group_name = $plugin['group'];
+			}
+
+			// Starting a new group, close off the divs of the last one.
+			if ( ! empty( $group ) ) {
+				echo '&lt;/div&gt;&lt;/div&gt;';
+			}
+
+			echo '&lt;div class="plugin-group"&gt;&lt;h3&gt;' . esc_html( $group_name ) . '&lt;/h3&gt;';
+			// Needs an extra wrapping div for nth-child selectors to work.
+			echo '&lt;div class="plugin-items"&gt;';
+
+			$group = $plugin['group'];
+		}
+
+		$title = wp_kses( $plugin['name'], $plugins_allowedtags );
+
+		// Remove any HTML from the description.
+		$description = strip_tags( $plugin['short_description'] );
+
+		/**
+		 * Filters the plugin card description on the Add Plugins screen.
+		 *
+		 * @since 6.0.0
+		 *
+		 * @param string $description Plugin card description.
+		 * @param array  $plugin      An array of plugin data. See <a href="../../functions/plugins_api">plugins_api()</a>
+		 *                            for the list of possible values.
+		 */
+		$description = apply_filters( 'plugin_install_description', $description, $plugin );
+
+		$version = wp_kses( $plugin['version'], $plugins_allowedtags );
+
+		$name = strip_tags( $title . ' ' . $version );
+
+		$author = wp_kses( $plugin['author'], $plugins_allowedtags );
+		if ( ! empty( $author ) ) {
+			/* translators: %s: Plugin author. */
+			$author = ' &lt;cite&gt;' . sprintf( __( 'By %s' ), $author ) . '&lt;/cite&gt;';
+		}
+
+		$requires_php = isset( $plugin['requires_php'] ) ? $plugin['requires_php'] : null;
+		$requires_wp  = isset( $plugin['requires'] ) ? $plugin['requires'] : null;
+
+		$compatible_php = is_php_version_compatible( $requires_php );
+		$compatible_wp  = is_wp_version_compatible( $requires_wp );
+		$tested_wp      = ( empty( $plugin['tested'] ) || version_compare( get_bloginfo( 'version' ), $plugin['tested'], '&lt;=' ) );
+
+		$action_links = array();
+
+		$action_links[] = wp_get_plugin_action_button( $name, $plugin, $compatible_php, $compatible_wp );
+
+		$details_link = self_admin_url(
+			'plugin-install.php?tab=plugin-information&amp;amp;plugin=' . $plugin['slug'] .
+			'&amp;amp;TB_iframe=true&amp;amp;width=600&amp;amp;height=550'
+		);
+
+		$action_links[] = sprintf(
+			'&lt;a href="%s" class="thickbox open-plugin-details-modal" aria-label="%s" data-title="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $details_link ),
+			/* translators: %s: Plugin name and version. */
+			esc_attr( sprintf( __( 'More information about %s' ), $name ) ),
+			esc_attr( $name ),
+			__( 'More Details' )
+		);
+
+		if ( ! empty( $plugin['icons']['svg'] ) ) {
+			$plugin_icon_url = $plugin['icons']['svg'];
+		} elseif ( ! empty( $plugin['icons']['2x'] ) ) {
+			$plugin_icon_url = $plugin['icons']['2x'];
+		} elseif ( ! empty( $plugin['icons']['1x'] ) ) {
+			$plugin_icon_url = $plugin['icons']['1x'];
+		} else {
+			$plugin_icon_url = $plugin['icons']['default'];
+		}
+
+		/**
+		 * Filters the install action links for a plugin.
+		 *
+		 * @since 2.7.0
+		 *
+		 * @param string[] $action_links An array of plugin action links.
+		 *                               Defaults are links to Details and Install Now.
+		 * @param array    $plugin       An array of plugin data. See <a href="../../functions/plugins_api">plugins_api()</a>
+		 *                               for the list of possible values.
+		 */
+		$action_links = apply_filters( 'plugin_install_action_links', $action_links, $plugin );
+
+		$last_updated_timestamp = strtotime( $plugin['last_updated'] );
+		?&gt;
+	&lt;div class="plugin-card plugin-card-&lt;?php echo sanitize_html_class( $plugin['slug'] ); ?&gt;"&gt;
+		&lt;?php
+		if ( ! $compatible_php || ! $compatible_wp ) {
+			$incompatible_notice_message = '';
+			if ( ! $compatible_php &amp;&amp; ! $compatible_wp ) {
+				$incompatible_notice_message .= __( 'This plugin does not work with your versions of WordPress and PHP.' );
+				if ( current_user_can( 'update_core' ) &amp;&amp; current_user_can( 'update_php' ) ) {
+					$incompatible_notice_message .= sprintf(
+						/* translators: 1: URL to WordPress Updates screen, 2: URL to Update PHP page. */
+						' ' . __( '&lt;a href="%1$s"&gt;Please update WordPress&lt;/a&gt;, and then &lt;a href="%2$s"&gt;learn more about updating PHP&lt;/a&gt;.' ),
+						self_admin_url( 'update-core.php' ),
+						esc_url( wp_get_update_php_url() )
+					);
+					$incompatible_notice_message .= wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;', false );
+				} elseif ( current_user_can( 'update_core' ) ) {
+					$incompatible_notice_message .= sprintf(
+						/* translators: %s: URL to WordPress Updates screen. */
+						' ' . __( '&lt;a href="%s"&gt;Please update WordPress&lt;/a&gt;.' ),
+						self_admin_url( 'update-core.php' )
+					);
+				} elseif ( current_user_can( 'update_php' ) ) {
+					$incompatible_notice_message .= sprintf(
+						/* translators: %s: URL to Update PHP page. */
+						' ' . __( '&lt;a href="%s"&gt;Learn more about updating PHP&lt;/a&gt;.' ),
+						esc_url( wp_get_update_php_url() )
+					);
+					$incompatible_notice_message .= wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;', false );
+				}
+			} elseif ( ! $compatible_wp ) {
+				$incompatible_notice_message .= __( 'This plugin does not work with your version of WordPress.' );
+				if ( current_user_can( 'update_core' ) ) {
+					$incompatible_notice_message .= sprintf(
+						/* translators: %s: URL to WordPress Updates screen. */
+						' ' . __( '&lt;a href="%s"&gt;Please update WordPress&lt;/a&gt;.' ),
+						self_admin_url( 'update-core.php' )
+					);
+				}
+			} elseif ( ! $compatible_php ) {
+				$incompatible_notice_message .= __( 'This plugin does not work with your version of PHP.' );
+				if ( current_user_can( 'update_php' ) ) {
+					$incompatible_notice_message .= sprintf(
+						/* translators: %s: URL to Update PHP page. */
+						' ' . __( '&lt;a href="%s"&gt;Learn more about updating PHP&lt;/a&gt;.' ),
+						esc_url( wp_get_update_php_url() )
+					);
+					$incompatible_notice_message .= wp_update_php_annotation( '&lt;/p&gt;&lt;p&gt;&lt;em&gt;', '&lt;/em&gt;', false );
+				}
+			}
+
+			wp_admin_notice(
+				$incompatible_notice_message,
+				array(
+					'type'               =&gt; 'error',
+					'additional_classes' =&gt; array( 'notice-alt', 'inline' ),
+				)
+			);
+		}
+		?&gt;
+		&lt;div class="plugin-card-top"&gt;
+			&lt;div class="name column-name"&gt;
+				&lt;h3&gt;
+					&lt;a href="&lt;?php echo esc_url( $details_link ); ?&gt;" class="thickbox open-plugin-details-modal"&gt;
+					&lt;?php echo $title; ?&gt;
+					&lt;img src="&lt;?php echo esc_url( $plugin_icon_url ); ?&gt;" class="plugin-icon" alt="" /&gt;
+					&lt;/a&gt;
+				&lt;/h3&gt;
+			&lt;/div&gt;
+			&lt;div class="action-links"&gt;
+				&lt;?php
+				if ( $action_links ) {
+					echo '&lt;ul class="plugin-action-buttons"&gt;&lt;li&gt;' . implode( '&lt;/li&gt;&lt;li&gt;', $action_links ) . '&lt;/li&gt;&lt;/ul&gt;';
+				}
+				?&gt;
+			&lt;/div&gt;
+			&lt;div class="desc column-description"&gt;
+				&lt;p&gt;&lt;?php echo $description; ?&gt;&lt;/p&gt;
+				&lt;p class="authors"&gt;&lt;?php echo $author; ?&gt;&lt;/p&gt;
+			&lt;/div&gt;
+		&lt;/div&gt;
+		&lt;?php
+		$dependencies_notice = $this-&gt;get_dependencies_notice( $plugin );
+		if ( ! empty( $dependencies_notice ) ) {
+			echo $dependencies_notice;
+		}
+		?&gt;
+		&lt;div class="plugin-card-bottom"&gt;
+			&lt;div class="vers column-rating"&gt;
+				&lt;?php
+				wp_star_rating(
+					array(
+						'rating' =&gt; $plugin['rating'],
+						'type'   =&gt; 'percent',
+						'number' =&gt; $plugin['num_ratings'],
+					)
+				);
+				?&gt;
+				&lt;span class="num-ratings" aria-hidden="true"&gt;(&lt;?php echo number_format_i18n( $plugin['num_ratings'] ); ?&gt;)&lt;/span&gt;
+			&lt;/div&gt;
+			&lt;div class="column-updated"&gt;
+				&lt;strong&gt;&lt;?php _e( 'Last Updated:' ); ?&gt;&lt;/strong&gt;
+				&lt;?php
+					/* translators: %s: Human-readable time difference. */
+					printf( __( '%s ago' ), human_time_diff( $last_updated_timestamp ) );
+				?&gt;
+			&lt;/div&gt;
+			&lt;div class="column-downloaded"&gt;
+				&lt;?php
+				if ( $plugin['active_installs'] &gt;= 1000000 ) {
+					$active_installs_millions = floor( $plugin['active_installs'] / 1000000 );
+					$active_installs_text     = sprintf(
+						/* translators: %s: Number of millions. */
+						_nx( '%s+ Million', '%s+ Million', $active_installs_millions, 'Active plugin installations' ),
+						number_format_i18n( $active_installs_millions )
+					);
+				} elseif ( 0 === $plugin['active_installs'] ) {
+					$active_installs_text = _x( 'Less Than 10', 'Active plugin installations' );
+				} else {
+					$active_installs_text = number_format_i18n( $plugin['active_installs'] ) . '+';
+				}
+				/* translators: %s: Number of installations. */
+				printf( __( '%s Active Installations' ), $active_installs_text );
+				?&gt;
+			&lt;/div&gt;
+			&lt;div class="column-compatibility"&gt;
+				&lt;?php
+				if ( ! $tested_wp ) {
+					echo '&lt;span class="compatibility-untested"&gt;' . __( 'Untested with your version of WordPress' ) . '&lt;/span&gt;';
+				} elseif ( ! $compatible_wp ) {
+					echo '&lt;span class="compatibility-incompatible"&gt;' . __( '&lt;strong&gt;Incompatible&lt;/strong&gt; with your version of WordPress' ) . '&lt;/span&gt;';
+				} else {
+					echo '&lt;span class="compatibility-compatible"&gt;' . __( '&lt;strong&gt;Compatible&lt;/strong&gt; with your version of WordPress' ) . '&lt;/span&gt;';
+				}
+				?&gt;
+			&lt;/div&gt;
+		&lt;/div&gt;
+	&lt;/div&gt;
+		&lt;?php
+	}
+
+	// Close off the group divs of the last one.
+	if ( ! empty( $group ) ) {
+		echo '&lt;/div&gt;&lt;/div&gt;';
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-plugin-install-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-plugin-install-list-table.php#L472">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-plugin-install-list-table.php#L472-L746">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/plugin_install_action_links"><span class="hook-func">apply_filters</span>( ‘plugin_install_action_links’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$action_links</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$plugin</span></nobr> )</a></dt>
+<dd>
+<p>Filters the install action links for a plugin.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/plugin_install_description"><span class="hook-func">apply_filters</span>( ‘plugin_install_description’, <nobr><span class="arg-type">string</span> <span class="arg-name">$description</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$plugin</span></nobr> )</a></dt>
+<dd>
+<p>Filters the plugin card description on the Add Plugins screen.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_plugin_install_list_table/display_rows" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_plugin_install_list_table/display_rows</a>
+  </p>
+</div>

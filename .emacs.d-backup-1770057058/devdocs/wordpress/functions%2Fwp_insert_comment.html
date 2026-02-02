@@ -1,0 +1,149 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_insert_comment( <span class="arg-type">array</span> <span class="arg-name">$commentdata</span> ): <span class="return-type">int|false</span>
+</h1> <section><p>Inserts a comment into the database.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$commentdata</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Array of arguments for inserting a new comment.<br> <ul class="param-hash">
+<li>
+<code>comment_agent</code> <span class="type">string</span><div class="desc">The HTTP user agent of the <code>$comment_author</code> when the comment was submitted. Default empty.</div>
+</li> <li>
+<code>comment_approved</code> <span class="type">int|string</span><div class="desc">Whether the comment has been approved. Default 1.</div>
+</li> <li>
+<code>comment_author</code> <span class="type">string</span><div class="desc">The name of the author of the comment. Default empty.</div>
+</li> <li>
+<code>comment_author_email</code> <span class="type">string</span><div class="desc">The email address of the <code>$comment_author</code>. Default empty.</div>
+</li> <li>
+<code>comment_author_IP</code> <span class="type">string</span><div class="desc">The IP address of the <code>$comment_author</code>. Default empty.</div>
+</li> <li>
+<code>comment_author_url</code> <span class="type">string</span><div class="desc">The URL address of the <code>$comment_author</code>. Default empty.</div>
+</li> <li>
+<code>comment_content</code> <span class="type">string</span><div class="desc">The content of the comment. Default empty.</div>
+</li> <li>
+<code>comment_date</code> <span class="type">string</span><div class="desc">The date the comment was submitted. To set the date manually, <code>$comment_date_gmt</code> must also be specified.<br> Default is the current time.</div>
+</li> <li>
+<code>comment_date_gmt</code> <span class="type">string</span><div class="desc">The date the comment was submitted in the GMT timezone.<br> Default is <code>$comment_date</code> in the site’s GMT timezone.</div>
+</li> <li>
+<code>comment_karma</code> <span class="type">int</span><div class="desc">The karma of the comment. Default 0.</div>
+</li> <li>
+<code>comment_parent</code> <span class="type">int</span><div class="desc">ID of this comment’s parent, if any. Default 0.</div>
+</li> <li>
+<code>comment_post_ID</code> <span class="type">int</span><div class="desc">ID of the post that relates to the comment, if any.<br> Default 0.</div>
+</li> <li>
+<code>comment_type</code> <span class="type">string</span><div class="desc">Comment type. Default <code>'comment'</code>.</div>
+</li> <li>
+<code>comment_meta</code> <span class="type">array</span><div class="desc">Optional. Array of key/value pairs to be stored in commentmeta for the new comment.</div>
+</li> <li>
+<code>user_id</code> <span class="type">int</span><div class="desc">ID of the user who submitted the comment. Default 0.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|false</span> The new comment’s ID on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2013" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_insert_comment( $commentdata ) {
+	global $wpdb;
+
+	$data = wp_unslash( $commentdata );
+
+	$comment_author       = ! isset( $data['comment_author'] ) ? '' : $data['comment_author'];
+	$comment_author_email = ! isset( $data['comment_author_email'] ) ? '' : $data['comment_author_email'];
+	$comment_author_url   = ! isset( $data['comment_author_url'] ) ? '' : $data['comment_author_url'];
+	$comment_author_ip    = ! isset( $data['comment_author_IP'] ) ? '' : $data['comment_author_IP'];
+
+	$comment_date     = ! isset( $data['comment_date'] ) ? current_time( 'mysql' ) : $data['comment_date'];
+	$comment_date_gmt = ! isset( $data['comment_date_gmt'] ) ? get_gmt_from_date( $comment_date ) : $data['comment_date_gmt'];
+
+	$comment_post_id  = ! isset( $data['comment_post_ID'] ) ? 0 : $data['comment_post_ID'];
+	$comment_content  = ! isset( $data['comment_content'] ) ? '' : $data['comment_content'];
+	$comment_karma    = ! isset( $data['comment_karma'] ) ? 0 : $data['comment_karma'];
+	$comment_approved = ! isset( $data['comment_approved'] ) ? 1 : $data['comment_approved'];
+	$comment_agent    = ! isset( $data['comment_agent'] ) ? '' : $data['comment_agent'];
+	$comment_type     = empty( $data['comment_type'] ) ? 'comment' : $data['comment_type'];
+	$comment_parent   = ! isset( $data['comment_parent'] ) ? 0 : $data['comment_parent'];
+
+	$user_id = ! isset( $data['user_id'] ) ? 0 : $data['user_id'];
+
+	$compacted = array(
+		'comment_post_ID'   =&gt; $comment_post_id,
+		'comment_author_IP' =&gt; $comment_author_ip,
+	);
+
+	$compacted += compact(
+		'comment_author',
+		'comment_author_email',
+		'comment_author_url',
+		'comment_date',
+		'comment_date_gmt',
+		'comment_content',
+		'comment_karma',
+		'comment_approved',
+		'comment_agent',
+		'comment_type',
+		'comment_parent',
+		'user_id'
+	);
+
+	if ( ! $wpdb-&gt;insert( $wpdb-&gt;comments, $compacted ) ) {
+		return false;
+	}
+
+	$id = (int) $wpdb-&gt;insert_id;
+
+	if ( 1 == $comment_approved ) {
+		wp_update_comment_count( $comment_post_id );
+
+		$data = array();
+		foreach ( array( 'server', 'gmt', 'blog' ) as $timezone ) {
+			$data[] = "lastcommentmodified:$timezone";
+		}
+		wp_cache_delete_multiple( $data, 'timeinfo' );
+	}
+
+	clean_comment_cache( $id );
+
+	$comment = get_comment( $id );
+
+	// If metadata is provided, store it.
+	if ( isset( $commentdata['comment_meta'] ) &amp;&amp; is_array( $commentdata['comment_meta'] ) ) {
+		foreach ( $commentdata['comment_meta'] as $meta_key =&gt; $meta_value ) {
+			add_comment_meta( $comment-&gt;comment_ID, $meta_key, $meta_value, true );
+		}
+	}
+
+	/**
+	 * Fires immediately after a comment is inserted into the database.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param int        $id      The comment ID.
+	 * @param WP_Comment $comment Comment object.
+	 */
+	do_action( 'wp_insert_comment', $id, $comment );
+
+	return $id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment.php#L2013">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment.php#L2013-L2094">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_insert_comment"><span class="hook-func">do_action</span>( ‘wp_insert_comment’, <nobr><span class="arg-type">int</span> <span class="arg-name">$id</span></nobr>, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a comment is inserted into the database.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">Default value for <code>$comment_type</code> argument changed to <code>comment</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Introduced the <code>$comment_meta</code> argument.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.0.0/">2.0.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_insert_comment" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_insert_comment</a>
+  </p>
+</div>

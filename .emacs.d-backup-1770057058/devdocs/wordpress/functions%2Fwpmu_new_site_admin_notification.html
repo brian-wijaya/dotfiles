@@ -1,0 +1,133 @@
+<h1 class="wp-block-wporg-code-reference-title">wpmu_new_site_admin_notification( <span class="arg-type">int</span> <span class="arg-name">$site_id</span>, <span class="arg-type">int</span> <span class="arg-name">$user_id</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Notifies the Multisite network administrator that a new site was created.</p> </section> <section><h2 id="description">Description</h2> <p>Filter <a href="../hooks/send_new_site_email">‘send_new_site_email’</a> to disable or bypass.</p> <p>Filter <a href="../hooks/new_site_email">‘new_site_email’</a> to filter the contents.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$site_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Site ID of the new site.</span></div></dd>
+<dt>
+<code>$user_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">User ID of the administrator of the new site.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> Whether the email notification was sent.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1715" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wpmu_new_site_admin_notification( $site_id, $user_id ) {
+	$site  = get_site( $site_id );
+	$user  = get_userdata( $user_id );
+	$email = get_site_option( 'admin_email' );
+
+	if ( ! $site || ! $user || ! $email ) {
+		return false;
+	}
+
+	/**
+	 * Filters whether to send an email to the Multisite network administrator when a new site is created.
+	 *
+	 * Return false to disable sending the email.
+	 *
+	 * @since 5.6.0
+	 *
+	 * @param bool    $send Whether to send the email.
+	 * @param WP_Site $site Site object of the new site.
+	 * @param WP_User $user User object of the administrator of the new site.
+	 */
+	if ( ! apply_filters( 'send_new_site_email', true, $site, $user ) ) {
+		return false;
+	}
+
+	$switched_locale = false;
+	$network_admin   = get_user_by( 'email', $email );
+
+	if ( $network_admin ) {
+		// If the network admin email address corresponds to a user, switch to their locale.
+		$switched_locale = switch_to_user_locale( $network_admin-&gt;ID );
+	} else {
+		// Otherwise switch to the locale of the current site.
+		$switched_locale = switch_to_locale( get_locale() );
+	}
+
+	$subject = sprintf(
+		/* translators: New site notification email subject. %s: Network title. */
+		__( '[%s] New Site Created' ),
+		get_network()-&gt;site_name
+	);
+
+	$message = sprintf(
+		/* translators: New site notification email. 1: User login, 2: Site URL, 3: Site title. */
+		__(
+			'New site created by %1$s
+
+Address: %2$s
+Name: %3$s'
+		),
+		$user-&gt;user_login,
+		get_site_url( $site-&gt;id ),
+		get_blog_option( $site-&gt;id, 'blogname' )
+	);
+
+	$header = sprintf(
+		'From: "%1$s" &lt;%2$s&gt;',
+		_x( 'Site Admin', 'email "From" field' ),
+		$email
+	);
+
+	$new_site_email = array(
+		'to'      =&gt; $email,
+		'subject' =&gt; $subject,
+		'message' =&gt; $message,
+		'headers' =&gt; $header,
+	);
+
+	/**
+	 * Filters the content of the email sent to the Multisite network administrator when a new site is created.
+	 *
+	 * Content should be formatted for transmission via wp_mail().
+	 *
+	 * @since 5.6.0
+	 *
+	 * @param array $new_site_email {
+	 *     Used to build wp_mail().
+	 *
+	 *     @type string $to      The email address of the recipient.
+	 *     @type string $subject The subject of the email.
+	 *     @type string $message The content of the email.
+	 *     @type string $headers Headers.
+	 * }
+	 * @param WP_Site $site         Site object of the new site.
+	 * @param WP_User $user         User object of the administrator of the new site.
+	 */
+	$new_site_email = apply_filters( 'new_site_email', $new_site_email, $site, $user );
+
+	wp_mail(
+		$new_site_email['to'],
+		wp_specialchars_decode( $new_site_email['subject'] ),
+		$new_site_email['message'],
+		$new_site_email['headers']
+	);
+
+	if ( $switched_locale ) {
+		restore_previous_locale();
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-functions.php#L1715">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-functions.php#L1715-L1814">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/new_site_email"><span class="hook-func">apply_filters</span>( ‘new_site_email’, <nobr><span class="arg-type">array</span> <span class="arg-name">$new_site_email</span></nobr>, <nobr><span class="arg-type">WP_Site</span> <span class="arg-name">$site</span></nobr>, <nobr><span class="arg-type">WP_User</span> <span class="arg-name">$user</span></nobr> )</a></dt>
+<dd>
+<p>Filters the content of the email sent to the Multisite network administrator when a new site is created.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/send_new_site_email"><span class="hook-func">apply_filters</span>( ‘send_new_site_email’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$send</span></nobr>, <nobr><span class="arg-type">WP_Site</span> <span class="arg-name">$site</span></nobr>, <nobr><span class="arg-type">WP_User</span> <span class="arg-name">$user</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to send an email to the Multisite network administrator when a new site is created.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wpmu_new_site_admin_notification" class="_attribution-link">https://developer.wordpress.org/reference/functions/wpmu_new_site_admin_notification</a>
+  </p>
+</div>

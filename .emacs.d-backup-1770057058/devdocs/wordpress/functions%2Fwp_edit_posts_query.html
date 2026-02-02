@@ -1,0 +1,126 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_edit_posts_query( <span class="arg-type">array|false</span> <span class="arg-name">$q</span> = <span class="arg-default">false</span> ): <span class="return-type">array</span>
+</h1> <section><p>Runs the query to fetch the posts for listing on the edit posts page.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$q</code><span class="type"><span class="array">array</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of query variables to use to build the query.<br> Defaults to the <code>$_GET</code> superglobal.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1216" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_edit_posts_query( $q = false ) {
+	if ( false === $q ) {
+		$q = $_GET;
+	}
+
+	$q['m']   = isset( $q['m'] ) ? (int) $q['m'] : 0;
+	$q['cat'] = isset( $q['cat'] ) ? (int) $q['cat'] : 0;
+
+	$post_statuses = get_post_stati();
+
+	if ( isset( $q['post_type'] ) &amp;&amp; in_array( $q['post_type'], get_post_types(), true ) ) {
+		$post_type = $q['post_type'];
+	} else {
+		$post_type = 'post';
+	}
+
+	$avail_post_stati = get_available_post_statuses( $post_type );
+	$post_status      = '';
+	$perm             = '';
+
+	if ( isset( $q['post_status'] ) &amp;&amp; in_array( $q['post_status'], $post_statuses, true ) ) {
+		$post_status = $q['post_status'];
+		$perm        = 'readable';
+	}
+
+	$orderby = '';
+
+	if ( isset( $q['orderby'] ) ) {
+		$orderby = $q['orderby'];
+	} elseif ( isset( $q['post_status'] ) &amp;&amp; in_array( $q['post_status'], array( 'pending', 'draft' ), true ) ) {
+		$orderby = 'modified';
+	}
+
+	$order = '';
+
+	if ( isset( $q['order'] ) ) {
+		$order = $q['order'];
+	} elseif ( isset( $q['post_status'] ) &amp;&amp; 'pending' === $q['post_status'] ) {
+		$order = 'ASC';
+	}
+
+	$per_page       = "edit_{$post_type}_per_page";
+	$posts_per_page = (int) get_user_option( $per_page );
+	if ( empty( $posts_per_page ) || $posts_per_page &lt; 1 ) {
+		$posts_per_page = 20;
+	}
+
+	/**
+	 * Filters the number of items per page to show for a specific 'per_page' type.
+	 *
+	 * The dynamic portion of the hook name, `$post_type`, refers to the post type.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `edit_post_per_page`
+	 *  - `edit_page_per_page`
+	 *  - `edit_attachment_per_page`
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param int $posts_per_page Number of posts to display per page for the given post
+	 *                            type. Default 20.
+	 */
+	$posts_per_page = apply_filters( "edit_{$post_type}_per_page", $posts_per_page );
+
+	/**
+	 * Filters the number of posts displayed per page when specifically listing "posts".
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param int    $posts_per_page Number of posts to be displayed. Default 20.
+	 * @param string $post_type      The post type.
+	 */
+	$posts_per_page = apply_filters( 'edit_posts_per_page', $posts_per_page, $post_type );
+
+	$query = compact( 'post_type', 'post_status', 'perm', 'order', 'orderby', 'posts_per_page' );
+
+	// Hierarchical types require special args.
+	if ( is_post_type_hierarchical( $post_type ) &amp;&amp; empty( $orderby ) ) {
+		$query['orderby']                = 'menu_order title';
+		$query['order']                  = 'asc';
+		$query['posts_per_page']         = -1;
+		$query['posts_per_archive_page'] = -1;
+		$query['fields']                 = 'id=&gt;parent';
+	}
+
+	if ( ! empty( $q['show_sticky'] ) ) {
+		$query['post__in'] = (array) get_option( 'sticky_posts' );
+	}
+
+	wp( $query );
+
+	return $avail_post_stati;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/post.php#L1216">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/post.php#L1216-L1309">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/edit_posts_per_page"><span class="hook-func">apply_filters</span>( ‘edit_posts_per_page’, <nobr><span class="arg-type">int</span> <span class="arg-name">$posts_per_page</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters the number of posts displayed per page when specifically listing “posts”.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/edit_post_type_per_page"><span class="hook-func">apply_filters</span>( “edit_{$post_type}_per_page”, <nobr><span class="arg-type">int</span> <span class="arg-name">$posts_per_page</span></nobr> )</a></dt>
+<dd>
+<p>Filters the number of items per page to show for a specific ‘per_page’ type.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_edit_posts_query" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_edit_posts_query</a>
+  </p>
+</div>

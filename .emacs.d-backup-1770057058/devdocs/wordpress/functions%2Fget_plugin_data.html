@@ -1,0 +1,148 @@
+<h1 class="wp-block-wporg-code-reference-title">get_plugin_data( <span class="arg-type">string</span> <span class="arg-name">$plugin_file</span>, <span class="arg-type">bool</span> <span class="arg-name">$markup</span> = <span class="arg-default">true</span>, <span class="arg-type">bool</span> <span class="arg-name">$translate</span> = <span class="arg-default">true</span> ): <span class="return-type">array</span>
+</h1> <section><p>Parses the plugin contents to retrieve plugin’s metadata.</p> </section> <section><h2 id="description">Description</h2> <p>All plugin headers must be on their own line. Plugin description must not have any newlines, otherwise only parts of the description will be displayed.<br>The below is formatted for printing.</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php line-numbers">/*
+Plugin Name: Name of the plugin.
+Plugin URI: The home page of the plugin.
+Description: Plugin description.
+Author: Plugin author's name.
+Author URI: Link to the author's website.
+Version: Plugin version.
+Text Domain: Optional. Unique identifier, should be same as the one used in
+     load_plugin_textdomain().
+Domain Path: Optional. Only useful if the translations are located in a
+     folder above the plugin's base path. For example, if .mo files are
+     located in the locale folder then Domain Path will be "/locale/" and
+     must have the first slash. Defaults to the base folder the plugin is
+     located in.
+Network: Optional. Specify "Network: true" to require that a plugin is activated
+     across all sites in an installation. This will prevent a plugin from being
+     activated on a single site when Multisite is enabled.
+Requires at least: Optional. Specify the minimum required WordPress version.
+Requires PHP: Optional. Specify the minimum required PHP version.
+* / # Remove the space to close comment.</code></pre> <p>The first 8 KB of the file will be pulled in and if the plugin data is not within that first 8 KB, then the plugin author should correct their plugin and move the plugin data headers to the top.</p> <p>The plugin file is assumed to have permissions to allow for scripts to read the file. This is not checked however and the file is only opened for reading.</p></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$plugin_file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Absolute path to the main plugin file.</span></div></dd>
+<dt>
+<code>$markup</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">If the returned data should have HTML markup applied.<br> </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+<dt>
+<code>$translate</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">If the returned data should be translated. </span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Plugin data. Values will be empty if not supplied by the plugin.<br> <ul class="param-hash">
+<li>
+<code>Name</code> <span class="type">string</span><div class="desc">Name of the plugin. Should be unique.</div>
+</li> <li>
+<code>PluginURI</code> <span class="type">string</span><div class="desc">Plugin URI.</div>
+</li> <li>
+<code>Version</code> <span class="type">string</span><div class="desc">Plugin version.</div>
+</li> <li>
+<code>Description</code> <span class="type">string</span><div class="desc">Plugin description.</div>
+</li> <li>
+<code>Author</code> <span class="type">string</span><div class="desc">Plugin author’s name.</div>
+</li> <li>
+<code>AuthorURI</code> <span class="type">string</span><div class="desc">Plugin author’s website address (if set).</div>
+</li> <li>
+<code>TextDomain</code> <span class="type">string</span><div class="desc">Plugin textdomain.</div>
+</li> <li>
+<code>DomainPath</code> <span class="type">string</span><div class="desc">Plugin’s relative directory path to .mo files.</div>
+</li> <li>
+<code>Network</code> <span class="type">bool</span><div class="desc">Whether the plugin can only be activated network-wide.</div>
+</li> <li>
+<code>RequiresWP</code> <span class="type">string</span><div class="desc">Minimum required version of WordPress.</div>
+</li> <li>
+<code>RequiresPHP</code> <span class="type">string</span><div class="desc">Minimum required version of PHP.</div>
+</li> <li>
+<code>UpdateURI</code> <span class="type">string</span><div class="desc">ID of the plugin for update purposes, should be a URI.</div>
+</li> <li>
+<code>RequiresPlugins</code> <span class="type">string</span><div class="desc">Comma separated list of dot org plugin slugs.</div>
+</li> <li>
+<code>Title</code> <span class="type">string</span><div class="desc">Title of the plugin and link to the plugin’s site (if set).</div>
+</li> <li>
+<code>AuthorName</code> <span class="type">string</span><div class="desc">Plugin author’s name.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="74" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_plugin_data( $plugin_file, $markup = true, $translate = true ) {
+
+	$default_headers = array(
+		'Name'            =&gt; 'Plugin Name',
+		'PluginURI'       =&gt; 'Plugin URI',
+		'Version'         =&gt; 'Version',
+		'Description'     =&gt; 'Description',
+		'Author'          =&gt; 'Author',
+		'AuthorURI'       =&gt; 'Author URI',
+		'TextDomain'      =&gt; 'Text Domain',
+		'DomainPath'      =&gt; 'Domain Path',
+		'Network'         =&gt; 'Network',
+		'RequiresWP'      =&gt; 'Requires at least',
+		'RequiresPHP'     =&gt; 'Requires PHP',
+		'UpdateURI'       =&gt; 'Update URI',
+		'RequiresPlugins' =&gt; 'Requires Plugins',
+		// Site Wide Only is deprecated in favor of Network.
+		'_sitewide'       =&gt; 'Site Wide Only',
+	);
+
+	$plugin_data = get_file_data( $plugin_file, $default_headers, 'plugin' );
+
+	// Site Wide Only is the old header for Network.
+	if ( ! $plugin_data['Network'] &amp;&amp; $plugin_data['_sitewide'] ) {
+		/* translators: 1: Site Wide Only: true, 2: Network: true */
+		_deprecated_argument( __FUNCTION__, '3.0.0', sprintf( __( 'The %1$s plugin header is deprecated. Use %2$s instead.' ), '&lt;code&gt;Site Wide Only: true&lt;/code&gt;', '&lt;code&gt;Network: true&lt;/code&gt;' ) );
+		$plugin_data['Network'] = $plugin_data['_sitewide'];
+	}
+	$plugin_data['Network'] = ( 'true' === strtolower( $plugin_data['Network'] ) );
+	unset( $plugin_data['_sitewide'] );
+
+	// If no text domain is defined fall back to the plugin slug.
+	if ( ! $plugin_data['TextDomain'] ) {
+		$plugin_slug = dirname( plugin_basename( $plugin_file ) );
+		if ( '.' !== $plugin_slug &amp;&amp; ! str_contains( $plugin_slug, '/' ) ) {
+			$plugin_data['TextDomain'] = $plugin_slug;
+		}
+	}
+
+	if ( $markup || $translate ) {
+		$plugin_data = _get_plugin_data_markup_translate( $plugin_file, $plugin_data, $markup, $translate );
+	} else {
+		$plugin_data['Title']      = $plugin_data['Name'];
+		$plugin_data['AuthorName'] = $plugin_data['Author'];
+	}
+
+	return $plugin_data;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/plugin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/plugin.php#L74">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/plugin.php#L74-L121">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.5.0/">6.5.0</a></td>
+<td><span class="since-description">Added support for <code>Requires Plugins</code> header.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td><span class="since-description">Added support for <code>Update URI</code> header.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">Added support for <code>Requires at least</code> and <code>Requires PHP</code> headers.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_plugin_data" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_plugin_data</a>
+  </p>
+</div>

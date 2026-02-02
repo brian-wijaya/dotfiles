@@ -1,0 +1,71 @@
+<h1 class="wp-block-wporg-code-reference-title">do_shortcode( <span class="arg-type">string</span> <span class="arg-name">$content</span>, <span class="arg-type">bool</span> <span class="arg-name">$ignore_html</span> = <span class="arg-default">false</span> ): <span class="return-type">string</span>
+</h1> <section><p>Searches content for shortcodes and filter shortcodes through their hooks.</p> </section> <section><h2 id="description">Description</h2> <p>If there are no shortcode tags defined, then the content will be returned without any filtering. This might cause issues when plugins are disabled but the shortcode will still show up in the post or content.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$content</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Content to search for shortcodes.</span></div></dd>
+<dt>
+<code>$ignore_html</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">When true, shortcodes inside HTML elements will be skipped.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Content with shortcodes filtered out.</section> <section><h2 id="more-information">More Information</h2> <p>If there are no shortcode tags defined, then the content will be returned without any filtering. This might cause issues if a plugin is disabled as its shortcode will still show up in the post or content.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="243" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function do_shortcode( $content, $ignore_html = false ) {
+	global $shortcode_tags;
+
+	if ( ! str_contains( $content, '[' ) ) {
+		return $content;
+	}
+
+	if ( empty( $shortcode_tags ) || ! is_array( $shortcode_tags ) ) {
+		return $content;
+	}
+
+	// Find all registered tag names in $content.
+	preg_match_all( '@\[([^&lt;&gt;&amp;/\[\]\x00-\x20=]++)@', $content, $matches );
+	$tagnames = array_intersect( array_keys( $shortcode_tags ), $matches[1] );
+
+	if ( empty( $tagnames ) ) {
+		return $content;
+	}
+
+	// Ensure this context is only added once if shortcodes are nested.
+	$has_filter   = has_filter( 'wp_get_attachment_image_context', '_filter_do_shortcode_context' );
+	$filter_added = false;
+
+	if ( ! $has_filter ) {
+		$filter_added = add_filter( 'wp_get_attachment_image_context', '_filter_do_shortcode_context' );
+	}
+
+	$content = do_shortcodes_in_html_tags( $content, $ignore_html, $tagnames );
+
+	$pattern = get_shortcode_regex( $tagnames );
+	$content = preg_replace_callback( "/$pattern/", 'do_shortcode_tag', $content );
+
+	// Always restore square braces so we don't break things like &lt;!--[if IE ]&gt;.
+	$content = unescape_invalid_shortcodes( $content );
+
+	// Only remove the filter if it was added in this scope.
+	if ( $filter_added ) {
+		remove_filter( 'wp_get_attachment_image_context', '_filter_do_shortcode_context' );
+	}
+
+	return $content;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/shortcodes.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/shortcodes.php#L243">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/shortcodes.php#L243-L284">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/do_shortcode" class="_attribution-link">https://developer.wordpress.org/reference/functions/do_shortcode</a>
+  </p>
+</div>

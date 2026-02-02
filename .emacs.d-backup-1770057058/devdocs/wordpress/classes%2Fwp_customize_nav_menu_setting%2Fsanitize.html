@@ -1,0 +1,58 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Nav_Menu_Setting::sanitize( <span class="arg-type">array</span> <span class="arg-name">$value</span> ): <span class="return-type">array|false|null</span>
+</h1> <section><p>Sanitize an input.</p> </section> <section><h2 id="description">Description</h2> <p>Note that parent::sanitize() erroneously does <a href="../../functions/wp_unslash" rel="function">wp_unslash()</a> on $value, but we remove that in this override.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$value</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The menu value to sanitize.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false|null</span> Null if an input isn’t valid. False if it is marked for deletion.<br> Otherwise the sanitized value.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="414" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function sanitize( $value ) {
+	// Menu is marked for deletion.
+	if ( false === $value ) {
+		return $value;
+	}
+
+	// Invalid.
+	if ( ! is_array( $value ) ) {
+		return null;
+	}
+
+	$default = array(
+		'name'        =&gt; '',
+		'description' =&gt; '',
+		'parent'      =&gt; 0,
+		'auto_add'    =&gt; false,
+	);
+	$value   = array_merge( $default, $value );
+	$value   = wp_array_slice_assoc( $value, array_keys( $default ) );
+
+	$value['name']        = trim( esc_html( $value['name'] ) ); // This sanitization code is used in wp-admin/nav-menus.php.
+	$value['description'] = sanitize_text_field( $value['description'] );
+	$value['parent']      = max( 0, (int) $value['parent'] );
+	$value['auto_add']    = ! empty( $value['auto_add'] );
+
+	if ( '' === $value['name'] ) {
+		$value['name'] = _x( '(unnamed)', 'Missing menu name.' );
+	}
+
+	/** This filter is documented in wp-includes/class-wp-customize-setting.php */
+	return apply_filters( "customize_sanitize_{$this-&gt;id}", $value, $this );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/customize/class-wp-customize-nav-menu-setting.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/customize/class-wp-customize-nav-menu-setting.php#L414">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/customize/class-wp-customize-nav-menu-setting.php#L414-L445">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/customize_sanitize_this-id"><span class="hook-func">apply_filters</span>( “customize_sanitize_{$this-&gt;id}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">WP_Customize_Setting</span> <span class="arg-name">$setting</span></nobr> )</a></dt>
+<dd>
+<p>Filters a Customize setting value in un-slashed form.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.3.0/">4.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_nav_menu_setting/sanitize" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_nav_menu_setting/sanitize</a>
+  </p>
+</div>

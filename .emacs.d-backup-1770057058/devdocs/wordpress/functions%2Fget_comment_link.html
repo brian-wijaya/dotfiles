@@ -1,0 +1,154 @@
+<h1 class="wp-block-wporg-code-reference-title">get_comment_link( <span class="arg-type">WP_Comment|int|null</span> <span class="arg-name">$comment</span> = <span class="arg-default">null</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">string</span>
+</h1> <section><p>Retrieves the link to a given comment.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="get_page_of_comment">get_page_of_comment()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$comment</code><span class="type"><span class="WP_Comment"><a href="../classes/wp_comment" rel="class">WP_Comment</a></span>|<span class="int">int</span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Comment to retrieve. Default current comment.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc">
+<span class="description">An array of optional arguments to override the defaults.<br> <ul class="param-hash">
+<li>
+<code>type</code> <span class="type">string</span><div class="desc">Passed to <a href="get_page_of_comment" rel="function">get_page_of_comment()</a> .</div>
+</li> <li>
+<code>page</code> <span class="type">int</span><div class="desc">Current page of comments, for calculating comment pagination.</div>
+</li> <li>
+<code>per_page</code> <span class="type">int</span><div class="desc">Per-page value for comment pagination.</div>
+</li> <li>
+<code>max_depth</code> <span class="type">int</span><div class="desc">Passed to <a href="get_page_of_comment" rel="function">get_page_of_comment()</a> .</div>
+</li> <li>
+<code>cpage</code> <span class="type">int|string</span><div class="desc">Value to use for the comment’s "comment-page" or "cpage" value.<br> If provided, this value overrides any value calculated from <code>$page</code> and <code>$per_page</code>.</div>
+</li> </ul> </span><details class="extended-description"><summary>More Arguments from get_page_of_comment( … $args )</summary><span class="description">Array of optional arguments.<br> <ul class="param-hash">
+<li>
+<code>type</code> <span class="type">string</span><div class="desc">Limit paginated comments to those matching a given type.<br> Accepts <code>'comment'</code>, <code>'trackback'</code>, <code>'pingback'</code>, <code>'pings'</code> (trackbacks and pingbacks), or <code>'all'</code>. Default <code>'all'</code>.</div>
+</li> <li>
+<code>per_page</code> <span class="type">int</span><div class="desc">Per-page count to use when calculating pagination.<br> Defaults to the value of the <code>'comments_per_page'</code> option.</div>
+</li> <li>
+<code>max_depth</code> <span class="type">int|string</span><div class="desc">If greater than 1, comment page will be determined for the top-level parent <code>$comment_id</code>.<br> Defaults to the value of the <code>'thread_comments_depth'</code> option.</div>
+</li> </ul> </span></details>
+</div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The permalink to the given comment.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="778" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_comment_link( $comment = null, $args = array() ) {
+	global $wp_rewrite, $in_comment_loop;
+
+	$comment = get_comment( $comment );
+
+	// Back-compat.
+	if ( ! is_array( $args ) ) {
+		$args = array( 'page' =&gt; $args );
+	}
+
+	$defaults = array(
+		'type'      =&gt; 'all',
+		'page'      =&gt; '',
+		'per_page'  =&gt; '',
+		'max_depth' =&gt; '',
+		'cpage'     =&gt; null,
+	);
+
+	$args = wp_parse_args( $args, $defaults );
+
+	$comment_link = get_permalink( $comment-&gt;comment_post_ID );
+
+	// The 'cpage' param takes precedence.
+	if ( ! is_null( $args['cpage'] ) ) {
+		$cpage = $args['cpage'];
+
+		// No 'cpage' is provided, so we calculate one.
+	} else {
+		if ( '' === $args['per_page'] &amp;&amp; get_option( 'page_comments' ) ) {
+			$args['per_page'] = get_option( 'comments_per_page' );
+		}
+
+		if ( empty( $args['per_page'] ) ) {
+			$args['per_page'] = 0;
+			$args['page']     = 0;
+		}
+
+		$cpage = $args['page'];
+
+		if ( '' === $cpage ) {
+			if ( ! empty( $in_comment_loop ) ) {
+				$cpage = (int) get_query_var( 'cpage' );
+			} else {
+				// Requires a database hit, so we only do it when we can't figure out from context.
+				$cpage = get_page_of_comment( $comment-&gt;comment_ID, $args );
+			}
+		}
+
+		/*
+		 * If the default page displays the oldest comments, the permalinks for comments on the default page
+		 * do not need a 'cpage' query var.
+		 */
+		if ( 'oldest' === get_option( 'default_comments_page' ) &amp;&amp; 1 === $cpage ) {
+			$cpage = '';
+		}
+	}
+
+	if ( $cpage &amp;&amp; get_option( 'page_comments' ) ) {
+		if ( $wp_rewrite-&gt;using_permalinks() ) {
+			if ( $cpage ) {
+				$comment_link = trailingslashit( $comment_link ) . $wp_rewrite-&gt;comments_pagination_base . '-' . $cpage;
+			}
+
+			$comment_link = user_trailingslashit( $comment_link, 'comment' );
+		} elseif ( $cpage ) {
+			$comment_link = add_query_arg( 'cpage', $cpage, $comment_link );
+		}
+	}
+
+	if ( $wp_rewrite-&gt;using_permalinks() ) {
+		$comment_link = user_trailingslashit( $comment_link, 'comment' );
+	}
+
+	$comment_link = $comment_link . '#comment-' . $comment-&gt;comment_ID;
+
+	/**
+	 * Filters the returned single comment permalink.
+	 *
+	 * @since 2.8.0
+	 * @since 4.4.0 Added the `$cpage` parameter.
+	 *
+	 * @see get_page_of_comment()
+	 *
+	 * @param string     $comment_link The comment permalink with '#comment-$id' appended.
+	 * @param WP_Comment $comment      The current comment object.
+	 * @param array      $args         An array of arguments to override the defaults.
+	 * @param int        $cpage        The calculated 'cpage' value.
+	 */
+	return apply_filters( 'get_comment_link', $comment_link, $comment, $args, $cpage );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment-template.php#L778">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment-template.php#L778-L867">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_comment_link"><span class="hook-func">apply_filters</span>( ‘get_comment_link’, <nobr><span class="arg-type">string</span> <span class="arg-name">$comment_link</span></nobr>, <nobr><span class="arg-type">WP_Comment</span> <span class="arg-name">$comment</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$cpage</span></nobr> )</a></dt>
+<dd>
+<p>Filters the returned single comment permalink.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Added the ability for <code>$comment</code> to also accept a <a href="../classes/wp_comment" rel="class">WP_Comment</a> object. Added <code>$cpage</code> argument.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_comment_link" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_comment_link</a>
+  </p>
+</div>

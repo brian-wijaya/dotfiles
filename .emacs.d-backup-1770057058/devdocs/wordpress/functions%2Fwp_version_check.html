@@ -1,0 +1,312 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_version_check( <span class="arg-type">array</span> <span class="arg-name">$extra_stats</span> = <span class="arg-default">array()</span>, <span class="arg-type">bool</span> <span class="arg-name">$force_check</span> = <span class="arg-default">false</span> )</h1> <section><p>Checks WordPress version against the newest version.</p> </section> <section><h2 id="description">Description</h2> <p>The WordPress version, PHP version, and locale is sent.</p> <p>Checks against the WordPress server at api.wordpress.org. Will only check if WordPress isn’t installing.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$extra_stats</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Extra statistics to report to the WordPress.org API.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$force_check</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to bypass the transient cache and force a fresh update check.<br> Defaults to false, true if $extra_stats is set.</span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="27" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_version_check( $extra_stats = array(), $force_check = false ) {
+	global $wpdb, $wp_local_package;
+
+	if ( wp_installing() ) {
+		return;
+	}
+
+	$php_version = PHP_VERSION;
+
+	$current      = get_site_transient( 'update_core' );
+	$translations = wp_get_installed_translations( 'core' );
+
+	// Invalidate the transient when $wp_version changes.
+	if ( is_object( $current ) &amp;&amp; wp_get_wp_version() !== $current-&gt;version_checked ) {
+		$current = false;
+	}
+
+	if ( ! is_object( $current ) ) {
+		$current                  = new stdClass();
+		$current-&gt;updates         = array();
+		$current-&gt;version_checked = wp_get_wp_version();
+	}
+
+	if ( ! empty( $extra_stats ) ) {
+		$force_check = true;
+	}
+
+	// Wait 1 minute between multiple version check requests.
+	$timeout          = MINUTE_IN_SECONDS;
+	$time_not_changed = isset( $current-&gt;last_checked ) &amp;&amp; $timeout &gt; ( time() - $current-&gt;last_checked );
+
+	if ( ! $force_check &amp;&amp; $time_not_changed ) {
+		return;
+	}
+
+	/**
+	 * Filters the locale requested for WordPress core translations.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param string $locale Current locale.
+	 */
+	$locale = apply_filters( 'core_version_check_locale', get_locale() );
+
+	// Update last_checked for current to prevent multiple blocking requests if request hangs.
+	$current-&gt;last_checked = time();
+	set_site_transient( 'update_core', $current );
+
+	if ( method_exists( $wpdb, 'db_server_info' ) ) {
+		$mysql_version = $wpdb-&gt;db_server_info();
+	} elseif ( method_exists( $wpdb, 'db_version' ) ) {
+		$mysql_version = preg_replace( '/[^0-9.].*/', '', $wpdb-&gt;db_version() );
+	} else {
+		$mysql_version = 'N/A';
+	}
+
+	if ( is_multisite() ) {
+		$num_blogs         = get_blog_count();
+		$wp_install        = network_site_url();
+		$multisite_enabled = 1;
+	} else {
+		$multisite_enabled = 0;
+		$num_blogs         = 1;
+		$wp_install        = home_url( '/' );
+	}
+
+	$extensions = get_loaded_extensions();
+	sort( $extensions, SORT_STRING | SORT_FLAG_CASE );
+	$query = array(
+		'version'            =&gt; wp_get_wp_version(),
+		'php'                =&gt; $php_version,
+		'locale'             =&gt; $locale,
+		'mysql'              =&gt; $mysql_version,
+		'local_package'      =&gt; isset( $wp_local_package ) ? $wp_local_package : '',
+		'blogs'              =&gt; $num_blogs,
+		'users'              =&gt; get_user_count(),
+		'multisite_enabled'  =&gt; $multisite_enabled,
+		'initial_db_version' =&gt; get_site_option( 'initial_db_version' ),
+		'extensions'         =&gt; array_combine( $extensions, array_map( 'phpversion', $extensions ) ),
+		'platform_flags'     =&gt; array(
+			'os'   =&gt; PHP_OS,
+			'bits' =&gt; PHP_INT_SIZE === 4 ? 32 : 64,
+		),
+		'image_support'      =&gt; array(),
+	);
+
+	if ( function_exists( 'gd_info' ) ) {
+		$gd_info = gd_info();
+		// Filter to supported values.
+		$gd_info = array_filter( $gd_info );
+
+		// Add data for GD WebP, AVIF, HEIC and JPEG XL support.
+		$query['image_support']['gd'] = array_keys(
+			array_filter(
+				array(
+					'webp' =&gt; isset( $gd_info['WebP Support'] ),
+					'avif' =&gt; isset( $gd_info['AVIF Support'] ),
+					'heic' =&gt; isset( $gd_info['HEIC Support'] ),
+					'jxl'  =&gt; isset( $gd_info['JXL Support'] ),
+				)
+			)
+		);
+	}
+
+	if ( class_exists( 'Imagick' ) ) {
+		// Add data for Imagick WebP, AVIF, HEIC and JPEG XL support.
+		$query['image_support']['imagick'] = array_keys(
+			array_filter(
+				array(
+					'webp' =&gt; ! empty( Imagick::queryFormats( 'WEBP' ) ),
+					'avif' =&gt; ! empty( Imagick::queryFormats( 'AVIF' ) ),
+					'heic' =&gt; ! empty( Imagick::queryFormats( 'HEIC' ) ),
+					'jxl'  =&gt; ! empty( Imagick::queryFormats( 'JXL' ) ),
+				)
+			)
+		);
+	}
+
+	/**
+	 * Filters the query arguments sent as part of the core version check.
+	 *
+	 * WARNING: Changing this data may result in your site not receiving security updates.
+	 * Please exercise extreme caution.
+	 *
+	 * @since 4.9.0
+	 *
+	 * @param array $query {
+	 *     Version check query arguments.
+	 *
+	 *     @type string $version            WordPress version number.
+	 *     @type string $php                PHP version number.
+	 *     @type string $locale             The locale to retrieve updates for.
+	 *     @type string $mysql              MySQL version number.
+	 *     @type string $local_package      The value of the $wp_local_package global, when set.
+	 *     @type int    $blogs              Number of sites on this WordPress installation.
+	 *     @type int    $users              Number of users on this WordPress installation.
+	 *     @type int    $multisite_enabled  Whether this WordPress installation uses Multisite.
+	 *     @type int    $initial_db_version Database version of WordPress at time of installation.
+	 * }
+	 */
+	$query = apply_filters( 'core_version_check_query_args', $query );
+
+	$post_body = array(
+		'translations' =&gt; wp_json_encode( $translations ),
+	);
+
+	if ( is_array( $extra_stats ) ) {
+		$post_body = array_merge( $post_body, $extra_stats );
+	}
+
+	// Allow for WP_AUTO_UPDATE_CORE to specify beta/RC/development releases.
+	if ( defined( 'WP_AUTO_UPDATE_CORE' )
+		&amp;&amp; in_array( WP_AUTO_UPDATE_CORE, array( 'beta', 'rc', 'development', 'branch-development' ), true )
+	) {
+		$query['channel'] = WP_AUTO_UPDATE_CORE;
+	}
+
+	$url      = 'https://api.wordpress.org/core/version-check/1.7/?' . http_build_query( $query, '', '&amp;' );
+	$http_url = $url;
+	$ssl      = wp_http_supports( array( 'ssl' ) );
+
+	if ( $ssl ) {
+		$url = set_url_scheme( $url, 'https' );
+	}
+
+	$doing_cron = wp_doing_cron();
+
+	$options = array(
+		'timeout'    =&gt; $doing_cron ? 30 : 3,
+		'user-agent' =&gt; 'WordPress/' . wp_get_wp_version() . '; ' . home_url( '/' ),
+		'headers'    =&gt; array(
+			'wp_install' =&gt; $wp_install,
+			'wp_blog'    =&gt; home_url( '/' ),
+		),
+		'body'       =&gt; $post_body,
+	);
+
+	$response = wp_remote_post( $url, $options );
+
+	if ( $ssl &amp;&amp; is_wp_error( $response ) ) {
+		wp_trigger_error(
+			__FUNCTION__,
+			sprintf(
+				/* translators: %s: Support forums URL. */
+				__( 'An unexpected error occurred. Something may be wrong with WordPress.org or this server&amp;#8217;s configuration. If you continue to have problems, please try the &lt;a href="%s"&gt;support forums&lt;/a&gt;.' ),
+				__( 'https://wordpress.org/support/forums/' )
+			) . ' ' . __( '(WordPress could not establish a secure connection to WordPress.org. Please contact your server administrator.)' ),
+			headers_sent() || WP_DEBUG ? E_USER_WARNING : E_USER_NOTICE
+		);
+		$response = wp_remote_post( $http_url, $options );
+	}
+
+	if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+		return;
+	}
+
+	$body = trim( wp_remote_retrieve_body( $response ) );
+	$body = json_decode( $body, true );
+
+	if ( ! is_array( $body ) || ! isset( $body['offers'] ) ) {
+		return;
+	}
+
+	$offers = $body['offers'];
+
+	foreach ( $offers as &amp;$offer ) {
+		foreach ( $offer as $offer_key =&gt; $value ) {
+			if ( 'packages' === $offer_key ) {
+				$offer['packages'] = (object) array_intersect_key(
+					array_map( 'esc_url', $offer['packages'] ),
+					array_fill_keys( array( 'full', 'no_content', 'new_bundled', 'partial', 'rollback' ), '' )
+				);
+			} elseif ( 'download' === $offer_key ) {
+				$offer['download'] = esc_url( $value );
+			} else {
+				$offer[ $offer_key ] = esc_html( $value );
+			}
+		}
+		$offer = (object) array_intersect_key(
+			$offer,
+			array_fill_keys(
+				array(
+					'response',
+					'download',
+					'locale',
+					'packages',
+					'current',
+					'version',
+					'php_version',
+					'mysql_version',
+					'new_bundled',
+					'partial_version',
+					'notify_email',
+					'support_email',
+					'new_files',
+				),
+				''
+			)
+		);
+	}
+
+	$updates                  = new stdClass();
+	$updates-&gt;updates         = $offers;
+	$updates-&gt;last_checked    = time();
+	$updates-&gt;version_checked = wp_get_wp_version();
+
+	if ( isset( $body['translations'] ) ) {
+		$updates-&gt;translations = $body['translations'];
+	}
+
+	set_site_transient( 'update_core', $updates );
+
+	if ( ! empty( $body['ttl'] ) ) {
+		$ttl = (int) $body['ttl'];
+
+		if ( $ttl &amp;&amp; ( time() + $ttl &lt; wp_next_scheduled( 'wp_version_check' ) ) ) {
+			// Queue an event to re-run the update check in $ttl seconds.
+			wp_schedule_single_event( time() + $ttl, 'wp_version_check' );
+		}
+	}
+
+	// Trigger background updates if running non-interactively, and we weren't called from the update handler.
+	if ( $doing_cron &amp;&amp; ! doing_action( 'wp_maybe_auto_update' ) ) {
+		/**
+		 * Fires during wp_cron, starting the auto-update process.
+		 *
+		 * @since 3.9.0
+		 */
+		do_action( 'wp_maybe_auto_update' );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/update.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/update.php#L27">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/update.php#L27-L297">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/core_version_check_locale"><span class="hook-func">apply_filters</span>( ‘core_version_check_locale’, <nobr><span class="arg-type">string</span> <span class="arg-name">$locale</span></nobr> )</a></dt>
+<dd>
+<p>Filters the locale requested for WordPress core translations.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/core_version_check_query_args"><span class="hook-func">apply_filters</span>( ‘core_version_check_query_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$query</span></nobr> )</a></dt>
+<dd>
+<p>Filters the query arguments sent as part of the core version check.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_maybe_auto_update"><span class="hook-func">do_action</span>( ‘wp_maybe_auto_update’ )</a></dt>
+<dd>
+<p>Fires during wp_cron, starting the auto-update process.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_version_check" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_version_check</a>
+  </p>
+</div>

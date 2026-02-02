@@ -6,13 +6,15 @@
  '(custom-safe-themes t)
  '(package-selected-packages
    '(ace-window bnf-mode breadcrumb calfw calfw-ical calibre consult
-                consult-dir corfu devdocs dirvish doom-modeline
-                doom-themes eldoc-box elfeed evil evil-collection gcmh
-                gptel hl-todo hotfuzz imenu-list imenus magit
-                marginalia moe-theme neotree nerd-icons
-                nerd-icons-dired orderless org-journal org-visibility
-                popper posframe shackle simple-httpd solaire-mode
-                symbols-outline use-package vertico vterm which-key
+                consult-dir corfu devdocs dired-hist dirvish
+                doom-modeline doom-themes eldoc-box elfeed evil
+                evil-collection gcmh github-dark-vscode-theme gptel
+                hl-todo hotfuzz imenu-list imenus magit marginalia
+                moe-theme neotree nerd-icons nerd-icons-dired nov
+                orderless org-journal org-noter org-visibility popper
+                posframe shackle simple-httpd solaire-mode
+                symbols-outline use-package vertico
+                vscode-dark-plus-theme vterm which-key
                 which-key-posframe)))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.

@@ -1,0 +1,324 @@
+<h1>signal-safety(7) — Linux manual page</h1>   <pre>
+<span class="headline"><i>signal-safety</i>(7)    Miscellaneous Information Manual    <i>signal-safety</i>(7)</span>
+</pre> <h2>
+NAME </h2>
+<pre>
+       signal-safety - async-signal-safe functions
+</pre> <h2>
+DESCRIPTION </h2>
+<pre>
+       An <i>async-signal-safe</i> function is one that can be safely called
+       from within a signal handler.  Many functions are <i>not</i> async-
+       signal-safe.  In particular, nonreentrant functions are generally
+       unsafe to call from a signal handler.
+
+       The kinds of issues that render a function unsafe can be quickly
+       understood when one considers the implementation of the <i>stdio</i>
+       library, all of whose functions are not async-signal-safe.
+
+       When performing buffered I/O on a file, the <i>stdio</i> functions must
+       maintain a statically allocated data buffer along with associated
+       counters and indexes (or pointers) that record the amount of data
+       and the current position in the buffer.  Suppose that the main
+       program is in the middle of a call to a <i>stdio</i> function such as
+       <a href="../man3/printf.3">printf(3)</a> where the buffer and associated variables have been
+       partially updated.  If, at that moment, the program is
+       interrupted by a signal handler that also calls <a href="../man3/printf.3">printf(3)</a>, then
+       the second call to <a href="../man3/printf.3">printf(3)</a> will operate on inconsistent data,
+       with unpredictable results.
+
+       To avoid problems with unsafe functions, there are two possible
+       choices:
+
+       (a)  Ensure that (1) the signal handler calls only async-signal-
+            safe functions, and (2) the signal handler itself is
+            reentrant with respect to global variables in the main
+            program.
+
+       (b)  Block signal delivery in the main program when calling
+            functions that are unsafe or operating on global data that
+            is also accessed by the signal handler.
+
+       Generally, the second choice is difficult in programs of any
+       complexity, so the first choice is taken.
+
+       POSIX.1 specifies a set of functions that an implementation must
+       make async-signal-safe.  (An implementation may provide safe
+       implementations of additional functions, but this is not required
+       by the standard and other implementations may not provide the
+       same guarantees.)
+
+       In general, a function is async-signal-safe either because it is
+       reentrant or because it is atomic with respect to signals (i.e.,
+       its execution can't be interrupted by a signal handler).
+
+       The set of functions required to be async-signal-safe by POSIX.1
+       is shown in the following table.  The functions not otherwise
+       noted were required to be async-signal-safe in POSIX.1-2001; the
+       table details changes in the subsequent standards.
+
+       <b>Function               Notes</b>
+       <a href="../man3/abort.3">abort(3)</a>               Added in POSIX.1-2001 TC1
+       <a href="../man2/accept.2">accept(2)</a>
+       <a href="../man2/access.2">access(2)</a>
+       <a href="../man3/aio_error.3">aio_error(3)</a>
+       <a href="../man3/aio_return.3">aio_return(3)</a>
+       <a href="../man3/aio_suspend.3">aio_suspend(3)</a>         See notes below
+       <a href="../man2/alarm.2">alarm(2)</a>
+       <a href="../man2/bind.2">bind(2)</a>
+       <a href="../man3/cfgetispeed.3">cfgetispeed(3)</a>
+       <a href="../man3/cfgetospeed.3">cfgetospeed(3)</a>
+       <a href="../man3/cfsetispeed.3">cfsetispeed(3)</a>
+       <a href="../man3/cfsetospeed.3">cfsetospeed(3)</a>
+       <a href="../man2/chdir.2">chdir(2)</a>
+       <a href="../man2/chmod.2">chmod(2)</a>
+       <a href="../man2/chown.2">chown(2)</a>
+       <a href="../man2/clock_gettime.2">clock_gettime(2)</a>
+       <a href="../man2/close.2">close(2)</a>
+       <a href="../man2/connect.2">connect(2)</a>
+       <a href="../man2/creat.2">creat(2)</a>
+       <a href="../man2/dup.2">dup(2)</a>
+       <a href="../man2/dup2.2">dup2(2)</a>
+       <a href="../man3/execl.3">execl(3)</a>               Added in POSIX.1-2008;
+                              see notes below
+       <a href="../man3/execle.3">execle(3)</a>              See notes below
+       <a href="../man3/execv.3">execv(3)</a>               Added in POSIX.1-2008
+       <a href="../man2/execve.2">execve(2)</a>
+       <a href="../man2/_exit.2">_exit(2)</a>
+       <a href="../man2/_exit.2">_Exit(2)</a>
+       <a href="../man2/faccessat.2">faccessat(2)</a>           Added in POSIX.1-2008
+       <a href="../man2/fchdir.2">fchdir(2)</a>              Added in POSIX.1-2008 TC1
+       <a href="../man2/fchmod.2">fchmod(2)</a>
+       <a href="../man2/fchmodat.2">fchmodat(2)</a>            Added in POSIX.1-2008
+       <a href="../man2/fchown.2">fchown(2)</a>
+       <a href="../man2/fchownat.2">fchownat(2)</a>            Added in POSIX.1-2008
+       <a href="../man2/fcntl.2">fcntl(2)</a>
+       <a href="../man2/fdatasync.2">fdatasync(2)</a>
+       <a href="../man3/fexecve.3">fexecve(3)</a>             Added in POSIX.1-2008
+       <a href="../man3/ffs.3">ffs(3)</a>                 Added in POSIX.1-2008 TC2
+       <a href="../man2/fork.2">fork(2)</a>                See notes below
+       <a href="../man2/fstat.2">fstat(2)</a>
+       <a href="../man2/fstatat.2">fstatat(2)</a>             Added in POSIX.1-2008
+       <a href="../man2/fsync.2">fsync(2)</a>
+       <a href="../man2/ftruncate.2">ftruncate(2)</a>
+       <a href="../man3/futimens.3">futimens(3)</a>            Added in POSIX.1-2008
+       <a href="../man2/getegid.2">getegid(2)</a>
+       <a href="../man2/geteuid.2">geteuid(2)</a>
+       <a href="../man2/getgid.2">getgid(2)</a>
+       <a href="../man2/getgroups.2">getgroups(2)</a>
+       <a href="../man2/getpeername.2">getpeername(2)</a>
+       <a href="../man2/getpgrp.2">getpgrp(2)</a>
+       <a href="../man2/getpid.2">getpid(2)</a>
+       <a href="../man2/getppid.2">getppid(2)</a>
+       <a href="../man2/getsockname.2">getsockname(2)</a>
+       <a href="../man2/getsockopt.2">getsockopt(2)</a>
+       <a href="../man2/getuid.2">getuid(2)</a>
+       <a href="../man3/htonl.3">htonl(3)</a>               Added in POSIX.1-2008 TC2
+       <a href="../man3/htons.3">htons(3)</a>               Added in POSIX.1-2008 TC2
+       <a href="../man2/kill.2">kill(2)</a>
+       <a href="../man2/link.2">link(2)</a>
+       <a href="../man2/linkat.2">linkat(2)</a>              Added in POSIX.1-2008
+       <a href="../man2/listen.2">listen(2)</a>
+       <a href="../man3/longjmp.3">longjmp(3)</a>             Added in POSIX.1-2008
+                              TC2; see notes below
+       <a href="../man2/lseek.2">lseek(2)</a>
+       <a href="../man2/lstat.2">lstat(2)</a>
+       <a href="../man3/memccpy.3">memccpy(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/memchr.3">memchr(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/memcmp.3">memcmp(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/memcpy.3">memcpy(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/memmove.3">memmove(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/memset.3">memset(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man2/mkdir.2">mkdir(2)</a>
+       <a href="../man2/mkdirat.2">mkdirat(2)</a>             Added in POSIX.1-2008
+       <a href="../man3/mkfifo.3">mkfifo(3)</a>
+       <a href="../man3/mkfifoat.3">mkfifoat(3)</a>            Added in POSIX.1-2008
+       <a href="../man2/mknod.2">mknod(2)</a>               Added in POSIX.1-2008
+       <a href="../man2/mknodat.2">mknodat(2)</a>             Added in POSIX.1-2008
+       <a href="../man3/ntohl.3">ntohl(3)</a>               Added in POSIX.1-2008 TC2
+       <a href="../man3/ntohs.3">ntohs(3)</a>               Added in POSIX.1-2008 TC2
+       <a href="../man2/open.2">open(2)</a>
+       <a href="../man2/openat.2">openat(2)</a>              Added in POSIX.1-2008
+       <a href="../man2/pause.2">pause(2)</a>
+       <a href="../man2/pipe.2">pipe(2)</a>
+       <a href="../man2/poll.2">poll(2)</a>
+       <b>posix_trace_event</b>(3)
+       <a href="../man2/pselect.2">pselect(2)</a>
+       <a href="../man3/pthread_kill.3">pthread_kill(3)</a>        Added in POSIX.1-2008 TC1
+       <a href="../man3/pthread_self.3">pthread_self(3)</a>        Added in POSIX.1-2008 TC1
+       <a href="../man3/pthread_sigmask.3">pthread_sigmask(3)</a>     Added in POSIX.1-2008 TC1
+       <a href="../man3/raise.3">raise(3)</a>
+       <a href="../man2/read.2">read(2)</a>
+       <a href="../man2/readlink.2">readlink(2)</a>
+       <a href="../man2/readlinkat.2">readlinkat(2)</a>          Added in POSIX.1-2008
+       <a href="../man2/recv.2">recv(2)</a>
+       <a href="../man2/recvfrom.2">recvfrom(2)</a>
+       <a href="../man2/recvmsg.2">recvmsg(2)</a>
+       <a href="../man2/rename.2">rename(2)</a>
+       <a href="../man2/renameat.2">renameat(2)</a>            Added in POSIX.1-2008
+       <a href="../man2/rmdir.2">rmdir(2)</a>
+       <a href="../man2/select.2">select(2)</a>
+       <a href="../man3/sem_post.3">sem_post(3)</a>
+       <a href="../man2/send.2">send(2)</a>
+       <a href="../man2/sendmsg.2">sendmsg(2)</a>
+       <a href="../man2/sendto.2">sendto(2)</a>
+       <a href="../man2/setgid.2">setgid(2)</a>
+       <a href="../man2/setpgid.2">setpgid(2)</a>
+       <a href="../man2/setsid.2">setsid(2)</a>
+       <a href="../man2/setsockopt.2">setsockopt(2)</a>
+       <a href="../man2/setuid.2">setuid(2)</a>
+       <a href="../man2/shutdown.2">shutdown(2)</a>
+       <a href="../man2/sigaction.2">sigaction(2)</a>
+       <a href="../man3/sigaddset.3">sigaddset(3)</a>
+       <a href="../man3/sigdelset.3">sigdelset(3)</a>
+       <a href="../man3/sigemptyset.3">sigemptyset(3)</a>
+       <a href="../man3/sigfillset.3">sigfillset(3)</a>
+       <a href="../man3/sigismember.3">sigismember(3)</a>
+       <a href="../man3/siglongjmp.3">siglongjmp(3)</a>          Added in POSIX.1-2008
+                              TC2; see notes below
+       <a href="../man2/signal.2">signal(2)</a>
+       <a href="../man3/sigpause.3">sigpause(3)</a>
+       <a href="../man2/sigpending.2">sigpending(2)</a>
+       <a href="../man2/sigprocmask.2">sigprocmask(2)</a>
+       <b>sigqueue</b>(2)
+       <a href="../man3/sigset.3">sigset(3)</a>
+       <a href="../man2/sigsuspend.2">sigsuspend(2)</a>
+       <a href="../man3/sleep.3">sleep(3)</a>
+       <a href="../man3/sockatmark.3">sockatmark(3)</a>          Added in POSIX.1-2001 TC2
+       <a href="../man2/socket.2">socket(2)</a>
+       <a href="../man2/socketpair.2">socketpair(2)</a>
+       <a href="../man2/stat.2">stat(2)</a>
+       <a href="../man3/stpcpy.3">stpcpy(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/stpncpy.3">stpncpy(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/strcat.3">strcat(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/strchr.3">strchr(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/strcmp.3">strcmp(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/strcpy.3">strcpy(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/strcspn.3">strcspn(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/strlen.3">strlen(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/strncat.3">strncat(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/strncmp.3">strncmp(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/strncpy.3">strncpy(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/strnlen.3">strnlen(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/strpbrk.3">strpbrk(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/strrchr.3">strrchr(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/strspn.3">strspn(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/strstr.3">strstr(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/strtok_r.3">strtok_r(3)</a>            Added in POSIX.1-2008 TC2
+       <a href="../man2/symlink.2">symlink(2)</a>
+       <a href="../man2/symlinkat.2">symlinkat(2)</a>           Added in POSIX.1-2008
+       <a href="../man3/tcdrain.3">tcdrain(3)</a>
+       <a href="../man3/tcflow.3">tcflow(3)</a>
+       <a href="../man3/tcflush.3">tcflush(3)</a>
+       <a href="../man3/tcgetattr.3">tcgetattr(3)</a>
+       <a href="../man3/tcgetpgrp.3">tcgetpgrp(3)</a>
+       <a href="../man3/tcsendbreak.3">tcsendbreak(3)</a>
+       <a href="../man3/tcsetattr.3">tcsetattr(3)</a>
+       <a href="../man3/tcsetpgrp.3">tcsetpgrp(3)</a>
+       <a href="../man2/time.2">time(2)</a>
+       <a href="../man2/timer_getoverrun.2">timer_getoverrun(2)</a>
+       <a href="../man2/timer_gettime.2">timer_gettime(2)</a>
+       <a href="../man2/timer_settime.2">timer_settime(2)</a>
+       <a href="../man2/times.2">times(2)</a>
+       <a href="../man2/umask.2">umask(2)</a>
+       <a href="../man2/uname.2">uname(2)</a>
+       <a href="../man2/unlink.2">unlink(2)</a>
+       <a href="../man2/unlinkat.2">unlinkat(2)</a>            Added in POSIX.1-2008
+       <a href="../man2/utime.2">utime(2)</a>
+       <a href="../man2/utimensat.2">utimensat(2)</a>           Added in POSIX.1-2008
+       <a href="../man2/utimes.2">utimes(2)</a>              Added in POSIX.1-2008
+       <a href="../man2/wait.2">wait(2)</a>
+       <a href="../man2/waitpid.2">waitpid(2)</a>
+       <a href="../man3/wcpcpy.3">wcpcpy(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/wcpncpy.3">wcpncpy(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wcscat.3">wcscat(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/wcschr.3">wcschr(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/wcscmp.3">wcscmp(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/wcscpy.3">wcscpy(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/wcscspn.3">wcscspn(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wcslen.3">wcslen(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/wcsncat.3">wcsncat(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wcsncmp.3">wcsncmp(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wcsncpy.3">wcsncpy(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wcsnlen.3">wcsnlen(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wcspbrk.3">wcspbrk(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wcsrchr.3">wcsrchr(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wcsspn.3">wcsspn(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/wcsstr.3">wcsstr(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/wcstok.3">wcstok(3)</a>              Added in POSIX.1-2008 TC2
+       <a href="../man3/wmemchr.3">wmemchr(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wmemcmp.3">wmemcmp(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wmemcpy.3">wmemcpy(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man3/wmemmove.3">wmemmove(3)</a>            Added in POSIX.1-2008 TC2
+       <a href="../man3/wmemset.3">wmemset(3)</a>             Added in POSIX.1-2008 TC2
+       <a href="../man2/write.2">write(2)</a>
+
+       Notes:
+
+       •  POSIX.1-2001 and POSIX.1-2001 TC2 required the functions
+          <a href="../man3/fpathconf.3">fpathconf(3)</a>, <a href="../man3/pathconf.3">pathconf(3)</a>, and <a href="../man3/sysconf.3">sysconf(3)</a> to be async-signal-
+          safe, but this requirement was removed in POSIX.1-2008.
+
+       •  If a signal handler interrupts the execution of an unsafe
+          function, and the handler terminates via a call to <a href="../man3/longjmp.3">longjmp(3)</a>
+          or <a href="../man3/siglongjmp.3">siglongjmp(3)</a> and the program subsequently calls an unsafe
+          function, then the behavior of the program is undefined.
+
+       •  POSIX.1-2001 TC1 clarified that if an application calls
+          <a href="../man2/fork.2">fork(2)</a> from a signal handler and any of the fork handlers
+          registered by <a href="../man3/pthread_atfork.3">pthread_atfork(3)</a> calls a function that is not
+          async-signal-safe, the behavior is undefined.  A future
+          revision of the standard is likely to remove <a href="../man2/fork.2">fork(2)</a> from the
+          list of async-signal-safe functions.
+
+       •  Asynchronous signal handlers that call functions which are
+          cancelation points and nest over regions of deferred
+          cancelation may trigger cancelation whose behavior is as if
+          asynchronous cancelation had occurred and may cause
+          application state to become inconsistent.
+
+   <b>errno</b>
+       Fetching and setting the value of <i><a href="../man3/errno.3">errno</a></i> is async-signal-safe
+       provided that the signal handler saves <i><a href="../man3/errno.3">errno</a></i> on entry and
+       restores its value before returning.
+
+   <b>Deviations in the GNU C library</b>
+       The following known deviations from the standard occur in the GNU
+       C library:
+
+       •  Before glibc 2.24, <a href="../man3/execl.3">execl(3)</a> and <a href="../man3/execle.3">execle(3)</a> employed <a href="../man3/realloc.3">realloc(3)</a>
+          internally and were consequently not async-signal-safe.  This
+          was fixed in glibc 2.24.
+
+       •  The glibc implementation of <a href="../man3/aio_suspend.3">aio_suspend(3)</a> is not async-
+          signal-safe because it uses <a href="../man3/pthread_mutex_lock.3">pthread_mutex_lock(3)</a> internally.
+</pre> <h2>
+SEE ALSO </h2>
+<pre>
+       <a href="../man2/sigaction.2">sigaction(2)</a>, <a href="signal.7">signal(7)</a>, <a href="standards.7">standards(7)</a>
+</pre> <h2>
+COLOPHON </h2>
+<pre>
+       This page is part of the <i>man-pages</i> (Linux kernel and C library
+       user-space interface documentation) project.  Information about
+       the project can be found at 
+       ⟨<a href="https://www.kernel.org/doc/man-pages/">https://www.kernel.org/doc/man-pages/</a>⟩.  If you have a bug report
+       for this manual page, see
+       ⟨<a href="https://git.kernel.org/pub/scm/docs/man-pages/man-pages.git/tree/CONTRIBUTING">https://git.kernel.org/pub/scm/docs/man-pages/man-pages.git/tree/CONTRIBUTING</a>⟩.
+       This page was obtained from the tarball man-pages-6.9.1.tar.gz
+       fetched from
+       ⟨<a href="https://mirrors.edge.kernel.org/pub/linux/docs/man-pages/">https://mirrors.edge.kernel.org/pub/linux/docs/man-pages/</a>⟩ on
+       2024-06-26.  If you discover any rendering problems in this HTML
+       version of the page, or you believe there is a better or more up-
+       to-date source for the page, or you have corrections or
+       improvements to the information in this COLOPHON (which is <i>not</i>
+       part of the original manual page), send a mail to
+       man-pages@man7.org
+
+<span class="footline">Linux man-pages 6.9.1          2024-05-02               <i>signal-safety</i>(7)</span>
+</pre>  <p>Pages that refer to this page: <a href="../man2/fork.2">fork(2)</a>, <a href="../man2/sigaction.2">sigaction(2)</a>, <a href="../man2/signal.2">signal(2)</a>, <a href="../man3/pthread_atfork.3">pthread_atfork(3)</a>, <a href="../man3/sd_journal_get_fd.3">sd_journal_get_fd(3)</a>, <a href="../man3/sd_journal_print.3">sd_journal_print(3)</a>, <a href="../man3/sd_journal_stream_fd.3">sd_journal_stream_fd(3)</a>, <a href="../man3/seccomp_load.3">seccomp_load(3)</a>, <a href="../man3/seccomp_precompute.3">seccomp_precompute(3)</a>, <a href="../man3/sem_post.3">sem_post(3)</a>, <a href="../man3/setjmp.3">setjmp(3)</a>, <a href="../man3/strerror.3">strerror(3)</a>, <a href="attributes.7">attributes(7)</a>, <a href="signal.7">signal(7)</a> </p> <hr>         <div class="_attribution">
+  <p class="_attribution-p">
+    ...<br>
+    <a href="https://man7.org/linux/man-pages/man7/signal-safety.7.html" class="_attribution-link">https://man7.org/linux/man-pages/man7/signal-safety.7.html</a>
+  </p>
+</div>

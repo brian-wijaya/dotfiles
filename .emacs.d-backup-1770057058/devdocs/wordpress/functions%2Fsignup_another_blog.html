@@ -1,0 +1,129 @@
+<h1 class="wp-block-wporg-code-reference-title">signup_another_blog( <span class="arg-type">string</span> <span class="arg-name">$blogname</span> = <span class="arg-default">”</span>, <span class="arg-type">string</span> <span class="arg-name">$blog_title</span> = <span class="arg-default">”</span>, <span class="arg-type">WP_Error|string</span> <span class="arg-name">$errors</span> = <span class="arg-default">”</span> )</h1> <section><p>Shows a form for returning users to sign up for another site.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$blogname</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The new site name</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$blog_title</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The new site title.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$errors</code><span class="type"><span class="WP_Error"><a href="../classes/wp_error" rel="class">WP_Error</a></span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">A <a href="../classes/wp_error" rel="class">WP_Error</a> object containing existing errors. Defaults to empty string.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="332" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function signup_another_blog( $blogname = '', $blog_title = '', $errors = '' ) {
+	$current_user = wp_get_current_user();
+
+	if ( ! is_wp_error( $errors ) ) {
+		$errors = new WP_Error();
+	}
+
+	$signup_defaults = array(
+		'blogname'   =&gt; $blogname,
+		'blog_title' =&gt; $blog_title,
+		'errors'     =&gt; $errors,
+	);
+
+	/**
+	 * Filters the default site sign-up variables.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param array $signup_defaults {
+	 *     An array of default site sign-up variables.
+	 *
+	 *     @type string   $blogname   The site blogname.
+	 *     @type string   $blog_title The site title.
+	 *     @type WP_Error $errors     A WP_Error object possibly containing 'blogname' or 'blog_title' errors.
+	 * }
+	 */
+	$filtered_results = apply_filters( 'signup_another_blog_init', $signup_defaults );
+
+	$blogname   = $filtered_results['blogname'];
+	$blog_title = $filtered_results['blog_title'];
+	$errors     = $filtered_results['errors'];
+
+	/* translators: %s: Network title. */
+	echo '&lt;h2&gt;' . sprintf( __( 'Get &lt;em&gt;another&lt;/em&gt; %s site in seconds' ), get_network()-&gt;site_name ) . '&lt;/h2&gt;';
+
+	if ( $errors-&gt;has_errors() ) {
+		echo '&lt;p&gt;' . __( 'There was a problem, please correct the form below and try again.' ) . '&lt;/p&gt;';
+	}
+	?&gt;
+	&lt;p&gt;
+		&lt;?php
+		printf(
+			/* translators: %s: Current user's display name. */
+			__( 'Welcome back, %s. By filling out the form below, you can &lt;strong&gt;add another site to your account&lt;/strong&gt;. There is no limit to the number of sites you can have, so create to your heart&amp;#8217;s content, but write responsibly!' ),
+			$current_user-&gt;display_name
+		);
+		?&gt;
+	&lt;/p&gt;
+
+	&lt;?php
+	$blogs = get_blogs_of_user( $current_user-&gt;ID );
+	if ( ! empty( $blogs ) ) {
+		?&gt;
+
+			&lt;p&gt;&lt;?php _e( 'Sites you are already a member of:' ); ?&gt;&lt;/p&gt;
+			&lt;ul&gt;
+				&lt;?php
+				foreach ( $blogs as $blog ) {
+					$home_url = get_home_url( $blog-&gt;userblog_id );
+					echo '&lt;li&gt;&lt;a href="' . esc_url( $home_url ) . '"&gt;' . $home_url . '&lt;/a&gt;&lt;/li&gt;';
+				}
+				?&gt;
+			&lt;/ul&gt;
+	&lt;?php } ?&gt;
+
+	&lt;p&gt;&lt;?php _e( 'If you are not going to use a great site domain, leave it for a new user. Now have at it!' ); ?&gt;&lt;/p&gt;
+	&lt;form id="setupform" method="post" action="wp-signup.php"&gt;
+		&lt;input type="hidden" name="stage" value="gimmeanotherblog" /&gt;
+		&lt;?php
+		/**
+		 * Fires when hidden sign-up form fields output when creating another site or user.
+		 *
+		 * @since MU (3.0.0)
+		 *
+		 * @param string $context A string describing the steps of the sign-up process. The value can be
+		 *                        'create-another-site', 'validate-user', or 'validate-site'.
+		 */
+		do_action( 'signup_hidden_fields', 'create-another-site' );
+		?&gt;
+		&lt;?php show_blog_form( $blogname, $blog_title, $errors ); ?&gt;
+		&lt;p class="submit"&gt;&lt;input type="submit" name="submit" class="submit" value="&lt;?php esc_attr_e( 'Create Site' ); ?&gt;" /&gt;&lt;/p&gt;
+	&lt;/form&gt;
+	&lt;?php
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-signup.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-signup.php#L332">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-signup.php#L332-L415">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/signup_another_blog_init"><span class="hook-func">apply_filters</span>( ‘signup_another_blog_init’, <nobr><span class="arg-type">array</span> <span class="arg-name">$signup_defaults</span></nobr> )</a></dt>
+<dd>
+<p>Filters the default site sign-up variables.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/signup_hidden_fields"><span class="hook-func">do_action</span>( ‘signup_hidden_fields’, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Fires when hidden sign-up form fields output when creating another site or user.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/signup_another_blog" class="_attribution-link">https://developer.wordpress.org/reference/functions/signup_another_blog</a>
+  </p>
+</div>

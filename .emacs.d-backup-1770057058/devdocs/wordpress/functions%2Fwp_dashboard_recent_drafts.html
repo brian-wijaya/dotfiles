@@ -1,0 +1,97 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_dashboard_recent_drafts( <span class="arg-type">WP_Post[]|false</span> <span class="arg-name">$drafts</span> = <span class="arg-default">false</span> )</h1> <section><p>Show recent drafts of the user on the dashboard.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$drafts</code><span class="type"><span class="WP_Post[]"><a href="../classes/wp_post" rel="class">WP_Post</a>[]</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of posts to display. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="623" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_dashboard_recent_drafts( $drafts = false ) {
+	if ( ! $drafts ) {
+		$query_args = array(
+			'post_type'      =&gt; 'post',
+			'post_status'    =&gt; 'draft',
+			'author'         =&gt; get_current_user_id(),
+			'posts_per_page' =&gt; 4,
+			'orderby'        =&gt; 'modified',
+			'order'          =&gt; 'DESC',
+		);
+
+		/**
+		 * Filters the post query arguments for the 'Recent Drafts' dashboard widget.
+		 *
+		 * @since 4.4.0
+		 *
+		 * @param array $query_args The query arguments for the 'Recent Drafts' dashboard widget.
+		 */
+		$query_args = apply_filters( 'dashboard_recent_drafts_query_args', $query_args );
+
+		$drafts = get_posts( $query_args );
+		if ( ! $drafts ) {
+			return;
+		}
+	}
+
+	echo '&lt;div class="drafts"&gt;';
+
+	if ( count( $drafts ) &gt; 3 ) {
+		printf(
+			'&lt;p class="view-all"&gt;&lt;a href="%s"&gt;%s&lt;/a&gt;&lt;/p&gt;' . "\n",
+			esc_url( admin_url( 'edit.php?post_status=draft' ) ),
+			__( 'View all drafts' )
+		);
+	}
+
+	echo '&lt;h2 class="hide-if-no-js"&gt;' . __( 'Your Recent Drafts' ) . "&lt;/h2&gt;\n";
+	echo '&lt;ul&gt;';
+
+	/* translators: Maximum number of words used in a preview of a draft on the dashboard. */
+	$draft_length = (int) _x( '10', 'draft_length' );
+
+	$drafts = array_slice( $drafts, 0, 3 );
+	foreach ( $drafts as $draft ) {
+		$url   = get_edit_post_link( $draft-&gt;ID );
+		$title = _draft_or_post_title( $draft-&gt;ID );
+
+		echo "&lt;li&gt;\n";
+		printf(
+			'&lt;div class="draft-title"&gt;&lt;a href="%s" aria-label="%s"&gt;%s&lt;/a&gt;&lt;time datetime="%s"&gt;%s&lt;/time&gt;&lt;/div&gt;',
+			esc_url( $url ),
+			/* translators: %s: Post title. */
+			esc_attr( sprintf( __( 'Edit &amp;#8220;%s&amp;#8221;' ), $title ) ),
+			esc_html( $title ),
+			get_the_time( 'c', $draft ),
+			get_the_time( __( 'F j, Y' ), $draft )
+		);
+
+		$the_content = wp_trim_words( $draft-&gt;post_content, $draft_length );
+
+		if ( $the_content ) {
+			echo '&lt;p&gt;' . $the_content . '&lt;/p&gt;';
+		}
+		echo "&lt;/li&gt;\n";
+	}
+
+	echo "&lt;/ul&gt;\n";
+	echo '&lt;/div&gt;';
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/dashboard.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/dashboard.php#L623">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/dashboard.php#L623-L691">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/dashboard_recent_drafts_query_args"><span class="hook-func">apply_filters</span>( ‘dashboard_recent_drafts_query_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$query_args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post query arguments for the ‘Recent Drafts’ dashboard widget.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_dashboard_recent_drafts" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_dashboard_recent_drafts</a>
+  </p>
+</div>

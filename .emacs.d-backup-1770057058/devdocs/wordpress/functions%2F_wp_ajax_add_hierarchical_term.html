@@ -1,0 +1,139 @@
+<h1 class="wp-block-wporg-code-reference-title">_wp_ajax_add_hierarchical_term()</h1> <section><p>Handles adding a hierarchical term via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="590" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _wp_ajax_add_hierarchical_term() {
+	$action   = $_POST['action'];
+	$taxonomy = get_taxonomy( substr( $action, 4 ) );
+	check_ajax_referer( $action, '_ajax_nonce-add-' . $taxonomy-&gt;name );
+
+	if ( ! current_user_can( $taxonomy-&gt;cap-&gt;edit_terms ) ) {
+		wp_die( -1 );
+	}
+
+	$names  = explode( ',', $_POST[ 'new' . $taxonomy-&gt;name ] );
+	$parent = isset( $_POST[ 'new' . $taxonomy-&gt;name . '_parent' ] ) ? (int) $_POST[ 'new' . $taxonomy-&gt;name . '_parent' ] : 0;
+
+	if ( 0 &gt; $parent ) {
+		$parent = 0;
+	}
+
+	if ( 'category' === $taxonomy-&gt;name ) {
+		$post_category = isset( $_POST['post_category'] ) ? (array) $_POST['post_category'] : array();
+	} else {
+		$post_category = ( isset( $_POST['tax_input'] ) &amp;&amp; isset( $_POST['tax_input'][ $taxonomy-&gt;name ] ) ) ? (array) $_POST['tax_input'][ $taxonomy-&gt;name ] : array();
+	}
+
+	$checked_categories = array_map( 'absint', (array) $post_category );
+	$popular_ids        = wp_popular_terms_checklist( $taxonomy-&gt;name, 0, 10, false );
+
+	foreach ( $names as $cat_name ) {
+		$cat_name          = trim( $cat_name );
+		$category_nicename = sanitize_title( $cat_name );
+
+		if ( '' === $category_nicename ) {
+			continue;
+		}
+
+		$cat_id = wp_insert_term( $cat_name, $taxonomy-&gt;name, array( 'parent' =&gt; $parent ) );
+
+		if ( ! $cat_id || is_wp_error( $cat_id ) ) {
+			continue;
+		} else {
+			$cat_id = $cat_id['term_id'];
+		}
+
+		$checked_categories[] = $cat_id;
+
+		if ( $parent ) { // Do these all at once in a second.
+			continue;
+		}
+
+		ob_start();
+
+		wp_terms_checklist(
+			0,
+			array(
+				'taxonomy'             =&gt; $taxonomy-&gt;name,
+				'descendants_and_self' =&gt; $cat_id,
+				'selected_cats'        =&gt; $checked_categories,
+				'popular_cats'         =&gt; $popular_ids,
+			)
+		);
+
+		$data = ob_get_clean();
+
+		$add = array(
+			'what'     =&gt; $taxonomy-&gt;name,
+			'id'       =&gt; $cat_id,
+			'data'     =&gt; str_replace( array( "\n", "\t" ), '', $data ),
+			'position' =&gt; -1,
+		);
+	}
+
+	if ( $parent ) { // Foncy - replace the parent and all its children.
+		$parent  = get_term( $parent, $taxonomy-&gt;name );
+		$term_id = $parent-&gt;term_id;
+
+		while ( $parent-&gt;parent ) { // Get the top parent.
+			$parent = get_term( $parent-&gt;parent, $taxonomy-&gt;name );
+			if ( is_wp_error( $parent ) ) {
+				break;
+			}
+			$term_id = $parent-&gt;term_id;
+		}
+
+		ob_start();
+
+		wp_terms_checklist(
+			0,
+			array(
+				'taxonomy'             =&gt; $taxonomy-&gt;name,
+				'descendants_and_self' =&gt; $term_id,
+				'selected_cats'        =&gt; $checked_categories,
+				'popular_cats'         =&gt; $popular_ids,
+			)
+		);
+
+		$data = ob_get_clean();
+
+		$add = array(
+			'what'     =&gt; $taxonomy-&gt;name,
+			'id'       =&gt; $term_id,
+			'data'     =&gt; str_replace( array( "\n", "\t" ), '', $data ),
+			'position' =&gt; -1,
+		);
+	}
+
+	ob_start();
+
+	wp_dropdown_categories(
+		array(
+			'taxonomy'         =&gt; $taxonomy-&gt;name,
+			'hide_empty'       =&gt; 0,
+			'name'             =&gt; 'new' . $taxonomy-&gt;name . '_parent',
+			'orderby'          =&gt; 'name',
+			'hierarchical'     =&gt; 1,
+			'show_option_none' =&gt; '&amp;mdash; ' . $taxonomy-&gt;labels-&gt;parent_item . ' &amp;mdash;',
+		)
+	);
+
+	$sup = ob_get_clean();
+
+	$add['supplemental'] = array( 'newcat_parent' =&gt; $sup );
+
+	$x = new WP_Ajax_Response( $add );
+	$x-&gt;send();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L590">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L590-L712">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_wp_ajax_add_hierarchical_term" class="_attribution-link">https://developer.wordpress.org/reference/functions/_wp_ajax_add_hierarchical_term</a>
+  </p>
+</div>

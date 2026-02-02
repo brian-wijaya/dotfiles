@@ -1,0 +1,83 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Terms_List_Table::column_name( <span class="arg-type">WP_Term</span> <span class="arg-name">$tag</span> ): <span class="return-type">string</span>
+</h1>  <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$tag</code><span class="type"><span class="WP_Term"><a href="../wp_term" rel="class">WP_Term</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Term object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="383" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function column_name( $tag ) {
+	$taxonomy = $this-&gt;screen-&gt;taxonomy;
+
+	$pad = str_repeat( '&amp;#8212; ', max( 0, $this-&gt;level ) );
+
+	/**
+	 * Filters display of the term name in the terms list table.
+	 *
+	 * The default output may include padding due to the term's
+	 * current level in the term hierarchy.
+	 *
+	 * @since 2.5.0
+	 *
+	 * @see WP_Terms_List_Table::column_name()
+	 *
+	 * @param string $pad_tag_name The term name, padded if not top-level.
+	 * @param WP_Term $tag         Term object.
+	 */
+	$name = apply_filters( 'term_name', $pad . ' ' . $tag-&gt;name, $tag );
+
+	$qe_data = get_term( $tag-&gt;term_id, $taxonomy, OBJECT, 'edit' );
+
+	$uri = wp_doing_ajax() ? wp_get_referer() : $_SERVER['REQUEST_URI'];
+
+	$edit_link = get_edit_term_link( $tag, $taxonomy, $this-&gt;screen-&gt;post_type );
+
+	if ( $edit_link ) {
+		$edit_link = add_query_arg(
+			'wp_http_referer',
+			urlencode( wp_unslash( $uri ) ),
+			$edit_link
+		);
+		$name      = sprintf(
+			'&lt;a class="row-title" href="%s" aria-label="%s"&gt;%s&lt;/a&gt;',
+			esc_url( $edit_link ),
+			/* translators: %s: Taxonomy term name. */
+			esc_attr( sprintf( __( '&amp;#8220;%s&amp;#8221; (Edit)' ), $tag-&gt;name ) ),
+			$name
+		);
+	}
+
+	$output = sprintf(
+		'&lt;strong&gt;%s&lt;/strong&gt;&lt;br /&gt;',
+		$name
+	);
+
+	/** This filter is documented in wp-admin/includes/class-wp-terms-list-table.php */
+	$quick_edit_enabled = apply_filters( 'quick_edit_enabled_for_taxonomy', true, $taxonomy );
+
+	if ( $quick_edit_enabled ) {
+		$output .= '&lt;div class="hidden" id="inline_' . $qe_data-&gt;term_id . '"&gt;';
+		$output .= '&lt;div class="name"&gt;' . $qe_data-&gt;name . '&lt;/div&gt;';
+
+		/** This filter is documented in wp-admin/edit-tag-form.php */
+		$output .= '&lt;div class="slug"&gt;' . apply_filters( 'editable_slug', $qe_data-&gt;slug, $qe_data ) . '&lt;/div&gt;';
+		$output .= '&lt;div class="parent"&gt;' . $qe_data-&gt;parent . '&lt;/div&gt;&lt;/div&gt;';
+	}
+
+	return $output;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-terms-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-terms-list-table.php#L383">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-terms-list-table.php#L383-L442">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/editable_slug"><span class="hook-func">apply_filters</span>( ‘editable_slug’, <nobr><span class="arg-type">string</span> <span class="arg-name">$slug</span></nobr>, <nobr><span class="arg-type">WP_Term|WP_Post</span> <span class="arg-name">$tag</span></nobr> )</a></dt>
+<dd>
+<p>Filters the editable slug for a post or term.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/quick_edit_enabled_for_taxonomy"><span class="hook-func">apply_filters</span>( ‘quick_edit_enabled_for_taxonomy’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$enable</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether Quick Edit should be enabled for the given taxonomy.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/term_name"><span class="hook-func">apply_filters</span>( ‘term_name’, <nobr><span class="arg-type">string</span> <span class="arg-name">$pad_tag_name</span></nobr>, <nobr><span class="arg-type">WP_Term</span> <span class="arg-name">$tag</span></nobr> )</a></dt>
+<dd>
+<p>Filters display of the term name in the terms list table.</p> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_terms_list_table/column_name" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_terms_list_table/column_name</a>
+  </p>
+</div>

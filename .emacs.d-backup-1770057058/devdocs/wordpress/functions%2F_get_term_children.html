@@ -1,0 +1,93 @@
+<h1 class="wp-block-wporg-code-reference-title">_get_term_children( <span class="arg-type">int</span> <span class="arg-name">$term_id</span>, <span class="arg-type">array</span> <span class="arg-name">$terms</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span>, <span class="arg-type">array</span> <span class="arg-name">$ancestors</span> = <span class="arg-default">array()</span> ): <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Gets the subset of $terms that are descendants of $term_id.</p> </section> <section><h2 id="description">Description</h2> <p>If <code>$terms</code> is an array of objects, then <a href="_get_term_children" rel="function">_get_term_children()</a> returns an array of objects.<br>If <code>$terms</code> is an array of IDs, then <a href="_get_term_children" rel="function">_get_term_children()</a> returns an array of IDs.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$term_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The ancestor term: all returned terms should be descendants of <code>$term_id</code>.</span></div></dd>
+<dt>
+<code>$terms</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The set of terms – either an array of term objects or term IDs – from which those that are descendants of $term_id will be chosen.</span></div></dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The taxonomy which determines the hierarchy of the terms.</span></div></dd>
+<dt>
+<code>$ancestors</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Term ancestors that have already been identified. Passed by reference, to keep track of found terms when recursing the hierarchy. The array of located ancestors is used to prevent infinite recursion loops. For performance, <code>term_ids</code> are used as array keys, with 1 as value. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../classes/wp_error" rel="class">WP_Error</a></span> The subset of $terms that are descendants of $term_id.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3949" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _get_term_children( $term_id, $terms, $taxonomy, &amp;$ancestors = array() ) {
+	$empty_array = array();
+	if ( empty( $terms ) ) {
+		return $empty_array;
+	}
+
+	$term_id      = (int) $term_id;
+	$term_list    = array();
+	$has_children = _get_term_hierarchy( $taxonomy );
+
+	if ( $term_id &amp;&amp; ! isset( $has_children[ $term_id ] ) ) {
+		return $empty_array;
+	}
+
+	// Include the term itself in the ancestors array, so we can properly detect when a loop has occurred.
+	if ( empty( $ancestors ) ) {
+		$ancestors[ $term_id ] = 1;
+	}
+
+	foreach ( (array) $terms as $term ) {
+		$use_id = false;
+		if ( ! is_object( $term ) ) {
+			$term = get_term( $term, $taxonomy );
+			if ( is_wp_error( $term ) ) {
+				return $term;
+			}
+			$use_id = true;
+		}
+
+		// Don't recurse if we've already identified the term as a child - this indicates a loop.
+		if ( isset( $ancestors[ $term-&gt;term_id ] ) ) {
+			continue;
+		}
+
+		if ( (int) $term-&gt;parent === $term_id ) {
+			if ( $use_id ) {
+				$term_list[] = $term-&gt;term_id;
+			} else {
+				$term_list[] = $term;
+			}
+
+			if ( ! isset( $has_children[ $term-&gt;term_id ] ) ) {
+				continue;
+			}
+
+			$ancestors[ $term-&gt;term_id ] = 1;
+
+			$children = _get_term_children( $term-&gt;term_id, $terms, $taxonomy, $ancestors );
+			if ( $children ) {
+				$term_list = array_merge( $term_list, $children );
+			}
+		}
+	}
+
+	return $term_list;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L3949">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L3949-L4004">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_get_term_children" class="_attribution-link">https://developer.wordpress.org/reference/functions/_get_term_children</a>
+  </p>
+</div>

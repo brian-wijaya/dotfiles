@@ -1,0 +1,150 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> Language_Pack_Upgrader_Skin {}</h1> <section><p>Translation Upgrader Skin for WordPress Translation Upgrades.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_upgrader_skin">WP_Upgrader_Skin</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="language_pack_upgrader_skin/__construct">Language_Pack_Upgrader_Skin::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="language_pack_upgrader_skin/after">Language_Pack_Upgrader_Skin::after</a></td>
+<td>Performs an action following a language pack update.</td>
+</tr>
+<tr class="">
+<td><a href="language_pack_upgrader_skin/before">Language_Pack_Upgrader_Skin::before</a></td>
+<td>Performs an action before a language pack update.</td>
+</tr>
+<tr class="">
+<td><a href="language_pack_upgrader_skin/bulk_footer">Language_Pack_Upgrader_Skin::bulk_footer</a></td>
+<td>Displays the footer following the bulk update process.</td>
+</tr>
+<tr class="">
+<td><a href="language_pack_upgrader_skin/error">Language_Pack_Upgrader_Skin::error</a></td>
+<td>Displays an error message about the update.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="18" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class Language_Pack_Upgrader_Skin extends WP_Upgrader_Skin {
+	public $language_update        = null;
+	public $done_header            = false;
+	public $done_footer            = false;
+	public $display_footer_actions = true;
+
+	/**
+	 * Constructor.
+	 *
+	 * Sets up the language pack upgrader skin.
+	 *
+	 * @since 3.7.0
+	 *
+	 * @param array $args
+	 */
+	public function __construct( $args = array() ) {
+		$defaults = array(
+			'url'                =&gt; '',
+			'nonce'              =&gt; '',
+			'title'              =&gt; __( 'Update Translations' ),
+			'skip_header_footer' =&gt; false,
+		);
+		$args     = wp_parse_args( $args, $defaults );
+		if ( $args['skip_header_footer'] ) {
+			$this-&gt;done_header            = true;
+			$this-&gt;done_footer            = true;
+			$this-&gt;display_footer_actions = false;
+		}
+		parent::__construct( $args );
+	}
+
+	/**
+	 * Performs an action before a language pack update.
+	 *
+	 * @since 3.7.0
+	 */
+	public function before() {
+		$name = $this-&gt;upgrader-&gt;get_name_for_update( $this-&gt;language_update );
+
+		echo '&lt;div class="update-messages lp-show-latest"&gt;';
+
+		/* translators: 1: Project name (plugin, theme, or WordPress), 2: Language. */
+		printf( '&lt;h2&gt;' . __( 'Updating translations for %1$s (%2$s)&amp;#8230;' ) . '&lt;/h2&gt;', $name, $this-&gt;language_update-&gt;language );
+	}
+
+	/**
+	 * Displays an error message about the update.
+	 *
+	 * @since 3.7.0
+	 * @since 5.9.0 Renamed `$error` to `$errors` for PHP 8 named parameter support.
+	 *
+	 * @param string|WP_Error $errors Errors.
+	 */
+	public function error( $errors ) {
+		echo '&lt;div class="lp-error"&gt;';
+		parent::error( $errors );
+		echo '&lt;/div&gt;';
+	}
+
+	/**
+	 * Performs an action following a language pack update.
+	 *
+	 * @since 3.7.0
+	 */
+	public function after() {
+		echo '&lt;/div&gt;';
+	}
+
+	/**
+	 * Displays the footer following the bulk update process.
+	 *
+	 * @since 3.7.0
+	 */
+	public function bulk_footer() {
+		$this-&gt;decrement_update_count( 'translation' );
+
+		$update_actions = array(
+			'updates_page' =&gt; sprintf(
+				'&lt;a href="%s" target="_parent"&gt;%s&lt;/a&gt;',
+				self_admin_url( 'update-core.php' ),
+				__( 'Go to WordPress Updates page' )
+			),
+		);
+
+		/**
+		 * Filters the list of action links available following a translations update.
+		 *
+		 * @since 3.7.0
+		 *
+		 * @param string[] $update_actions Array of translations update links.
+		 */
+		$update_actions = apply_filters( 'update_translations_complete_actions', $update_actions );
+
+		if ( $update_actions &amp;&amp; $this-&gt;display_footer_actions ) {
+			$this-&gt;feedback( implode( ' | ', $update_actions ) );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-language-pack-upgrader-skin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-language-pack-upgrader-skin.php#L18">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-language-pack-upgrader-skin.php#L18-L115">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td><span class="since-description">Moved to its own file from wp-admin/includes/class-wp-upgrader-skins.php.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/language_pack_upgrader_skin" class="_attribution-link">https://developer.wordpress.org/reference/classes/language_pack_upgrader_skin</a>
+  </p>
+</div>

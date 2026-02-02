@@ -1,0 +1,166 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_object_terms( <span class="arg-type">int|int[]</span> <span class="arg-name">$object_ids</span>, <span class="arg-type">string|string[]</span> <span class="arg-name">$taxonomies</span>, <span class="arg-type">array|string</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type"><a href="../classes/wp_term" rel="class">WP_Term</a>[]|int[]|string[]|string|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Retrieves the terms associated with the given object(s), in the supplied taxonomies.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$object_ids</code><span class="type"><span class="int">int</span>|<span class="int[]">int[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The ID(s) of the object(s) to retrieve.</span></div></dd>
+<dt>
+<code>$taxonomies</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The taxonomy names to retrieve terms from.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span>|<span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">See WP_Term_Query::__construct() for supported arguments.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../classes/wp_term" rel="class">WP_Term</a>[]|int[]|string[]|string|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Array of terms, a count thereof as a numeric string, or <a href="../classes/wp_error" rel="class">WP_Error</a> if any of the taxonomies do not exist.<br> See WP_Term_Query::get_terms() for more information.</section> <section><h2 id="more-information">More Information</h2> <p>It should be noted that the results from wp_get_object_terms are not cached which will result in a db call everytime this function is called. For performance, functions like <a href="get_the_terms" rel="function">get_the_terms()</a> (which the results of has been cached), should be used.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2254" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_object_terms( $object_ids, $taxonomies, $args = array() ) {
+	if ( empty( $object_ids ) || empty( $taxonomies ) ) {
+		return array();
+	}
+
+	if ( ! is_array( $taxonomies ) ) {
+		$taxonomies = array( $taxonomies );
+	}
+
+	foreach ( $taxonomies as $taxonomy ) {
+		if ( ! taxonomy_exists( $taxonomy ) ) {
+			return new WP_Error( 'invalid_taxonomy', __( 'Invalid taxonomy.' ) );
+		}
+	}
+
+	if ( ! is_array( $object_ids ) ) {
+		$object_ids = array( $object_ids );
+	}
+	$object_ids = array_map( 'intval', $object_ids );
+
+	$defaults = array(
+		'update_term_meta_cache' =&gt; false,
+	);
+
+	$args = wp_parse_args( $args, $defaults );
+
+	/**
+	 * Filters arguments for retrieving object terms.
+	 *
+	 * @since 4.9.0
+	 *
+	 * @param array    $args       An array of arguments for retrieving terms for the given object(s).
+	 *                             See <a href="wp_get_object_terms">wp_get_object_terms()</a> for details.
+	 * @param int[]    $object_ids Array of object IDs.
+	 * @param string[] $taxonomies Array of taxonomy names to retrieve terms from.
+	 */
+	$args = apply_filters( 'wp_get_object_terms_args', $args, $object_ids, $taxonomies );
+
+	/*
+	 * When one or more queried taxonomies is registered with an 'args' array,
+	 * those params override the `$args` passed to this function.
+	 */
+	$terms = array();
+	if ( count( $taxonomies ) &gt; 1 ) {
+		foreach ( $taxonomies as $index =&gt; $taxonomy ) {
+			$t = get_taxonomy( $taxonomy );
+			if ( isset( $t-&gt;args ) &amp;&amp; is_array( $t-&gt;args ) &amp;&amp; array_merge( $args, $t-&gt;args ) != $args ) {
+				unset( $taxonomies[ $index ] );
+				$terms = array_merge( $terms, wp_get_object_terms( $object_ids, $taxonomy, array_merge( $args, $t-&gt;args ) ) );
+			}
+		}
+	} else {
+		$t = get_taxonomy( $taxonomies[0] );
+		if ( isset( $t-&gt;args ) &amp;&amp; is_array( $t-&gt;args ) ) {
+			$args = array_merge( $args, $t-&gt;args );
+		}
+	}
+
+	$args['taxonomy']   = $taxonomies;
+	$args['object_ids'] = $object_ids;
+
+	// Taxonomies registered without an 'args' param are handled here.
+	if ( ! empty( $taxonomies ) ) {
+		$terms_from_remaining_taxonomies = get_terms( $args );
+
+		// Array keys should be preserved for values of $fields that use term_id for keys.
+		if ( ! empty( $args['fields'] ) &amp;&amp; str_starts_with( $args['fields'], 'id=&gt;' ) ) {
+			$terms = $terms + $terms_from_remaining_taxonomies;
+		} else {
+			$terms = array_merge( $terms, $terms_from_remaining_taxonomies );
+		}
+	}
+
+	/**
+	 * Filters the terms for a given object or objects.
+	 *
+	 * @since 4.2.0
+	 *
+	 * @param WP_Term[]|int[]|string[]|string $terms      Array of terms or a count thereof as a numeric string.
+	 * @param int[]                           $object_ids Array of object IDs for which terms were retrieved.
+	 * @param string[]                        $taxonomies Array of taxonomy names from which terms were retrieved.
+	 * @param array                           $args       Array of arguments for retrieving terms for the given
+	 *                                                    object(s). See wp_get_object_terms() for details.
+	 */
+	$terms = apply_filters( 'get_object_terms', $terms, $object_ids, $taxonomies, $args );
+
+	$object_ids = implode( ',', $object_ids );
+	$taxonomies = "'" . implode( "', '", array_map( 'esc_sql', $taxonomies ) ) . "'";
+
+	/**
+	 * Filters the terms for a given object or objects.
+	 *
+	 * The `$taxonomies` parameter passed to this filter is formatted as a SQL fragment. The
+	 * <a href="../hooks/get_object_terms">'get_object_terms'</a> filter is recommended as an alternative.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param WP_Term[]|int[]|string[]|string $terms      Array of terms or a count thereof as a numeric string.
+	 * @param string                          $object_ids Comma separated list of object IDs for which terms were retrieved.
+	 * @param string                          $taxonomies SQL fragment of taxonomy names from which terms were retrieved.
+	 * @param array                           $args       Array of arguments for retrieving terms for the given
+	 *                                                    object(s). See wp_get_object_terms() for details.
+	 */
+	return apply_filters( 'wp_get_object_terms', $terms, $object_ids, $taxonomies, $args );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L2254">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L2254-L2358">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_object_terms"><span class="hook-func">apply_filters</span>( ‘get_object_terms’, <nobr><span class="arg-type">WP_Term[]|int[]|string[]|string</span> <span class="arg-name">$terms</span></nobr>, <nobr><span class="arg-type">int[]</span> <span class="arg-name">$object_ids</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$taxonomies</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the terms for a given object or objects.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_get_object_terms"><span class="hook-func">apply_filters</span>( ‘wp_get_object_terms’, <nobr><span class="arg-type">WP_Term[]|int[]|string[]|string</span> <span class="arg-name">$terms</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$object_ids</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomies</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the terms for a given object or objects.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_get_object_terms_args"><span class="hook-func">apply_filters</span>( ‘wp_get_object_terms_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">int[]</span> <span class="arg-name">$object_ids</span></nobr>, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$taxonomies</span></nobr> )</a></dt>
+<dd>
+<p>Filters arguments for retrieving object terms.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description">Passing <code>update_term_meta_cache</code> argument value false by default resulting in <a href="get_terms" rel="function">get_terms()</a> to not prime the term meta cache.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td><span class="since-description">Refactored to use <a href="../classes/wp_term_query" rel="class">WP_Term_Query</a>, and to support any <a href="../classes/wp_term_query" rel="class">WP_Term_Query</a> arguments.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Introduced <code>$meta_query</code> and <code>$update_term_meta_cache</code> arguments. When <code>$fields</code> is <code>'all'</code> or <code>'all_with_object_id'</code>, an array of <code>WP_Term</code> objects will be returned.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td><span class="since-description">Added support for <code>'taxonomy'</code>, <code>'parent'</code>, and <code>'term_taxonomy_id'</code> values of <code>$orderby</code>.<br> Introduced <code>$parent</code> argument.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_object_terms" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_object_terms</a>
+  </p>
+</div>

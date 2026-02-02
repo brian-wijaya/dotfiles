@@ -1,0 +1,97 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_stream_image( <span class="arg-type">WP_Image_Editor</span> <span class="arg-name">$image</span>, <span class="arg-type">string</span> <span class="arg-name">$mime_type</span>, <span class="arg-type">int</span> <span class="arg-name">$attachment_id</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Streams image in <a href="../classes/wp_image_editor" rel="class">WP_Image_Editor</a> to browser.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$image</code><span class="type"><span class="WP_Image_Editor"><a href="../classes/wp_image_editor" rel="class">WP_Image_Editor</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The image editor instance.</span></div></dd>
+<dt>
+<code>$mime_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The mime type of the image.</span></div></dd>
+<dt>
+<code>$attachment_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The image’s attachment post ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="344" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_stream_image( $image, $mime_type, $attachment_id ) {
+	if ( $image instanceof WP_Image_Editor ) {
+
+		/**
+		 * Filters the WP_Image_Editor instance for the image to be streamed to the browser.
+		 *
+		 * @since 3.5.0
+		 *
+		 * @param WP_Image_Editor $image         The image editor instance.
+		 * @param int             $attachment_id The attachment post ID.
+		 */
+		$image = apply_filters( 'image_editor_save_pre', $image, $attachment_id );
+
+		if ( is_wp_error( $image-&gt;stream( $mime_type ) ) ) {
+			return false;
+		}
+
+		return true;
+	} else {
+		/* translators: 1: $image, 2: WP_Image_Editor */
+		_deprecated_argument( __FUNCTION__, '3.5.0', sprintf( __( '%1$s needs to be a %2$s object.' ), '$image', 'WP_Image_Editor' ) );
+
+		/**
+		 * Filters the GD image resource to be streamed to the browser.
+		 *
+		 * @since 2.9.0
+		 * @deprecated 3.5.0 Use <a href="../hooks/image_editor_save_pre">'image_editor_save_pre'</a> instead.
+		 *
+		 * @param resource|GdImage $image         Image resource to be streamed.
+		 * @param int              $attachment_id The attachment post ID.
+		 */
+		$image = apply_filters_deprecated( 'image_save_pre', array( $image, $attachment_id ), '3.5.0', 'image_editor_save_pre' );
+
+		switch ( $mime_type ) {
+			case 'image/jpeg':
+				header( 'Content-Type: image/jpeg' );
+				return imagejpeg( $image, null, 90 );
+			case 'image/png':
+				header( 'Content-Type: image/png' );
+				return imagepng( $image );
+			case 'image/gif':
+				header( 'Content-Type: image/gif' );
+				return imagegif( $image );
+			case 'image/webp':
+				if ( function_exists( 'imagewebp' ) ) {
+					header( 'Content-Type: image/webp' );
+					return imagewebp( $image, null, 90 );
+				}
+				return false;
+			case 'image/avif':
+				if ( function_exists( 'imageavif' ) ) {
+					header( 'Content-Type: image/avif' );
+					return imageavif( $image, null, 90 );
+				}
+				return false;
+			default:
+				return false;
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/image-edit.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/image-edit.php#L344">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/image-edit.php#L344-L403">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/image_editor_save_pre"><span class="hook-func">apply_filters</span>( ‘image_editor_save_pre’, <nobr><span class="arg-type">WP_Image_Editor</span> <span class="arg-name">$image</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the <a href="../classes/wp_image_editor" rel="class">WP_Image_Editor</a> instance for the image to be streamed to the browser.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/image_save_pre"><span class="hook-func">apply_filters_deprecated</span>( ‘image_save_pre’, <nobr><span class="arg-type">resource|GdImage</span> <span class="arg-name">$image</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the GD image resource to be streamed to the browser.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.9.0/">2.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_stream_image" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_stream_image</a>
+  </p>
+</div>

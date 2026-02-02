@@ -1,0 +1,59 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_refresh_post_nonces( <span class="arg-type">array</span> <span class="arg-name">$response</span>, <span class="arg-type">array</span> <span class="arg-name">$data</span>, <span class="arg-type">string</span> <span class="arg-name">$screen_id</span> ): <span class="return-type">array</span>
+</h1> <section><p>Checks nonce expiration on the New/Edit Post screen and refresh if needed.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$response</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The Heartbeat response.</span></div></dd>
+<dt>
+<code>$data</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The $_POST data sent.</span></div></dd>
+<dt>
+<code>$screen_id</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The screen ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The Heartbeat response.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1241" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_refresh_post_nonces( $response, $data, $screen_id ) {
+	if ( array_key_exists( 'wp-refresh-post-nonces', $data ) ) {
+		$received = $data['wp-refresh-post-nonces'];
+
+		$response['wp-refresh-post-nonces'] = array( 'check' =&gt; 1 );
+
+		$post_id = absint( $received['post_id'] );
+
+		if ( ! $post_id ) {
+			return $response;
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return $response;
+		}
+
+		$response['wp-refresh-post-nonces'] = array(
+			'replace' =&gt; array(
+				'getpermalinknonce'    =&gt; wp_create_nonce( 'getpermalink' ),
+				'samplepermalinknonce' =&gt; wp_create_nonce( 'samplepermalink' ),
+				'closedpostboxesnonce' =&gt; wp_create_nonce( 'closedpostboxes' ),
+				'_ajax_linking_nonce'  =&gt; wp_create_nonce( 'internal-linking' ),
+				'_wpnonce'             =&gt; wp_create_nonce( 'update-post_' . $post_id ),
+			),
+		);
+	}
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/misc.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/misc.php#L1241">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/misc.php#L1241-L1269">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.6.0/">3.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_refresh_post_nonces" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_refresh_post_nonces</a>
+  </p>
+</div>

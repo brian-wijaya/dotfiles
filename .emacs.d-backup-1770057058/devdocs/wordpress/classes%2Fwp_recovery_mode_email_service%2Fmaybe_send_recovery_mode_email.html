@@ -1,0 +1,69 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Recovery_Mode_Email_Service::maybe_send_recovery_mode_email( <span class="arg-type">int</span> <span class="arg-name">$rate_limit</span>, <span class="arg-type">array</span> <span class="arg-name">$error</span>, <span class="arg-type">array</span> <span class="arg-name">$extension</span> ): <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Sends the recovery mode email if the rate limit has not been sent.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$rate_limit</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Number of seconds before another email can be sent.</span></div></dd>
+<dt>
+<code>$error</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Error details from <code>error_get_last()</code>.</span></div></dd>
+<dt>
+<code>$extension</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The extension that caused the error.<br> <ul class="param-hash">
+<li>
+<code>slug</code> <span class="type">string</span><div class="desc">The extension slug. The plugin or theme’s directory.</div>
+</li> <li>
+<code>type</code> <span class="type">string</span><div class="desc">The extension type. Either <code>'plugin'</code> or <code>'theme'</code>.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true|<a href="../wp_error" rel="class">WP_Error</a></span> True if email sent, <a href="../wp_error" rel="class">WP_Error</a> otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="53" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function maybe_send_recovery_mode_email( $rate_limit, $error, $extension ) {
+
+	$last_sent = get_option( self::RATE_LIMIT_OPTION );
+
+	if ( ! $last_sent || time() &gt; $last_sent + $rate_limit ) {
+		if ( ! update_option( self::RATE_LIMIT_OPTION, time() ) ) {
+			return new WP_Error( 'storage_error', __( 'Could not update the email last sent time.' ) );
+		}
+
+		$sent = $this-&gt;send_recovery_mode_email( $rate_limit, $error, $extension );
+
+		if ( $sent ) {
+			return true;
+		}
+
+		return new WP_Error(
+			'email_failed',
+			sprintf(
+				/* translators: %s: mail() */
+				__( 'The email could not be sent. Possible reason: your host may have disabled the %s function.' ),
+				'mail()'
+			)
+		);
+	}
+
+	$err_message = sprintf(
+		/* translators: 1: Last sent as a human time diff, 2: Wait time as a human time diff. */
+		__( 'A recovery link was already sent %1$s ago. Please wait another %2$s before requesting a new email.' ),
+		human_time_diff( $last_sent ),
+		human_time_diff( $last_sent + $rate_limit )
+	);
+
+	return new WP_Error( 'email_sent_already', $err_message );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-recovery-mode-email-service.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-recovery-mode-email-service.php#L53">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-recovery-mode-email-service.php#L53-L86">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_recovery_mode_email_service/maybe_send_recovery_mode_email" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_recovery_mode_email_service/maybe_send_recovery_mode_email</a>
+  </p>
+</div>

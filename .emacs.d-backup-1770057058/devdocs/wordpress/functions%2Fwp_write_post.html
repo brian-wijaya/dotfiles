@@ -1,0 +1,85 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_write_post(): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Creates a new post from the “Write Post” form using <code>$_POST</code> information.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> Post ID on success, <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="902" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_write_post() {
+	if ( isset( $_POST['post_type'] ) ) {
+		$ptype = get_post_type_object( $_POST['post_type'] );
+	} else {
+		$ptype = get_post_type_object( 'post' );
+	}
+
+	if ( ! current_user_can( $ptype-&gt;cap-&gt;edit_posts ) ) {
+		if ( 'page' === $ptype-&gt;name ) {
+			return new WP_Error( 'edit_pages', __( 'Sorry, you are not allowed to create pages on this site.' ) );
+		} else {
+			return new WP_Error( 'edit_posts', __( 'Sorry, you are not allowed to create posts or drafts on this site.' ) );
+		}
+	}
+
+	$_POST['post_mime_type'] = '';
+
+	// Clear out any data in internal vars.
+	unset( $_POST['filter'] );
+
+	// Edit, don't write, if we have a post ID.
+	if ( isset( $_POST['post_ID'] ) ) {
+		return edit_post();
+	}
+
+	if ( isset( $_POST['visibility'] ) ) {
+		switch ( $_POST['visibility'] ) {
+			case 'public':
+				$_POST['post_password'] = '';
+				break;
+			case 'password':
+				unset( $_POST['sticky'] );
+				break;
+			case 'private':
+				$_POST['post_status']   = 'private';
+				$_POST['post_password'] = '';
+				unset( $_POST['sticky'] );
+				break;
+		}
+	}
+
+	$translated = _wp_translate_postdata( false );
+	if ( is_wp_error( $translated ) ) {
+		return $translated;
+	}
+	$translated = _wp_get_allowed_postdata( $translated );
+
+	// Create the post.
+	$post_id = wp_insert_post( $translated );
+	if ( is_wp_error( $post_id ) ) {
+		return $post_id;
+	}
+
+	if ( empty( $post_id ) ) {
+		return 0;
+	}
+
+	add_meta( $post_id );
+
+	add_post_meta( $post_id, '_edit_last', $GLOBALS['current_user']-&gt;ID );
+
+	// Now that we have an ID we can fix any attachment anchor hrefs.
+	_fix_attachment_links( $post_id );
+
+	wp_set_post_lock( $post_id );
+
+	return $post_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/post.php#L902">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/post.php#L902-L969">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_write_post" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_write_post</a>
+  </p>
+</div>

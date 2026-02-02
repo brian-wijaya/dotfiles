@@ -1,0 +1,167 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Plugins_Controller::create_item( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Uploads a plugin and optionally activates it.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="273" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function create_item( $request ) {
+	global $wp_filesystem;
+
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+	require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+
+	$slug = $request['slug'];
+
+	// Verify filesystem is accessible first.
+	$filesystem_available = $this-&gt;is_filesystem_available();
+	if ( is_wp_error( $filesystem_available ) ) {
+		return $filesystem_available;
+	}
+
+	$api = plugins_api(
+		'plugin_information',
+		array(
+			'slug'   =&gt; $slug,
+			'fields' =&gt; array(
+				'sections'       =&gt; false,
+				'language_packs' =&gt; true,
+			),
+		)
+	);
+
+	if ( is_wp_error( $api ) ) {
+		if ( str_contains( $api-&gt;get_error_message(), 'Plugin not found.' ) ) {
+			$api-&gt;add_data( array( 'status' =&gt; 404 ) );
+		} else {
+			$api-&gt;add_data( array( 'status' =&gt; 500 ) );
+		}
+
+		return $api;
+	}
+
+	$skin     = new WP_Ajax_Upgrader_Skin();
+	$upgrader = new Plugin_Upgrader( $skin );
+
+	$result = $upgrader-&gt;install( $api-&gt;download_link );
+
+	if ( is_wp_error( $result ) ) {
+		$result-&gt;add_data( array( 'status' =&gt; 500 ) );
+
+		return $result;
+	}
+
+	// This should be the same as $result above.
+	if ( is_wp_error( $skin-&gt;result ) ) {
+		$skin-&gt;result-&gt;add_data( array( 'status' =&gt; 500 ) );
+
+		return $skin-&gt;result;
+	}
+
+	if ( $skin-&gt;get_errors()-&gt;has_errors() ) {
+		$error = $skin-&gt;get_errors();
+		$error-&gt;add_data( array( 'status' =&gt; 500 ) );
+
+		return $error;
+	}
+
+	if ( is_null( $result ) ) {
+		// Pass through the error from WP_Filesystem if one was raised.
+		if ( $wp_filesystem instanceof WP_Filesystem_Base
+			&amp;&amp; is_wp_error( $wp_filesystem-&gt;errors ) &amp;&amp; $wp_filesystem-&gt;errors-&gt;has_errors()
+		) {
+			return new WP_Error(
+				'unable_to_connect_to_filesystem',
+				$wp_filesystem-&gt;errors-&gt;get_error_message(),
+				array( 'status' =&gt; 500 )
+			);
+		}
+
+		return new WP_Error(
+			'unable_to_connect_to_filesystem',
+			__( 'Unable to connect to the filesystem. Please confirm your credentials.' ),
+			array( 'status' =&gt; 500 )
+		);
+	}
+
+	$file = $upgrader-&gt;plugin_info();
+
+	if ( ! $file ) {
+		return new WP_Error(
+			'unable_to_determine_installed_plugin',
+			__( 'Unable to determine what plugin was installed.' ),
+			array( 'status' =&gt; 500 )
+		);
+	}
+
+	if ( 'inactive' !== $request['status'] ) {
+		$can_change_status = $this-&gt;plugin_status_permission_check( $file, $request['status'], 'inactive' );
+
+		if ( is_wp_error( $can_change_status ) ) {
+			return $can_change_status;
+		}
+
+		$changed_status = $this-&gt;handle_plugin_status( $file, $request['status'], 'inactive' );
+
+		if ( is_wp_error( $changed_status ) ) {
+			return $changed_status;
+		}
+	}
+
+	// Install translations.
+	$installed_locales = array_values( get_available_languages() );
+	/** This filter is documented in wp-includes/update.php */
+	$installed_locales = apply_filters( 'plugins_update_check_locales', $installed_locales );
+
+	$language_packs = array_map(
+		static function ( $item ) {
+			return (object) $item;
+		},
+		$api-&gt;language_packs
+	);
+
+	$language_packs = array_filter(
+		$language_packs,
+		static function ( $pack ) use ( $installed_locales ) {
+			return in_array( $pack-&gt;language, $installed_locales, true );
+		}
+	);
+
+	if ( $language_packs ) {
+		$lp_upgrader = new Language_Pack_Upgrader( $skin );
+
+		// Install all applicable language packs for the plugin.
+		$lp_upgrader-&gt;bulk_upgrade( $language_packs );
+	}
+
+	$path          = WP_PLUGIN_DIR . '/' . $file;
+	$data          = get_plugin_data( $path, false, false );
+	$data['_file'] = $file;
+
+	$response = $this-&gt;prepare_item_for_response( $data, $request );
+	$response-&gt;set_status( 201 );
+	$response-&gt;header( 'Location', rest_url( sprintf( '%s/%s/%s', $this-&gt;namespace, $this-&gt;rest_base, substr( $file, 0, - 4 ) ) ) );
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-plugins-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-plugins-controller.php#L273">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-plugins-controller.php#L273-L413">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/plugins_update_check_locales"><span class="hook-func">apply_filters</span>( ‘plugins_update_check_locales’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$locales</span></nobr> )</a></dt>
+<dd>
+<p>Filters the locales requested for plugin translations.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_plugins_controller/create_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_plugins_controller/create_item</a>
+  </p>
+</div>

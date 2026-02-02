@@ -1,0 +1,91 @@
+<h1>GPURenderBundleEncoder: setVertexBuffer() method</h1> <details class="baseline-indicator not" data-glean-toggle-open="baseline_toggle_open"> <summary>  <div class="status-title"> <span class="not-bold">Limited availability</span> </div>    </summary> <div class="extra"> <p>This feature is not Baseline because it does not work in some of the most widely-used browsers.</p>  <ul> <li> <a href="https://developer.mozilla.org/en-US/docs/Glossary/Baseline/Compatibility" data-glean-id="baseline_link_learn_more" target="_blank" class="learn-more"> Learn more </a> </li> <li> <a href="#browser_compatibility" data-glean-id="baseline_link_bcd_table"> See full compatibility </a> </li> <li> <a href="https://survey.alchemer.com/s3/7634825/MDN-baseline-feedback?page=%2Fen-US%2Fdocs%2FWeb%2FAPI%2FGPURenderBundleEncoder%2FsetVertexBuffer&amp;level=not" data-glean-id="baseline_link_feedback" class="feedback-link" target="_blank" rel="noreferrer"> Report feedback </a> </li> </ul> </div> </details>   <div class="notecard secure"><p><strong>Secure context:</strong> This feature is available only in <a href="https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts">secure contexts</a> (HTTPS), in some or all <a href="#browser_compatibility">supporting browsers</a>.</p></div> <div class="notecard note"><p><strong>Note:</strong> This feature is available in <a href="../web_workers_api">Web Workers</a>.</p></div> <p>The <code>setVertexBuffer()</code> method of the <a href="../gpurenderbundleencoder"><code>GPURenderBundleEncoder</code></a> interface sets or unsets the current <a href="../gpubuffer"><code>GPUBuffer</code></a> for the given slot that will provide vertex data for subsequent drawing commands.</p> <div class="notecard note"> <p><strong>Note:</strong> This method is functionally identical to its equivalent on <a href="../gpurenderpassencoder"><code>GPURenderPassEncoder</code></a> — <a href="../gpurenderpassencoder/setvertexbuffer"><code>setVertexBuffer()</code></a>.</p> </div>     <mdn-survey></mdn-survey>  <h2 id="syntax" class="heading">Syntax</h2> <div class="code-example"><pre data-language="js">setVertexBuffer(slot, buffer, offset, size)
+</pre></div>  <h3 id="parameters" class="heading">Parameters</h3> <dl> <dt id="slot"><a href="#slot"><code>slot</code></a></dt> <dd> <p>A number referencing the vertex buffer slot to set the vertex buffer for.</p> </dd> <dt id="buffer"><a href="#buffer"><code>buffer</code></a></dt> <dd> <p>A <a href="../gpubuffer"><code>GPUBuffer</code></a> representing the buffer containing the vertex data to use for subsequent drawing commands, or <code>null</code>, in which case any previously-set buffer in the given slot is unset.</p> </dd> <dt id="offset"><a href="#offset"><code>offset</code> <span class="badge inline optional">Optional</span></a></dt> <dd> <p>A number representing the offset, in bytes, into <code>buffer</code> where the vertex data begins. If omitted, <code>offset</code> defaults to 0.</p> </dd> <dt id="size"><a href="#size"><code>size</code> <span class="badge inline optional">Optional</span></a></dt> <dd> <p>A number representing the size, in bytes, of the vertex data contained in <code>buffer</code>. If omitted, <code>size</code> defaults to the <code>buffer</code>'s <a href="../gpubuffer/size"><code>GPUBuffer.size</code></a> - <code>offset</code>.</p> </dd> </dl>  <h3 id="return_value" class="heading">Return value</h3> <p>None (<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/undefined"><code>Undefined</code></a>).</p>  <h3 id="validation" class="heading">Validation</h3> <p>The following criteria must be met when calling <code>setVertexBuffer()</code>, otherwise a <a href="../gpuvalidationerror"><code>GPUValidationError</code></a> is generated and the <a href="../gpurenderbundleencoder"><code>GPURenderBundleEncoder</code></a> becomes invalid:</p> <ul> <li>
+<code>buffer</code>'s <a href="../gpubuffer/usage"><code>GPUBuffer.usage</code></a> contains the <code>GPUBufferUsage.VERTEX</code> flag.</li> <li>
+<code>slot</code> is less than the <a href="../gpudevice"><code>GPUDevice</code></a>'s <code>maxVertexBuffers</code> <a href="../gpusupportedlimits">limit</a>.</li> <li>
+<code>offset</code> + <code>size</code> is less than or equal to the <code>buffer</code>'s <a href="../gpubuffer/size"><code>GPUBuffer.size</code></a>.</li> <li>
+<code>offset</code> is a multiple of 4.</li> </ul>  <h2 id="examples" class="heading">Examples</h2> &gt;  <h3 id="set_vertex_buffer" class="heading">Set vertex buffer</h3> <div class="code-example"><pre data-language="js">function recordRenderPass(passEncoder) {
+  if (settings.dynamicOffsets) {
+    passEncoder.setPipeline(dynamicPipeline);
+  } else {
+    passEncoder.setPipeline(pipeline);
+  }
+  passEncoder.setVertexBuffer(0, vertexBuffer);
+  passEncoder.setBindGroup(0, timeBindGroup);
+  const dynamicOffsets = [0];
+  for (let i = 0; i &lt; numTriangles; ++i) {
+    if (settings.dynamicOffsets) {
+      dynamicOffsets[0] = i * alignedUniformBytes;
+      passEncoder.setBindGroup(1, dynamicBindGroup, dynamicOffsets);
+    } else {
+      passEncoder.setBindGroup(1, bindGroups[i]);
+    }
+    passEncoder.draw(3, 1, 0, 0);
+  }
+}
+</pre></div> <p>The above snippet is taken from the WebGPU Samples <a href="https://webgpu.github.io/webgpu-samples/samples/animometer/" target="_blank">Animometer example</a>.</p>  <h3 id="unset_vertex_buffer" class="heading">Unset vertex buffer</h3> <div class="code-example"><pre data-language="js">// Set vertex buffer in slot 0
+passEncoder.setVertexBuffer(0, vertexBuffer);
+
+// Later, unset vertex buffer in slot 0
+passEncoder.setVertexBuffer(0, null);
+</pre></div>  <h2 id="specifications" class="heading">Specifications</h2> <div class="_table"><table> <thead> <tr> <th scope="col">Specification</th> </tr> </thead> <tbody> <tr> <td><a href="https://gpuweb.github.io/gpuweb/#dom-gpurendercommandsmixin-setvertexbuffer" rel="noopener" target="_blank">WebGPU&gt;<br># dom-gpurendercommandsmixin-setvertexbuffer&gt;</a></td> </tr> </tbody> </table></div>  <h2 id="browser_compatibility" class="heading">Browser compatibility</h2> <div class="_table"><table>
+<thead>
+<tr id="bct-browser-type">
+<th></th>
+<th colspan="5">Desktop</th>
+<th colspan="7">Mobile</th>
+</tr>
+<tr id="bct-browsers">
+<th></th>
+<th>Chrome</th>
+<th>Edge</th>
+<th>Firefox</th>
+<th>Opera</th>
+<th>Safari</th>
+<th>Chrome Android</th>
+<th>Firefox for Android</th>
+<th>Opera Android</th>
+<th>Safari on IOS</th>
+<th>Samsung Internet</th>
+<th>WebView Android</th>
+<th>WebView on iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th><code>setVertexBuffer</code></th>
+<td class="bc-supports-yes"><details><summary>113</summary>Currently supported on ChromeOS, macOS, and Windows only.</details></td>
+<td class="bc-supports-yes"><details><summary>113</summary>Currently supported on ChromeOS, macOS, and Windows only.</details></td>
+<td class="bc-supports-yes"><details><summary>141</summary>Currently supported on Windows only, in all contexts except for service workers.</details></td>
+<td class="bc-supports-yes"><details><summary>99</summary>Currently supported on ChromeOS, macOS, and Windows only.</details></td>
+<td class="bc-supports-yes">26</td>
+<td class="bc-supports-yes">121</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">81</td>
+<td class="bc-supports-yes">26</td>
+<td class="bc-supports-yes">25.0</td>
+<td class="bc-supports-yes">121</td>
+<td class="bc-supports-yes">26</td>
+</tr>
+<tr>
+<th><code>unset_vertex_buffer</code></th>
+<td class="bc-supports-yes"><details><summary>117</summary>Currently supported on ChromeOS, macOS, and Windows only.</details></td>
+<td class="bc-supports-yes"><details><summary>117</summary>Currently supported on ChromeOS, macOS, and Windows only.</details></td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes"><details><summary>103</summary>Currently supported on ChromeOS, macOS, and Windows only.</details></td>
+<td class="bc-supports-yes">26</td>
+<td class="bc-supports-yes">121</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">81</td>
+<td class="bc-supports-yes">26</td>
+<td class="bc-supports-yes">25.0</td>
+<td class="bc-supports-yes">121</td>
+<td class="bc-supports-yes">26</td>
+</tr>
+</tbody>
+</table></div>  <h2 id="see_also" class="heading">See also</h2> <ul> <li>The <a href="../webgpu_api">WebGPU API</a>
+</li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2005&ndash;2025 MDN contributors.<br>Licensed under the Creative Commons Attribution-ShareAlike License v2.5 or later.<br>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/GPURenderBundleEncoder/setVertexBuffer" class="_attribution-link">https://developer.mozilla.org/en-US/docs/Web/API/GPURenderBundleEncoder/setVertexBuffer</a>
+  </p>
+</div>

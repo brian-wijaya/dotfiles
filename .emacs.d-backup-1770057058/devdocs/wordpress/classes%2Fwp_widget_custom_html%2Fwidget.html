@@ -1,0 +1,97 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Widget_Custom_HTML::widget( <span class="arg-type">array</span> <span class="arg-name">$args</span>, <span class="arg-type">array</span> <span class="arg-name">$instance</span> )</h1> <section><p>Outputs the content for the current Custom HTML widget instance.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Display arguments including <code>'before_title'</code>, <code>'after_title'</code>, <code>'before_widget'</code>, and <code>'after_widget'</code>.</span></div></dd>
+<dt>
+<code>$instance</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Settings for the current Custom HTML widget instance.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="117" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function widget( $args, $instance ) {
+	global $post;
+
+	// Override global $post so filters (and shortcodes) apply in a consistent context.
+	$original_post = $post;
+	if ( is_singular() ) {
+		// Make sure post is always the queried object on singular queries (not from another sub-query that failed to clean up the global $post).
+		$post = get_queried_object();
+	} else {
+		// Nullify the $post global during widget rendering to prevent shortcodes from running with the unexpected context on archive queries.
+		$post = null;
+	}
+
+	// Prevent dumping out all attachments from the media library.
+	add_filter( 'shortcode_atts_gallery', array( $this, '_filter_gallery_shortcode_attrs' ) );
+
+	$instance = array_merge( $this-&gt;default_instance, $instance );
+
+	/** This filter is documented in wp-includes/widgets/class-wp-widget-pages.php */
+	$title = apply_filters( 'widget_title', $instance['title'], $instance, $this-&gt;id_base );
+
+	// Prepare instance data that looks like a normal Text widget.
+	$simulated_text_widget_instance = array_merge(
+		$instance,
+		array(
+			'text'   =&gt; isset( $instance['content'] ) ? $instance['content'] : '',
+			'filter' =&gt; false, // Because wpautop is not applied.
+			'visual' =&gt; false, // Because it wasn't created in TinyMCE.
+		)
+	);
+	unset( $simulated_text_widget_instance['content'] ); // Was moved to 'text' prop.
+
+	/** This filter is documented in wp-includes/widgets/class-wp-widget-text.php */
+	$content = apply_filters( 'widget_text', $instance['content'], $simulated_text_widget_instance, $this );
+
+	/**
+	 * Filters the content of the Custom HTML widget.
+	 *
+	 * @since 4.8.1
+	 *
+	 * @param string                $content  The widget content.
+	 * @param array                 $instance Array of settings for the current widget.
+	 * @param WP_Widget_Custom_HTML $widget   Current Custom HTML widget instance.
+	 */
+	$content = apply_filters( 'widget_custom_html_content', $content, $instance, $this );
+
+	// Restore post global.
+	$post = $original_post;
+	remove_filter( 'shortcode_atts_gallery', array( $this, '_filter_gallery_shortcode_attrs' ) );
+
+	// Inject the Text widget's container class name alongside this widget's class name for theme styling compatibility.
+	$args['before_widget'] = preg_replace( '/(?&lt;=\sclass=["\'])/', 'widget_text ', $args['before_widget'] );
+
+	echo $args['before_widget'];
+	if ( ! empty( $title ) ) {
+		echo $args['before_title'] . $title . $args['after_title'];
+	}
+	echo '&lt;div class="textwidget custom-html-widget"&gt;'; // The textwidget class is for theme styling compatibility.
+	echo $content;
+	echo '&lt;/div&gt;';
+	echo $args['after_widget'];
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/widgets/class-wp-widget-custom-html.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/widgets/class-wp-widget-custom-html.php#L117">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/widgets/class-wp-widget-custom-html.php#L117-L178">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/widget_custom_html_content"><span class="hook-func">apply_filters</span>( ‘widget_custom_html_content’, <nobr><span class="arg-type">string</span> <span class="arg-name">$content</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$instance</span></nobr>, <nobr><span class="arg-type">WP_Widget_Custom_HTML</span> <span class="arg-name">$widget</span></nobr> )</a></dt>
+<dd>
+<p>Filters the content of the Custom HTML widget.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/widget_text"><span class="hook-func">apply_filters</span>( ‘widget_text’, <nobr><span class="arg-type">string</span> <span class="arg-name">$text</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$instance</span></nobr>, <nobr><span class="arg-type">WP_Widget_Text|WP_Widget_Custom_HTML</span> <span class="arg-name">$widget</span></nobr> )</a></dt>
+<dd>
+<p>Filters the content of the Text widget.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/widget_title"><span class="hook-func">apply_filters</span>( ‘widget_title’, <nobr><span class="arg-type">string</span> <span class="arg-name">$title</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$instance</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$id_base</span></nobr> )</a></dt>
+<dd>
+<p>Filters the widget title.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.8.1/">4.8.1</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_widget_custom_html/widget" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_widget_custom_html/widget</a>
+  </p>
+</div>

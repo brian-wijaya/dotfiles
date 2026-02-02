@@ -1,0 +1,80 @@
+<h1 class="wp-block-wporg-code-reference-title">_load_remote_block_patterns( <span class="arg-type">WP_Screen</span> <span class="arg-name">$deprecated</span> = <span class="arg-default">null</span> )</h1> <section><p>Register Core’s official patterns from wordpress.org/patterns.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$deprecated</code><span class="type"><span class="WP_Screen"><a href="../classes/wp_screen" rel="class">WP_Screen</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Unused. Formerly the screen that the current request was triggered from.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="210" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _load_remote_block_patterns( $deprecated = null ) {
+	if ( ! empty( $deprecated ) ) {
+		_deprecated_argument( __FUNCTION__, '5.9.0' );
+		$current_screen = $deprecated;
+		if ( ! $current_screen-&gt;is_block_editor ) {
+			return;
+		}
+	}
+
+	$supports_core_patterns = get_theme_support( 'core-block-patterns' );
+
+	/**
+	 * Filter to disable remote block patterns.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param bool $should_load_remote
+	 */
+	$should_load_remote = apply_filters( 'should_load_remote_block_patterns', true );
+
+	if ( $supports_core_patterns &amp;&amp; $should_load_remote ) {
+		$request         = new WP_REST_Request( 'GET', '/wp/v2/pattern-directory/patterns' );
+		$core_keyword_id = 11; // 11 is the ID for "core".
+		$request-&gt;set_param( 'keyword', $core_keyword_id );
+		$response = rest_do_request( $request );
+		if ( $response-&gt;is_error() ) {
+			return;
+		}
+		$patterns = $response-&gt;get_data();
+
+		foreach ( $patterns as $pattern ) {
+			$pattern['source']  = 'pattern-directory/core';
+			$normalized_pattern = wp_normalize_remote_block_pattern( $pattern );
+			$pattern_name       = 'core/' . sanitize_title( $normalized_pattern['title'] );
+			register_block_pattern( $pattern_name, $normalized_pattern );
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/block-patterns.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/block-patterns.php#L210">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/block-patterns.php#L210-L247">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/should_load_remote_block_patterns"><span class="hook-func">apply_filters</span>( ‘should_load_remote_block_patterns’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$should_load_remote</span></nobr> )</a></dt>
+<dd>
+<p>Filter to disable remote block patterns.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description">Add <code>'pattern-directory/core'</code> to the pattern’s <code>'source'</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.2.0/">6.2.0</a></td>
+<td><span class="since-description">Normalize the pattern from the API (snake_case) to the format expected by <code>register_block_pattern</code> (camelCase).</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">The $current_screen argument was removed.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_load_remote_block_patterns" class="_attribution-link">https://developer.wordpress.org/reference/functions/_load_remote_block_patterns</a>
+  </p>
+</div>

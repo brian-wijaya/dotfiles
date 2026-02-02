@@ -1,0 +1,69 @@
+<h1 class="wp-block-wporg-code-reference-title">MO::export_to_file_handle( <span class="arg-type">resource</span> <span class="arg-name">$fh</span> ): <span class="return-type">true</span>
+</h1>  <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$fh</code><span class="type"><span class="resource">resource</span></span><span class="required">required</span>
+</dt>
+
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">true</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="104" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function export_to_file_handle( $fh ) {
+	$entries = array_filter( $this-&gt;entries, array( $this, 'is_entry_good_for_export' ) );
+	ksort( $entries );
+	$magic                     = 0x950412de;
+	$revision                  = 0;
+	$total                     = count( $entries ) + 1; // All the headers are one entry.
+	$originals_lengths_addr    = 28;
+	$translations_lengths_addr = $originals_lengths_addr + 8 * $total;
+	$size_of_hash              = 0;
+	$hash_addr                 = $translations_lengths_addr + 8 * $total;
+	$current_addr              = $hash_addr;
+	fwrite(
+		$fh,
+		pack(
+			'V*',
+			$magic,
+			$revision,
+			$total,
+			$originals_lengths_addr,
+			$translations_lengths_addr,
+			$size_of_hash,
+			$hash_addr
+		)
+	);
+	fseek( $fh, $originals_lengths_addr );
+
+	// Headers' msgid is an empty string.
+	fwrite( $fh, pack( 'VV', 0, $current_addr ) );
+	++$current_addr;
+	$originals_table = "\0";
+
+	$reader = new POMO_Reader();
+
+	foreach ( $entries as $entry ) {
+		$originals_table .= $this-&gt;export_original( $entry ) . "\0";
+		$length           = $reader-&gt;strlen( $this-&gt;export_original( $entry ) );
+		fwrite( $fh, pack( 'VV', $length, $current_addr ) );
+		$current_addr += $length + 1; // Account for the NULL byte after.
+	}
+
+	$exported_headers = $this-&gt;export_headers();
+	fwrite( $fh, pack( 'VV', $reader-&gt;strlen( $exported_headers ), $current_addr ) );
+	$current_addr      += strlen( $exported_headers ) + 1;
+	$translations_table = $exported_headers . "\0";
+
+	foreach ( $entries as $entry ) {
+		$translations_table .= $this-&gt;export_translations( $entry ) . "\0";
+		$length              = $reader-&gt;strlen( $this-&gt;export_translations( $entry ) );
+		fwrite( $fh, pack( 'VV', $length, $current_addr ) );
+		$current_addr += $length + 1;
+	}
+
+	fwrite( $fh, $originals_table );
+	fwrite( $fh, $translations_table );
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/pomo/mo.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/pomo/mo.php#L104">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/pomo/mo.php#L104-L159">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/mo/export_to_file_handle" class="_attribution-link">https://developer.wordpress.org/reference/classes/mo/export_to_file_handle</a>
+  </p>
+</div>

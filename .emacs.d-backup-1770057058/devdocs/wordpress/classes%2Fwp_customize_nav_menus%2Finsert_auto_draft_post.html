@@ -1,0 +1,69 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Customize_Nav_Menus::insert_auto_draft_post( <span class="arg-type">array</span> <span class="arg-name">$postarr</span> ): <span class="return-type"><a href="../wp_post" rel="class">WP_Post</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Adds a new <code>auto-draft</code> post.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$postarr</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post array. Note that post_status is overridden to be <code>auto-draft</code>.<br> <ul class="param-hash">
+<li>
+<code>post_title</code> <span class="type">string</span><div class="desc">Post title. Required.</div>
+</li> <li>
+<code>post_type</code> <span class="type">string</span><div class="desc">Post type. Required.</div>
+</li> <li>
+<code>post_name</code> <span class="type">string</span><div class="desc">Post name.</div>
+</li> <li>
+<code>post_content</code> <span class="type">string</span><div class="desc">Post content.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_post" rel="class">WP_Post</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Inserted auto-draft post object or error.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="949" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function insert_auto_draft_post( $postarr ) {
+	if ( ! isset( $postarr['post_type'] ) ) {
+		return new WP_Error( 'unknown_post_type', __( 'Invalid post type.' ) );
+	}
+	if ( empty( $postarr['post_title'] ) ) {
+		return new WP_Error( 'empty_title', __( 'Empty title.' ) );
+	}
+	if ( ! empty( $postarr['post_status'] ) ) {
+		return new WP_Error( 'status_forbidden', __( 'Status is forbidden.' ) );
+	}
+
+	/*
+	 * If the changeset is a draft, this will change to draft the next time the changeset
+	 * is updated; otherwise, auto-draft will persist in autosave revisions, until save.
+	 */
+	$postarr['post_status'] = 'auto-draft';
+
+	// Auto-drafts are allowed to have empty post_names, so it has to be explicitly set.
+	if ( empty( $postarr['post_name'] ) ) {
+		$postarr['post_name'] = sanitize_title( $postarr['post_title'] );
+	}
+	if ( ! isset( $postarr['meta_input'] ) ) {
+		$postarr['meta_input'] = array();
+	}
+	$postarr['meta_input']['_customize_draft_post_name'] = $postarr['post_name'];
+	$postarr['meta_input']['_customize_changeset_uuid']  = $this-&gt;manager-&gt;changeset_uuid();
+	unset( $postarr['post_name'] );
+
+	add_filter( 'wp_insert_post_empty_content', '__return_false', 1000 );
+	$r = wp_insert_post( wp_slash( $postarr ), true );
+	remove_filter( 'wp_insert_post_empty_content', '__return_false', 1000 );
+
+	if ( is_wp_error( $r ) ) {
+		return $r;
+	} else {
+		return get_post( $r );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-customize-nav-menus.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-customize-nav-menus.php#L949">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-customize-nav-menus.php#L949-L986">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_customize_nav_menus/insert_auto_draft_post" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_customize_nav_menus/insert_auto_draft_post</a>
+  </p>
+</div>

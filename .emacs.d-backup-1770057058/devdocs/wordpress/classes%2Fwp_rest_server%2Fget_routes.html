@@ -1,0 +1,105 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Server::get_routes( <span class="arg-type">string</span> <span class="arg-name">$route_namespace</span> = <span class="arg-default">”</span> ): <span class="return-type">array</span>
+</h1> <section><p>Retrieves the route map.</p> </section> <section><h2 id="description">Description</h2> <p>The route map is an associative array with path regexes as the keys. The value is an indexed array with the callback function/method as the first item, and a bitmask of HTTP methods as the second item (see the class constants).</p> <p>Each route can be mapped to more than one callback by using an array of the indexed arrays. This allows mapping e.g. GET requests to one callback and POST requests to another.</p> <p>Note that the path regexes (array keys) must have @ escaped, as this is used as the delimiter with preg_match()</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$route_namespace</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Optionally, only return routes in the given namespace.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> <code>'/path/regex' =&gt; array( $callback, $bitmask )</code> or <code>'/path/regex' =&gt; array( array( $callback, $bitmask ), ...)</code>.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="956" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_routes( $route_namespace = '' ) {
+	$endpoints = $this-&gt;endpoints;
+
+	if ( $route_namespace ) {
+		$endpoints = wp_list_filter( $endpoints, array( 'namespace' =&gt; $route_namespace ) );
+	}
+
+	/**
+	 * Filters the array of available REST API endpoints.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param array $endpoints The available endpoints. An array of matching regex patterns, each mapped
+	 *                         to an array of callbacks for the endpoint. These take the format
+	 *                         `'/path/regex' =&gt; array( $callback, $bitmask )` or
+	 *                         `'/path/regex' =&gt; array( array( $callback, $bitmask ).
+	 */
+	$endpoints = apply_filters( 'rest_endpoints', $endpoints );
+
+	// Normalize the endpoints.
+	$defaults = array(
+		'methods'       =&gt; '',
+		'accept_json'   =&gt; false,
+		'accept_raw'    =&gt; false,
+		'show_in_index' =&gt; true,
+		'args'          =&gt; array(),
+	);
+
+	foreach ( $endpoints as $route =&gt; &amp;$handlers ) {
+
+		if ( isset( $handlers['callback'] ) ) {
+			// Single endpoint, add one deeper.
+			$handlers = array( $handlers );
+		}
+
+		if ( ! isset( $this-&gt;route_options[ $route ] ) ) {
+			$this-&gt;route_options[ $route ] = array();
+		}
+
+		foreach ( $handlers as $key =&gt; &amp;$handler ) {
+
+			if ( ! is_numeric( $key ) ) {
+				// Route option, move it to the options.
+				$this-&gt;route_options[ $route ][ $key ] = $handler;
+				unset( $handlers[ $key ] );
+				continue;
+			}
+
+			$handler = wp_parse_args( $handler, $defaults );
+
+			// Allow comma-separated HTTP methods.
+			if ( is_string( $handler['methods'] ) ) {
+				$methods = explode( ',', $handler['methods'] );
+			} elseif ( is_array( $handler['methods'] ) ) {
+				$methods = $handler['methods'];
+			} else {
+				$methods = array();
+			}
+
+			$handler['methods'] = array();
+
+			foreach ( $methods as $method ) {
+				$method                        = strtoupper( trim( $method ) );
+				$handler['methods'][ $method ] = true;
+			}
+		}
+	}
+
+	return $endpoints;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/class-wp-rest-server.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/class-wp-rest-server.php#L956">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/class-wp-rest-server.php#L956-L1025">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_endpoints"><span class="hook-func">apply_filters</span>( ‘rest_endpoints’, <nobr><span class="arg-type">array</span> <span class="arg-name">$endpoints</span></nobr> )</a></dt>
+<dd>
+<p>Filters the array of available REST API endpoints.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.4.0/">5.4.0</a></td>
+<td><span class="since-description">Added <code>$route_namespace</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_server/get_routes" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_server/get_routes</a>
+  </p>
+</div>

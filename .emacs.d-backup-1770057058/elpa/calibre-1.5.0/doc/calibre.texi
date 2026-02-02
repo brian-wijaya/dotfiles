@@ -1,0 +1,463 @@
+\input texinfo
+@setfilename calibre.info
+@include version.texi
+@settitle calibre.el @value{VERSION}
+@syncodeindex pg cp
+
+@copying
+This manual is for calibre.el (version @value{VERSION},
+@value{UPDATED}), a package for interacting with Calibre libraries from
+Emacs.
+
+Copyright @copyright{} 2023,2024  Free Software Foundation, Inc.
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, with no Front-Cover Texts, and with no Back-Cover
+Texts.  A copy of the license is included in the section entitled
+``GNU Free Documentation License''.
+@end quotation
+@end copying
+
+@dircategory Emacs
+@direntry
+* Calibre: (calibre).     Interact with Calibre from Emacs.
+@end direntry
+
+@titlepage
+@title calibre.el
+@subtitle for version @value{VERSION}, @value{UPDATED}
+@author Kjartan Oli Agustsson (@email{kjartanoli@@disroot.org})
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@contents
+
+@node Top
+@top calibre.el
+
+This manual is for calibre.el (version @value{VERSION},
+@value{UPDATED}).
+
+@menu
+* Getting started::
+* Viewing your library::
+* Modifying your library::
+* Interacting with external reading devices::
+* GNU Free Documentation License::
+* Index::
+@end menu
+
+@node Getting started
+@chapter Getting started
+@vindex calibre-libraries
+@cindex Library
+@findex calibre-library
+@findex calibre-select-library
+To start using calibre.el customise the variable
+@code{calibre-libraries}.  Each entry is a cons cell @code{(@var{NAME}
+. @var{PATH})}, where @var{NAME} is a human readable name for the
+library, and @var{PATH} is the library's location on your file
+system.@footnote{This is the path you would specify during Calibre's
+Welcome Wizard.}  Once you have defined your libraries call
+@code{calibre-library} to view one of them.  If more than one library is
+defined you will be prompted to select one of them.  To switch between
+libraries call @code{calibre-select-library}.
+
+@node Viewing your library
+@chapter Viewing your library
+@cindex Library buffer
+@vindex calibre-library-columns
+Your interface with your library is the @file{*Library*} buffer, created
+by @code{calibre-library}.  The @file{*Library*} buffer contains a
+listing of the books in the current library.  The exact metadata
+displayed is controlled by @code{calibre-library-columns}.  Each entry
+in @code{calibre-library-columns} is a cons cell @code{(@var{COLUMN}
+. @var{WIDTH})}, where @var{COLUMN} is one of:
+@table @code
+@item id
+The id of the book.
+@item title
+The title of the book.
+@item authors
+The authors of the book.
+@item publisher
+The publisher of the book.
+@item series
+The series the book is part of.
+@item series-index
+The book's position within its series.
+@item tags
+Any tags applied to the book.
+@item formats
+The formats the book is available in within the library.
+@item pubdate
+The book's date of publication.@footnote{To change how this is displayed
+customize @code{calibre-library-time-format.}}
+@item summary
+The book's summary.@footnote{This field is likely to contain large
+amounts of text which are not well suited to display in the
+@file{*Library*} buffer.}
+@end table
+@var{WIDTH} is an integer specifying the number of characters the
+corresponding column should take in the @file{*Library*} buffer.
+@code{calibre-library-columns} has a setter which automatically updates
+the @file{*Library*} buffer to reflect changes in its value.  You should
+therefore take care to modify its value through methods which respect
+this setter, such as the Customize interface @xref{Easy
+Customization,,,Emacs}, or Emacs 29's @code{setopt}
+@xref{Examining,,,Emacs}.
+
+@menu
+* Reading books::
+* Searching::
+@end menu
+
+@node Reading books
+@section Reading books
+@findex calibre-library-open-book
+@findex calibre-library-open-book-other-window
+To read a book simply press @kbd{@key{RET}}
+(@code{calibre-library-open-book}) with point on a particular book in
+the @file{*Library*} buffer.  This will open a new buffer containing the
+book at point in the current window.  Alternatively you can also press
+@kbd{o} (@code{calibre-library-open-book-other-window}), which will open
+the book in a different window.
+
+@findex calibre-library-open-book-external
+@vindex calibre-external-formats
+To actually read a book Emacs must of course be able to display the file
+format in which the book is stored, which may require the presence of
+additional tools on your system @xref{Document View,,,Emacs}.  If Emacs
+is not able to display your chosen format, or you simply prefer using
+another program, you can also open the book in an external program using
+@code{calibre-library-open-book-external} or customize
+@code{calibre-external-formats}.  If an entry for a particular format
+exists en @code{calibre-external-formats}
+@code{calibre-library-open-book} will use the specified program instead
+of opening the file in Emacs.
+
+@menu
+* Choosing formats::
+@end menu
+
+@node Choosing formats
+@subsection Choosing formats
+Some of the primary features of Calibre are its ability to convert
+between different file formats, and the ability to store multiple
+formats of the same book.  calibre.el does not yet support converting
+between formats, but it does handle multiple formats of the same book.
+
+@vindex calibre-format-preferences
+When a book with multiple formats is opened one format must be selected.
+In calibre.el this selection is performed by consulting
+@code{calibre-format-preferences}, an ordered list defining your
+preferences for file formats.  Whenever you open a book calibre.el will
+search this list and select the first format applicable to the book
+being opened.  If none of your preferred formats are available for the
+book in question calibre.el will select one of the available ones.  If
+you wish to override the automatic selection of a preferred format call
+@code{calibre-library-open-book} or
+@code{calibre-library-open-book-other-window} with a prefix argument
+@xref{Arguments,,,Emacs}.
+
+@node Searching
+@section Searching
+@cindex filter
+@cindex basic filter
+Searching in calibre.el is performed by the application of filters.  A
+filter is either inclusive or exclusive and consists of the name of a
+metadata field (@var{FIELD}) and a value against which that field should
+be compared (@var{VALUE}).  A book matches a filter if its value for
+@var{FIELD} is equal to @var{VALUE}.
+
+As the names imply items that match an inclusive filter are included in
+the search result, while items that match an exclusive filter are
+excluded, but the system is slightly more complex.  Inclusive filters
+form an intersection while exclusive filters form a union.  This means
+that to be included an item must match @emph{ALL} inclusive filters, while to
+be excluded it is sufficient to match @emph{ANY} exclusive filter.  To change
+this behaviour a composite filter is used.
+
+@cindex composite filter
+A composite filter is composed of a set of filters, and can like normal
+filters be either inclusive or exclusive.  However the
+intersection/union semantics of composite filters are reversed compared
+to their normal counterparts.  An inclusive composite filter is
+therefore a set of filters for which it is sufficient for a book to
+match ANY of its elements to be included, while an exclusive composite
+filter is a set of filters for which a book must match all of its
+elements to be excluded.
+
+It is of course possible to combine composite and non-composite filters.
+When doing so composite filters are treated exactly as any other base
+filter, i.e. any book matching an inclusive composite filter must still
+match all other inclusive filters.
+
+@menu
+* Interactive search::
+* Virtual Libraries::
+@end menu
+
+@node Interactive search
+@subsection Interactive search
+@findex calibre-search
+The most convenient method of applying filters to your library is the
+interactive search interface provided by @code{calibre-search} which is
+by default bound to @kbd{s} in the @file{*Library*} buffer.  When called
+@code{calibre-search} opens a simple interface allowing you to quickly
+apply any filter, and see the results immediately.  To apply a composite
+filter enter the Compose sub-menu by pressing @kbd{C}, compose the
+filter, and then apply it by pressing @kbd{a}, or cancel it by pressing
+@kbd{q}.  The interactive search interface also allows you to remove the
+last applied filter by pressing @kbd{u}, to remove multiple filters
+press @kbd{u} again, or to clear all filters by pressing @kbd{c}.
+
+@node Virtual Libraries
+@subsection Virtual Libraries
+@cindex Virtual Library
+@vindex calibre-virtual-libraries
+A virtual library is a named subset of your library, defined using the
+filter mechanism.  To create a virtual library customize the variable
+@code{calibre-virtual-libraries}.  Each entry in
+@code{calibre-virtual-libraries} is a cons cell @code{(@var{NAME}
+. @var{FILTERS})}, where @var{NAME} is a string identifying the virtual
+library and @var{FILTERS} is a list of filters.
+
+Each filter is either:
+
+@cindex basic filter
+A basic filter, which is a vector @code{[@var{OP} @var{FIELD}
+@var{VALUE}]}.  @var{OP} is either @code{+} or @code{-}, where @code{+}
+signifies an inclusive filter and @code{-} signifies an exclusive one.
+@var{FIELD} is a symbol identifying the metadata field to match against,
+it must be one of:
+@itemize @bullet
+@item title
+@item author
+@item publisher
+@item series
+@item tag
+@item format
+@end itemize
+@var{VALUE} is the string to compare @var{FIELD} to.
+
+@cindex fuzzy filter
+For a given book to match against a basic filter the value of
+@var{FIELD} for that book must be exactly equal to @var{VALUE}.
+Sometimes this exact matching is undesirable and you would like to find
+all books where @var{FIELD} contains @var{VALUE} instead.  This is
+exactly what fuzzy filters do.
+
+A fuzzy filter is a vector @code{[@var{OP} @var{FIELD} @var{VALUE} ~]}.
+@var{OP}, @var{FIELD}, and @var{VALUE} have the same meaning as in a
+basic filter.  The @code{~} is what identifies the filter as fuzzy.
+
+@cindex composite filter
+A composite filter, is a vector @code{[@var{OP} @var{FILTERS}]} where
+@var{OP} has the same meaning as for basic filters and @var{FILTERS} is
+a list of vectors @code{[@var{FIELD} @var{VALUE}]} or @code{[@var{FIELD}
+@var{VALUE} ~]}.  In each such vector @var{FIELD} and @var{VALUE} have
+the same meaning as for a basic filter and a @code{~} at the end marks
+that particular component as fuzzy.
+
+@node Modifying your library
+@chapter Modifying your library
+@vindex calibre-calibredb-executable
+The operations discussed in this section perform modifications to
+Calibre's metadata database through the @command{calibredb} executable
+shipped with Calibre.  If Emacs does not find @command{calibredb}
+customize @code{calibre-calibredb-executable} to point to it.
+
+All database modifications are performed using asynchronous background
+processes, this means that Emacs will not become unresponsive while
+performing time consuming operations, such as adding many books at once.
+It also means that the @file{*Library*} buffer may not immediately
+reflect the results of these modifications.  The @file{*Library*} buffer
+is automatically refreshed once the modification has been completed.
+
+@menu
+* Adding books::
+* Adding formats to existing books::
+* Modifying books::
+* Removing books::
+@end menu
+
+@node Adding books
+@section Adding books
+
+@menu
+* Adding individual books::
+* Adding books in bulk::
+* Tagging added books::
+* Handling duplicate books::
+@end menu
+
+@node Adding individual books
+@subsection Adding individual books
+To add new books to your library press @kbd{a} in the @file{*Library*}
+buffer, this invokes @code{calibre-library-add-book} which will prompt
+you for the book you wish to add.  @code{calibre-library-add-book} also
+accepts a directory, in which case the contents of that directory will
+be added recursively.
+
+@node Adding books in bulk
+@subsection Adding books in bulk
+@findex calibre-library-add-book
+@findex calibre-dired-add
+If you have many books you wish to add to your library, and
+@code{calibre-library-add-book}'s ability to import directories is not
+sufficient, i.e. your books are contained in different directories or
+you only want to import some of the books in a particular directory, you
+can make use of calibre.el's integration with Dired
+(@pxref{Dired,,,Emacs}).  Mark the files you want to add in a Dired
+buffer and call @code{calibre-dired-add} to add them all to your
+library.
+
+@node Tagging added books
+@subsection Tagging added books
+@vindex calibre-default-tags
+If you have tags you want to apply to all books added to your library,
+for example to tag all books as ``unread'', you can customise
+@code{calibre-default-tags}.  Any tag present in this list will be
+automatically added to the book.
+
+For more specific control over tags both @code{calibre-library-add-book}
+and @code{calibre-dired-add} can be called with a prefix argument.  When
+called with a prefix argument they will prompt for a list of tags to
+apply to the books being added.
+
+@node Handling duplicate books
+@subsection Handling duplicate books
+When adding new books Calibre compares them with existing books in your
+library in an attempt to determine if the book is already present.  When
+a duplicate is detected Calibre can do one of three things:
+@enumerate
+@item
+Ignore the new book
+@item
+Overwrite the existing book
+@item
+Create a new book, resulting in two distinct books in your library.
+@end enumerate
+
+@vindex calibre-automerge-policy
+Which of these options calibre.el uses is controlled by the user option
+@code{calibre-automerge-policy} whose three values:
+@itemize
+@item
+Ignore
+@item
+Overwrite
+@item
+New Record
+@end itemize
+correspond to the three options.
+
+@node Adding formats to existing books
+@section Adding formats to existing books
+@findex calibre-library-add-format
+The @code{calibre-library-add-format} allows you to add formats to an
+existing book.  The command will prompt for a file and add that file as
+a new format to the book at point in the @file{*Library*} buffer.  Be
+aware that if you provide a file in a format already present in the
+library the existing file will be overwritten.
+
+@node Modifying books
+@section Modifying books
+calibre.el provides two methods of modifying book metadata.  A dedicated
+editing buffer providing full access to the metadata of a single book,
+and a set of commands to make simple changes to a set of books directly
+from the @file{*Library*} buffer.
+
+@menu
+* Modifying a single book::
+* Modifying multiple books::
+* Committing and reverting modifications::
+@end menu
+
+@node Modifying a single book
+@subsection Modifying a single book
+@findex calibre-edit-book
+To edit a single book in your library, bring point to the line
+representing that book in the @file{*Library*} buffer and press @kbd{e}
+(@code{calibre-edit-book}).  This will open a customisation buffer which
+you can use to edit the metadata of the book.  Once you are satisfied
+with your edits press the Accept or Apply buttons.  You will see your
+changes reflected in the @file{*Library*} buffer, and the book will be
+marked as modified.
+
+
+@node Modifying multiple books
+@subsection Modifying multiple books
+@findex calibre-library-mark
+@findex calibre-library-mark-unmark
+To edit multiple books at once you must mark them with
+@code{calibre-library-mark} (bound to @kbd{m} by default).  A book can
+be removed from the selection by calling
+@code{calibre-library-mark-unmark} (bound to @kbd{u} by default).  Once
+you are satisfied with your selection simply call any of the commands in
+this section.  If no books are selected all of the commands in this
+section will operate on the book at point.
+
+@findex calibre-library-add-tags
+@findex calibre-library-remove-tags
+Currently the only metadata that can be modified from the
+@file{*Library*} buffer are tags and authors, which can be manipulated
+with the commands @code{calibre-library-add-tags},
+@code{calibre-library-remove-tags}, @code{calibre-library-add-authors},
+and @code{calibre-library-remove-authors}.  Both commands will prompt
+for one, or more, tags or authors and respectively add them to any books
+which do not already have them, or remove them from any books that do.
+
+@node Committing and reverting modifications
+@subsection Committing and reverting modifications
+@findex calibre-library-execute
+@findex calibre-library-mark-unmark
+Modifications are not immediately applied to the underlying Calibre
+library, they must be explicitly committed by calling
+@code{calibre-library-execute}.  This allows you to modify multiple
+books, and change your mind about modifications.  To undo any
+modifications to a book, bring point to that book and press @kbd{u}
+(@code{calibre-library-mark-unmark}), this will discard any
+modifications which have not been committed by
+@code{calibre-library-execute}.  To discard all modifications to all
+books simply revert the @file{*Library*} buffer.
+
+@node Removing books
+@section Removing books
+@findex calibre-library-mark-remove
+@findex calibre-library-execute
+To remove books from your library simply move point to the book you wish
+to remove and press @kbd{d} (@code{calibre-library-mark-remove}).  This
+will mark the book for removal.  Once you have marked all the books you
+wish to remove, press @kbd{x} (@code{calibre-library-execute}) to remove
+them.
+
+@node Interacting with external reading devices
+@chapter Interacting with external reading devices
+Calibre has the ability to interact with external reading devices,
+allowing to manage the books stored on these devices.  calibre.el now
+supports a limited subset of this functionality in the form of the
+ability to transfer books from your library to an external device.
+
+To do this call @code{calibre-device-send-books} which will transfer all
+marked books, or the book at point if no books are marked, to an
+external device.  The transfer is performed asynchronously so it will
+not block Emacs but it can take some time to complete.
+
+Once the transfer is complete call @code{calibre-device-eject} to safely
+eject the external device before unplugging it from your computer.
+
+@include fdl.texi
+
+@node Index
+@unnumbered Index
+
+@printindex cp
+
+@bye

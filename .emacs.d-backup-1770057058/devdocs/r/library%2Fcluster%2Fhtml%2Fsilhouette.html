@@ -1,0 +1,125 @@
+<div class="container">
+<main>  <h2>
+<code>silhouette</code> Compute or Extract Silhouette Information from Clustering</h2> <h3>Description</h3> <p>Compute silhouette information according to a given clustering in <code class="reqn">k</code> clusters. </p> <h3>Usage</h3> <pre data-language="r"><code class="language-R">silhouette(x, ...)
+## Default S3 method:
+  silhouette(x, dist, dmatrix, ...)
+## S3 method for class 'partition'
+silhouette(x, ...)
+## S3 method for class 'clara'
+silhouette(x, full = FALSE, subset = NULL, ...)
+
+sortSilhouette(object, ...)
+## S3 method for class 'silhouette'
+summary(object, FUN = mean, ...)
+## S3 method for class 'silhouette'
+plot(x, nmax.lab = 40, max.strlen = 5,
+     main = NULL, sub = NULL, xlab = expression("Silhouette width "* s[i]),
+     col = "gray",  do.col.sort = length(col) &gt; 1, border = 0,
+     cex.names = par("cex.axis"), do.n.k = TRUE, do.clus.stat = TRUE, ...)
+</code></pre> <h3>Arguments</h3> <table> <tr>
+<td><code id="x">x</code></td> <td> <p>an object of appropriate class; for the <code>default</code> method an integer vector with <code class="reqn">k</code> different integer cluster codes or a list with such an <code>x$clustering</code> component. Note that silhouette statistics are only defined if <code class="reqn">2 \le k \le n-1</code>.</p> </td>
+</tr> <tr>
+<td><code id="dist">dist</code></td> <td> <p>a dissimilarity object inheriting from class <code><a href="../../stats/html/dist">dist</a></code> or coercible to one. If not specified, <code>dmatrix</code> must be.</p> </td>
+</tr> <tr>
+<td><code id="dmatrix">dmatrix</code></td> <td> <p>a symmetric dissimilarity matrix (<code class="reqn">n \times n</code>), specified instead of <code>dist</code>, which can be more efficient.</p> </td>
+</tr> <tr>
+<td><code id="full">full</code></td> <td> <p>logical or number in <code class="reqn">[0,1]</code> specifying if a <em>full</em> silhouette should be computed for <code><a href="clara">clara</a></code> object. When a number, say <code class="reqn">f</code>, for a random <code><a href="../../base/html/sample">sample.int</a>(n, size = f*n)</code> of the data the silhouette values are computed. This requires <code class="reqn">O((f*n)^2)</code> memory, since the full dissimilarity of the (sub)sample (see <code><a href="daisy">daisy</a></code>) is needed internally.</p> </td>
+</tr> <tr>
+<td><code id="subset">subset</code></td> <td> <p>a subset from <code>1:n</code>, specified instead of <code>full</code> to specify the indices of the observations to be used for the silhouette computations.</p> </td>
+</tr> <tr>
+<td><code id="object">object</code></td> <td> <p>an object of class <code>silhouette</code>.</p> </td>
+</tr> <tr>
+<td><code id="...">...</code></td> <td> <p>further arguments passed to and from methods.</p> </td>
+</tr> <tr>
+<td><code id="FUN">FUN</code></td> <td> <p>function used to summarize silhouette widths.</p> </td>
+</tr> <tr>
+<td><code id="nmax.lab">nmax.lab</code></td> <td> <p>integer indicating the number of labels which is considered too large for single-name labeling the silhouette plot.</p> </td>
+</tr> <tr>
+<td><code id="max.strlen">max.strlen</code></td> <td> <p>positive integer giving the length to which strings are truncated in silhouette plot labeling.</p> </td>
+</tr> <tr>
+<td>
+<code id="main">main</code>, <code id="sub">sub</code>, <code id="xlab">xlab</code>
+</td> <td> <p>arguments to <code><a href="../../graphics/html/title">title</a></code>; have a sensible non-NULL default here.</p> </td>
+</tr> <tr>
+<td>
+<code id="col">col</code>, <code id="border">border</code>, <code id="cex.names">cex.names</code>
+</td> <td> <p>arguments passed <code><a href="../../graphics/html/barplot">barplot</a>()</code>; note that the default used to be <code>col
+      = heat.colors(n), border = par("fg")</code> instead.<br> <code>col</code> can also be a color vector of length <code class="reqn">k</code> for clusterwise coloring, see also <code>do.col.sort</code>: </p> </td>
+</tr> <tr>
+<td><code id="do.col.sort">do.col.sort</code></td> <td> <p>logical indicating if the colors <code>col</code> should be sorted “along” the silhouette; this is useful for casewise or clusterwise coloring.</p> </td>
+</tr> <tr>
+<td><code id="do.n.k">do.n.k</code></td> <td> <p>logical indicating if <code class="reqn">n</code> and <code class="reqn">k</code> “title text” should be written.</p> </td>
+</tr> <tr>
+<td><code id="do.clus.stat">do.clus.stat</code></td> <td> <p>logical indicating if cluster size and averages should be written right to the silhouettes.</p> </td>
+</tr> </table> <h3>Details</h3> <p>For each observation i, the <em>silhouette width</em> <code class="reqn">s(i)</code> is defined as follows: <br> Put a(i) = average dissimilarity between i and all other points of the cluster to which i belongs (if i is the <em>only</em> observation in its cluster, <code class="reqn">s(i) := 0</code> without further calculations). For all <em>other</em> clusters C, put <code class="reqn">d(i,C)</code> = average dissimilarity of i to all observations of C. The smallest of these <code class="reqn">d(i,C)</code> is <code class="reqn">b(i) := \min_C d(i,C)</code>, and can be seen as the dissimilarity between i and its “neighbor” cluster, i.e., the nearest one to which it does <em>not</em> belong. Finally, </p> <p style="text-align: center;"><code class="reqn">s(i) := \frac{b(i) - a(i) }{max(a(i), b(i))}.</code> </p> <p><code>silhouette.default()</code> is now based on C code donated by Romain Francois (the R version being still available as <code>cluster:::silhouetteR</code>). </p> <p>Observations with a large <code class="reqn">s(i)</code> (almost 1) are very well clustered, a small <code class="reqn">s(i)</code> (around 0) means that the observation lies between two clusters, and observations with a negative <code class="reqn">s(i)</code> are probably placed in the wrong cluster. </p> <h3>Value</h3> <p><code>silhouette()</code> returns an object, <code>sil</code>, of class <code>silhouette</code> which is an <code class="reqn">n \times 3</code> matrix with attributes. For each observation i, <code>sil[i,]</code> contains the cluster to which i belongs as well as the neighbor cluster of i (the cluster, not containing i, for which the average dissimilarity between its observations and i is minimal), and the silhouette width <code class="reqn">s(i)</code> of the observation. The <code><a href="../../base/html/colnames">colnames</a></code> correspondingly are <code>c("cluster", "neighbor", "sil_width")</code>. </p> <p><code>summary(sil)</code> returns an object of class <code>summary.silhouette</code>, a list with components </p> <dl> <dt>
+<code>si.summary</code>:</dt>
+<dd>
+<p>numerical <code><a href="../../base/html/summary">summary</a></code> of the individual silhouette widths <code class="reqn">s(i)</code>.</p> </dd> <dt>
+<code>clus.avg.widths</code>:</dt>
+<dd>
+<p>numeric (rank 1) array of clusterwise <em>means</em> of silhouette widths where <code>mean = FUN</code> is used.</p> </dd> <dt>
+<code>avg.width</code>:</dt>
+<dd>
+<p>the total mean <code>FUN(s)</code> where <code>s</code> are the individual silhouette widths.</p> </dd> <dt>
+<code>clus.sizes</code>:</dt>
+<dd>
+<p><code><a href="../../base/html/table">table</a></code> of the <code class="reqn">k</code> cluster sizes.</p> </dd> <dt>
+<code>call</code>:</dt>
+<dd>
+<p>if available, the <code><a href="../../base/html/call">call</a></code> creating <code>sil</code>.</p> </dd> <dt>
+<code>Ordered</code>:</dt>
+<dd>
+<p>logical identical to <code>attr(sil, "Ordered")</code>, see below.</p> </dd> </dl> <p><code>sortSilhouette(sil)</code> orders the rows of <code>sil</code> as in the silhouette plot, by cluster (increasingly) and decreasing silhouette width <code class="reqn">s(i)</code>. <br> <code>attr(sil, "Ordered")</code> is a logical indicating if <code>sil</code> <em>is</em> ordered as by <code>sortSilhouette()</code>. In that case, <code>rownames(sil)</code> will contain case labels or numbers, and <br> <code>attr(sil, "iOrd")</code> the ordering index vector. </p> <h3>Note</h3> <p>While <code>silhouette()</code> is <em>intrinsic</em> to the <code><a href="partition.object">partition</a></code> clusterings, and hence has a (trivial) method for these, it is straightforward to get silhouettes from hierarchical clusterings from <code>silhouette.default()</code> with <code><a href="../../stats/html/cutree">cutree</a>()</code> and distance as input. </p> <p>By default, for <code><a href="clara">clara</a>()</code> partitions, the silhouette is just for the best random <em>subset</em> used. Use <code>full = TRUE</code> to compute (and later possibly plot) the full silhouette. </p> <h3>References</h3> <p>Rousseeuw, P.J. (1987) Silhouettes: A graphical aid to the interpretation and validation of cluster analysis. <em>J. Comput. Appl. Math.</em>, <b>20</b>, 53–65. </p> <p>chapter 2 of Kaufman and Rousseeuw (1990), see the references in <code><a href="plot.agnes">plot.agnes</a></code>. </p> <h3>See Also</h3> <p><code><a href="partition.object">partition.object</a></code>, <code><a href="plot.partition">plot.partition</a></code>. </p> <h3>Examples</h3> <pre data-language="r"><code class="language-R">data(ruspini)
+pr4 &lt;- pam(ruspini, 4)
+str(si &lt;- silhouette(pr4))
+(ssi &lt;- summary(si))
+plot(si) # silhouette plot
+plot(si, col = c("red", "green", "blue", "purple"))# with cluster-wise coloring
+
+si2 &lt;- silhouette(pr4$clustering, dist(ruspini, "canberra"))
+summary(si2) # has small values: "canberra"'s fault
+plot(si2, nmax= 80, cex.names=0.6)
+
+op &lt;- par(mfrow= c(3,2), oma= c(0,0, 3, 0),
+          mgp= c(1.6,.8,0), mar= .1+c(4,2,2,2))
+for(k in 2:6)
+   plot(silhouette(pam(ruspini, k=k)), main = paste("k = ",k), do.n.k=FALSE)
+mtext("PAM(Ruspini) as in Kaufman &amp; Rousseeuw, p.101",
+      outer = TRUE, font = par("font.main"), cex = par("cex.main")); frame()
+
+## the same with cluster-wise colours:
+c6 &lt;- c("tomato", "forest green", "dark blue", "purple2", "goldenrod4", "gray20")
+for(k in 2:6)
+   plot(silhouette(pam(ruspini, k=k)), main = paste("k = ",k), do.n.k=FALSE,
+        col = c6[1:k])
+par(op)
+
+## clara(): standard silhouette is just for the best random subset
+data(xclara)
+set.seed(7)
+str(xc1k &lt;- xclara[ sample(nrow(xclara), size = 1000) ,]) # rownames == indices
+cl3 &lt;- clara(xc1k, 3)
+plot(silhouette(cl3))# only of the "best" subset of 46
+## The full silhouette: internally needs large (36 MB) dist object:
+sf &lt;- silhouette(cl3, full = TRUE) ## this is the same as
+s.full &lt;- silhouette(cl3$clustering, daisy(xc1k))
+stopifnot(all.equal(sf, s.full, check.attributes = FALSE, tolerance = 0))
+## color dependent on original "3 groups of each 1000": % __FIXME ??__
+plot(sf, col = 2+ as.integer(names(cl3$clustering) ) %/% 1000,
+     main ="plot(silhouette(clara(.), full = TRUE))")
+
+## Silhouette for a hierarchical clustering:
+ar &lt;- agnes(ruspini)
+si3 &lt;- silhouette(cutree(ar, k = 5), # k = 4 gave the same as pam() above
+    	           daisy(ruspini))
+stopifnot(is.data.frame(di3 &lt;- as.data.frame(si3)))
+plot(si3, nmax = 80, cex.names = 0.5)
+## 2 groups: Agnes() wasn't too good:
+si4 &lt;- silhouette(cutree(ar, k = 2), daisy(ruspini))
+plot(si4, nmax = 80, cex.names = 0.5)
+</code></pre> </main> </div><div class="_attribution">
+  <p class="_attribution-p">
+    Copyright (&copy;) 1999–2012 R Foundation for Statistical Computing.<br>Licensed under the <a href="https://www.gnu.org/copyleft/gpl.html">GNU General Public License</a>.<br>
+    
+  </p>
+</div>

@@ -1,0 +1,114 @@
+<h1 class="wp-block-wporg-code-reference-title">_deprecated_constructor( <span class="arg-type">string</span> <span class="arg-name">$class_name</span>, <span class="arg-type">string</span> <span class="arg-name">$version</span>, <span class="arg-type">string</span> <span class="arg-name">$parent_class</span> = <span class="arg-default">”</span> )</h1> <section><p>Marks a constructor as deprecated and informs when it has been used.</p> </section> <section><h2 id="description">Description</h2> <p>Similar to <a href="_deprecated_function" rel="function">_deprecated_function()</a> , but with different strings. Used to remove PHP4-style constructors.</p> <p>The current behavior is to trigger a user error if <code>WP_DEBUG</code> is true.</p> <p>This function is to be used in every PHP4-style constructor method that is deprecated.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$class_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The class containing the deprecated constructor.</span></div></dd>
+<dt>
+<code>$version</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The version of WordPress that deprecated the function.</span></div></dd>
+<dt>
+<code>$parent_class</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The parent class calling the deprecated constructor.<br> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="5603" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _deprecated_constructor( $class_name, $version, $parent_class = '' ) {
+
+	/**
+	 * Fires when a deprecated constructor is called.
+	 *
+	 * @since 4.3.0
+	 * @since 4.5.0 Added the `$parent_class` parameter.
+	 *
+	 * @param string $class_name   The class containing the deprecated constructor.
+	 * @param string $version      The version of WordPress that deprecated the function.
+	 * @param string $parent_class The parent class calling the deprecated constructor.
+	 */
+	do_action( 'deprecated_constructor_run', $class_name, $version, $parent_class );
+
+	/**
+	 * Filters whether to trigger an error for deprecated functions.
+	 *
+	 * `WP_DEBUG` must be true in addition to the filter evaluating to true.
+	 *
+	 * @since 4.3.0
+	 *
+	 * @param bool $trigger Whether to trigger the error for deprecated functions. Default true.
+	 */
+	if ( WP_DEBUG &amp;&amp; apply_filters( 'deprecated_constructor_trigger_error', true ) ) {
+		if ( function_exists( '__' ) ) {
+			if ( $parent_class ) {
+				$message = sprintf(
+					/* translators: 1: PHP class name, 2: PHP parent class name, 3: Version number, 4: __construct() method. */
+					__( 'The called constructor method for %1$s class in %2$s is &lt;strong&gt;deprecated&lt;/strong&gt; since version %3$s! Use %4$s instead.' ),
+					$class_name,
+					$parent_class,
+					$version,
+					'&lt;code&gt;__construct()&lt;/code&gt;'
+				);
+			} else {
+				$message = sprintf(
+					/* translators: 1: PHP class name, 2: Version number, 3: __construct() method. */
+					__( 'The called constructor method for %1$s class is &lt;strong&gt;deprecated&lt;/strong&gt; since version %2$s! Use %3$s instead.' ),
+					$class_name,
+					$version,
+					'&lt;code&gt;__construct()&lt;/code&gt;'
+				);
+			}
+		} else {
+			if ( $parent_class ) {
+				$message = sprintf(
+					'The called constructor method for %1$s class in %2$s is &lt;strong&gt;deprecated&lt;/strong&gt; since version %3$s! Use %4$s instead.',
+					$class_name,
+					$parent_class,
+					$version,
+					'&lt;code&gt;__construct()&lt;/code&gt;'
+				);
+			} else {
+				$message = sprintf(
+					'The called constructor method for %1$s class is &lt;strong&gt;deprecated&lt;/strong&gt; since version %2$s! Use %3$s instead.',
+					$class_name,
+					$version,
+					'&lt;code&gt;__construct()&lt;/code&gt;'
+				);
+			}
+		}
+
+		wp_trigger_error( '', $message, E_USER_DEPRECATED );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L5603">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L5603-L5667">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deprecated_constructor_run"><span class="hook-func">do_action</span>( ‘deprecated_constructor_run’, <nobr><span class="arg-type">string</span> <span class="arg-name">$class_name</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$version</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$parent_class</span></nobr> )</a></dt>
+<dd>
+<p>Fires when a deprecated constructor is called.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deprecated_constructor_trigger_error"><span class="hook-func">apply_filters</span>( ‘deprecated_constructor_trigger_error’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$trigger</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to trigger an error for deprecated functions.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.4.0/">5.4.0</a></td>
+<td><span class="since-description">The error type is now classified as E_USER_DEPRECATED (used to default to E_USER_NOTICE).</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.5.0/">4.5.0</a></td>
+<td><span class="since-description">Added the <code>$parent_class</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.3.0/">4.3.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_deprecated_constructor" class="_attribution-link">https://developer.wordpress.org/reference/functions/_deprecated_constructor</a>
+  </p>
+</div>

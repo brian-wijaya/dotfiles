@@ -1,0 +1,232 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Posts_Controller::get_collection_params(): <span class="return-type">array</span>
+</h1> <section><p>Retrieves the query params for the posts collection.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Collection parameters.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2876" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_collection_params() {
+	$query_params = parent::get_collection_params();
+
+	$query_params['context']['default'] = 'view';
+
+	$query_params['after'] = array(
+		'description' =&gt; __( 'Limit response to posts published after a given ISO8601 compliant date.' ),
+		'type'        =&gt; 'string',
+		'format'      =&gt; 'date-time',
+	);
+
+	$query_params['modified_after'] = array(
+		'description' =&gt; __( 'Limit response to posts modified after a given ISO8601 compliant date.' ),
+		'type'        =&gt; 'string',
+		'format'      =&gt; 'date-time',
+	);
+
+	if ( post_type_supports( $this-&gt;post_type, 'author' ) ) {
+		$query_params['author']         = array(
+			'description' =&gt; __( 'Limit result set to posts assigned to specific authors.' ),
+			'type'        =&gt; 'array',
+			'items'       =&gt; array(
+				'type' =&gt; 'integer',
+			),
+			'default'     =&gt; array(),
+		);
+		$query_params['author_exclude'] = array(
+			'description' =&gt; __( 'Ensure result set excludes posts assigned to specific authors.' ),
+			'type'        =&gt; 'array',
+			'items'       =&gt; array(
+				'type' =&gt; 'integer',
+			),
+			'default'     =&gt; array(),
+		);
+	}
+
+	$query_params['before'] = array(
+		'description' =&gt; __( 'Limit response to posts published before a given ISO8601 compliant date.' ),
+		'type'        =&gt; 'string',
+		'format'      =&gt; 'date-time',
+	);
+
+	$query_params['modified_before'] = array(
+		'description' =&gt; __( 'Limit response to posts modified before a given ISO8601 compliant date.' ),
+		'type'        =&gt; 'string',
+		'format'      =&gt; 'date-time',
+	);
+
+	$query_params['exclude'] = array(
+		'description' =&gt; __( 'Ensure result set excludes specific IDs.' ),
+		'type'        =&gt; 'array',
+		'items'       =&gt; array(
+			'type' =&gt; 'integer',
+		),
+		'default'     =&gt; array(),
+	);
+
+	$query_params['include'] = array(
+		'description' =&gt; __( 'Limit result set to specific IDs.' ),
+		'type'        =&gt; 'array',
+		'items'       =&gt; array(
+			'type' =&gt; 'integer',
+		),
+		'default'     =&gt; array(),
+	);
+
+	if ( 'page' === $this-&gt;post_type || post_type_supports( $this-&gt;post_type, 'page-attributes' ) ) {
+		$query_params['menu_order'] = array(
+			'description' =&gt; __( 'Limit result set to posts with a specific menu_order value.' ),
+			'type'        =&gt; 'integer',
+		);
+	}
+
+	$query_params['search_semantics'] = array(
+		'description' =&gt; __( 'How to interpret the search input.' ),
+		'type'        =&gt; 'string',
+		'enum'        =&gt; array( 'exact' ),
+	);
+
+	$query_params['offset'] = array(
+		'description' =&gt; __( 'Offset the result set by a specific number of items.' ),
+		'type'        =&gt; 'integer',
+	);
+
+	$query_params['order'] = array(
+		'description' =&gt; __( 'Order sort attribute ascending or descending.' ),
+		'type'        =&gt; 'string',
+		'default'     =&gt; 'desc',
+		'enum'        =&gt; array( 'asc', 'desc' ),
+	);
+
+	$query_params['orderby'] = array(
+		'description' =&gt; __( 'Sort collection by post attribute.' ),
+		'type'        =&gt; 'string',
+		'default'     =&gt; 'date',
+		'enum'        =&gt; array(
+			'author',
+			'date',
+			'id',
+			'include',
+			'modified',
+			'parent',
+			'relevance',
+			'slug',
+			'include_slugs',
+			'title',
+		),
+	);
+
+	if ( 'page' === $this-&gt;post_type || post_type_supports( $this-&gt;post_type, 'page-attributes' ) ) {
+		$query_params['orderby']['enum'][] = 'menu_order';
+	}
+
+	$post_type = get_post_type_object( $this-&gt;post_type );
+
+	if ( $post_type-&gt;hierarchical || 'attachment' === $this-&gt;post_type ) {
+		$query_params['parent']         = array(
+			'description' =&gt; __( 'Limit result set to items with particular parent IDs.' ),
+			'type'        =&gt; 'array',
+			'items'       =&gt; array(
+				'type' =&gt; 'integer',
+			),
+			'default'     =&gt; array(),
+		);
+		$query_params['parent_exclude'] = array(
+			'description' =&gt; __( 'Limit result set to all items except those of a particular parent ID.' ),
+			'type'        =&gt; 'array',
+			'items'       =&gt; array(
+				'type' =&gt; 'integer',
+			),
+			'default'     =&gt; array(),
+		);
+	}
+
+	$query_params['search_columns'] = array(
+		'default'     =&gt; array(),
+		'description' =&gt; __( 'Array of column names to be searched.' ),
+		'type'        =&gt; 'array',
+		'items'       =&gt; array(
+			'enum' =&gt; array( 'post_title', 'post_content', 'post_excerpt' ),
+			'type' =&gt; 'string',
+		),
+	);
+
+	$query_params['slug'] = array(
+		'description' =&gt; __( 'Limit result set to posts with one or more specific slugs.' ),
+		'type'        =&gt; 'array',
+		'items'       =&gt; array(
+			'type' =&gt; 'string',
+		),
+	);
+
+	$query_params['status'] = array(
+		'default'           =&gt; 'publish',
+		'description'       =&gt; __( 'Limit result set to posts assigned one or more statuses.' ),
+		'type'              =&gt; 'array',
+		'items'             =&gt; array(
+			'enum' =&gt; array_merge( array_keys( get_post_stati() ), array( 'any' ) ),
+			'type' =&gt; 'string',
+		),
+		'sanitize_callback' =&gt; array( $this, 'sanitize_post_statuses' ),
+	);
+
+	$query_params = $this-&gt;prepare_taxonomy_limit_schema( $query_params );
+
+	if ( 'post' === $this-&gt;post_type ) {
+		$query_params['sticky'] = array(
+			'description' =&gt; __( 'Limit result set to items that are sticky.' ),
+			'type'        =&gt; 'boolean',
+		);
+	}
+
+	if ( post_type_supports( $this-&gt;post_type, 'post-formats' ) ) {
+		$query_params['format'] = array(
+			'description' =&gt; __( 'Limit result set to items assigned one or more given formats.' ),
+			'type'        =&gt; 'array',
+			'uniqueItems' =&gt; true,
+			'items'       =&gt; array(
+				'enum' =&gt; array_values( get_post_format_slugs() ),
+				'type' =&gt; 'string',
+			),
+		);
+	}
+
+	/**
+	 * Filters collection parameters for the posts controller.
+	 *
+	 * The dynamic part of the filter `$this-&gt;post_type` refers to the post
+	 * type slug for the controller.
+	 *
+	 * This filter registers the collection parameter, but does not map the
+	 * collection parameter to an internal WP_Query parameter. Use the
+	 * `rest_{$this-&gt;post_type}_query` filter to set WP_Query parameters.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param array        $query_params JSON Schema-formatted collection parameters.
+	 * @param WP_Post_Type $post_type    Post type object.
+	 */
+	return apply_filters( "rest_{$this-&gt;post_type}_collection_params", $query_params, $post_type );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php#L2876">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-posts-controller.php#L2876-L3076">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_this-post_type_collection_params"><span class="hook-func">apply_filters</span>( “rest_{$this-&gt;post_type}_collection_params”, <nobr><span class="arg-type">array</span> <span class="arg-name">$query_params</span></nobr>, <nobr><span class="arg-type">WP_Post_Type</span> <span class="arg-name">$post_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters collection parameters for the posts controller.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.7.0/">5.7.0</a></td>
+<td><span class="since-description">The <code>modified_after</code> and <code>modified_before</code> query parameters were added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.4.0/">5.4.0</a></td>
+<td><span class="since-description">The <code>tax_relation</code> query parameter was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_posts_controller/get_collection_params" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_posts_controller/get_collection_params</a>
+  </p>
+</div>

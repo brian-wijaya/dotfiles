@@ -1,0 +1,89 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Site_Health_Auto_Updates::test_vcs_abspath(): <span class="return-type">array</span>
+</h1> <section><p>Checks if WordPress is controlled by a VCS (Git, Subversion etc).</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The test results.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="207" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function test_vcs_abspath() {
+	$context_dirs = array( ABSPATH );
+	$vcs_dirs     = array( '.svn', '.git', '.hg', '.bzr' );
+	$check_dirs   = array();
+
+	foreach ( $context_dirs as $context_dir ) {
+		// Walk up from $context_dir to the root.
+		do {
+			$check_dirs[] = $context_dir;
+
+			// Once we've hit '/' or 'C:\', we need to stop. dirname will keep returning the input here.
+			if ( dirname( $context_dir ) === $context_dir ) {
+				break;
+			}
+
+			// Continue one level at a time.
+		} while ( $context_dir = dirname( $context_dir ) );
+	}
+
+	$check_dirs = array_unique( $check_dirs );
+	$updater    = new WP_Automatic_Updater();
+	$checkout   = false;
+
+	// Search all directories we've found for evidence of version control.
+	foreach ( $vcs_dirs as $vcs_dir ) {
+		foreach ( $check_dirs as $check_dir ) {
+			if ( ! $updater-&gt;is_allowed_dir( $check_dir ) ) {
+				continue;
+			}
+
+			$checkout = is_dir( rtrim( $check_dir, '\\/' ) . "/$vcs_dir" );
+			if ( $checkout ) {
+				break 2;
+			}
+		}
+	}
+
+	/** This filter is documented in wp-admin/includes/class-wp-automatic-updater.php */
+	if ( $checkout &amp;&amp; ! apply_filters( 'automatic_updates_is_vcs_checkout', true, ABSPATH ) ) {
+		return array(
+			'description' =&gt; sprintf(
+				/* translators: 1: Folder name. 2: Version control directory. 3: Filter name. */
+				__( 'The folder %1$s was detected as being under version control (%2$s), but the %3$s filter is allowing updates.' ),
+				'&lt;code&gt;' . $check_dir . '&lt;/code&gt;',
+				"&lt;code&gt;$vcs_dir&lt;/code&gt;",
+				'&lt;code&gt;automatic_updates_is_vcs_checkout&lt;/code&gt;'
+			),
+			'severity'    =&gt; 'info',
+		);
+	}
+
+	if ( $checkout ) {
+		return array(
+			'description' =&gt; sprintf(
+				/* translators: 1: Folder name. 2: Version control directory. */
+				__( 'The folder %1$s was detected as being under version control (%2$s).' ),
+				'&lt;code&gt;' . $check_dir . '&lt;/code&gt;',
+				"&lt;code&gt;$vcs_dir&lt;/code&gt;"
+			),
+			'severity'    =&gt; 'warning',
+		);
+	}
+
+	return array(
+		'description' =&gt; __( 'No version control systems were detected.' ),
+		'severity'    =&gt; 'pass',
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-site-health-auto-updates.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-site-health-auto-updates.php#L207">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-site-health-auto-updates.php#L207-L274">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/automatic_updates_is_vcs_checkout"><span class="hook-func">apply_filters</span>( ‘automatic_updates_is_vcs_checkout’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$checkout</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether the automatic updater should consider a filesystem location to be potentially managed by a version control system.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_site_health_auto_updates/test_vcs_abspath" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_site_health_auto_updates/test_vcs_abspath</a>
+  </p>
+</div>

@@ -1,0 +1,65 @@
+<h1 class="wp-block-wporg-code-reference-title">update_post_thumbnail_cache( <span class="arg-type">WP_Query</span> <span class="arg-name">$wp_query</span> = <span class="arg-default">null</span> )</h1> <section><p>Updates cache for thumbnails in the current loop.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$wp_query</code><span class="type"><span class="WP_Query"><a href="../classes/wp_query" rel="class">WP_Query</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">A <a href="../classes/wp_query" rel="class">WP_Query</a> instance. Defaults to the $wp_query global.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="104" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function update_post_thumbnail_cache( $wp_query = null ) {
+	if ( ! $wp_query ) {
+		$wp_query = $GLOBALS['wp_query'];
+	}
+
+	if ( $wp_query-&gt;thumbnails_cached ) {
+		return;
+	}
+
+	$thumb_ids = array();
+
+	/*
+	 * $wp_query may contain an array of post objects or post IDs.
+	 *
+	 * This ensures the cache is primed for all post objects to avoid
+	 * `get_post()` calls in `get_the_post_thumbnail()` triggering an
+	 * additional database call for each post.
+	 */
+	$parent_post_ids = array();
+	foreach ( $wp_query-&gt;posts as $post ) {
+		if ( $post instanceof WP_Post ) {
+			$parent_post_ids[] = $post-&gt;ID;
+		} elseif ( is_int( $post ) ) {
+			$parent_post_ids[] = $post;
+		}
+	}
+	_prime_post_caches( $parent_post_ids, false, true );
+
+	foreach ( $wp_query-&gt;posts as $post ) {
+		$id = get_post_thumbnail_id( $post );
+		if ( $id ) {
+			$thumb_ids[] = $id;
+		}
+	}
+
+	if ( ! empty( $thumb_ids ) ) {
+		_prime_post_caches( $thumb_ids, false, true );
+	}
+
+	$wp_query-&gt;thumbnails_cached = true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post-thumbnail-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post-thumbnail-template.php#L104">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post-thumbnail-template.php#L104-L144">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.2.0/">3.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/update_post_thumbnail_cache" class="_attribution-link">https://developer.wordpress.org/reference/functions/update_post_thumbnail_cache</a>
+  </p>
+</div>

@@ -1,0 +1,196 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_REST_Block_Pattern_Categories_Controller {}</h1> <section><p>Core class used to access block pattern categories via the REST API.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_rest_controller">WP_REST_Controller</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_rest_block_pattern_categories_controller/__construct">WP_REST_Block_Pattern_Categories_Controller::__construct</a></td>
+<td>Constructs the controller.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_pattern_categories_controller/get_item_schema">WP_REST_Block_Pattern_Categories_Controller::get_item_schema</a></td>
+<td>Retrieves the block pattern category schema, conforming to JSON Schema.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_pattern_categories_controller/get_items">WP_REST_Block_Pattern_Categories_Controller::get_items</a></td>
+<td>Retrieves all block pattern categories.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_pattern_categories_controller/get_items_permissions_check">WP_REST_Block_Pattern_Categories_Controller::get_items_permissions_check</a></td>
+<td>Checks whether a given request has permission to read block patterns.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_pattern_categories_controller/prepare_item_for_response">WP_REST_Block_Pattern_Categories_Controller::prepare_item_for_response</a></td>
+<td>Prepare a raw block pattern category before it gets output in a REST API response.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_pattern_categories_controller/register_routes">WP_REST_Block_Pattern_Categories_Controller::register_routes</a></td>
+<td>Registers the routes for the objects of the controller.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_REST_Block_Pattern_Categories_Controller extends WP_REST_Controller {
+
+	/**
+	 * Constructs the controller.
+	 *
+	 * @since 6.0.0
+	 */
+	public function __construct() {
+		$this-&gt;namespace = 'wp/v2';
+		$this-&gt;rest_base = 'block-patterns/categories';
+	}
+
+	/**
+	 * Registers the routes for the objects of the controller.
+	 *
+	 * @since 6.0.0
+	 */
+	public function register_routes() {
+		register_rest_route(
+			$this-&gt;namespace,
+			'/' . $this-&gt;rest_base,
+			array(
+				array(
+					'methods'             =&gt; WP_REST_Server::READABLE,
+					'callback'            =&gt; array( $this, 'get_items' ),
+					'permission_callback' =&gt; array( $this, 'get_items_permissions_check' ),
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+	}
+
+	/**
+	 * Checks whether a given request has permission to read block patterns.
+	 *
+	 * @since 6.0.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error True if the request has read access, WP_Error object otherwise.
+	 */
+	public function get_items_permissions_check( $request ) {
+		if ( current_user_can( 'edit_posts' ) ) {
+			return true;
+		}
+
+		foreach ( get_post_types( array( 'show_in_rest' =&gt; true ), 'objects' ) as $post_type ) {
+			if ( current_user_can( $post_type-&gt;cap-&gt;edit_posts ) ) {
+				return true;
+			}
+		}
+
+		return new WP_Error(
+			'rest_cannot_view',
+			__( 'Sorry, you are not allowed to view the registered block pattern categories.' ),
+			array( 'status' =&gt; rest_authorization_required_code() )
+		);
+	}
+
+	/**
+	 * Retrieves all block pattern categories.
+	 *
+	 * @since 6.0.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
+	 */
+	public function get_items( $request ) {
+		$response   = array();
+		$categories = WP_Block_Pattern_Categories_Registry::get_instance()-&gt;get_all_registered();
+		foreach ( $categories as $category ) {
+			$prepared_category = $this-&gt;prepare_item_for_response( $category, $request );
+			$response[]        = $this-&gt;prepare_response_for_collection( $prepared_category );
+		}
+
+		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * Prepare a raw block pattern category before it gets output in a REST API response.
+	 *
+	 * @since 6.0.0
+	 *
+	 * @param array           $item    Raw category as registered, before any changes.
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
+	 */
+	public function prepare_item_for_response( $item, $request ) {
+		$fields = $this-&gt;get_fields_for_response( $request );
+		$keys   = array( 'name', 'label', 'description' );
+		$data   = array();
+		foreach ( $keys as $key ) {
+			if ( isset( $item[ $key ] ) &amp;&amp; rest_is_field_included( $key, $fields ) ) {
+				$data[ $key ] = $item[ $key ];
+			}
+		}
+
+		$context = ! empty( $request['context'] ) ? $request['context'] : 'view';
+		$data    = $this-&gt;add_additional_fields_to_object( $data, $request );
+		$data    = $this-&gt;filter_response_by_context( $data, $context );
+
+		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Retrieves the block pattern category schema, conforming to JSON Schema.
+	 *
+	 * @since 6.0.0
+	 *
+	 * @return array Item schema data.
+	 */
+	public function get_item_schema() {
+		if ( $this-&gt;schema ) {
+			return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+		}
+
+		$schema = array(
+			'$schema'    =&gt; 'http://json-schema.org/draft-04/schema#',
+			'title'      =&gt; 'block-pattern-category',
+			'type'       =&gt; 'object',
+			'properties' =&gt; array(
+				'name'        =&gt; array(
+					'description' =&gt; __( 'The category name.' ),
+					'type'        =&gt; 'string',
+					'readonly'    =&gt; true,
+					'context'     =&gt; array( 'view', 'edit', 'embed' ),
+				),
+				'label'       =&gt; array(
+					'description' =&gt; __( 'The category label, in human readable format.' ),
+					'type'        =&gt; 'string',
+					'readonly'    =&gt; true,
+					'context'     =&gt; array( 'view', 'edit', 'embed' ),
+				),
+				'description' =&gt; array(
+					'description' =&gt; __( 'The category description, in human readable format.' ),
+					'type'        =&gt; 'string',
+					'readonly'    =&gt; true,
+					'context'     =&gt; array( 'view', 'edit', 'embed' ),
+				),
+			),
+		);
+
+		$this-&gt;schema = $schema;
+
+		return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-block-pattern-categories-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-pattern-categories-controller.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-pattern-categories-controller.php#L17-L162">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.0.0/">6.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_block_pattern_categories_controller" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_block_pattern_categories_controller</a>
+  </p>
+</div>

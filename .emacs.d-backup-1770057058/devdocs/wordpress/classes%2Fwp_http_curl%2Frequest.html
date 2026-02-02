@@ -1,0 +1,298 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Http_Curl::request( <span class="arg-type">string</span> <span class="arg-name">$url</span>, <span class="arg-type">string|array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type">array|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Send a HTTP request to a URI using cURL extension.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The request URL.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="string">string</span>|<span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Override the defaults.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../wp_error" rel="class">WP_Error</a></span> Array containing <code>'headers'</code>, <code>'body'</code>, <code>'response'</code>, <code>'cookies'</code>, <code>'filename'</code>. A <a href="../wp_error" rel="class">WP_Error</a> instance upon error</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="73" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function request( $url, $args = array() ) {
+	$defaults = array(
+		'method'      =&gt; 'GET',
+		'timeout'     =&gt; 5,
+		'redirection' =&gt; 5,
+		'httpversion' =&gt; '1.0',
+		'blocking'    =&gt; true,
+		'headers'     =&gt; array(),
+		'body'        =&gt; null,
+		'cookies'     =&gt; array(),
+		'decompress'  =&gt; false,
+		'stream'      =&gt; false,
+		'filename'    =&gt; null,
+	);
+
+	$parsed_args = wp_parse_args( $args, $defaults );
+
+	if ( isset( $parsed_args['headers']['User-Agent'] ) ) {
+		$parsed_args['user-agent'] = $parsed_args['headers']['User-Agent'];
+		unset( $parsed_args['headers']['User-Agent'] );
+	} elseif ( isset( $parsed_args['headers']['user-agent'] ) ) {
+		$parsed_args['user-agent'] = $parsed_args['headers']['user-agent'];
+		unset( $parsed_args['headers']['user-agent'] );
+	}
+
+	// Construct Cookie: header if any cookies are set.
+	WP_Http::buildCookieHeader( $parsed_args );
+
+	$handle = curl_init();
+
+	// cURL offers really easy proxy support.
+	$proxy = new WP_HTTP_Proxy();
+
+	if ( $proxy-&gt;is_enabled() &amp;&amp; $proxy-&gt;send_through_proxy( $url ) ) {
+
+		curl_setopt( $handle, CURLOPT_PROXYTYPE, CURLPROXY_HTTP );
+		curl_setopt( $handle, CURLOPT_PROXY, $proxy-&gt;host() );
+		curl_setopt( $handle, CURLOPT_PROXYPORT, $proxy-&gt;port() );
+
+		if ( $proxy-&gt;use_authentication() ) {
+			curl_setopt( $handle, CURLOPT_PROXYAUTH, CURLAUTH_ANY );
+			curl_setopt( $handle, CURLOPT_PROXYUSERPWD, $proxy-&gt;authentication() );
+		}
+	}
+
+	$is_local   = isset( $parsed_args['local'] ) &amp;&amp; $parsed_args['local'];
+	$ssl_verify = isset( $parsed_args['sslverify'] ) &amp;&amp; $parsed_args['sslverify'];
+	if ( $is_local ) {
+		/** This filter is documented in wp-includes/class-wp-http-streams.php */
+		$ssl_verify = apply_filters( 'https_local_ssl_verify', $ssl_verify, $url );
+	} elseif ( ! $is_local ) {
+		/** This filter is documented in wp-includes/class-wp-http.php */
+		$ssl_verify = apply_filters( 'https_ssl_verify', $ssl_verify, $url );
+	}
+
+	/*
+	 * CURLOPT_TIMEOUT and CURLOPT_CONNECTTIMEOUT expect integers. Have to use ceil since.
+	 * a value of 0 will allow an unlimited timeout.
+	 */
+	$timeout = (int) ceil( $parsed_args['timeout'] );
+	curl_setopt( $handle, CURLOPT_CONNECTTIMEOUT, $timeout );
+	curl_setopt( $handle, CURLOPT_TIMEOUT, $timeout );
+
+	curl_setopt( $handle, CURLOPT_URL, $url );
+	curl_setopt( $handle, CURLOPT_RETURNTRANSFER, true );
+	curl_setopt( $handle, CURLOPT_SSL_VERIFYHOST, ( true === $ssl_verify ) ? 2 : false );
+	curl_setopt( $handle, CURLOPT_SSL_VERIFYPEER, $ssl_verify );
+
+	if ( $ssl_verify ) {
+		curl_setopt( $handle, CURLOPT_CAINFO, $parsed_args['sslcertificates'] );
+	}
+
+	curl_setopt( $handle, CURLOPT_USERAGENT, $parsed_args['user-agent'] );
+
+	/*
+	 * The option doesn't work with safe mode or when open_basedir is set, and there's
+	 * a bug #17490 with redirected POST requests, so handle redirections outside Curl.
+	 */
+	curl_setopt( $handle, CURLOPT_FOLLOWLOCATION, false );
+	curl_setopt( $handle, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS );
+
+	switch ( $parsed_args['method'] ) {
+		case 'HEAD':
+			curl_setopt( $handle, CURLOPT_NOBODY, true );
+			break;
+		case 'POST':
+			curl_setopt( $handle, CURLOPT_POST, true );
+			curl_setopt( $handle, CURLOPT_POSTFIELDS, $parsed_args['body'] );
+			break;
+		case 'PUT':
+			curl_setopt( $handle, CURLOPT_CUSTOMREQUEST, 'PUT' );
+			curl_setopt( $handle, CURLOPT_POSTFIELDS, $parsed_args['body'] );
+			break;
+		default:
+			curl_setopt( $handle, CURLOPT_CUSTOMREQUEST, $parsed_args['method'] );
+			if ( ! is_null( $parsed_args['body'] ) ) {
+				curl_setopt( $handle, CURLOPT_POSTFIELDS, $parsed_args['body'] );
+			}
+			break;
+	}
+
+	if ( true === $parsed_args['blocking'] ) {
+		curl_setopt( $handle, CURLOPT_HEADERFUNCTION, array( $this, 'stream_headers' ) );
+		curl_setopt( $handle, CURLOPT_WRITEFUNCTION, array( $this, 'stream_body' ) );
+	}
+
+	curl_setopt( $handle, CURLOPT_HEADER, false );
+
+	if ( isset( $parsed_args['limit_response_size'] ) ) {
+		$this-&gt;max_body_length = (int) $parsed_args['limit_response_size'];
+	} else {
+		$this-&gt;max_body_length = false;
+	}
+
+	// If streaming to a file open a file handle, and setup our curl streaming handler.
+	if ( $parsed_args['stream'] ) {
+		if ( ! WP_DEBUG ) {
+			$this-&gt;stream_handle = @fopen( $parsed_args['filename'], 'w+' );
+		} else {
+			$this-&gt;stream_handle = fopen( $parsed_args['filename'], 'w+' );
+		}
+		if ( ! $this-&gt;stream_handle ) {
+			return new WP_Error(
+				'http_request_failed',
+				sprintf(
+					/* translators: 1: fopen(), 2: File name. */
+					__( 'Could not open handle for %1$s to %2$s.' ),
+					'fopen()',
+					$parsed_args['filename']
+				)
+			);
+		}
+	} else {
+		$this-&gt;stream_handle = false;
+	}
+
+	if ( ! empty( $parsed_args['headers'] ) ) {
+		// cURL expects full header strings in each element.
+		$headers = array();
+		foreach ( $parsed_args['headers'] as $name =&gt; $value ) {
+			$headers[] = "{$name}: $value";
+		}
+		curl_setopt( $handle, CURLOPT_HTTPHEADER, $headers );
+	}
+
+	if ( '1.0' === $parsed_args['httpversion'] ) {
+		curl_setopt( $handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0 );
+	} else {
+		curl_setopt( $handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1 );
+	}
+
+	/**
+	 * Fires before the cURL request is executed.
+	 *
+	 * Cookies are not currently handled by the HTTP API. This action allows
+	 * plugins to handle cookies themselves.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param resource $handle      The cURL handle returned by curl_init() (passed by reference).
+	 * @param array    $parsed_args The HTTP request arguments.
+	 * @param string   $url         The request URL.
+	 */
+	do_action_ref_array( 'http_api_curl', array( &amp;$handle, $parsed_args, $url ) );
+
+	// We don't need to return the body, so don't. Just execute request and return.
+	if ( ! $parsed_args['blocking'] ) {
+		curl_exec( $handle );
+
+		$curl_error = curl_error( $handle );
+		if ( $curl_error ) {
+			curl_close( $handle );
+			return new WP_Error( 'http_request_failed', $curl_error );
+		}
+		if ( in_array( curl_getinfo( $handle, CURLINFO_HTTP_CODE ), array( 301, 302 ), true ) ) {
+			curl_close( $handle );
+			return new WP_Error( 'http_request_failed', __( 'Too many redirects.' ) );
+		}
+
+		curl_close( $handle );
+		return array(
+			'headers'  =&gt; array(),
+			'body'     =&gt; '',
+			'response' =&gt; array(
+				'code'    =&gt; false,
+				'message' =&gt; false,
+			),
+			'cookies'  =&gt; array(),
+		);
+	}
+
+	curl_exec( $handle );
+
+	$processed_headers   = WP_Http::processHeaders( $this-&gt;headers, $url );
+	$body                = $this-&gt;body;
+	$bytes_written_total = $this-&gt;bytes_written_total;
+
+	$this-&gt;headers             = '';
+	$this-&gt;body                = '';
+	$this-&gt;bytes_written_total = 0;
+
+	$curl_error = curl_errno( $handle );
+
+	// If an error occurred, or, no response.
+	if ( $curl_error || ( 0 === strlen( $body ) &amp;&amp; empty( $processed_headers['headers'] ) ) ) {
+		if ( CURLE_WRITE_ERROR /* 23 */ === $curl_error ) {
+			if ( ! $this-&gt;max_body_length || $this-&gt;max_body_length !== $bytes_written_total ) {
+				if ( $parsed_args['stream'] ) {
+					curl_close( $handle );
+					fclose( $this-&gt;stream_handle );
+					return new WP_Error( 'http_request_failed', __( 'Failed to write request to temporary file.' ) );
+				} else {
+					curl_close( $handle );
+					return new WP_Error( 'http_request_failed', curl_error( $handle ) );
+				}
+			}
+		} else {
+			$curl_error = curl_error( $handle );
+			if ( $curl_error ) {
+				curl_close( $handle );
+				return new WP_Error( 'http_request_failed', $curl_error );
+			}
+		}
+		if ( in_array( curl_getinfo( $handle, CURLINFO_HTTP_CODE ), array( 301, 302 ), true ) ) {
+			curl_close( $handle );
+			return new WP_Error( 'http_request_failed', __( 'Too many redirects.' ) );
+		}
+	}
+
+	curl_close( $handle );
+
+	if ( $parsed_args['stream'] ) {
+		fclose( $this-&gt;stream_handle );
+	}
+
+	$response = array(
+		'headers'  =&gt; $processed_headers['headers'],
+		'body'     =&gt; null,
+		'response' =&gt; $processed_headers['response'],
+		'cookies'  =&gt; $processed_headers['cookies'],
+		'filename' =&gt; $parsed_args['filename'],
+	);
+
+	// Handle redirects.
+	$redirect_response = WP_Http::handle_redirects( $url, $parsed_args, $response );
+	if ( false !== $redirect_response ) {
+		return $redirect_response;
+	}
+
+	if ( true === $parsed_args['decompress']
+		&amp;&amp; true === WP_Http_Encoding::should_decode( $processed_headers['headers'] )
+	) {
+		$body = WP_Http_Encoding::decompress( $body );
+	}
+
+	$response['body'] = $body;
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-http-curl.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-http-curl.php#L73">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-http-curl.php#L73-L331">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/https_local_ssl_verify"><span class="hook-func">apply_filters</span>( ‘https_local_ssl_verify’, <nobr><span class="arg-type">bool|string</span> <span class="arg-name">$ssl_verify</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether SSL should be verified for local HTTP API requests.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/https_ssl_verify"><span class="hook-func">apply_filters</span>( ‘https_ssl_verify’, <nobr><span class="arg-type">bool|string</span> <span class="arg-name">$ssl_verify</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether SSL should be verified for non-local requests.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/http_api_curl"><span class="hook-func">do_action_ref_array</span>( ‘http_api_curl’, <nobr><span class="arg-type">resource</span> <span class="arg-name">$handle</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$parsed_args</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr> )</a></dt>
+<dd>
+<p>Fires before the cURL request is executed.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_http_curl/request" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_http_curl/request</a>
+  </p>
+</div>

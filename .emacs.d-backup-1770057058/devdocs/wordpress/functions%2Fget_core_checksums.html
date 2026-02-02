@@ -1,0 +1,69 @@
+<h1 class="wp-block-wporg-code-reference-title">get_core_checksums( <span class="arg-type">string</span> <span class="arg-name">$version</span>, <span class="arg-type">string</span> <span class="arg-name">$locale</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Gets and caches the checksums for the given version of WordPress.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$version</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Version string to query.</span></div></dd>
+<dt>
+<code>$locale</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Locale to query.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> An array of checksums on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="131" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_core_checksums( $version, $locale ) {
+	$http_url = 'https://api.wordpress.org/core/checksums/1.0/?' . http_build_query( compact( 'version', 'locale' ), '', '&amp;' );
+	$url      = $http_url;
+
+	$ssl = wp_http_supports( array( 'ssl' ) );
+
+	if ( $ssl ) {
+		$url = set_url_scheme( $url, 'https' );
+	}
+
+	$options = array(
+		'timeout' =&gt; wp_doing_cron() ? 30 : 3,
+	);
+
+	$response = wp_remote_get( $url, $options );
+
+	if ( $ssl &amp;&amp; is_wp_error( $response ) ) {
+		wp_trigger_error(
+			__FUNCTION__,
+			sprintf(
+				/* translators: %s: Support forums URL. */
+				__( 'An unexpected error occurred. Something may be wrong with WordPress.org or this server&amp;#8217;s configuration. If you continue to have problems, please try the &lt;a href="%s"&gt;support forums&lt;/a&gt;.' ),
+				__( 'https://wordpress.org/support/forums/' )
+			) . ' ' . __( '(WordPress could not establish a secure connection to WordPress.org. Please contact your server administrator.)' ),
+			headers_sent() || WP_DEBUG ? E_USER_WARNING : E_USER_NOTICE
+		);
+
+		$response = wp_remote_get( $http_url, $options );
+	}
+
+	if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+		return false;
+	}
+
+	$body = trim( wp_remote_retrieve_body( $response ) );
+	$body = json_decode( $body, true );
+
+	if ( ! is_array( $body ) || ! isset( $body['checksums'] ) || ! is_array( $body['checksums'] ) ) {
+		return false;
+	}
+
+	return $body['checksums'];
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/update.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/update.php#L131">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/update.php#L131-L173">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_core_checksums" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_core_checksums</a>
+  </p>
+</div>

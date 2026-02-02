@@ -1,0 +1,149 @@
+<h1 class="wp-block-wporg-code-reference-title">wpdb::query( <span class="arg-type">string</span> <span class="arg-name">$query</span> ): <span class="return-type">int|bool</span>
+</h1> <section><p>Performs a database query, using current database connection.</p> </section> <section><h2 id="description">Description</h2> <p>More information can be found on the documentation page.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$query</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Database query.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|bool</span> Boolean true for CREATE, ALTER, TRUNCATE and DROP queries. Number of rows affected/selected for all other queries. Boolean false on error.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2206" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function query( $query ) {
+	if ( ! $this-&gt;ready ) {
+		$this-&gt;check_current_query = true;
+		return false;
+	}
+
+	/**
+	 * Filters the database query.
+	 *
+	 * Some queries are made before the plugins have been loaded,
+	 * and thus cannot be filtered with this method.
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param string $query Database query.
+	 */
+	$query = apply_filters( 'query', $query );
+
+	if ( ! $query ) {
+		$this-&gt;insert_id = 0;
+		return false;
+	}
+
+	$this-&gt;flush();
+
+	// Log how the function was called.
+	$this-&gt;func_call = "\$db-&gt;query(\"$query\")";
+
+	// If we're writing to the database, make sure the query will write safely.
+	if ( $this-&gt;check_current_query &amp;&amp; ! $this-&gt;check_ascii( $query ) ) {
+		$stripped_query = $this-&gt;strip_invalid_text_from_query( $query );
+		/*
+		 * strip_invalid_text_from_query() can perform queries, so we need
+		 * to flush again, just to make sure everything is clear.
+		 */
+		$this-&gt;flush();
+		if ( $stripped_query !== $query ) {
+			$this-&gt;insert_id  = 0;
+			$this-&gt;last_query = $query;
+
+			wp_load_translations_early();
+
+			$this-&gt;last_error = __( 'WordPress database error: Could not perform query because it contains invalid data.' );
+
+			return false;
+		}
+	}
+
+	$this-&gt;check_current_query = true;
+
+	// Keep track of the last query for debug.
+	$this-&gt;last_query = $query;
+
+	$this-&gt;_do_query( $query );
+
+	// Database server has gone away, try to reconnect.
+	$mysql_errno = 0;
+
+	if ( $this-&gt;dbh instanceof mysqli ) {
+		$mysql_errno = mysqli_errno( $this-&gt;dbh );
+	} else {
+		/*
+		 * $dbh is defined, but isn't a real connection.
+		 * Something has gone horribly wrong, let's try a reconnect.
+		 */
+		$mysql_errno = 2006;
+	}
+
+	if ( empty( $this-&gt;dbh ) || 2006 === $mysql_errno ) {
+		if ( $this-&gt;check_connection() ) {
+			$this-&gt;_do_query( $query );
+		} else {
+			$this-&gt;insert_id = 0;
+			return false;
+		}
+	}
+
+	// If there is an error then take note of it.
+	if ( $this-&gt;dbh instanceof mysqli ) {
+		$this-&gt;last_error = mysqli_error( $this-&gt;dbh );
+	} else {
+		$this-&gt;last_error = __( 'Unable to retrieve the error message from MySQL' );
+	}
+
+	if ( $this-&gt;last_error ) {
+		// Clear insert_id on a subsequent failed insert.
+		if ( $this-&gt;insert_id &amp;&amp; preg_match( '/^\s*(insert|replace)\s/i', $query ) ) {
+			$this-&gt;insert_id = 0;
+		}
+
+		$this-&gt;print_error();
+		return false;
+	}
+
+	if ( preg_match( '/^\s*(create|alter|truncate|drop)\s/i', $query ) ) {
+		$return_val = $this-&gt;result;
+	} elseif ( preg_match( '/^\s*(insert|delete|update|replace)\s/i', $query ) ) {
+		$this-&gt;rows_affected = mysqli_affected_rows( $this-&gt;dbh );
+
+		// Take note of the insert_id.
+		if ( preg_match( '/^\s*(insert|replace)\s/i', $query ) ) {
+			$this-&gt;insert_id = mysqli_insert_id( $this-&gt;dbh );
+		}
+
+		// Return number of rows affected.
+		$return_val = $this-&gt;rows_affected;
+	} else {
+		$num_rows = 0;
+
+		if ( $this-&gt;result instanceof mysqli_result ) {
+			while ( $row = mysqli_fetch_object( $this-&gt;result ) ) {
+				$this-&gt;last_result[ $num_rows ] = $row;
+				++$num_rows;
+			}
+		}
+
+		// Log and return the number of rows selected.
+		$this-&gt;num_rows = $num_rows;
+		$return_val     = $num_rows;
+	}
+
+	return $return_val;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wpdb.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wpdb.php#L2206">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wpdb.php#L2206-L2328">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/query"><span class="hook-func">apply_filters</span>( ‘query’, <nobr><span class="arg-type">string</span> <span class="arg-name">$query</span></nobr> )</a></dt>
+<dd>
+<p>Filters the database query.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/0.71/">0.71</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wpdb/query" class="_attribution-link">https://developer.wordpress.org/reference/classes/wpdb/query</a>
+  </p>
+</div>

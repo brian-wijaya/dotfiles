@@ -1,0 +1,164 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> Walker_Category_Checklist {}</h1> <section><p>Core walker class to output an unordered list of category checkbox input elements.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="walker">Walker</a></li> <li><a href="../functions/wp_category_checklist">wp_category_checklist()</a></li> <li><a href="../functions/wp_terms_checklist">wp_terms_checklist()</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="walker_category_checklist/end_el">Walker_Category_Checklist::end_el</a></td>
+<td>Ends the element output, if needed.</td>
+</tr>
+<tr class="">
+<td><a href="walker_category_checklist/end_lvl">Walker_Category_Checklist::end_lvl</a></td>
+<td>Ends the list of after the elements are added.</td>
+</tr>
+<tr class="">
+<td><a href="walker_category_checklist/start_el">Walker_Category_Checklist::start_el</a></td>
+<td>Start the element output.</td>
+</tr>
+<tr class="">
+<td><a href="walker_category_checklist/start_lvl">Walker_Category_Checklist::start_lvl</a></td>
+<td>Starts the list before the elements are added.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="19" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class Walker_Category_Checklist extends Walker {
+	public $tree_type = 'category';
+	public $db_fields = array(
+		'parent' =&gt; 'parent',
+		'id'     =&gt; 'term_id',
+	); // TODO: Decouple this.
+
+	/**
+	 * Starts the list before the elements are added.
+	 *
+	 * @see Walker:start_lvl()
+	 *
+	 * @since 2.5.1
+	 *
+	 * @param string $output Used to append additional content (passed by reference).
+	 * @param int    $depth  Depth of category. Used for tab indentation.
+	 * @param array  $args   An array of arguments. See <a href="../functions/wp_terms_checklist">wp_terms_checklist()</a>.
+	 */
+	public function start_lvl( &amp;$output, $depth = 0, $args = array() ) {
+		$indent  = str_repeat( "\t", $depth );
+		$output .= "$indent&lt;ul class='children'&gt;\n";
+	}
+
+	/**
+	 * Ends the list of after the elements are added.
+	 *
+	 * @see Walker::end_lvl()
+	 *
+	 * @since 2.5.1
+	 *
+	 * @param string $output Used to append additional content (passed by reference).
+	 * @param int    $depth  Depth of category. Used for tab indentation.
+	 * @param array  $args   An array of arguments. See <a href="../functions/wp_terms_checklist">wp_terms_checklist()</a>.
+	 */
+	public function end_lvl( &amp;$output, $depth = 0, $args = array() ) {
+		$indent  = str_repeat( "\t", $depth );
+		$output .= "$indent&lt;/ul&gt;\n";
+	}
+
+	/**
+	 * Start the element output.
+	 *
+	 * @see Walker::start_el()
+	 *
+	 * @since 2.5.1
+	 * @since 5.9.0 Renamed `$category` to `$data_object` and `$id` to `$current_object_id`
+	 *              to match parent class for PHP 8 named parameter support.
+	 *
+	 * @param string  $output            Used to append additional content (passed by reference).
+	 * @param WP_Term $data_object       The current term object.
+	 * @param int     $depth             Depth of the term in reference to parents. Default 0.
+	 * @param array   $args              An array of arguments. See <a href="../functions/wp_terms_checklist">wp_terms_checklist()</a>.
+	 * @param int     $current_object_id Optional. ID of the current term. Default 0.
+	 */
+	public function start_el( &amp;$output, $data_object, $depth = 0, $args = array(), $current_object_id = 0 ) {
+		// Restores the more descriptive, specific name for use within this method.
+		$category = $data_object;
+
+		if ( empty( $args['taxonomy'] ) ) {
+			$taxonomy = 'category';
+		} else {
+			$taxonomy = $args['taxonomy'];
+		}
+
+		if ( 'category' === $taxonomy ) {
+			$name = 'post_category';
+		} else {
+			$name = 'tax_input[' . $taxonomy . ']';
+		}
+
+		$args['popular_cats'] = ! empty( $args['popular_cats'] ) ? array_map( 'intval', $args['popular_cats'] ) : array();
+
+		$class = in_array( $category-&gt;term_id, $args['popular_cats'], true ) ? ' class="popular-category"' : '';
+
+		$args['selected_cats'] = ! empty( $args['selected_cats'] ) ? array_map( 'intval', $args['selected_cats'] ) : array();
+
+		if ( ! empty( $args['list_only'] ) ) {
+			$aria_checked = 'false';
+			$inner_class  = 'category';
+
+			if ( in_array( $category-&gt;term_id, $args['selected_cats'], true ) ) {
+				$inner_class .= ' selected';
+				$aria_checked = 'true';
+			}
+
+			$output .= "\n" . '&lt;li' . $class . '&gt;' .
+				'&lt;div class="' . $inner_class . '" data-term-id=' . $category-&gt;term_id .
+				' tabindex="0" role="checkbox" aria-checked="' . $aria_checked . '"&gt;' .
+				/** This filter is documented in wp-includes/category-template.php */
+				esc_html( apply_filters( 'the_category', $category-&gt;name, '', '' ) ) . '&lt;/div&gt;';
+		} else {
+			$is_selected         = in_array( $category-&gt;term_id, $args['selected_cats'], true );
+			$is_disabled         = ! empty( $args['disabled'] );
+			$li_element_id       = wp_unique_prefixed_id( "in-{$taxonomy}-{$category-&gt;term_id}-" );
+			$checkbox_element_id = wp_unique_prefixed_id( "in-{$taxonomy}-{$category-&gt;term_id}-" );
+
+			$output .= "\n&lt;li id='" . esc_attr( $li_element_id ) . "'$class&gt;" .
+				'&lt;label class="selectit"&gt;&lt;input value="' . $category-&gt;term_id . '" type="checkbox" name="' . $name . '[]" id="' . esc_attr( $checkbox_element_id ) . '"' .
+				checked( $is_selected, true, false ) .
+				disabled( $is_disabled, true, false ) . ' /&gt; ' .
+				/** This filter is documented in wp-includes/category-template.php */
+				esc_html( apply_filters( 'the_category', $category-&gt;name, '', '' ) ) . '&lt;/label&gt;';
+		}
+	}
+
+	/**
+	 * Ends the element output, if needed.
+	 *
+	 * @see Walker::end_el()
+	 *
+	 * @since 2.5.1
+	 * @since 5.9.0 Renamed `$category` to `$data_object` to match parent class for PHP 8 named parameter support.
+	 *
+	 * @param string  $output      Used to append additional content (passed by reference).
+	 * @param WP_Term $data_object The current term object.
+	 * @param int     $depth       Depth of the term in reference to parents. Default 0.
+	 * @param array   $args        An array of arguments. See <a href="../functions/wp_terms_checklist">wp_terms_checklist()</a>.
+	 */
+	public function end_el( &amp;$output, $data_object, $depth = 0, $args = array() ) {
+		$output .= "&lt;/li&gt;\n";
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-walker-category-checklist.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-walker-category-checklist.php#L19">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-walker-category-checklist.php#L19-L140">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.1/">2.5.1</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/walker_category_checklist" class="_attribution-link">https://developer.wordpress.org/reference/classes/walker_category_checklist</a>
+  </p>
+</div>

@@ -1,0 +1,121 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Site_Health::wp_cron_scheduled_check()</h1> <section><p>Runs the scheduled event to check and update the latest site health status for the website.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3191" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function wp_cron_scheduled_check() {
+	// Bootstrap wp-admin, as WP_Cron doesn't do this for us.
+	require_once trailingslashit( ABSPATH ) . 'wp-admin/includes/admin.php';
+
+	$tests = WP_Site_Health::get_tests();
+
+	$results = array();
+
+	$site_status = array(
+		'good'        =&gt; 0,
+		'recommended' =&gt; 0,
+		'critical'    =&gt; 0,
+	);
+
+	// Don't run https test on development environments.
+	if ( $this-&gt;is_development_environment() ) {
+		unset( $tests['async']['https_status'] );
+	}
+
+	foreach ( $tests['direct'] as $test ) {
+		if ( ! empty( $test['skip_cron'] ) ) {
+			continue;
+		}
+
+		if ( is_string( $test['test'] ) ) {
+			$test_function = sprintf(
+				'get_test_%s',
+				$test['test']
+			);
+
+			if ( method_exists( $this, $test_function ) &amp;&amp; is_callable( array( $this, $test_function ) ) ) {
+				$results[] = $this-&gt;perform_test( array( $this, $test_function ) );
+				continue;
+			}
+		}
+
+		if ( is_callable( $test['test'] ) ) {
+			$results[] = $this-&gt;perform_test( $test['test'] );
+		}
+	}
+
+	foreach ( $tests['async'] as $test ) {
+		if ( ! empty( $test['skip_cron'] ) ) {
+			continue;
+		}
+
+		// Local endpoints may require authentication, so asynchronous tests can pass a direct test runner as well.
+		if ( ! empty( $test['async_direct_test'] ) &amp;&amp; is_callable( $test['async_direct_test'] ) ) {
+			// This test is callable, do so and continue to the next asynchronous check.
+			$results[] = $this-&gt;perform_test( $test['async_direct_test'] );
+			continue;
+		}
+
+		if ( is_string( $test['test'] ) ) {
+			// Check if this test has a REST API endpoint.
+			if ( isset( $test['has_rest'] ) &amp;&amp; $test['has_rest'] ) {
+				$result_fetch = wp_remote_get(
+					$test['test'],
+					array(
+						'body' =&gt; array(
+							'_wpnonce' =&gt; wp_create_nonce( 'wp_rest' ),
+						),
+					)
+				);
+			} else {
+				$result_fetch = wp_remote_post(
+					admin_url( 'admin-ajax.php' ),
+					array(
+						'body' =&gt; array(
+							'action'   =&gt; $test['test'],
+							'_wpnonce' =&gt; wp_create_nonce( 'health-check-site-status' ),
+						),
+					)
+				);
+			}
+
+			if ( ! is_wp_error( $result_fetch ) &amp;&amp; 200 === wp_remote_retrieve_response_code( $result_fetch ) ) {
+				$result = json_decode( wp_remote_retrieve_body( $result_fetch ), true );
+			} else {
+				$result = false;
+			}
+
+			if ( is_array( $result ) ) {
+				$results[] = $result;
+			} else {
+				$results[] = array(
+					'status' =&gt; 'recommended',
+					'label'  =&gt; __( 'A test is unavailable' ),
+				);
+			}
+		}
+	}
+
+	foreach ( $results as $result ) {
+		if ( 'critical' === $result['status'] ) {
+			++$site_status['critical'];
+		} elseif ( 'recommended' === $result['status'] ) {
+			++$site_status['recommended'];
+		} else {
+			++$site_status['good'];
+		}
+	}
+
+	set_transient( 'health-check-site-status-result', wp_json_encode( $site_status ) );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-site-health.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-site-health.php#L3191">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-site-health.php#L3191-L3295">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.4.0/">5.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_site_health/wp_cron_scheduled_check" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_site_health/wp_cron_scheduled_check</a>
+  </p>
+</div>

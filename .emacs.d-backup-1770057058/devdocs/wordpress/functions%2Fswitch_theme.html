@@ -1,0 +1,145 @@
+<h1 class="wp-block-wporg-code-reference-title">switch_theme( <span class="arg-type">string</span> <span class="arg-name">$stylesheet</span> )</h1> <section><p>Switches the theme.</p> </section> <section><h2 id="description">Description</h2> <p>Accepts one argument: $stylesheet of the theme. It also accepts an additional function signature of two arguments: $template then $stylesheet. This is for backward compatibility.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$stylesheet</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Stylesheet name.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="760" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function switch_theme( $stylesheet ) {
+	global $wp_theme_directories, $wp_customize, $sidebars_widgets, $wp_registered_sidebars;
+
+	$requirements = validate_theme_requirements( $stylesheet );
+	if ( is_wp_error( $requirements ) ) {
+		wp_die( $requirements );
+	}
+
+	$_sidebars_widgets = null;
+	if ( 'wp_ajax_customize_save' === current_action() ) {
+		$old_sidebars_widgets_data_setting = $wp_customize-&gt;get_setting( 'old_sidebars_widgets_data' );
+		if ( $old_sidebars_widgets_data_setting ) {
+			$_sidebars_widgets = $wp_customize-&gt;post_value( $old_sidebars_widgets_data_setting );
+		}
+	} elseif ( is_array( $sidebars_widgets ) ) {
+		$_sidebars_widgets = $sidebars_widgets;
+	}
+
+	if ( is_array( $_sidebars_widgets ) ) {
+		set_theme_mod(
+			'sidebars_widgets',
+			array(
+				'time' =&gt; time(),
+				'data' =&gt; $_sidebars_widgets,
+			)
+		);
+	}
+
+	$nav_menu_locations = get_theme_mod( 'nav_menu_locations' );
+	update_option( 'theme_switch_menu_locations', $nav_menu_locations, true );
+
+	if ( func_num_args() &gt; 1 ) {
+		$stylesheet = func_get_arg( 1 );
+	}
+
+	$old_theme = wp_get_theme();
+	$new_theme = wp_get_theme( $stylesheet );
+	$template  = $new_theme-&gt;get_template();
+
+	if ( wp_is_recovery_mode() ) {
+		$paused_themes = wp_paused_themes();
+		$paused_themes-&gt;delete( $old_theme-&gt;get_stylesheet() );
+		$paused_themes-&gt;delete( $old_theme-&gt;get_template() );
+	}
+
+	update_option( 'template', $template );
+	update_option( 'stylesheet', $stylesheet );
+
+	if ( count( $wp_theme_directories ) &gt; 1 ) {
+		update_option( 'template_root', get_raw_theme_root( $template, true ) );
+		update_option( 'stylesheet_root', get_raw_theme_root( $stylesheet, true ) );
+	} else {
+		delete_option( 'template_root' );
+		delete_option( 'stylesheet_root' );
+	}
+
+	$new_name = $new_theme-&gt;get( 'Name' );
+
+	update_option( 'current_theme', $new_name );
+
+	// Migrate from the old mods_{name} option to theme_mods_{slug}.
+	if ( is_admin() &amp;&amp; false === get_option( 'theme_mods_' . $stylesheet ) ) {
+		$default_theme_mods = (array) get_option( 'mods_' . $new_name );
+		if ( ! empty( $nav_menu_locations ) &amp;&amp; empty( $default_theme_mods['nav_menu_locations'] ) ) {
+			$default_theme_mods['nav_menu_locations'] = $nav_menu_locations;
+		}
+		add_option( "theme_mods_$stylesheet", $default_theme_mods );
+	} else {
+		/*
+		 * Since retrieve_widgets() is called when initializing a theme in the Customizer,
+		 * we need to remove the theme mods to avoid overwriting changes made via
+		 * the Customizer when accessing wp-admin/widgets.php.
+		 */
+		if ( 'wp_ajax_customize_save' === current_action() ) {
+			remove_theme_mod( 'sidebars_widgets' );
+		}
+	}
+
+	// Stores classic sidebars for later use by block themes.
+	if ( $new_theme-&gt;is_block_theme() ) {
+		set_theme_mod( 'wp_classic_sidebars', $wp_registered_sidebars );
+	}
+
+	update_option( 'theme_switched', $old_theme-&gt;get_stylesheet() );
+
+	/*
+	 * Reset template globals when switching themes outside of a switched blog
+	 * context to ensure templates will be loaded from the new theme.
+	 */
+	if ( ! is_multisite() || ! ms_is_switched() ) {
+		wp_set_template_globals();
+	}
+
+	// Clear pattern caches.
+	if ( ! is_multisite() ) {
+		$new_theme-&gt;delete_pattern_cache();
+		$old_theme-&gt;delete_pattern_cache();
+	}
+
+	// Set autoload=no for the old theme, autoload=yes for the switched theme.
+	$theme_mods_options = array(
+		'theme_mods_' . $stylesheet                  =&gt; 'yes',
+		'theme_mods_' . $old_theme-&gt;get_stylesheet() =&gt; 'no',
+	);
+	wp_set_option_autoload_values( $theme_mods_options );
+
+	/**
+	 * Fires after the theme is switched.
+	 *
+	 * See <a href="../hooks/after_switch_theme">'after_switch_theme'</a>.
+	 *
+	 * @since 1.5.0
+	 * @since 4.5.0 Introduced the `$old_theme` parameter.
+	 *
+	 * @param string   $new_name  Name of the new theme.
+	 * @param WP_Theme $new_theme WP_Theme instance of the new theme.
+	 * @param WP_Theme $old_theme WP_Theme instance of the old theme.
+	 */
+	do_action( 'switch_theme', $new_name, $new_theme, $old_theme );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/theme.php#L760">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/theme.php#L760-L879">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/switch_theme"><span class="hook-func">do_action</span>( ‘switch_theme’, <nobr><span class="arg-type">string</span> <span class="arg-name">$new_name</span></nobr>, <nobr><span class="arg-type">WP_Theme</span> <span class="arg-name">$new_theme</span></nobr>, <nobr><span class="arg-type">WP_Theme</span> <span class="arg-name">$old_theme</span></nobr> )</a></dt>
+<dd>
+<p>Fires after the theme is switched.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/switch_theme" class="_attribution-link">https://developer.wordpress.org/reference/functions/switch_theme</a>
+  </p>
+</div>

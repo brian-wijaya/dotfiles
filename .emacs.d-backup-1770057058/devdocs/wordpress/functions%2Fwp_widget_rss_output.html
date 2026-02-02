@@ -1,0 +1,126 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_widget_rss_output( <span class="arg-type">string|array|object</span> <span class="arg-name">$rss</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> )</h1> <section><p>Display the RSS entries in a list.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$rss</code><span class="type"><span class="string">string</span>|<span class="array">array</span>|<span class="object">object</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">RSS url.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Widget arguments.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1585" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_widget_rss_output( $rss, $args = array() ) {
+	if ( is_string( $rss ) ) {
+		$rss = fetch_feed( $rss );
+	} elseif ( is_array( $rss ) &amp;&amp; isset( $rss['url'] ) ) {
+		$args = $rss;
+		$rss  = fetch_feed( $rss['url'] );
+	} elseif ( ! is_object( $rss ) ) {
+		return;
+	}
+
+	if ( is_wp_error( $rss ) ) {
+		if ( is_admin() || current_user_can( 'manage_options' ) ) {
+			echo '&lt;p&gt;&lt;strong&gt;' . __( 'RSS Error:' ) . '&lt;/strong&gt; ' . esc_html( $rss-&gt;get_error_message() ) . '&lt;/p&gt;';
+		}
+		return;
+	}
+
+	$default_args = array(
+		'show_author'  =&gt; 0,
+		'show_date'    =&gt; 0,
+		'show_summary' =&gt; 0,
+		'items'        =&gt; 0,
+	);
+	$args         = wp_parse_args( $args, $default_args );
+
+	$items = (int) $args['items'];
+	if ( $items &lt; 1 || 20 &lt; $items ) {
+		$items = 10;
+	}
+	$show_summary = (int) $args['show_summary'];
+	$show_author  = (int) $args['show_author'];
+	$show_date    = (int) $args['show_date'];
+
+	if ( ! $rss-&gt;get_item_quantity() ) {
+		echo '&lt;ul&gt;&lt;li&gt;' . __( 'An error has occurred, which probably means the feed is down. Try again later.' ) . '&lt;/li&gt;&lt;/ul&gt;';
+		$rss-&gt;__destruct();
+		unset( $rss );
+		return;
+	}
+
+	echo '&lt;ul&gt;';
+	foreach ( $rss-&gt;get_items( 0, $items ) as $item ) {
+		$link = $item-&gt;get_link();
+		while ( ! empty( $link ) &amp;&amp; stristr( $link, 'http' ) !== $link ) {
+			$link = substr( $link, 1 );
+		}
+		$link = esc_url( strip_tags( $link ) );
+
+		$title = esc_html( trim( strip_tags( $item-&gt;get_title() ) ) );
+		if ( empty( $title ) ) {
+			$title = __( 'Untitled' );
+		}
+
+		$desc = html_entity_decode( $item-&gt;get_description(), ENT_QUOTES, get_option( 'blog_charset' ) );
+		$desc = esc_attr( wp_trim_words( $desc, 55, ' [&amp;hellip;]' ) );
+
+		$summary = '';
+		if ( $show_summary ) {
+			$summary = $desc;
+
+			// Change existing [...] to [&amp;hellip;].
+			if ( str_ends_with( $summary, '[...]' ) ) {
+				$summary = substr( $summary, 0, -5 ) . '[&amp;hellip;]';
+			}
+
+			$summary = '&lt;div class="rssSummary"&gt;' . esc_html( $summary ) . '&lt;/div&gt;';
+		}
+
+		$date = '';
+		if ( $show_date ) {
+			$date = $item-&gt;get_date( 'U' );
+
+			if ( $date ) {
+				$date = ' &lt;span class="rss-date"&gt;' . date_i18n( get_option( 'date_format' ), $date ) . '&lt;/span&gt;';
+			}
+		}
+
+		$author = '';
+		if ( $show_author ) {
+			$author = $item-&gt;get_author();
+			if ( is_object( $author ) ) {
+				$author = $author-&gt;get_name();
+				$author = ' &lt;cite&gt;' . esc_html( strip_tags( $author ) ) . '&lt;/cite&gt;';
+			}
+		}
+
+		if ( '' === $link ) {
+			echo "&lt;li&gt;$title{$date}{$summary}{$author}&lt;/li&gt;";
+		} elseif ( $show_summary ) {
+			echo "&lt;li&gt;&lt;a class='rsswidget' href='$link'&gt;$title&lt;/a&gt;{$date}{$summary}{$author}&lt;/li&gt;";
+		} else {
+			echo "&lt;li&gt;&lt;a class='rsswidget' href='$link'&gt;$title&lt;/a&gt;{$date}{$author}&lt;/li&gt;";
+		}
+	}
+	echo '&lt;/ul&gt;';
+	$rss-&gt;__destruct();
+	unset( $rss );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/widgets.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/widgets.php#L1585">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/widgets.php#L1585-L1682">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_widget_rss_output" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_widget_rss_output</a>
+  </p>
+</div>

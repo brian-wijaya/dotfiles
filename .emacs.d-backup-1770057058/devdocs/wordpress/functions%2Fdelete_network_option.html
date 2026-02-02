@@ -1,0 +1,128 @@
+<h1 class="wp-block-wporg-code-reference-title">delete_network_option( <span class="arg-type">int</span> <span class="arg-name">$network_id</span>, <span class="arg-type">string</span> <span class="arg-name">$option</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Removes a network option by name.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="delete_option">delete_option()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$network_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">ID of the network. Can be null to default to the current network ID.</span></div></dd>
+<dt>
+<code>$option</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Name of the option to delete. Expected to not be SQL-escaped.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if the option was deleted, false otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2236" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function delete_network_option( $network_id, $option ) {
+	global $wpdb;
+
+	if ( $network_id &amp;&amp; ! is_numeric( $network_id ) ) {
+		return false;
+	}
+
+	$network_id = (int) $network_id;
+
+	// Fallback to the current network if a network ID is not specified.
+	if ( ! $network_id ) {
+		$network_id = get_current_network_id();
+	}
+
+	/**
+	 * Fires immediately before a specific network option is deleted.
+	 *
+	 * The dynamic portion of the hook name, `$option`, refers to the option name.
+	 *
+	 * @since 3.0.0
+	 * @since 4.4.0 The `$option` parameter was added.
+	 * @since 4.7.0 The `$network_id` parameter was added.
+	 *
+	 * @param string $option     Option name.
+	 * @param int    $network_id ID of the network.
+	 */
+	do_action( "pre_delete_site_option_{$option}", $option, $network_id );
+
+	if ( ! is_multisite() ) {
+		$result = delete_option( $option );
+	} else {
+		$row = $wpdb-&gt;get_row( $wpdb-&gt;prepare( "SELECT meta_id FROM {$wpdb-&gt;sitemeta} WHERE meta_key = %s AND site_id = %d", $option, $network_id ) );
+		if ( is_null( $row ) || ! $row-&gt;meta_id ) {
+			return false;
+		}
+		$cache_key = "$network_id:$option";
+		wp_cache_delete( $cache_key, 'site-options' );
+
+		$result = $wpdb-&gt;delete(
+			$wpdb-&gt;sitemeta,
+			array(
+				'meta_key' =&gt; $option,
+				'site_id'  =&gt; $network_id,
+			)
+		);
+
+		if ( $result ) {
+			$notoptions_key = "$network_id:notoptions";
+			$notoptions     = wp_cache_get( $notoptions_key, 'site-options' );
+
+			if ( ! is_array( $notoptions ) ) {
+				$notoptions = array();
+			}
+			$notoptions[ $option ] = true;
+			wp_cache_set( $notoptions_key, $notoptions, 'site-options' );
+		}
+	}
+
+	if ( $result ) {
+
+		/**
+		 * Fires after a specific network option has been deleted.
+		 *
+		 * The dynamic portion of the hook name, `$option`, refers to the option name.
+		 *
+		 * @since 2.9.0 As "delete_site_option_{$key}"
+		 * @since 3.0.0
+		 * @since 4.7.0 The `$network_id` parameter was added.
+		 *
+		 * @param string $option     Name of the network option.
+		 * @param int    $network_id ID of the network.
+		 */
+		do_action( "delete_site_option_{$option}", $option, $network_id );
+
+		/**
+		 * Fires after a network option has been deleted.
+		 *
+		 * @since 3.0.0
+		 * @since 4.7.0 The `$network_id` parameter was added.
+		 *
+		 * @param string $option     Name of the network option.
+		 * @param int    $network_id ID of the network.
+		 */
+		do_action( 'delete_site_option', $option, $network_id );
+
+		return true;
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/option.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/option.php#L2236">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/option.php#L2236-L2325">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_site_option"><span class="hook-func">do_action</span>( ‘delete_site_option’, <nobr><span class="arg-type">string</span> <span class="arg-name">$option</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$network_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a network option has been deleted.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_site_option_option"><span class="hook-func">do_action</span>( “delete_site_option_{$option}”, <nobr><span class="arg-type">string</span> <span class="arg-name">$option</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$network_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a specific network option has been deleted.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_delete_site_option_option"><span class="hook-func">do_action</span>( “pre_delete_site_option_{$option}”, <nobr><span class="arg-type">string</span> <span class="arg-name">$option</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$network_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before a specific network option is deleted.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/delete_network_option" class="_attribution-link">https://developer.wordpress.org/reference/functions/delete_network_option</a>
+  </p>
+</div>

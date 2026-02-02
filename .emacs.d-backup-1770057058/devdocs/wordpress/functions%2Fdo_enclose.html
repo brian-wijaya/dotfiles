@@ -1,0 +1,131 @@
+<h1 class="wp-block-wporg-code-reference-title">do_enclose( <span class="arg-type">string|null</span> <span class="arg-name">$content</span>, <span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span> ): <span class="return-type">void|false</span>
+</h1> <section><p>Checks content for video and audio links to add as enclosures.</p> </section> <section><h2 id="description">Description</h2> <p>Will not add enclosures that have already been added and will remove enclosures that are no longer in the post. This is called as pingbacks and trackbacks.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$content</code><span class="type"><span class="string">string</span>|<span class="null">null</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post content. If <code>null</code>, the <code>post_content</code> field from <code>$post</code> is used.</span></div></dd>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID or post object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">void|false</span> Void on success, false if the post is not found.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="881" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function do_enclose( $content, $post ) {
+	global $wpdb;
+
+	// @todo Tidy this code and make the debug code optional.
+	require_once ABSPATH . WPINC . '/class-IXR.php';
+
+	$post = get_post( $post );
+	if ( ! $post ) {
+		return false;
+	}
+
+	if ( null === $content ) {
+		$content = $post-&gt;post_content;
+	}
+
+	$post_links = array();
+
+	$pung = get_enclosed( $post-&gt;ID );
+
+	$post_links_temp = wp_extract_urls( $content );
+
+	foreach ( $pung as $link_test ) {
+		// Link is no longer in post.
+		if ( ! in_array( $link_test, $post_links_temp, true ) ) {
+			$mids = $wpdb-&gt;get_col( $wpdb-&gt;prepare( "SELECT meta_id FROM $wpdb-&gt;postmeta WHERE post_id = %d AND meta_key = 'enclosure' AND meta_value LIKE %s", $post-&gt;ID, $wpdb-&gt;esc_like( $link_test ) . '%' ) );
+			foreach ( $mids as $mid ) {
+				delete_metadata_by_mid( 'post', $mid );
+			}
+		}
+	}
+
+	foreach ( (array) $post_links_temp as $link_test ) {
+		// If we haven't pung it already.
+		if ( ! in_array( $link_test, $pung, true ) ) {
+			$test = parse_url( $link_test );
+			if ( false === $test ) {
+				continue;
+			}
+			if ( isset( $test['query'] ) ) {
+				$post_links[] = $link_test;
+			} elseif ( isset( $test['path'] ) &amp;&amp; ( '/' !== $test['path'] ) &amp;&amp; ( '' !== $test['path'] ) ) {
+				$post_links[] = $link_test;
+			}
+		}
+	}
+
+	/**
+	 * Filters the list of enclosure links before querying the database.
+	 *
+	 * Allows for the addition and/or removal of potential enclosures to save
+	 * to postmeta before checking the database for existing enclosures.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param string[] $post_links An array of enclosure links.
+	 * @param int      $post_id    Post ID.
+	 */
+	$post_links = apply_filters( 'enclosure_links', $post_links, $post-&gt;ID );
+
+	foreach ( (array) $post_links as $url ) {
+		$url = strip_fragment_from_url( $url );
+
+		if ( '' !== $url &amp;&amp; ! $wpdb-&gt;get_var( $wpdb-&gt;prepare( "SELECT post_id FROM $wpdb-&gt;postmeta WHERE post_id = %d AND meta_key = 'enclosure' AND meta_value LIKE %s", $post-&gt;ID, $wpdb-&gt;esc_like( $url ) . '%' ) ) ) {
+
+			$headers = wp_get_http_headers( $url );
+			if ( $headers ) {
+				$len           = isset( $headers['Content-Length'] ) ? (int) $headers['Content-Length'] : 0;
+				$type          = isset( $headers['Content-Type'] ) ? $headers['Content-Type'] : '';
+				$allowed_types = array( 'video', 'audio' );
+
+				// Check to see if we can figure out the mime type from the extension.
+				$url_parts = parse_url( $url );
+				if ( false !== $url_parts &amp;&amp; ! empty( $url_parts['path'] ) ) {
+					$extension = pathinfo( $url_parts['path'], PATHINFO_EXTENSION );
+					if ( ! empty( $extension ) ) {
+						foreach ( wp_get_mime_types() as $exts =&gt; $mime ) {
+							if ( preg_match( '!^(' . $exts . ')$!i', $extension ) ) {
+								$type = $mime;
+								break;
+							}
+						}
+					}
+				}
+
+				if ( in_array( substr( $type, 0, strpos( $type, '/' ) ), $allowed_types, true ) ) {
+					add_post_meta( $post-&gt;ID, 'enclosure', "$url\n$len\n$mime\n" );
+				}
+			}
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L881">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L881-L971">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/enclosure_links"><span class="hook-func">apply_filters</span>( ‘enclosure_links’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$post_links</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of enclosure links before querying the database.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td><span class="since-description">The <code>$content</code> parameter is no longer optional, but passing <code>null</code> to skip it is still supported.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">The <code>$content</code> parameter was made optional, and the <code>$post</code> parameter was updated to accept a post ID or a <a href="../classes/wp_post" rel="class">WP_Post</a> object.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/do_enclose" class="_attribution-link">https://developer.wordpress.org/reference/functions/do_enclose</a>
+  </p>
+</div>

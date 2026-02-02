@@ -1,0 +1,91 @@
+<h1 class="wp-block-wporg-code-reference-title">_get_list_table( <span class="arg-type">string</span> <span class="arg-name">$class_name</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span> ): <span class="return-type"><a href="../classes/wp_list_table" rel="class">WP_List_Table</a>|false</span>
+</h1> <section><p>Fetches an instance of a <a href="../classes/wp_list_table" rel="class">WP_List_Table</a> class.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$class_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The type of the list table, which is the class name.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Arguments to pass to the class. Accepts <code>'screen'</code>.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../classes/wp_list_table" rel="class">WP_List_Table</a>|false</span> List table object on success, false if the class does not exist.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="21" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _get_list_table( $class_name, $args = array() ) {
+	$core_classes = array(
+		// Site Admin.
+		'WP_Posts_List_Table'                         =&gt; 'posts',
+		'WP_Media_List_Table'                         =&gt; 'media',
+		'WP_Terms_List_Table'                         =&gt; 'terms',
+		'WP_Users_List_Table'                         =&gt; 'users',
+		'WP_Comments_List_Table'                      =&gt; 'comments',
+		'WP_Post_Comments_List_Table'                 =&gt; array( 'comments', 'post-comments' ),
+		'WP_Links_List_Table'                         =&gt; 'links',
+		'WP_Plugin_Install_List_Table'                =&gt; 'plugin-install',
+		'WP_Themes_List_Table'                        =&gt; 'themes',
+		'WP_Theme_Install_List_Table'                 =&gt; array( 'themes', 'theme-install' ),
+		'WP_Plugins_List_Table'                       =&gt; 'plugins',
+		'WP_Application_Passwords_List_Table'         =&gt; 'application-passwords',
+
+		// Network Admin.
+		'WP_MS_Sites_List_Table'                      =&gt; 'ms-sites',
+		'WP_MS_Users_List_Table'                      =&gt; 'ms-users',
+		'WP_MS_Themes_List_Table'                     =&gt; 'ms-themes',
+
+		// Privacy requests tables.
+		'WP_Privacy_Data_Export_Requests_List_Table'  =&gt; 'privacy-data-export-requests',
+		'WP_Privacy_Data_Removal_Requests_List_Table' =&gt; 'privacy-data-removal-requests',
+	);
+
+	if ( isset( $core_classes[ $class_name ] ) ) {
+		foreach ( (array) $core_classes[ $class_name ] as $required ) {
+			require_once ABSPATH . 'wp-admin/includes/class-wp-' . $required . '-list-table.php';
+		}
+
+		if ( isset( $args['screen'] ) ) {
+			$args['screen'] = convert_to_screen( $args['screen'] );
+		} elseif ( isset( $GLOBALS['hook_suffix'] ) ) {
+			$args['screen'] = get_current_screen();
+		} else {
+			$args['screen'] = null;
+		}
+
+		/**
+		 * Filters the list table class to instantiate.
+		 *
+		 * @since 6.1.0
+		 *
+		 * @param string $class_name The list table class to use.
+		 * @param array  $args       An array containing _get_list_table() arguments.
+		 */
+		$custom_class_name = apply_filters( 'wp_list_table_class_name', $class_name, $args );
+
+		if ( is_string( $custom_class_name ) &amp;&amp; class_exists( $custom_class_name ) ) {
+			$class_name = $custom_class_name;
+		}
+
+		return new $class_name( $args );
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/list-table.php#L21">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/list-table.php#L21-L78">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_list_table_class_name"><span class="hook-func">apply_filters</span>( ‘wp_list_table_class_name’, <nobr><span class="arg-type">string</span> <span class="arg-name">$class_name</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list table class to instantiate.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_get_list_table" class="_attribution-link">https://developer.wordpress.org/reference/functions/_get_list_table</a>
+  </p>
+</div>

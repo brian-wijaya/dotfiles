@@ -1,0 +1,100 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Menus_Controller::update_item( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Updates a single term from a taxonomy.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="287" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function update_item( $request ) {
+	$term = $this-&gt;get_term( $request['id'] );
+	if ( is_wp_error( $term ) ) {
+		return $term;
+	}
+
+	if ( isset( $request['parent'] ) ) {
+		if ( ! is_taxonomy_hierarchical( $this-&gt;taxonomy ) ) {
+			return new WP_Error( 'rest_taxonomy_not_hierarchical', __( 'Cannot set parent term, taxonomy is not hierarchical.' ), array( 'status' =&gt; 400 ) );
+		}
+
+		$parent = get_term( (int) $request['parent'], $this-&gt;taxonomy );
+
+		if ( ! $parent ) {
+			return new WP_Error( 'rest_term_invalid', __( 'Parent term does not exist.' ), array( 'status' =&gt; 400 ) );
+		}
+	}
+
+	$prepared_term = $this-&gt;prepare_item_for_database( $request );
+
+	// Only update the term if we have something to update.
+	if ( ! empty( $prepared_term ) ) {
+		if ( ! isset( $prepared_term-&gt;{'menu-name'} ) ) {
+			// wp_update_nav_menu_object() requires that the menu-name is always passed.
+			$prepared_term-&gt;{'menu-name'} = $term-&gt;name;
+		}
+
+		$update = wp_update_nav_menu_object( $term-&gt;term_id, wp_slash( (array) $prepared_term ) );
+
+		if ( is_wp_error( $update ) ) {
+			return $update;
+		}
+	}
+
+	$term = get_term( $term-&gt;term_id, $this-&gt;taxonomy );
+
+	/** This action is documented in wp-includes/rest-api/endpoints/class-wp-rest-terms-controller.php */
+	do_action( "rest_insert_{$this-&gt;taxonomy}", $term, $request, false );
+
+	$schema = $this-&gt;get_item_schema();
+	if ( ! empty( $schema['properties']['meta'] ) &amp;&amp; isset( $request['meta'] ) ) {
+		$meta_update = $this-&gt;meta-&gt;update_value( $request['meta'], $term-&gt;term_id );
+
+		if ( is_wp_error( $meta_update ) ) {
+			return $meta_update;
+		}
+	}
+
+	$locations_update = $this-&gt;handle_locations( $term-&gt;term_id, $request );
+
+	if ( is_wp_error( $locations_update ) ) {
+		return $locations_update;
+	}
+
+	$this-&gt;handle_auto_add( $term-&gt;term_id, $request );
+
+	$fields_update = $this-&gt;update_additional_fields_for_object( $term, $request );
+
+	if ( is_wp_error( $fields_update ) ) {
+		return $fields_update;
+	}
+
+	$request-&gt;set_param( 'context', 'view' );
+
+	/** This action is documented in wp-includes/rest-api/endpoints/class-wp-rest-terms-controller.php */
+	do_action( "rest_after_insert_{$this-&gt;taxonomy}", $term, $request, false );
+
+	$response = $this-&gt;prepare_item_for_response( $term, $request );
+
+	return rest_ensure_response( $response );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-menus-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menus-controller.php#L287">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menus-controller.php#L287-L357">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_after_insert_this-taxonomy"><span class="hook-func">do_action</span>( “rest_after_insert_{$this-&gt;taxonomy}”, <nobr><span class="arg-type">WP_Term</span> <span class="arg-name">$term</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$creating</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a single term is completely created or updated via the REST API.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_insert_this-taxonomy"><span class="hook-func">do_action</span>( “rest_insert_{$this-&gt;taxonomy}”, <nobr><span class="arg-type">WP_Term</span> <span class="arg-name">$term</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$creating</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a single term is created or updated via the REST API.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_menus_controller/update_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_menus_controller/update_item</a>
+  </p>
+</div>

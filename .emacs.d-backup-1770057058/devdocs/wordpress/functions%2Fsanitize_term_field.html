@@ -1,0 +1,223 @@
+<h1 class="wp-block-wporg-code-reference-title">sanitize_term_field( <span class="arg-type">string</span> <span class="arg-name">$field</span>, <span class="arg-type">string</span> <span class="arg-name">$value</span>, <span class="arg-type">int</span> <span class="arg-name">$term_id</span>, <span class="arg-type">string</span> <span class="arg-name">$taxonomy</span>, <span class="arg-type">string</span> <span class="arg-name">$context</span> ): <span class="return-type">mixed</span>
+</h1> <section><p>Sanitizes the field value in the term based on the context.</p> </section> <section><h2 id="description">Description</h2> <p>Passing a term field value through the function should be assumed to have cleansed the value for whatever context the term field is going to be used.</p> <p>If no context or an unsupported context is given, then default filters will be applied.</p> <p>There are enough filters for each context to support a custom filtering without creating your own filter function. Simply create a function that hooks into the filter you need.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$field</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Term field to sanitize.</span></div></dd>
+<dt>
+<code>$value</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Search for this term value.</span></div></dd>
+<dt>
+<code>$term_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Term ID.</span></div></dd>
+<dt>
+<code>$taxonomy</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Taxonomy name.</span></div></dd>
+<dt>
+<code>$context</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Context in which to sanitize the term field.<br> Accepts <code>'raw'</code>, <code>'edit'</code>, <code>'db'</code>, <code>'display'</code>, <code>'rss'</code>, <code>'attribute'</code>, or <code>'js'</code>. Default <code>'display'</code>.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed</span> Sanitized field.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1756" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function sanitize_term_field( $field, $value, $term_id, $taxonomy, $context ) {
+	$int_fields = array( 'parent', 'term_id', 'count', 'term_group', 'term_taxonomy_id', 'object_id' );
+	if ( in_array( $field, $int_fields, true ) ) {
+		$value = (int) $value;
+		if ( $value &lt; 0 ) {
+			$value = 0;
+		}
+	}
+
+	$context = strtolower( $context );
+
+	if ( 'raw' === $context ) {
+		return $value;
+	}
+
+	if ( 'edit' === $context ) {
+
+		/**
+		 * Filters a term field to edit before it is sanitized.
+		 *
+		 * The dynamic portion of the hook name, `$field`, refers to the term field.
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param mixed $value     Value of the term field.
+		 * @param int   $term_id   Term ID.
+		 * @param string $taxonomy Taxonomy slug.
+		 */
+		$value = apply_filters( "edit_term_{$field}", $value, $term_id, $taxonomy );
+
+		/**
+		 * Filters the taxonomy field to edit before it is sanitized.
+		 *
+		 * The dynamic portions of the filter name, `$taxonomy` and `$field`, refer
+		 * to the taxonomy slug and taxonomy field, respectively.
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param mixed $value   Value of the taxonomy field to edit.
+		 * @param int   $term_id Term ID.
+		 */
+		$value = apply_filters( "edit_{$taxonomy}_{$field}", $value, $term_id );
+
+		if ( 'description' === $field ) {
+			$value = esc_html( $value ); // textarea_escaped
+		} else {
+			$value = esc_attr( $value );
+		}
+	} elseif ( 'db' === $context ) {
+
+		/**
+		 * Filters a term field value before it is sanitized.
+		 *
+		 * The dynamic portion of the hook name, `$field`, refers to the term field.
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param mixed  $value    Value of the term field.
+		 * @param string $taxonomy Taxonomy slug.
+		 */
+		$value = apply_filters( "pre_term_{$field}", $value, $taxonomy );
+
+		/**
+		 * Filters a taxonomy field before it is sanitized.
+		 *
+		 * The dynamic portions of the filter name, `$taxonomy` and `$field`, refer
+		 * to the taxonomy slug and field name, respectively.
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param mixed $value Value of the taxonomy field.
+		 */
+		$value = apply_filters( "pre_{$taxonomy}_{$field}", $value );
+
+		// Back compat filters.
+		if ( 'slug' === $field ) {
+			/**
+			 * Filters the category nicename before it is sanitized.
+			 *
+			 * Use the <a href="../hooks/pre_taxonomy_field">'pre_$taxonomy_$field'</a> hook instead.
+			 *
+			 * @since 2.0.3
+			 *
+			 * @param string $value The category nicename.
+			 */
+			$value = apply_filters( 'pre_category_nicename', $value );
+		}
+	} elseif ( 'rss' === $context ) {
+
+		/**
+		 * Filters the term field for use in RSS.
+		 *
+		 * The dynamic portion of the hook name, `$field`, refers to the term field.
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param mixed  $value    Value of the term field.
+		 * @param string $taxonomy Taxonomy slug.
+		 */
+		$value = apply_filters( "term_{$field}_rss", $value, $taxonomy );
+
+		/**
+		 * Filters the taxonomy field for use in RSS.
+		 *
+		 * The dynamic portions of the hook name, `$taxonomy`, and `$field`, refer
+		 * to the taxonomy slug and field name, respectively.
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param mixed $value Value of the taxonomy field.
+		 */
+		$value = apply_filters( "{$taxonomy}_{$field}_rss", $value );
+	} else {
+		// Use display filters by default.
+
+		/**
+		 * Filters the term field sanitized for display.
+		 *
+		 * The dynamic portion of the hook name, `$field`, refers to the term field name.
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param mixed  $value    Value of the term field.
+		 * @param int    $term_id  Term ID.
+		 * @param string $taxonomy Taxonomy slug.
+		 * @param string $context  Context to retrieve the term field value.
+		 */
+		$value = apply_filters( "term_{$field}", $value, $term_id, $taxonomy, $context );
+
+		/**
+		 * Filters the taxonomy field sanitized for display.
+		 *
+		 * The dynamic portions of the filter name, `$taxonomy`, and `$field`, refer
+		 * to the taxonomy slug and taxonomy field, respectively.
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param mixed  $value   Value of the taxonomy field.
+		 * @param int    $term_id Term ID.
+		 * @param string $context Context to retrieve the taxonomy field value.
+		 */
+		$value = apply_filters( "{$taxonomy}_{$field}", $value, $term_id, $context );
+	}
+
+	if ( 'attribute' === $context ) {
+		$value = esc_attr( $value );
+	} elseif ( 'js' === $context ) {
+		$value = esc_js( $value );
+	}
+
+	// Restore the type for integer fields after esc_attr().
+	if ( in_array( $field, $int_fields, true ) ) {
+		$value = (int) $value;
+	}
+
+	return $value;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L1756">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L1756-L1912">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/edit_term_field"><span class="hook-func">apply_filters</span>( “edit_term_{$field}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$term_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr> )</a></dt>
+<dd>
+<p>Filters a term field to edit before it is sanitized.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/edit_taxonomy_field"><span class="hook-func">apply_filters</span>( “edit_{$taxonomy}_{$field}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$term_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the taxonomy field to edit before it is sanitized.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_category_nicename"><span class="hook-func">apply_filters</span>( ‘pre_category_nicename’, <nobr><span class="arg-type">string</span> <span class="arg-name">$value</span></nobr> )</a></dt>
+<dd>
+<p>Filters the category nicename before it is sanitized.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_term_field"><span class="hook-func">apply_filters</span>( “pre_term_{$field}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr> )</a></dt>
+<dd>
+<p>Filters a term field value before it is sanitized.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_taxonomy_field"><span class="hook-func">apply_filters</span>( “pre_{$taxonomy}_{$field}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr> )</a></dt>
+<dd>
+<p>Filters a taxonomy field before it is sanitized.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/term_field"><span class="hook-func">apply_filters</span>( “term_{$field}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$term_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Filters the term field sanitized for display.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/term_field_rss"><span class="hook-func">apply_filters</span>( “term_{$field}_rss”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$taxonomy</span></nobr> )</a></dt>
+<dd>
+<p>Filters the term field for use in RSS.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/taxonomy_field"><span class="hook-func">apply_filters</span>( “{$taxonomy}_{$field}”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$term_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Filters the taxonomy field sanitized for display.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/taxonomy_field_rss"><span class="hook-func">apply_filters</span>( “{$taxonomy}_{$field}_rss”, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$value</span></nobr> )</a></dt>
+<dd>
+<p>Filters the taxonomy field for use in RSS.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/sanitize_term_field" class="_attribution-link">https://developer.wordpress.org/reference/functions/sanitize_term_field</a>
+  </p>
+</div>

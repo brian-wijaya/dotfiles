@@ -1,0 +1,147 @@
+<h1 class="wp-block-wporg-code-reference-title">render_block( <span class="arg-type">array</span> <span class="arg-name">$parsed_block</span> ): <span class="return-type">string</span>
+</h1> <section><p>Renders a single block into a HTML string.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$parsed_block</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An associative array of the block being rendered. See <a href="../classes/wp_block_parser_block" rel="class">WP_Block_Parser_Block</a>.<br> <ul class="param-hash">
+<li>
+<code>blockName</code> <span class="type">string</span><div class="desc">Name of block.</div>
+</li> <li>
+<code>attrs</code> <span class="type">array</span><div class="desc">Attributes from block comment delimiters.</div>
+</li> <li>
+<code>innerBlocks</code> <span class="type">array[]</span><div class="desc">List of inner blocks. An array of arrays that have the same structure as this one.</div>
+</li> <li>
+<code>innerHTML</code> <span class="type">string</span><div class="desc">HTML from inside block comment delimiters.</div>
+</li> <li>
+<code>innerContent</code> <span class="type">array</span><div class="desc">List of string fragments and null markers where inner blocks were found.</div>
+</li> </ul> </span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> String of rendered HTML.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2088" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function render_block( $parsed_block ) {
+	global $post;
+	$parent_block = null;
+
+	/**
+	 * Allows render_block() to be short-circuited, by returning a non-null value.
+	 *
+	 * @since 5.1.0
+	 * @since 5.9.0 The `$parent_block` parameter was added.
+	 *
+	 * @param string|null   $pre_render   The pre-rendered content. Default null.
+	 * @param array         $parsed_block {
+	 *     An associative array of the block being rendered. See WP_Block_Parser_Block.
+	 *
+	 *     @type string   $blockName    Name of block.
+	 *     @type array    $attrs        Attributes from block comment delimiters.
+	 *     @type array[]  $innerBlocks  List of inner blocks. An array of arrays that
+	 *                                  have the same structure as this one.
+	 *     @type string   $innerHTML    HTML from inside block comment delimiters.
+	 *     @type array    $innerContent List of string fragments and null markers where
+	 *                                  inner blocks were found.
+	 * }
+	 * @param WP_Block|null $parent_block If this is a nested block, a reference to the parent block.
+	 */
+	$pre_render = apply_filters( 'pre_render_block', null, $parsed_block, $parent_block );
+	if ( ! is_null( $pre_render ) ) {
+		return $pre_render;
+	}
+
+	$source_block = $parsed_block;
+
+	/**
+	 * Filters the block being rendered in render_block(), before it's processed.
+	 *
+	 * @since 5.1.0
+	 * @since 5.9.0 The `$parent_block` parameter was added.
+	 *
+	 * @param array         $parsed_block {
+	 *     An associative array of the block being rendered. See WP_Block_Parser_Block.
+	 *
+	 *     @type string   $blockName    Name of block.
+	 *     @type array    $attrs        Attributes from block comment delimiters.
+	 *     @type array[]  $innerBlocks  List of inner blocks. An array of arrays that
+	 *                                  have the same structure as this one.
+	 *     @type string   $innerHTML    HTML from inside block comment delimiters.
+	 *     @type array    $innerContent List of string fragments and null markers where
+	 *                                  inner blocks were found.
+	 * }
+	 * @param array         $source_block {
+	 *     An un-modified copy of `$parsed_block`, as it appeared in the source content.
+	 *     See WP_Block_Parser_Block.
+	 *
+	 *     @type string   $blockName    Name of block.
+	 *     @type array    $attrs        Attributes from block comment delimiters.
+	 *     @type array[]  $innerBlocks  List of inner blocks. An array of arrays that
+	 *                                  have the same structure as this one.
+	 *     @type string   $innerHTML    HTML from inside block comment delimiters.
+	 *     @type array    $innerContent List of string fragments and null markers where
+	 *                                  inner blocks were found.
+	 * }
+	 * @param WP_Block|null $parent_block If this is a nested block, a reference to the parent block.
+	 */
+	$parsed_block = apply_filters( 'render_block_data', $parsed_block, $source_block, $parent_block );
+
+	$context = array();
+
+	if ( $post instanceof WP_Post ) {
+		$context['postId'] = $post-&gt;ID;
+
+		/*
+		 * The `postType` context is largely unnecessary server-side, since the ID
+		 * is usually sufficient on its own. That being said, since a block's
+		 * manifest is expected to be shared between the server and the client,
+		 * it should be included to consistently fulfill the expectation.
+		 */
+		$context['postType'] = $post-&gt;post_type;
+	}
+
+	/**
+	 * Filters the default context provided to a rendered block.
+	 *
+	 * @since 5.5.0
+	 * @since 5.9.0 The `$parent_block` parameter was added.
+	 *
+	 * @param array         $context      Default context.
+	 * @param array         $parsed_block {
+	 *     An associative array of the block being rendered. See WP_Block_Parser_Block.
+	 *
+	 *     @type string   $blockName    Name of block.
+	 *     @type array    $attrs        Attributes from block comment delimiters.
+	 *     @type array[]  $innerBlocks  List of inner blocks. An array of arrays that
+	 *                                  have the same structure as this one.
+	 *     @type string   $innerHTML    HTML from inside block comment delimiters.
+	 *     @type array    $innerContent List of string fragments and null markers where
+	 *                                  inner blocks were found.
+	 * }
+	 * @param WP_Block|null $parent_block If this is a nested block, a reference to the parent block.
+	 */
+	$context = apply_filters( 'render_block_context', $context, $parsed_block, $parent_block );
+
+	$block = new WP_Block( $parsed_block, $context );
+
+	return $block-&gt;render();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/blocks.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/blocks.php#L2088">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/blocks.php#L2088-L2191">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_render_block"><span class="hook-func">apply_filters</span>( ‘pre_render_block’, <nobr><span class="arg-type">string|null</span> <span class="arg-name">$pre_render</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$parsed_block</span></nobr>, <nobr><span class="arg-type">WP_Block|null</span> <span class="arg-name">$parent_block</span></nobr> )</a></dt>
+<dd>
+<p>Allows <a href="render_block" rel="function">render_block()</a> to be short-circuited, by returning a non-null value.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/render_block_context"><span class="hook-func">apply_filters</span>( ‘render_block_context’, <nobr><span class="arg-type">array</span> <span class="arg-name">$context</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$parsed_block</span></nobr>, <nobr><span class="arg-type">WP_Block|null</span> <span class="arg-name">$parent_block</span></nobr> )</a></dt>
+<dd>
+<p>Filters the default context provided to a rendered block.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/render_block_data"><span class="hook-func">apply_filters</span>( ‘render_block_data’, <nobr><span class="arg-type">array</span> <span class="arg-name">$parsed_block</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$source_block</span></nobr>, <nobr><span class="arg-type">WP_Block|null</span> <span class="arg-name">$parent_block</span></nobr> )</a></dt>
+<dd>
+<p>Filters the block being rendered in <a href="render_block" rel="function">render_block()</a> , before it’s processed.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/render_block" class="_attribution-link">https://developer.wordpress.org/reference/functions/render_block</a>
+  </p>
+</div>

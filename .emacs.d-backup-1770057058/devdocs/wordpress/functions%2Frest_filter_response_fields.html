@@ -1,0 +1,77 @@
+<h1 class="wp-block-wporg-code-reference-title">rest_filter_response_fields( <span class="arg-type">WP_REST_Response</span> <span class="arg-name">$response</span>, <span class="arg-type">WP_REST_Server</span> <span class="arg-name">$server</span>, <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../classes/wp_rest_response" rel="class">WP_REST_Response</a></span>
+</h1> <section><p>Filters the REST API response to include only an allow-listed set of response object fields.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$response</code><span class="type"><span class="WP_REST_Response"><a href="../classes/wp_rest_response" rel="class">WP_REST_Response</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Current response being served.</span></div></dd>
+<dt>
+<code>$server</code><span class="type"><span class="WP_REST_Server"><a href="../classes/wp_rest_server" rel="class">WP_REST_Server</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">ResponseHandler instance (usually <a href="../classes/wp_rest_server" rel="class">WP_REST_Server</a>).</span></div></dd>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../classes/wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The request that was used to make current response.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../classes/wp_rest_response" rel="class">WP_REST_Response</a></span> Response to be served, trimmed down to contain a subset of fields.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="913" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function rest_filter_response_fields( $response, $server, $request ) {
+	if ( ! isset( $request['_fields'] ) || $response-&gt;is_error() ) {
+		return $response;
+	}
+
+	$data = $response-&gt;get_data();
+
+	$fields = wp_parse_list( $request['_fields'] );
+
+	if ( 0 === count( $fields ) ) {
+		return $response;
+	}
+
+	// Trim off outside whitespace from the comma delimited list.
+	$fields = array_map( 'trim', $fields );
+
+	// Create nested array of accepted field hierarchy.
+	$fields_as_keyed = array();
+	foreach ( $fields as $field ) {
+		$parts = explode( '.', $field );
+		$ref   = &amp;$fields_as_keyed;
+		while ( count( $parts ) &gt; 1 ) {
+			$next = array_shift( $parts );
+			if ( isset( $ref[ $next ] ) &amp;&amp; true === $ref[ $next ] ) {
+				// Skip any sub-properties if their parent prop is already marked for inclusion.
+				break 2;
+			}
+			$ref[ $next ] = isset( $ref[ $next ] ) ? $ref[ $next ] : array();
+			$ref          = &amp;$ref[ $next ];
+		}
+		$last         = array_shift( $parts );
+		$ref[ $last ] = true;
+	}
+
+	if ( wp_is_numeric_array( $data ) ) {
+		$new_data = array();
+		foreach ( $data as $item ) {
+			$new_data[] = _rest_array_intersect_key_recursive( $item, $fields_as_keyed );
+		}
+	} else {
+		$new_data = _rest_array_intersect_key_recursive( $data, $fields_as_keyed );
+	}
+
+	$response-&gt;set_data( $new_data );
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api.php#L913">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api.php#L913-L959">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.8.0/">4.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/rest_filter_response_fields" class="_attribution-link">https://developer.wordpress.org/reference/functions/rest_filter_response_fields</a>
+  </p>
+</div>

@@ -1,0 +1,335 @@
+<h1 class="wp-block-wporg-code-reference-title">Custom_Image_Header::step_1()</h1> <section><p>Displays first step of custom header image page.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="507" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">	public function step_1() {
+		$this-&gt;process_default_headers();
+		?&gt;
+
+&lt;div class="wrap"&gt;
+&lt;h1&gt;&lt;?php _e( 'Custom Header' ); ?&gt;&lt;/h1&gt;
+
+		&lt;?php
+		if ( current_user_can( 'customize' ) ) {
+			$message = sprintf(
+				/* translators: %s: URL to header image configuration in Customizer. */
+				__( 'You can now manage and live-preview Custom Header in the &lt;a href="%s"&gt;Customizer&lt;/a&gt;.' ),
+				admin_url( 'customize.php?autofocus[control]=header_image' )
+			);
+			wp_admin_notice(
+				$message,
+				array(
+					'type'               =&gt; 'info',
+					'additional_classes' =&gt; array( 'hide-if-no-customize' ),
+				)
+			);
+		}
+
+		if ( ! empty( $this-&gt;updated ) ) {
+			$updated_message = sprintf(
+				/* translators: %s: Home URL. */
+				__( 'Header updated. &lt;a href="%s"&gt;Visit your site&lt;/a&gt; to see how it looks.' ),
+				esc_url( home_url( '/' ) )
+			);
+			wp_admin_notice(
+				$updated_message,
+				array(
+					'id'                 =&gt; 'message',
+					'additional_classes' =&gt; array( 'updated' ),
+				)
+			);
+		}
+		?&gt;
+
+&lt;h2&gt;&lt;?php _e( 'Header Image' ); ?&gt;&lt;/h2&gt;
+
+&lt;table class="form-table" role="presentation"&gt;
+&lt;tbody&gt;
+
+		&lt;?php if ( get_custom_header() || display_header_text() ) : ?&gt;
+&lt;tr&gt;
+&lt;th scope="row"&gt;&lt;?php _e( 'Preview' ); ?&gt;&lt;/th&gt;
+&lt;td&gt;
+			&lt;?php
+			if ( $this-&gt;admin_image_div_callback ) {
+				call_user_func( $this-&gt;admin_image_div_callback );
+			} else {
+				$custom_header = get_custom_header();
+				$header_image  = get_header_image();
+
+				if ( $header_image ) {
+					$header_image_style = 'background-image:url(' . esc_url( $header_image ) . ');';
+				} else {
+					$header_image_style = '';
+				}
+
+				if ( $custom_header-&gt;width ) {
+					$header_image_style .= 'max-width:' . $custom_header-&gt;width . 'px;';
+				}
+				if ( $custom_header-&gt;height ) {
+					$header_image_style .= 'height:' . $custom_header-&gt;height . 'px;';
+				}
+				?&gt;
+	&lt;div id="headimg" style="&lt;?php echo $header_image_style; ?&gt;"&gt;
+				&lt;?php
+				if ( display_header_text() ) {
+					$style = ' style="color:#' . get_header_textcolor() . ';"';
+				} else {
+					$style = ' style="display:none;"';
+				}
+				?&gt;
+		&lt;h1&gt;&lt;a id="name" class="displaying-header-text" &lt;?php echo $style; ?&gt; onclick="return false;" href="&lt;?php bloginfo( 'url' ); ?&gt;" tabindex="-1"&gt;&lt;?php bloginfo( 'name' ); ?&gt;&lt;/a&gt;&lt;/h1&gt;
+		&lt;div id="desc" class="displaying-header-text" &lt;?php echo $style; ?&gt;&gt;&lt;?php bloginfo( 'description' ); ?&gt;&lt;/div&gt;
+	&lt;/div&gt;
+			&lt;?php } ?&gt;
+&lt;/td&gt;
+&lt;/tr&gt;
+		&lt;?php endif; ?&gt;
+
+		&lt;?php if ( current_user_can( 'upload_files' ) &amp;&amp; current_theme_supports( 'custom-header', 'uploads' ) ) : ?&gt;
+&lt;tr&gt;
+&lt;th scope="row"&gt;&lt;?php _e( 'Select Image' ); ?&gt;&lt;/th&gt;
+&lt;td&gt;
+	&lt;p&gt;&lt;?php _e( 'You can select an image to be shown at the top of your site by uploading from your computer or choosing from your media library. After selecting an image you will be able to crop it.' ); ?&gt;&lt;br /&gt;
+			&lt;?php
+			if ( ! current_theme_supports( 'custom-header', 'flex-height' )
+				&amp;&amp; ! current_theme_supports( 'custom-header', 'flex-width' )
+			) {
+				printf(
+					/* translators: 1: Image width in pixels, 2: Image height in pixels. */
+					__( 'Images of exactly &lt;strong&gt;%1$d &amp;times; %2$d pixels&lt;/strong&gt; will be used as-is.' ) . '&lt;br /&gt;',
+					get_theme_support( 'custom-header', 'width' ),
+					get_theme_support( 'custom-header', 'height' )
+				);
+			} elseif ( current_theme_supports( 'custom-header', 'flex-height' ) ) {
+				if ( ! current_theme_supports( 'custom-header', 'flex-width' ) ) {
+					printf(
+						/* translators: %s: Size in pixels. */
+						__( 'Images should be at least %s wide.' ) . ' ',
+						sprintf(
+							/* translators: %d: Custom header width. */
+							'&lt;strong&gt;' . __( '%d pixels' ) . '&lt;/strong&gt;',
+							get_theme_support( 'custom-header', 'width' )
+						)
+					);
+				}
+			} elseif ( current_theme_supports( 'custom-header', 'flex-width' ) ) {
+				if ( ! current_theme_supports( 'custom-header', 'flex-height' ) ) {
+					printf(
+						/* translators: %s: Size in pixels. */
+						__( 'Images should be at least %s tall.' ) . ' ',
+						sprintf(
+							/* translators: %d: Custom header height. */
+							'&lt;strong&gt;' . __( '%d pixels' ) . '&lt;/strong&gt;',
+							get_theme_support( 'custom-header', 'height' )
+						)
+					);
+				}
+			}
+
+			if ( current_theme_supports( 'custom-header', 'flex-height' )
+				|| current_theme_supports( 'custom-header', 'flex-width' )
+			) {
+				if ( current_theme_supports( 'custom-header', 'width' ) ) {
+					printf(
+						/* translators: %s: Size in pixels. */
+						__( 'Suggested width is %s.' ) . ' ',
+						sprintf(
+							/* translators: %d: Custom header width. */
+							'&lt;strong&gt;' . __( '%d pixels' ) . '&lt;/strong&gt;',
+							get_theme_support( 'custom-header', 'width' )
+						)
+					);
+				}
+
+				if ( current_theme_supports( 'custom-header', 'height' ) ) {
+					printf(
+						/* translators: %s: Size in pixels. */
+						__( 'Suggested height is %s.' ) . ' ',
+						sprintf(
+							/* translators: %d: Custom header height. */
+							'&lt;strong&gt;' . __( '%d pixels' ) . '&lt;/strong&gt;',
+							get_theme_support( 'custom-header', 'height' )
+						)
+					);
+				}
+			}
+			?&gt;
+	&lt;/p&gt;
+	&lt;form enctype="multipart/form-data" id="upload-form" class="wp-upload-form" method="post" action="&lt;?php echo esc_url( add_query_arg( 'step', 2 ) ); ?&gt;"&gt;
+	&lt;p&gt;
+		&lt;label for="upload"&gt;&lt;?php _e( 'Choose an image from your computer:' ); ?&gt;&lt;/label&gt;&lt;br /&gt;
+		&lt;input type="file" id="upload" name="import" /&gt;
+		&lt;input type="hidden" name="action" value="save" /&gt;
+			&lt;?php wp_nonce_field( 'custom-header-upload', '_wpnonce-custom-header-upload' ); ?&gt;
+			&lt;?php submit_button( __( 'Upload' ), '', 'submit', false ); ?&gt;
+	&lt;/p&gt;
+			&lt;?php
+			$modal_update_href = add_query_arg(
+				array(
+					'page'                          =&gt; 'custom-header',
+					'step'                          =&gt; 2,
+					'_wpnonce-custom-header-upload' =&gt; wp_create_nonce( 'custom-header-upload' ),
+				),
+				admin_url( 'themes.php' )
+			);
+			?&gt;
+	&lt;p&gt;
+		&lt;label for="choose-from-library-link"&gt;&lt;?php _e( 'Or choose an image from your media library:' ); ?&gt;&lt;/label&gt;&lt;br /&gt;
+		&lt;button id="choose-from-library-link" class="button"
+			data-update-link="&lt;?php echo esc_url( $modal_update_href ); ?&gt;"
+			data-choose="&lt;?php esc_attr_e( 'Choose a Custom Header' ); ?&gt;"
+			data-update="&lt;?php esc_attr_e( 'Set as header' ); ?&gt;"&gt;&lt;?php _e( 'Choose Image' ); ?&gt;&lt;/button&gt;
+	&lt;/p&gt;
+	&lt;/form&gt;
+&lt;/td&gt;
+&lt;/tr&gt;
+		&lt;?php endif; ?&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;form method="post" action="&lt;?php echo esc_url( add_query_arg( 'step', 1 ) ); ?&gt;"&gt;
+		&lt;?php submit_button( null, 'screen-reader-text', 'save-header-options', false ); ?&gt;
+&lt;table class="form-table" role="presentation"&gt;
+&lt;tbody&gt;
+		&lt;?php if ( get_uploaded_header_images() ) : ?&gt;
+&lt;tr&gt;
+&lt;th scope="row"&gt;&lt;?php _e( 'Uploaded Images' ); ?&gt;&lt;/th&gt;
+&lt;td&gt;
+	&lt;p&gt;&lt;?php _e( 'You can choose one of your previously uploaded headers, or show a random one.' ); ?&gt;&lt;/p&gt;
+			&lt;?php
+			$this-&gt;show_header_selector( 'uploaded' );
+			?&gt;
+&lt;/td&gt;
+&lt;/tr&gt;
+			&lt;?php
+	endif;
+		if ( ! empty( $this-&gt;default_headers ) ) :
+			?&gt;
+&lt;tr&gt;
+&lt;th scope="row"&gt;&lt;?php _e( 'Default Images' ); ?&gt;&lt;/th&gt;
+&lt;td&gt;
+			&lt;?php if ( current_theme_supports( 'custom-header', 'uploads' ) ) : ?&gt;
+	&lt;p&gt;&lt;?php _e( 'If you do not want to upload your own image, you can use one of these cool headers, or show a random one.' ); ?&gt;&lt;/p&gt;
+	&lt;?php else : ?&gt;
+	&lt;p&gt;&lt;?php _e( 'You can use one of these cool headers or show a random one on each page.' ); ?&gt;&lt;/p&gt;
+	&lt;?php endif; ?&gt;
+			&lt;?php
+			$this-&gt;show_header_selector( 'default' );
+			?&gt;
+&lt;/td&gt;
+&lt;/tr&gt;
+			&lt;?php
+	endif;
+		if ( get_header_image() ) :
+			?&gt;
+&lt;tr&gt;
+&lt;th scope="row"&gt;&lt;?php _e( 'Remove Image' ); ?&gt;&lt;/th&gt;
+&lt;td&gt;
+	&lt;p&gt;&lt;?php _e( 'This will remove the header image. You will not be able to restore any customizations.' ); ?&gt;&lt;/p&gt;
+			&lt;?php submit_button( __( 'Remove Header Image' ), '', 'removeheader', false ); ?&gt;
+&lt;/td&gt;
+&lt;/tr&gt;
+			&lt;?php
+	endif;
+
+		$default_image = sprintf(
+			get_theme_support( 'custom-header', 'default-image' ),
+			get_template_directory_uri(),
+			get_stylesheet_directory_uri()
+		);
+
+		if ( $default_image &amp;&amp; get_header_image() !== $default_image ) :
+			?&gt;
+&lt;tr&gt;
+&lt;th scope="row"&gt;&lt;?php _e( 'Reset Image' ); ?&gt;&lt;/th&gt;
+&lt;td&gt;
+	&lt;p&gt;&lt;?php _e( 'This will restore the original header image. You will not be able to restore any customizations.' ); ?&gt;&lt;/p&gt;
+			&lt;?php submit_button( __( 'Restore Original Header Image' ), '', 'resetheader', false ); ?&gt;
+&lt;/td&gt;
+&lt;/tr&gt;
+	&lt;?php endif; ?&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+		&lt;?php if ( current_theme_supports( 'custom-header', 'header-text' ) ) : ?&gt;
+
+&lt;h2&gt;&lt;?php _e( 'Header Text' ); ?&gt;&lt;/h2&gt;
+
+&lt;table class="form-table" role="presentation"&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;th scope="row"&gt;&lt;?php _e( 'Header Text' ); ?&gt;&lt;/th&gt;
+&lt;td&gt;
+	&lt;p&gt;
+	&lt;label&gt;&lt;input type="checkbox" name="display-header-text" id="display-header-text"&lt;?php checked( display_header_text() ); ?&gt; /&gt; &lt;?php _e( 'Show header text with your image.' ); ?&gt;&lt;/label&gt;
+	&lt;/p&gt;
+&lt;/td&gt;
+&lt;/tr&gt;
+
+&lt;tr class="displaying-header-text"&gt;
+&lt;th scope="row"&gt;&lt;?php _e( 'Text Color' ); ?&gt;&lt;/th&gt;
+&lt;td&gt;
+	&lt;p&gt;
+			&lt;?php
+			$default_color = '';
+			if ( current_theme_supports( 'custom-header', 'default-text-color' ) ) {
+				$default_color = get_theme_support( 'custom-header', 'default-text-color' );
+				if ( $default_color &amp;&amp; ! str_contains( $default_color, '#' ) ) {
+					$default_color = '#' . $default_color;
+				}
+			}
+
+			$default_color_attr = $default_color ? ' data-default-color="' . esc_attr( $default_color ) . '"' : '';
+
+			$header_textcolor = display_header_text() ? get_header_textcolor() : get_theme_support( 'custom-header', 'default-text-color' );
+			if ( $header_textcolor &amp;&amp; ! str_contains( $header_textcolor, '#' ) ) {
+				$header_textcolor = '#' . $header_textcolor;
+			}
+
+			echo '&lt;input type="text" name="text-color" id="text-color" value="' . esc_attr( $header_textcolor ) . '"' . $default_color_attr . ' /&gt;';
+			if ( $default_color ) {
+				/* translators: %s: Default text color. */
+				echo ' &lt;span class="description hide-if-js"&gt;' . sprintf( _x( 'Default: %s', 'color' ), esc_html( $default_color ) ) . '&lt;/span&gt;';
+			}
+			?&gt;
+	&lt;/p&gt;
+&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+			&lt;?php
+endif;
+
+		/**
+		 * Fires just before the submit button in the custom header options form.
+		 *
+		 * @since 3.1.0
+		 */
+		do_action( 'custom_header_options' );
+
+		wp_nonce_field( 'custom-header-options', '_wpnonce-custom-header-options' );
+		?&gt;
+
+		&lt;?php submit_button( null, 'primary', 'save-header-options' ); ?&gt;
+&lt;/form&gt;
+&lt;/div&gt;
+
+		&lt;?php
+	}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-custom-image-header.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-custom-image-header.php#L507">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-custom-image-header.php#L507-L821">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/custom_header_options"><span class="hook-func">do_action</span>( ‘custom_header_options’ )</a></dt>
+<dd>
+<p>Fires just before the submit button in the custom header options form.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/custom_image_header/step_1" class="_attribution-link">https://developer.wordpress.org/reference/classes/custom_image_header/step_1</a>
+  </p>
+</div>

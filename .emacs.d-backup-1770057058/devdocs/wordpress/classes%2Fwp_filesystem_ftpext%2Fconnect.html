@@ -1,0 +1,59 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Filesystem_FTPext::connect(): <span class="return-type">bool</span>
+</h1> <section><p>Connects filesystem.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="85" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function connect() {
+	if ( isset( $this-&gt;options['ssl'] ) &amp;&amp; $this-&gt;options['ssl'] &amp;&amp; function_exists( 'ftp_ssl_connect' ) ) {
+		$this-&gt;link = @ftp_ssl_connect( $this-&gt;options['hostname'], $this-&gt;options['port'], FS_CONNECT_TIMEOUT );
+	} else {
+		$this-&gt;link = @ftp_connect( $this-&gt;options['hostname'], $this-&gt;options['port'], FS_CONNECT_TIMEOUT );
+	}
+
+	if ( ! $this-&gt;link ) {
+		$this-&gt;errors-&gt;add(
+			'connect',
+			sprintf(
+				/* translators: %s: hostname:port */
+				__( 'Failed to connect to FTP Server %s' ),
+				$this-&gt;options['hostname'] . ':' . $this-&gt;options['port']
+			)
+		);
+
+		return false;
+	}
+
+	if ( ! @ftp_login( $this-&gt;link, $this-&gt;options['username'], $this-&gt;options['password'] ) ) {
+		$this-&gt;errors-&gt;add(
+			'auth',
+			sprintf(
+				/* translators: %s: Username. */
+				__( 'Username/Password incorrect for %s' ),
+				$this-&gt;options['username']
+			)
+		);
+
+		return false;
+	}
+
+	// Set the connection to use Passive FTP.
+	ftp_pasv( $this-&gt;link, true );
+
+	if ( @ftp_get_option( $this-&gt;link, FTP_TIMEOUT_SEC ) &lt; FS_TIMEOUT ) {
+		@ftp_set_option( $this-&gt;link, FTP_TIMEOUT_SEC, FS_TIMEOUT );
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-filesystem-ftpext.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-filesystem-ftpext.php#L85">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-filesystem-ftpext.php#L85-L126">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_filesystem_ftpext/connect" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_filesystem_ftpext/connect</a>
+  </p>
+</div>

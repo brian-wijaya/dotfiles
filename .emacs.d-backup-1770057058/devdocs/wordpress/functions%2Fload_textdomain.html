@@ -1,0 +1,178 @@
+<h1 class="wp-block-wporg-code-reference-title">load_textdomain( <span class="arg-type">string</span> <span class="arg-name">$domain</span>, <span class="arg-type">string</span> <span class="arg-name">$mofile</span>, <span class="arg-type">string</span> <span class="arg-name">$locale</span> = <span class="arg-default">null</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Loads a .mo file into the text domain $domain.</p> </section> <section><h2 id="description">Description</h2> <p>If the text domain already exists, the translations will be merged. If both sets have the same string, the translation from the original value will be taken.</p> <p>On success, the .mo file will be placed in the $l10n global by $domain and will be a MO object.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$domain</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Text domain. Unique identifier for retrieving translated strings.</span></div></dd>
+<dt>
+<code>$mofile</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Path to the .mo file.</span></div></dd>
+<dt>
+<code>$locale</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Locale. Default is the current locale.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="725" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function load_textdomain( $domain, $mofile, $locale = null ) {
+	/** @var WP_Textdomain_Registry $wp_textdomain_registry */
+	global $l10n, $l10n_unloaded, $wp_textdomain_registry;
+
+	$l10n_unloaded = (array) $l10n_unloaded;
+
+	if ( ! is_string( $domain ) ) {
+		return false;
+	}
+
+	/**
+	 * Filters whether to short-circuit loading .mo file.
+	 *
+	 * Returning a non-null value from the filter will effectively short-circuit
+	 * the loading, returning the passed value instead.
+	 *
+	 * @since 6.3.0
+	 *
+	 * @param bool|null   $loaded The result of loading a .mo file. Default null.
+	 * @param string      $domain Text domain. Unique identifier for retrieving translated strings.
+	 * @param string      $mofile Path to the MO file.
+	 * @param string|null $locale Locale.
+	 */
+	$loaded = apply_filters( 'pre_load_textdomain', null, $domain, $mofile, $locale );
+	if ( null !== $loaded ) {
+		if ( true === $loaded ) {
+			unset( $l10n_unloaded[ $domain ] );
+		}
+
+		return $loaded;
+	}
+
+	/**
+	 * Filters whether to override the .mo file loading.
+	 *
+	 * @since 2.9.0
+	 * @since 6.2.0 Added the `$locale` parameter.
+	 *
+	 * @param bool        $override Whether to override the .mo file loading. Default false.
+	 * @param string      $domain   Text domain. Unique identifier for retrieving translated strings.
+	 * @param string      $mofile   Path to the MO file.
+	 * @param string|null $locale   Locale.
+	 */
+	$plugin_override = apply_filters( 'override_load_textdomain', false, $domain, $mofile, $locale );
+
+	if ( true === (bool) $plugin_override ) {
+		unset( $l10n_unloaded[ $domain ] );
+
+		return true;
+	}
+
+	/**
+	 * Fires before the MO translation file is loaded.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param string $domain Text domain. Unique identifier for retrieving translated strings.
+	 * @param string $mofile Path to the .mo file.
+	 */
+	do_action( 'load_textdomain', $domain, $mofile );
+
+	/**
+	 * Filters MO file path for loading translations for a specific text domain.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param string $mofile Path to the MO file.
+	 * @param string $domain Text domain. Unique identifier for retrieving translated strings.
+	 */
+	$mofile = apply_filters( 'load_textdomain_mofile', $mofile, $domain );
+
+	if ( ! $locale ) {
+		$locale = determine_locale();
+	}
+
+	$i18n_controller = WP_Translation_Controller::get_instance();
+
+	// Ensures the correct locale is set as the current one, in case it was filtered.
+	$i18n_controller-&gt;set_locale( $locale );
+
+	/**
+	 * Filters the preferred file format for translation files.
+	 *
+	 * Can be used to disable the use of PHP files for translations.
+	 *
+	 * @since 6.5.0
+	 *
+	 * @param string $preferred_format Preferred file format. Possible values: 'php', 'mo'. Default: 'php'.
+	 * @param string $domain           The text domain.
+	 */
+	$preferred_format = apply_filters( 'translation_file_format', 'php', $domain );
+	if ( ! in_array( $preferred_format, array( 'php', 'mo' ), true ) ) {
+		$preferred_format = 'php';
+	}
+
+	$translation_files = array();
+
+	if ( 'mo' !== $preferred_format ) {
+		$translation_files[] = substr_replace( $mofile, ".l10n.$preferred_format", - strlen( '.mo' ) );
+	}
+
+	$translation_files[] = $mofile;
+
+	foreach ( $translation_files as $file ) {
+		/**
+		 * Filters the file path for loading translations for the given text domain.
+		 *
+		 * Similar to the <a href="../hooks/load_textdomain_mofile">'load_textdomain_mofile'</a> filter with the difference that
+		 * the file path could be for an MO or PHP file.
+		 *
+		 * @since 6.5.0
+		 * @since 6.6.0 Added the `$locale` parameter.
+		 *
+		 * @param string $file   Path to the translation file to load.
+		 * @param string $domain The text domain.
+		 * @param string $locale The locale.
+		 */
+		$file = (string) apply_filters( 'load_translation_file', $file, $domain, $locale );
+
+		$success = $i18n_controller-&gt;load_file( $file, $domain, $locale );
+
+		if ( $success ) {
+			if ( isset( $l10n[ $domain ] ) &amp;&amp; $l10n[ $domain ] instanceof MO ) {
+				$i18n_controller-&gt;load_file( $l10n[ $domain ]-&gt;get_filename(), $domain, $locale );
+			}
+
+			// Unset NOOP_Translations reference in get_translations_for_domain().
+			unset( $l10n[ $domain ] );
+
+			$l10n[ $domain ] = new WP_Translations( $i18n_controller, $domain );
+
+			$wp_textdomain_registry-&gt;set( $domain, $locale, dirname( $file ) );
+
+			return true;
+		}
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/l10n.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/l10n.php#L725">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/l10n.php#L725-L863">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td><span class="since-description">Added the <code>$locale</code> parameter.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/load_textdomain" class="_attribution-link">https://developer.wordpress.org/reference/functions/load_textdomain</a>
+  </p>
+</div>

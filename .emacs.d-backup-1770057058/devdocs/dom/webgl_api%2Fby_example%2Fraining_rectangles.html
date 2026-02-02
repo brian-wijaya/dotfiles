@@ -1,0 +1,104 @@
+<h1>Raining rectangles</h1>    <ul class="prev-next">
+<li class="prev"><a class="button secondary" href="scissor_animation"><span class="button-wrap"> Previous </span></a></li>
+<li class="next"><a class="button secondary" href="hello_glsl"><span class="button-wrap"> Next </span></a></li>
+</ul> <p>A simple WebGL game that demonstrates clearing with solid colors, scissoring, animation, and user interaction.</p>     <mdn-survey></mdn-survey>  <h2 id="animation_and_user_interaction_with_scissoring" class="heading">Animation and user interaction with scissoring</h2> <div class="code-example"><iframe class="sample-code-frame" title="Animation and user interaction with scissoring sample" id="frame_animation_and_user_interaction_with_scissoring" width="660" height="425" src="about:blank" data-live-path="/en-US/docs/Web/API/WebGL_API/By_example/Raining_rectangles/" data-live-id="animation_and_user_interaction_with_scissoring" sandbox="allow-same-origin allow-scripts" loading="lazy"></iframe></div> <p>This is a simple game. The objective: try to catch as many of the raining rectangles as you can by clicking on them. In this example, we use an object-oriented approach for the displayed rectangles, which helps to keep the state of the rectangle (its position, color, and so on) organized in one place, and the overall code more compact and reusable.</p> <p>This example combines clearing the drawing buffer with solid colors and scissoring operations. It is a preview of a full graphical application that manipulates various phases of the <a href="https://developer.mozilla.org/en-US/docs/Glossary/WebGL">WebGL</a> graphics pipeline and state machine.</p> <p>In addition, the example demonstrates how to integrate the WebGL function calls within a game loop. The game loop is responsible for drawing the animation frames, and keeping the animation responsive to user input. Here, the game loop is implemented using timeouts.</p>    <div class="code-example"><pre data-language="js">const canvas = document.querySelector("canvas");
+
+const gl = getRenderingContext();
+gl.enable(gl.SCISSOR_TEST);
+let rainingRect = new Rectangle();
+
+let timer = setTimeout(drawAnimation, 17);
+canvas.addEventListener("click", playerClick);
+const [scoreDisplay, missesDisplay] = document.querySelectorAll("strong");
+
+function getRenderingContext() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+  const gl = canvas.getContext("webgl");
+  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+  gl.clearColor(0.0, 0.0, 0.0, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  return gl;
+}
+
+let score = 0;
+let misses = 0;
+function drawAnimation() {
+  gl.scissor(
+    rainingRect.position[0],
+    rainingRect.position[1],
+    rainingRect.size[0],
+    rainingRect.size[1],
+  );
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  rainingRect.position[1] -= rainingRect.velocity;
+  if (rainingRect.position[1] &lt; 0) {
+    misses += 1;
+    missesDisplay.textContent = misses;
+    rainingRect = new Rectangle();
+  }
+  // We are using setTimeout for animation. So we reschedule
+  // the timeout to call drawAnimation again in 17ms.
+  // Otherwise we won't get any animation.
+  timer = setTimeout(drawAnimation, 17);
+}
+
+function playerClick(evt) {
+  // We need to transform the position of the click event from
+  // window coordinates to relative position inside the canvas.
+  // In addition we need to remember that vertical position in
+  // WebGL increases from bottom to top, unlike in the browser
+  // window.
+  const position = [
+    evt.pageX - evt.target.offsetLeft,
+    gl.drawingBufferHeight - (evt.pageY - evt.target.offsetTop),
+  ];
+  // If the click falls inside the rectangle, we caught it.
+
+  // Increment score and create a new rectangle.
+  const diffPos = [
+    position[0] - rainingRect.position[0],
+    position[1] - rainingRect.position[1],
+  ];
+  if (
+    diffPos[0] &gt;= 0 &amp;&amp;
+    diffPos[0] &lt; rainingRect.size[0] &amp;&amp;
+    diffPos[1] &gt;= 0 &amp;&amp;
+    diffPos[1] &lt; rainingRect.size[1]
+  ) {
+    score += 1;
+    scoreDisplay.textContent = score;
+    rainingRect = new Rectangle();
+  }
+}
+
+class Rectangle {
+  constructor() {
+    // We get three random numbers and use them for new rectangle
+    // size and position. For each we use a different number,
+    // because we want horizontal size, vertical size and
+    // position to be determined independently.
+    const randVec = getRandomVector();
+    this.size = [5 + 120 * randVec[0], 5 + 120 * randVec[1]];
+    this.position = [
+      randVec[2] * (gl.drawingBufferWidth - this.size[0]),
+      gl.drawingBufferHeight,
+    ];
+    this.velocity = 1.0 + 6.0 * Math.random();
+    this.color = getRandomVector();
+    gl.clearColor(this.color[0], this.color[1], this.color[2], 1.0);
+  }
+}
+
+function getRandomVector() {
+  return [Math.random(), Math.random(), Math.random()];
+}
+</pre></div> <p>The source code of this example is also available on <a href="https://github.com/idofilin/webgl-by-example/tree/master/raining-rectangles" target="_blank">GitHub</a>.</p> <ul class="prev-next">
+<li class="prev"><a class="button secondary" href="scissor_animation"><span class="button-wrap"> Previous </span></a></li>
+<li class="next"><a class="button secondary" href="hello_glsl"><span class="button-wrap"> Next </span></a></li>
+</ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2005&ndash;2025 MDN contributors.<br>Licensed under the Creative Commons Attribution-ShareAlike License v2.5 or later.<br>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/By_example/Raining_rectangles" class="_attribution-link">https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/By_example/Raining_rectangles</a>
+  </p>
+</div>

@@ -1,0 +1,182 @@
+<h1 class="wp-block-wporg-code-reference-title">get_blog_details( <span class="arg-type">int|string|array</span> <span class="arg-name">$fields</span> = <span class="arg-default">null</span>, <span class="arg-type">bool</span> <span class="arg-name">$get_all</span> = <span class="arg-default">true</span> ): <span class="return-type"><a href="../classes/wp_site" rel="class">WP_Site</a>|false</span>
+</h1> <section><p>Retrieves the details for a blog from the blogs table and blog options.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$fields</code><span class="type"><span class="int">int</span>|<span class="string">string</span>|<span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">A blog ID, a blog slug, or an array of fields to query against.<br> Defaults to the current blog ID.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$get_all</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to retrieve all details or only the details in the blogs table.<br> Default is true.</span></div>
+<p class="default">Default:<code>true</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../classes/wp_site" rel="class">WP_Site</a>|false</span> Blog details on success. False on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="128" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_blog_details( $fields = null, $get_all = true ) {
+	global $wpdb;
+
+	if ( is_array( $fields ) ) {
+		if ( isset( $fields['blog_id'] ) ) {
+			$blog_id = $fields['blog_id'];
+		} elseif ( isset( $fields['domain'] ) &amp;&amp; isset( $fields['path'] ) ) {
+			$key  = md5( $fields['domain'] . $fields['path'] );
+			$blog = wp_cache_get( $key, 'blog-lookup' );
+			if ( false !== $blog ) {
+				return $blog;
+			}
+			if ( str_starts_with( $fields['domain'], 'www.' ) ) {
+				$nowww = substr( $fields['domain'], 4 );
+				$blog  = $wpdb-&gt;get_row( $wpdb-&gt;prepare( "SELECT * FROM $wpdb-&gt;blogs WHERE domain IN (%s,%s) AND path = %s ORDER BY CHAR_LENGTH(domain) DESC", $nowww, $fields['domain'], $fields['path'] ) );
+			} else {
+				$blog = $wpdb-&gt;get_row( $wpdb-&gt;prepare( "SELECT * FROM $wpdb-&gt;blogs WHERE domain = %s AND path = %s", $fields['domain'], $fields['path'] ) );
+			}
+			if ( $blog ) {
+				wp_cache_set( $blog-&gt;blog_id . 'short', $blog, 'blog-details' );
+				$blog_id = $blog-&gt;blog_id;
+			} else {
+				return false;
+			}
+		} elseif ( isset( $fields['domain'] ) &amp;&amp; is_subdomain_install() ) {
+			$key  = md5( $fields['domain'] );
+			$blog = wp_cache_get( $key, 'blog-lookup' );
+			if ( false !== $blog ) {
+				return $blog;
+			}
+			if ( str_starts_with( $fields['domain'], 'www.' ) ) {
+				$nowww = substr( $fields['domain'], 4 );
+				$blog  = $wpdb-&gt;get_row( $wpdb-&gt;prepare( "SELECT * FROM $wpdb-&gt;blogs WHERE domain IN (%s,%s) ORDER BY CHAR_LENGTH(domain) DESC", $nowww, $fields['domain'] ) );
+			} else {
+				$blog = $wpdb-&gt;get_row( $wpdb-&gt;prepare( "SELECT * FROM $wpdb-&gt;blogs WHERE domain = %s", $fields['domain'] ) );
+			}
+			if ( $blog ) {
+				wp_cache_set( $blog-&gt;blog_id . 'short', $blog, 'blog-details' );
+				$blog_id = $blog-&gt;blog_id;
+			} else {
+				return false;
+			}
+		} else {
+			return false;
+		}
+	} else {
+		if ( ! $fields ) {
+			$blog_id = get_current_blog_id();
+		} elseif ( ! is_numeric( $fields ) ) {
+			$blog_id = get_id_from_blogname( $fields );
+		} else {
+			$blog_id = $fields;
+		}
+	}
+
+	$blog_id = (int) $blog_id;
+
+	$all     = $get_all ? '' : 'short';
+	$details = wp_cache_get( $blog_id . $all, 'blog-details' );
+
+	if ( $details ) {
+		if ( ! is_object( $details ) ) {
+			if ( -1 === $details ) {
+				return false;
+			} else {
+				// Clear old pre-serialized objects. Cache clients do better with that.
+				wp_cache_delete( $blog_id . $all, 'blog-details' );
+				unset( $details );
+			}
+		} else {
+			return $details;
+		}
+	}
+
+	// Try the other cache.
+	if ( $get_all ) {
+		$details = wp_cache_get( $blog_id . 'short', 'blog-details' );
+	} else {
+		$details = wp_cache_get( $blog_id, 'blog-details' );
+		// If short was requested and full cache is set, we can return.
+		if ( $details ) {
+			if ( ! is_object( $details ) ) {
+				if ( -1 === $details ) {
+					return false;
+				} else {
+					// Clear old pre-serialized objects. Cache clients do better with that.
+					wp_cache_delete( $blog_id, 'blog-details' );
+					unset( $details );
+				}
+			} else {
+				return $details;
+			}
+		}
+	}
+
+	if ( empty( $details ) ) {
+		$details = WP_Site::get_instance( $blog_id );
+		if ( ! $details ) {
+			// Set the full cache.
+			wp_cache_set( $blog_id, -1, 'blog-details' );
+			return false;
+		}
+	}
+
+	if ( ! $details instanceof WP_Site ) {
+		$details = new WP_Site( $details );
+	}
+
+	if ( ! $get_all ) {
+		wp_cache_set( $blog_id . $all, $details, 'blog-details' );
+		return $details;
+	}
+
+	$switched_blog = false;
+
+	if ( get_current_blog_id() !== $blog_id ) {
+		switch_to_blog( $blog_id );
+		$switched_blog = true;
+	}
+
+	$details-&gt;blogname   = get_option( 'blogname' );
+	$details-&gt;siteurl    = get_option( 'siteurl' );
+	$details-&gt;post_count = get_option( 'post_count' );
+	$details-&gt;home       = get_option( 'home' );
+
+	if ( $switched_blog ) {
+		restore_current_blog();
+	}
+
+	/**
+	 * Filters a blog's details.
+	 *
+	 * @since MU (3.0.0)
+	 * @deprecated 4.7.0 Use <a href="../hooks/site_details">'site_details'</a> instead.
+	 *
+	 * @param WP_Site $details The blog details.
+	 */
+	$details = apply_filters_deprecated( 'blog_details', array( $details ), '4.7.0', 'site_details' );
+
+	wp_cache_set( $blog_id . $all, $details, 'blog-details' );
+
+	$key = md5( $details-&gt;domain . $details-&gt;path );
+	wp_cache_set( $key, $details, 'blog-lookup' );
+
+	return $details;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-blogs.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-blogs.php#L128">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-blogs.php#L128-L273">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/blog_details"><span class="hook-func">apply_filters_deprecated</span>( ‘blog_details’, <nobr><span class="arg-type">WP_Site</span> <span class="arg-name">$details</span></nobr> )</a></dt>
+<dd>
+<p>Filters a blog’s details.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_blog_details" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_blog_details</a>
+  </p>
+</div>

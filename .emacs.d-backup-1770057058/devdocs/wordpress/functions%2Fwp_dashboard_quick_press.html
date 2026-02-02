@@ -1,0 +1,101 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_dashboard_quick_press( <span class="arg-type">string|false</span> <span class="arg-name">$error_msg</span> = <span class="arg-default">false</span> )</h1> <section><p>Displays the Quick Draft widget.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$error_msg</code><span class="type"><span class="string">string</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Error message. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="542" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_dashboard_quick_press( $error_msg = false ) {
+	global $post_ID;
+
+	if ( ! current_user_can( 'edit_posts' ) ) {
+		return;
+	}
+
+	// Check if a new auto-draft (= no new post_ID) is needed or if the old can be used.
+	$last_post_id = (int) get_user_option( 'dashboard_quick_press_last_post_id' ); // Get the last post_ID.
+
+	if ( $last_post_id ) {
+		$post = get_post( $last_post_id );
+
+		if ( empty( $post ) || 'auto-draft' !== $post-&gt;post_status ) { // auto-draft doesn't exist anymore.
+			$post = get_default_post_to_edit( 'post', true );
+			update_user_option( get_current_user_id(), 'dashboard_quick_press_last_post_id', (int) $post-&gt;ID ); // Save post_ID.
+		} else {
+			$post-&gt;post_title = ''; // Remove the auto draft title.
+		}
+	} else {
+		$post    = get_default_post_to_edit( 'post', true );
+		$user_id = get_current_user_id();
+
+		// Don't create an option if this is a super admin who does not belong to this site.
+		if ( in_array( get_current_blog_id(), array_keys( get_blogs_of_user( $user_id ) ), true ) ) {
+			update_user_option( $user_id, 'dashboard_quick_press_last_post_id', (int) $post-&gt;ID ); // Save post_ID.
+		}
+	}
+
+	$post_ID = (int) $post-&gt;ID;
+	?&gt;
+
+	&lt;form name="post" action="&lt;?php echo esc_url( admin_url( 'post.php' ) ); ?&gt;" method="post" id="quick-press" class="initial-form hide-if-no-js"&gt;
+
+		&lt;?php
+		if ( $error_msg ) {
+			wp_admin_notice(
+				$error_msg,
+				array(
+					'additional_classes' =&gt; array( 'error' ),
+				)
+			);
+		}
+		?&gt;
+
+		&lt;div class="input-text-wrap" id="title-wrap"&gt;
+			&lt;label for="title"&gt;
+				&lt;?php
+				/** This filter is documented in wp-admin/edit-form-advanced.php */
+				echo apply_filters( 'enter_title_here', __( 'Title' ), $post );
+				?&gt;
+			&lt;/label&gt;
+			&lt;input type="text" name="post_title" id="title" autocomplete="off" /&gt;
+		&lt;/div&gt;
+
+		&lt;div class="textarea-wrap" id="description-wrap"&gt;
+			&lt;label for="content"&gt;&lt;?php _e( 'Content' ); ?&gt;&lt;/label&gt;
+			&lt;textarea name="content" id="content" placeholder="&lt;?php esc_attr_e( 'What&amp;#8217;s on your mind?' ); ?&gt;" class="mceEditor" rows="3" cols="15" autocomplete="off"&gt;&lt;/textarea&gt;
+		&lt;/div&gt;
+
+		&lt;p class="submit"&gt;
+			&lt;input type="hidden" name="action" id="quickpost-action" value="post-quickdraft-save" /&gt;
+			&lt;input type="hidden" name="post_ID" value="&lt;?php echo $post_ID; ?&gt;" /&gt;
+			&lt;input type="hidden" name="post_type" value="post" /&gt;
+			&lt;?php wp_nonce_field( 'add-post' ); ?&gt;
+			&lt;?php submit_button( __( 'Save Draft' ), 'primary', 'save', false, array( 'id' =&gt; 'save-post' ) ); ?&gt;
+			&lt;br class="clear" /&gt;
+		&lt;/p&gt;
+
+	&lt;/form&gt;
+	&lt;?php
+	wp_dashboard_recent_drafts();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/dashboard.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/dashboard.php#L542">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/dashboard.php#L542-L614">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/enter_title_here"><span class="hook-func">apply_filters</span>( ‘enter_title_here’, <nobr><span class="arg-type">string</span> <span class="arg-name">$text</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters the title field placeholder text.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.8.0/">3.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_dashboard_quick_press" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_dashboard_quick_press</a>
+  </p>
+</div>

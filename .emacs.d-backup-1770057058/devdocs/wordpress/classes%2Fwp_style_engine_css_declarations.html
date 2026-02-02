@@ -1,0 +1,230 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Style_Engine_CSS_Declarations {}</h1> <section><p>Core class used for style engine CSS declarations.</p> </section> <section><h2 id="description">Description</h2> <p>Holds, sanitizes, processes, and prints CSS declarations for the style engine.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_style_engine_css_declarations/__construct">WP_Style_Engine_CSS_Declarations::__construct</a></td>
+<td>Constructor for this object.</td>
+</tr>
+<tr class="">
+<td><a href="wp_style_engine_css_declarations/add_declaration">WP_Style_Engine_CSS_Declarations::add_declaration</a></td>
+<td>Adds a single declaration.</td>
+</tr>
+<tr class="">
+<td><a href="wp_style_engine_css_declarations/add_declarations">WP_Style_Engine_CSS_Declarations::add_declarations</a></td>
+<td>Adds multiple declarations.</td>
+</tr>
+<tr class="">
+<td><a href="wp_style_engine_css_declarations/filter_declaration">WP_Style_Engine_CSS_Declarations::filter_declaration</a></td>
+<td>Filters a CSS property + value pair.</td>
+</tr>
+<tr class="">
+<td><a href="wp_style_engine_css_declarations/get_declarations">WP_Style_Engine_CSS_Declarations::get_declarations</a></td>
+<td>Gets the declarations array.</td>
+</tr>
+<tr class="">
+<td><a href="wp_style_engine_css_declarations/get_declarations_string">WP_Style_Engine_CSS_Declarations::get_declarations_string</a></td>
+<td>Filters and compiles the CSS declarations.</td>
+</tr>
+<tr class="">
+<td><a href="wp_style_engine_css_declarations/remove_declaration">WP_Style_Engine_CSS_Declarations::remove_declaration</a></td>
+<td>Removes a single declaration.</td>
+</tr>
+<tr class="">
+<td><a href="wp_style_engine_css_declarations/remove_declarations">WP_Style_Engine_CSS_Declarations::remove_declarations</a></td>
+<td>Removes multiple declarations.</td>
+</tr>
+<tr class="">
+<td><a href="wp_style_engine_css_declarations/sanitize_property">WP_Style_Engine_CSS_Declarations::sanitize_property</a></td>
+<td>Sanitizes property names.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="18" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Style_Engine_CSS_Declarations {
+
+	/**
+	 * An array of CSS declarations (property =&gt; value pairs).
+	 *
+	 * @since 6.1.0
+	 *
+	 * @var string[]
+	 */
+	protected $declarations = array();
+
+	/**
+	 * Constructor for this object.
+	 *
+	 * If a `$declarations` array is passed, it will be used to populate
+	 * the initial `$declarations` prop of the object by calling add_declarations().
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param string[] $declarations Optional. An associative array of CSS definitions,
+	 *                               e.g. `array( "$property" =&gt; "$value", "$property" =&gt; "$value" )`.
+	 *                               Default empty array.
+	 */
+	public function __construct( $declarations = array() ) {
+		$this-&gt;add_declarations( $declarations );
+	}
+
+	/**
+	 * Adds a single declaration.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param string $property The CSS property.
+	 * @param string $value    The CSS value.
+	 * @return WP_Style_Engine_CSS_Declarations Returns the object to allow chaining methods.
+	 */
+	public function add_declaration( $property, $value ) {
+		// Sanitizes the property.
+		$property = $this-&gt;sanitize_property( $property );
+		// Bails early if the property is empty.
+		if ( empty( $property ) ) {
+			return $this;
+		}
+
+		// Trims the value. If empty, bail early.
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return $this;
+		}
+
+		// Adds the declaration property/value pair.
+		$this-&gt;declarations[ $property ] = $value;
+
+		return $this;
+	}
+
+	/**
+	 * Removes a single declaration.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param string $property The CSS property.
+	 * @return WP_Style_Engine_CSS_Declarations Returns the object to allow chaining methods.
+	 */
+	public function remove_declaration( $property ) {
+		unset( $this-&gt;declarations[ $property ] );
+		return $this;
+	}
+
+	/**
+	 * Adds multiple declarations.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param string[] $declarations An array of declarations.
+	 * @return WP_Style_Engine_CSS_Declarations Returns the object to allow chaining methods.
+	 */
+	public function add_declarations( $declarations ) {
+		foreach ( $declarations as $property =&gt; $value ) {
+			$this-&gt;add_declaration( $property, $value );
+		}
+		return $this;
+	}
+
+	/**
+	 * Removes multiple declarations.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param string[] $properties Optional. An array of properties. Default empty array.
+	 * @return WP_Style_Engine_CSS_Declarations Returns the object to allow chaining methods.
+	 */
+	public function remove_declarations( $properties = array() ) {
+		foreach ( $properties as $property ) {
+			$this-&gt;remove_declaration( $property );
+		}
+		return $this;
+	}
+
+	/**
+	 * Gets the declarations array.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @return string[] The declarations array.
+	 */
+	public function get_declarations() {
+		return $this-&gt;declarations;
+	}
+
+	/**
+	 * Filters a CSS property + value pair.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param string $property The CSS property.
+	 * @param string $value    The value to be filtered.
+	 * @param string $spacer   Optional. The spacer between the colon and the value.
+	 *                         Default empty string.
+	 * @return string The filtered declaration or an empty string.
+	 */
+	protected static function filter_declaration( $property, $value, $spacer = '' ) {
+		$filtered_value = wp_strip_all_tags( $value, true );
+		if ( '' !== $filtered_value ) {
+			return safecss_filter_attr( "{$property}:{$spacer}{$filtered_value}" );
+		}
+		return '';
+	}
+
+	/**
+	 * Filters and compiles the CSS declarations.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param bool $should_prettify Optional. Whether to add spacing, new lines and indents.
+	 *                              Default false.
+	 * @param int  $indent_count    Optional. The number of tab indents to apply to the rule.
+	 *                              Applies if `prettify` is `true`. Default 0.
+	 * @return string The CSS declarations.
+	 */
+	public function get_declarations_string( $should_prettify = false, $indent_count = 0 ) {
+		$declarations_array  = $this-&gt;get_declarations();
+		$declarations_output = '';
+		$indent              = $should_prettify ? str_repeat( "\t", $indent_count ) : '';
+		$suffix              = $should_prettify ? ' ' : '';
+		$suffix              = $should_prettify &amp;&amp; $indent_count &gt; 0 ? "\n" : $suffix;
+		$spacer              = $should_prettify ? ' ' : '';
+
+		foreach ( $declarations_array as $property =&gt; $value ) {
+			$filtered_declaration = static::filter_declaration( $property, $value, $spacer );
+			if ( $filtered_declaration ) {
+				$declarations_output .= "{$indent}{$filtered_declaration};$suffix";
+			}
+		}
+
+		return rtrim( $declarations_output );
+	}
+
+	/**
+	 * Sanitizes property names.
+	 *
+	 * @since 6.1.0
+	 *
+	 * @param string $property The CSS property.
+	 * @return string The sanitized property name.
+	 */
+	protected function sanitize_property( $property ) {
+		return sanitize_key( $property );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/style-engine/class-wp-style-engine-css-declarations.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/style-engine/class-wp-style-engine-css-declarations.php#L18">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/style-engine/class-wp-style-engine-css-declarations.php#L18-L187">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.1.0/">6.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_style_engine_css_declarations" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_style_engine_css_declarations</a>
+  </p>
+</div>

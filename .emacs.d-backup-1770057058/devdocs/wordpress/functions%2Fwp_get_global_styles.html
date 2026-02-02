@@ -1,0 +1,66 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_global_styles( <span class="arg-type">array</span> <span class="arg-name">$path</span> = <span class="arg-default">array()</span>, <span class="arg-type">array</span> <span class="arg-name">$context</span> = <span class="arg-default">array()</span> ): <span class="return-type">mixed</span>
+</h1> <section><p>Gets the styles resulting of merging core, theme, and user data.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$path</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Path to the specific style to retrieve. Optional.<br> If empty, will return all styles.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$context</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Metadata to know where to retrieve the $path from. Optional.<br> <ul class="param-hash">
+<li>
+<code>block_name</code> <span class="type">string</span><div class="desc">Which block to retrieve the styles from.<br> If empty, it’ll return the styles for the global context.</div>
+</li> <li>
+<code>origin</code> <span class="type">string</span><div class="desc">Which origin to take data from.<br> Valid values are <code>'all'</code> (core, theme, and user) or <code>'base'</code> (core and theme).<br> If empty or unknown, <code>'all'</code> is used.</div>
+</li> <li>
+<code>transforms</code> <span class="type">array</span><div class="desc">Which transformation(s) to apply.<br> Valid value is array( <code>'resolve-variables'</code> ).<br> If defined, variables are resolved to their value in the styles.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed</span> The styles array or individual style value to retrieve.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="114" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_global_styles( $path = array(), $context = array() ) {
+	if ( ! empty( $context['block_name'] ) ) {
+		$path = array_merge( array( 'blocks', $context['block_name'] ), $path );
+	}
+
+	$origin = 'custom';
+	if ( isset( $context['origin'] ) &amp;&amp; 'base' === $context['origin'] ) {
+		$origin = 'theme';
+	}
+
+	$resolve_variables = isset( $context['transforms'] )
+	&amp;&amp; is_array( $context['transforms'] )
+	&amp;&amp; in_array( 'resolve-variables', $context['transforms'], true );
+
+	$merged_data = WP_Theme_JSON_Resolver::get_merged_data( $origin );
+	if ( $resolve_variables ) {
+		$merged_data = WP_Theme_JSON::resolve_variables( $merged_data );
+	}
+	$styles = $merged_data-&gt;get_raw_data()['styles'];
+	return _wp_array_get( $styles, $path, $styles );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/global-styles-and-settings.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/global-styles-and-settings.php#L114">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/global-styles-and-settings.php#L114-L134">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description"><code>transforms</code> is now usable in the <code>context</code> parameter. In case [<code>transforms</code>][<code>'resolve_variables'</code>] is defined, variables are resolved to their value in the styles.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_global_styles" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_global_styles</a>
+  </p>
+</div>

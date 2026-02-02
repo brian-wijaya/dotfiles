@@ -1,0 +1,57 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Media_List_Table::prepare_items()</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="68" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_items() {
+	global $mode, $wp_query, $post_mime_types, $avail_post_mime_types;
+
+	$mode = empty( $_REQUEST['mode'] ) ? 'list' : $_REQUEST['mode'];
+
+	/*
+	 * Exclude attachments scheduled for deletion in the next two hours
+	 * if they are for zip packages for interrupted or failed updates.
+	 * See File_Upload_Upgrader class.
+	 */
+	$not_in = array();
+
+	$crons = _get_cron_array();
+
+	if ( is_array( $crons ) ) {
+		foreach ( $crons as $cron ) {
+			if ( isset( $cron['upgrader_scheduled_cleanup'] ) ) {
+				$details = reset( $cron['upgrader_scheduled_cleanup'] );
+
+				if ( ! empty( $details['args'][0] ) ) {
+					$not_in[] = (int) $details['args'][0];
+				}
+			}
+		}
+	}
+
+	if ( ! empty( $_REQUEST['post__not_in'] ) &amp;&amp; is_array( $_REQUEST['post__not_in'] ) ) {
+		$not_in = array_merge( array_values( $_REQUEST['post__not_in'] ), $not_in );
+	}
+
+	if ( ! empty( $not_in ) ) {
+		$_REQUEST['post__not_in'] = $not_in;
+	}
+
+	list( $post_mime_types, $avail_post_mime_types ) = wp_edit_attachments_query( $_REQUEST );
+
+	$this-&gt;is_trash = isset( $_REQUEST['attachment-filter'] ) &amp;&amp; 'trash' === $_REQUEST['attachment-filter'];
+
+	$this-&gt;set_pagination_args(
+		array(
+			'total_items' =&gt; $wp_query-&gt;found_posts,
+			'total_pages' =&gt; $wp_query-&gt;max_num_pages,
+			'per_page'    =&gt; $wp_query-&gt;query_vars['posts_per_page'],
+		)
+	);
+	if ( $wp_query-&gt;posts ) {
+		update_post_thumbnail_cache( $wp_query );
+		update_post_parent_caches( $wp_query-&gt;posts );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-media-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-media-list-table.php#L68">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-media-list-table.php#L68-L117">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_media_list_table/prepare_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_media_list_table/prepare_items</a>
+  </p>
+</div>

@@ -1,0 +1,219 @@
+<h1 class="wp-block-wporg-code-reference-title">register_meta( <span class="arg-type">string</span> <span class="arg-name">$object_type</span>, <span class="arg-type">string</span> <span class="arg-name">$meta_key</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span>, <span class="arg-type">string|array</span> <span class="arg-name">$deprecated</span> = <span class="arg-default">null</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Registers a meta key.</p> </section> <section><h2 id="description">Description</h2> <p>It is recommended to register meta keys for a specific combination of object type and object subtype. If passing an object subtype is omitted, the meta key will be registered for the entire object type, however it can be partly overridden in case a more specific meta key of the same name exists for the same object type and a subtype.</p> <p>If an object type does not support any subtypes, such as users or comments, you should commonly call this function without passing a subtype.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$object_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Type of object metadata is for. Accepts <code>'post'</code>, <code>'comment'</code>, <code>'term'</code>, <code>'user'</code>, or any other object type with an associated meta table.</span></div></dd>
+<dt>
+<code>$meta_key</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Meta key to register.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Data used to describe the meta key when registered.<br> <ul class="param-hash">
+<li>
+<code>object_subtype</code> <span class="type">string</span><div class="desc">A subtype; e.g. if the object type is "post", the post type. If left empty, the meta key will be registered on the entire object type. Default empty.</div>
+</li> <li>
+<code>type</code> <span class="type">string</span><div class="desc">The type of data associated with this meta key.<br> Valid values are <code>'string'</code>, <code>'boolean'</code>, <code>'integer'</code>, <code>'number'</code>, <code>'array'</code>, and <code>'object'</code>.</div>
+</li> <li>
+<code>label</code> <span class="type">string</span><div class="desc">A human-readable label of the data attached to this meta key.</div>
+</li> <li>
+<code>description</code> <span class="type">string</span><div class="desc">A description of the data attached to this meta key.</div>
+</li> <li>
+<code>single</code> <span class="type">bool</span><div class="desc">Whether the meta key has one value per object, or an array of values per object.</div>
+</li> <li>
+<code>default</code> <span class="type">mixed</span><div class="desc">The default value returned from <a href="get_metadata" rel="function">get_metadata()</a> if no value has been set yet.<br> When using a non-single meta key, the default value is for the first entry.<br> In other words, when calling <a href="get_metadata" rel="function">get_metadata()</a> with <code>$single</code> set to <code>false</code>, the default value given here will be wrapped in an array.</div>
+</li> <li>
+<code>sanitize_callback</code> <span class="type">callable</span><div class="desc">A function or method to call when sanitizing <code>$meta_key</code> data.</div>
+</li> <li>
+<code>auth_callback</code> <span class="type">callable</span><div class="desc">Optional. A function or method to call when performing edit_post_meta, add_post_meta, and delete_post_meta capability checks.</div>
+</li> <li>
+<code>show_in_rest</code> <span class="type">bool|array</span><div class="desc">Whether data associated with this meta key can be considered public and should be accessible via the REST API. A custom post type must also declare support for custom fields for registered meta to be accessible via REST.<br> When registering complex meta values this argument may optionally be an array with <code>'schema'</code> or <code>'prepare_callback'</code> keys instead of a boolean.</div>
+</li> <li>
+<code>revisions_enabled</code> <span class="type">bool</span><div class="desc">Whether to enable revisions support for this meta_key. Can only be used when the object type is <code>'post'</code>.</div>
+</li> </ul> </span></div></dd>
+<dt>
+<code>$deprecated</code><span class="type"><span class="string">string</span>|<span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Deprecated. Use <code>$args</code> instead.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if the meta key was successfully registered in the global array, false if not.<br> Registering a meta key with distinct sanitize and auth callbacks will fire those callbacks, but will not add to the global registry.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1407" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function register_meta( $object_type, $meta_key, $args, $deprecated = null ) {
+	global $wp_meta_keys;
+
+	if ( ! is_array( $wp_meta_keys ) ) {
+		$wp_meta_keys = array();
+	}
+
+	$defaults = array(
+		'object_subtype'    =&gt; '',
+		'type'              =&gt; 'string',
+		'label'             =&gt; '',
+		'description'       =&gt; '',
+		'default'           =&gt; '',
+		'single'            =&gt; false,
+		'sanitize_callback' =&gt; null,
+		'auth_callback'     =&gt; null,
+		'show_in_rest'      =&gt; false,
+		'revisions_enabled' =&gt; false,
+	);
+
+	// There used to be individual args for sanitize and auth callbacks.
+	$has_old_sanitize_cb = false;
+	$has_old_auth_cb     = false;
+
+	if ( is_callable( $args ) ) {
+		$args = array(
+			'sanitize_callback' =&gt; $args,
+		);
+
+		$has_old_sanitize_cb = true;
+	} else {
+		$args = (array) $args;
+	}
+
+	if ( is_callable( $deprecated ) ) {
+		$args['auth_callback'] = $deprecated;
+		$has_old_auth_cb       = true;
+	}
+
+	/**
+	 * Filters the registration arguments when registering meta.
+	 *
+	 * @since 4.6.0
+	 *
+	 * @param array  $args        Array of meta registration arguments.
+	 * @param array  $defaults    Array of default arguments.
+	 * @param string $object_type Type of object metadata is for. Accepts 'post', 'comment', 'term', 'user',
+	 *                            or any other object type with an associated meta table.
+	 * @param string $meta_key    Meta key.
+	 */
+	$args = apply_filters( 'register_meta_args', $args, $defaults, $object_type, $meta_key );
+	unset( $defaults['default'] );
+	$args = wp_parse_args( $args, $defaults );
+
+	// Require an item schema when registering array meta.
+	if ( false !== $args['show_in_rest'] &amp;&amp; 'array' === $args['type'] ) {
+		if ( ! is_array( $args['show_in_rest'] ) || ! isset( $args['show_in_rest']['schema']['items'] ) ) {
+			_doing_it_wrong( __FUNCTION__, __( 'When registering an "array" meta type to show in the REST API, you must specify the schema for each array item in "show_in_rest.schema.items".' ), '5.3.0' );
+
+			return false;
+		}
+	}
+
+	$object_subtype = ! empty( $args['object_subtype'] ) ? $args['object_subtype'] : '';
+	if ( $args['revisions_enabled'] ) {
+		if ( 'post' !== $object_type ) {
+			_doing_it_wrong( __FUNCTION__, __( 'Meta keys cannot enable revisions support unless the object type supports revisions.' ), '6.4.0' );
+
+			return false;
+		} elseif ( ! empty( $object_subtype ) &amp;&amp; ! post_type_supports( $object_subtype, 'revisions' ) ) {
+			_doing_it_wrong( __FUNCTION__, __( 'Meta keys cannot enable revisions support unless the object subtype supports revisions.' ), '6.4.0' );
+
+			return false;
+		}
+	}
+
+	// If `auth_callback` is not provided, fall back to `is_protected_meta()`.
+	if ( empty( $args['auth_callback'] ) ) {
+		if ( is_protected_meta( $meta_key, $object_type ) ) {
+			$args['auth_callback'] = '__return_false';
+		} else {
+			$args['auth_callback'] = '__return_true';
+		}
+	}
+
+	// Back-compat: old sanitize and auth callbacks are applied to all of an object type.
+	if ( is_callable( $args['sanitize_callback'] ) ) {
+		if ( ! empty( $object_subtype ) ) {
+			add_filter( "sanitize_{$object_type}_meta_{$meta_key}_for_{$object_subtype}", $args['sanitize_callback'], 10, 4 );
+		} else {
+			add_filter( "sanitize_{$object_type}_meta_{$meta_key}", $args['sanitize_callback'], 10, 3 );
+		}
+	}
+
+	if ( is_callable( $args['auth_callback'] ) ) {
+		if ( ! empty( $object_subtype ) ) {
+			add_filter( "auth_{$object_type}_meta_{$meta_key}_for_{$object_subtype}", $args['auth_callback'], 10, 6 );
+		} else {
+			add_filter( "auth_{$object_type}_meta_{$meta_key}", $args['auth_callback'], 10, 6 );
+		}
+	}
+
+	if ( array_key_exists( 'default', $args ) ) {
+		$schema = $args;
+		if ( is_array( $args['show_in_rest'] ) &amp;&amp; isset( $args['show_in_rest']['schema'] ) ) {
+			$schema = array_merge( $schema, $args['show_in_rest']['schema'] );
+		}
+
+		$check = rest_validate_value_from_schema( $args['default'], $schema );
+		if ( is_wp_error( $check ) ) {
+			_doing_it_wrong( __FUNCTION__, __( 'When registering a default meta value the data must match the type provided.' ), '5.5.0' );
+
+			return false;
+		}
+
+		if ( ! has_filter( "default_{$object_type}_metadata", 'filter_default_metadata' ) ) {
+			add_filter( "default_{$object_type}_metadata", 'filter_default_metadata', 10, 5 );
+		}
+	}
+
+	// Global registry only contains meta keys registered with the array of arguments added in 4.6.0.
+	if ( ! $has_old_auth_cb &amp;&amp; ! $has_old_sanitize_cb ) {
+		unset( $args['object_subtype'] );
+
+		$wp_meta_keys[ $object_type ][ $object_subtype ][ $meta_key ] = $args;
+
+		return true;
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/meta.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/meta.php#L1407">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/meta.php#L1407-L1537">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/register_meta_args"><span class="hook-func">apply_filters</span>( ‘register_meta_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$defaults</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$object_type</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$meta_key</span></nobr> )</a></dt>
+<dd>
+<p>Filters the registration arguments when registering meta.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.7.0/">6.7.0</a></td>
+<td><span class="since-description">The <code>label</code> argument was added to the arguments array.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.4.0/">6.4.0</a></td>
+<td><span class="since-description">The <code>$revisions_enabled</code> argument was added to the arguments array.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td><span class="since-description">The <code>$default</code> argument was added to the arguments array.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">Valid meta types expanded to include "array" and "object".</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.8/">4.9.8</a></td>
+<td><span class="since-description">The <code>$object_subtype</code> argument was added to the arguments array.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/4.6.0/">4.6.0</a></td>
+<td><span class="since-description"><a href="https://core.trac.wordpress.org/ticket/35658"> Modified to support an array of data to attach to registered meta keys</a>. Previous arguments for <code>$sanitize_callback</code> and <code>$auth_callback</code> have been folded into this array.</span></td>
+</tr>
+<tr class="wporg-hidden">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure><a class="wp-block-wporg-code-table-show-more" href="#">Show 2 more</a><a class="wp-block-wporg-code-table-show-less" href="#">Show less</a></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/register_meta" class="_attribution-link">https://developer.wordpress.org/reference/functions/register_meta</a>
+  </p>
+</div>

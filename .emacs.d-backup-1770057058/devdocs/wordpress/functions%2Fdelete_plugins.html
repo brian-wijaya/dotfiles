@@ -1,0 +1,191 @@
+<h1 class="wp-block-wporg-code-reference-title">delete_plugins( <span class="arg-type">string[]</span> <span class="arg-name">$plugins</span>, <span class="arg-type">string</span> <span class="arg-name">$deprecated</span> = <span class="arg-default">”</span> ): <span class="return-type">bool|null|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Removes directory and files of a plugin for a list of plugins.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$plugins</code><span class="type"><span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">List of plugin paths to delete, relative to the plugins directory.</span></div></dd>
+<dt>
+<code>$deprecated</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Not used.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|null|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True on success, false if <code>$plugins</code> is empty, <code>WP_Error</code> on failure.<br> <code>null</code> if filesystem credentials are required to proceed.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="904" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function delete_plugins( $plugins, $deprecated = '' ) {
+	global $wp_filesystem;
+
+	if ( empty( $plugins ) ) {
+		return false;
+	}
+
+	$checked = array();
+	foreach ( $plugins as $plugin ) {
+		$checked[] = 'checked[]=' . $plugin;
+	}
+
+	$url = wp_nonce_url( 'plugins.php?action=delete-selected&amp;verify-delete=1&amp;' . implode( '&amp;', $checked ), 'bulk-plugins' );
+
+	ob_start();
+	$credentials = request_filesystem_credentials( $url );
+	$data        = ob_get_clean();
+
+	if ( false === $credentials ) {
+		if ( ! empty( $data ) ) {
+			require_once ABSPATH . 'wp-admin/admin-header.php';
+			echo $data;
+			require_once ABSPATH . 'wp-admin/admin-footer.php';
+			exit;
+		}
+		return;
+	}
+
+	if ( ! WP_Filesystem( $credentials ) ) {
+		ob_start();
+		// Failed to connect. Error and request again.
+		request_filesystem_credentials( $url, '', true );
+		$data = ob_get_clean();
+
+		if ( ! empty( $data ) ) {
+			require_once ABSPATH . 'wp-admin/admin-header.php';
+			echo $data;
+			require_once ABSPATH . 'wp-admin/admin-footer.php';
+			exit;
+		}
+		return;
+	}
+
+	if ( ! is_object( $wp_filesystem ) ) {
+		return new WP_Error( 'fs_unavailable', __( 'Could not access filesystem.' ) );
+	}
+
+	if ( is_wp_error( $wp_filesystem-&gt;errors ) &amp;&amp; $wp_filesystem-&gt;errors-&gt;has_errors() ) {
+		return new WP_Error( 'fs_error', __( 'Filesystem error.' ), $wp_filesystem-&gt;errors );
+	}
+
+	// Get the base plugin folder.
+	$plugins_dir = $wp_filesystem-&gt;wp_plugins_dir();
+	if ( empty( $plugins_dir ) ) {
+		return new WP_Error( 'fs_no_plugins_dir', __( 'Unable to locate WordPress plugin directory.' ) );
+	}
+
+	$plugins_dir = trailingslashit( $plugins_dir );
+
+	$plugin_translations = wp_get_installed_translations( 'plugins' );
+
+	$errors = array();
+
+	foreach ( $plugins as $plugin_file ) {
+		// Run Uninstall hook.
+		if ( is_uninstallable_plugin( $plugin_file ) ) {
+			uninstall_plugin( $plugin_file );
+		}
+
+		/**
+		 * Fires immediately before a plugin deletion attempt.
+		 *
+		 * @since 4.4.0
+		 *
+		 * @param string $plugin_file Path to the plugin file relative to the plugins directory.
+		 */
+		do_action( 'delete_plugin', $plugin_file );
+
+		$this_plugin_dir = trailingslashit( dirname( $plugins_dir . $plugin_file ) );
+
+		/*
+		 * If plugin is in its own directory, recursively delete the directory.
+		 * Base check on if plugin includes directory separator AND that it's not the root plugin folder.
+		 */
+		if ( strpos( $plugin_file, '/' ) &amp;&amp; $this_plugin_dir !== $plugins_dir ) {
+			$deleted = $wp_filesystem-&gt;delete( $this_plugin_dir, true );
+		} else {
+			$deleted = $wp_filesystem-&gt;delete( $plugins_dir . $plugin_file );
+		}
+
+		/**
+		 * Fires immediately after a plugin deletion attempt.
+		 *
+		 * @since 4.4.0
+		 *
+		 * @param string $plugin_file Path to the plugin file relative to the plugins directory.
+		 * @param bool   $deleted     Whether the plugin deletion was successful.
+		 */
+		do_action( 'deleted_plugin', $plugin_file, $deleted );
+
+		if ( ! $deleted ) {
+			$errors[] = $plugin_file;
+			continue;
+		}
+
+		$plugin_slug = dirname( $plugin_file );
+
+		if ( 'hello.php' === $plugin_file ) {
+			$plugin_slug = 'hello-dolly';
+		}
+
+		// Remove language files, silently.
+		if ( '.' !== $plugin_slug &amp;&amp; ! empty( $plugin_translations[ $plugin_slug ] ) ) {
+			$translations = $plugin_translations[ $plugin_slug ];
+
+			foreach ( $translations as $translation =&gt; $data ) {
+				$wp_filesystem-&gt;delete( WP_LANG_DIR . '/plugins/' . $plugin_slug . '-' . $translation . '.po' );
+				$wp_filesystem-&gt;delete( WP_LANG_DIR . '/plugins/' . $plugin_slug . '-' . $translation . '.mo' );
+				$wp_filesystem-&gt;delete( WP_LANG_DIR . '/plugins/' . $plugin_slug . '-' . $translation . '.l10n.php' );
+
+				$json_translation_files = glob( WP_LANG_DIR . '/plugins/' . $plugin_slug . '-' . $translation . '-*.json' );
+				if ( $json_translation_files ) {
+					array_map( array( $wp_filesystem, 'delete' ), $json_translation_files );
+				}
+			}
+		}
+	}
+
+	// Remove deleted plugins from the plugin updates list.
+	$current = get_site_transient( 'update_plugins' );
+	if ( $current ) {
+		// Don't remove the plugins that weren't deleted.
+		$deleted = array_diff( $plugins, $errors );
+
+		foreach ( $deleted as $plugin_file ) {
+			unset( $current-&gt;response[ $plugin_file ] );
+		}
+
+		set_site_transient( 'update_plugins', $current );
+	}
+
+	if ( ! empty( $errors ) ) {
+		if ( 1 === count( $errors ) ) {
+			/* translators: %s: Plugin filename. */
+			$message = __( 'Could not fully remove the plugin %s.' );
+		} else {
+			/* translators: %s: Comma-separated list of plugin filenames. */
+			$message = __( 'Could not fully remove the plugins %s.' );
+		}
+
+		return new WP_Error( 'could_not_remove_plugin', sprintf( $message, implode( ', ', $errors ) ) );
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/plugin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/plugin.php#L904">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/plugin.php#L904-L1058">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deleted_plugin"><span class="hook-func">do_action</span>( ‘deleted_plugin’, <nobr><span class="arg-type">string</span> <span class="arg-name">$plugin_file</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$deleted</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after a plugin deletion attempt.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/delete_plugin"><span class="hook-func">do_action</span>( ‘delete_plugin’, <nobr><span class="arg-type">string</span> <span class="arg-name">$plugin_file</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before a plugin deletion attempt.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.6.0/">2.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/delete_plugins" class="_attribution-link">https://developer.wordpress.org/reference/functions/delete_plugins</a>
+  </p>
+</div>

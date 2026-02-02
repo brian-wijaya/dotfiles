@@ -1,0 +1,77 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_credits( <span class="arg-type">string</span> <span class="arg-name">$version</span> = <span class="arg-default">”</span>, <span class="arg-type">string</span> <span class="arg-name">$locale</span> = <span class="arg-default">”</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Retrieves the contributor credits.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$version</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">WordPress version. Defaults to the current version.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+<dt>
+<code>$locale</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">WordPress locale. Defaults to the current user’s locale.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> A list of all of the contributors, or false on error.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="20" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_credits( $version = '', $locale = '' ) {
+	if ( ! $version ) {
+		$version = wp_get_wp_version();
+	}
+
+	if ( ! $locale ) {
+		$locale = get_user_locale();
+	}
+
+	$results = get_site_transient( 'wordpress_credits_' . $locale );
+
+	if ( ! is_array( $results )
+		|| str_contains( $version, '-' )
+		|| ( isset( $results['data']['version'] ) &amp;&amp; ! str_starts_with( $version, $results['data']['version'] ) )
+	) {
+		$url     = "https://api.wordpress.org/core/credits/1.1/?version={$version}&amp;locale={$locale}";
+		$options = array( 'user-agent' =&gt; 'WordPress/' . $version . '; ' . home_url( '/' ) );
+
+		if ( wp_http_supports( array( 'ssl' ) ) ) {
+			$url = set_url_scheme( $url, 'https' );
+		}
+
+		$response = wp_remote_get( $url, $options );
+
+		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+			return false;
+		}
+
+		$results = json_decode( wp_remote_retrieve_body( $response ), true );
+
+		if ( ! is_array( $results ) ) {
+			return false;
+		}
+
+		set_site_transient( 'wordpress_credits_' . $locale, $results, DAY_IN_SECONDS );
+	}
+
+	return $results;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/credits.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/credits.php#L20">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/credits.php#L20-L58">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.6.0/">5.6.0</a></td>
+<td><span class="since-description">Added the <code>$version</code> and <code>$locale</code> parameters.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.2.0/">3.2.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_credits" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_credits</a>
+  </p>
+</div>

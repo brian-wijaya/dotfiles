@@ -1,0 +1,71 @@
+<h1 class="wp-block-wporg-code-reference-title">atom_enclosure()</h1> <section><p>Displays the atom enclosure for the current post.</p> </section> <section><h2 id="description">Description</h2> <p>Uses the global $post to check whether the post requires a password and if the user has the password for the post. If not then it will return before displaying.</p> <p>Also uses the function <a href="get_post_custom" rel="function">get_post_custom()</a> to get the post’s ‘enclosure’ metadata field and parses the value to display the enclosure(s). The enclosure(s) consist of link HTML tag(s) with a URI and other attributes.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="519" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function atom_enclosure() {
+	if ( post_password_required() ) {
+		return;
+	}
+
+	foreach ( (array) get_post_custom() as $key =&gt; $val ) {
+		if ( 'enclosure' === $key ) {
+			foreach ( (array) $val as $enc ) {
+				$enclosure = explode( "\n", $enc );
+
+				$url    = '';
+				$type   = '';
+				$length = 0;
+
+				$mimes = get_allowed_mime_types();
+
+				// Parse URL.
+				if ( isset( $enclosure[0] ) &amp;&amp; is_string( $enclosure[0] ) ) {
+					$url = trim( $enclosure[0] );
+				}
+
+				// Parse length and type.
+				for ( $i = 1; $i &lt;= 2; $i++ ) {
+					if ( isset( $enclosure[ $i ] ) ) {
+						if ( is_numeric( $enclosure[ $i ] ) ) {
+							$length = trim( $enclosure[ $i ] );
+						} elseif ( in_array( $enclosure[ $i ], $mimes, true ) ) {
+							$type = trim( $enclosure[ $i ] );
+						}
+					}
+				}
+
+				$html_link_tag = sprintf(
+					"&lt;link href=\"%s\" rel=\"enclosure\" length=\"%d\" type=\"%s\" /&gt;\n",
+					esc_url( $url ),
+					esc_attr( $length ),
+					esc_attr( $type )
+				);
+
+				/**
+				 * Filters the atom enclosure HTML link tag for the current post.
+				 *
+				 * @since 2.2.0
+				 *
+				 * @param string $html_link_tag The HTML link tag with a URI and other attributes.
+				 */
+				echo apply_filters( 'atom_enclosure', $html_link_tag );
+			}
+		}
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/feed.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/feed.php#L519">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/feed.php#L519-L569">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/atom_enclosure"><span class="hook-func">apply_filters</span>( ‘atom_enclosure’, <nobr><span class="arg-type">string</span> <span class="arg-name">$html_link_tag</span></nobr> )</a></dt>
+<dd>
+<p>Filters the atom enclosure HTML link tag for the current post.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.2.0/">2.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/atom_enclosure" class="_attribution-link">https://developer.wordpress.org/reference/functions/atom_enclosure</a>
+  </p>
+</div>

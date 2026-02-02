@@ -1,0 +1,102 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Rewrite::mod_rewrite_rules(): <span class="return-type">string</span>
+</h1> <section><p>Retrieves mod_rewrite-formatted rewrite rules to write to .htaccess.</p> </section> <section><h2 id="description">Description</h2> <p>Does not actually write to the .htaccess file, but creates the rules for the process that will.</p> <p>Will add the non_wp_rules property rules to the .htaccess file before the WordPress rewrite rules one.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> </section> <section><h2 id="more-information">More Information</h2> <p>returns a string (not an array) of all the rules. They are wrapped in an Apache <tt><a class="external text" href="http://httpd.apache.org/docs/2.0/mod/core.html#ifmodule" rel="nofollow">&lt;IfModule&gt;</a></tt> block, to ensure mod_rewrite is enabled.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1539" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function mod_rewrite_rules() {
+	if ( ! $this-&gt;using_permalinks() ) {
+		return '';
+	}
+
+	$site_root = parse_url( site_url() );
+	if ( isset( $site_root['path'] ) ) {
+		$site_root = trailingslashit( $site_root['path'] );
+	}
+
+	$home_root = parse_url( home_url() );
+	if ( isset( $home_root['path'] ) ) {
+		$home_root = trailingslashit( $home_root['path'] );
+	} else {
+		$home_root = '/';
+	}
+
+	$rules  = "&lt;IfModule mod_rewrite.c&gt;\n";
+	$rules .= "RewriteEngine On\n";
+	$rules .= "RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]\n";
+	$rules .= "RewriteBase $home_root\n";
+
+	// Prevent -f checks on index.php.
+	$rules .= "RewriteRule ^index\.php$ - [L]\n";
+
+	// Add in the rules that don't redirect to WP's index.php (and thus shouldn't be handled by WP at all).
+	foreach ( (array) $this-&gt;non_wp_rules as $match =&gt; $query ) {
+		// Apache 1.3 does not support the reluctant (non-greedy) modifier.
+		$match = str_replace( '.+?', '.+', $match );
+
+		$rules .= 'RewriteRule ^' . $match . ' ' . $home_root . $query . " [QSA,L]\n";
+	}
+
+	if ( $this-&gt;use_verbose_rules ) {
+		$this-&gt;matches = '';
+		$rewrite       = $this-&gt;rewrite_rules();
+		$num_rules     = count( $rewrite );
+		$rules        .= "RewriteCond %{REQUEST_FILENAME} -f [OR]\n" .
+			"RewriteCond %{REQUEST_FILENAME} -d\n" .
+			"RewriteRule ^.*$ - [S=$num_rules]\n";
+
+		foreach ( (array) $rewrite as $match =&gt; $query ) {
+			// Apache 1.3 does not support the reluctant (non-greedy) modifier.
+			$match = str_replace( '.+?', '.+', $match );
+
+			if ( str_contains( $query, $this-&gt;index ) ) {
+				$rules .= 'RewriteRule ^' . $match . ' ' . $home_root . $query . " [QSA,L]\n";
+			} else {
+				$rules .= 'RewriteRule ^' . $match . ' ' . $site_root . $query . " [QSA,L]\n";
+			}
+		}
+	} else {
+		$rules .= "RewriteCond %{REQUEST_FILENAME} !-f\n" .
+			"RewriteCond %{REQUEST_FILENAME} !-d\n" .
+			"RewriteRule . {$home_root}{$this-&gt;index} [L]\n";
+	}
+
+	$rules .= "&lt;/IfModule&gt;\n";
+
+	/**
+	 * Filters the list of rewrite rules formatted for output to an .htaccess file.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @param string $rules mod_rewrite Rewrite rules formatted for .htaccess.
+	 */
+	$rules = apply_filters( 'mod_rewrite_rules', $rules );
+
+	/**
+	 * Filters the list of rewrite rules formatted for output to an .htaccess file.
+	 *
+	 * @since 1.5.0
+	 * @deprecated 1.5.0 Use the <a href="../../hooks/mod_rewrite_rules">'mod_rewrite_rules'</a> filter instead.
+	 *
+	 * @param string $rules mod_rewrite Rewrite rules formatted for .htaccess.
+	 */
+	return apply_filters_deprecated( 'rewrite_rules', array( $rules ), '1.5.0', 'mod_rewrite_rules' );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-rewrite.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-rewrite.php#L1539">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-rewrite.php#L1539-L1616">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/mod_rewrite_rules"><span class="hook-func">apply_filters</span>( ‘mod_rewrite_rules’, <nobr><span class="arg-type">string</span> <span class="arg-name">$rules</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of rewrite rules formatted for output to an .htaccess file.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rewrite_rules"><span class="hook-func">apply_filters_deprecated</span>( ‘rewrite_rules’, <nobr><span class="arg-type">string</span> <span class="arg-name">$rules</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of rewrite rules formatted for output to an .htaccess file.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rewrite/mod_rewrite_rules" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rewrite/mod_rewrite_rules</a>
+  </p>
+</div>

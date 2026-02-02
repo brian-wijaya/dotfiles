@@ -1,0 +1,56 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_check_post_lock( <span class="arg-type">int|WP_Post</span> <span class="arg-name">$post</span> ): <span class="return-type">int|false</span>
+</h1> <section><p>Determines whether the post is currently being edited by another user.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">ID or object of the post to check for editing.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|false</span> ID of the user with lock. False if the post does not exist, post is not locked, the user with lock does not exist, or the post is locked by current user.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1701" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_check_post_lock( $post ) {
+	$post = get_post( $post );
+
+	if ( ! $post ) {
+		return false;
+	}
+
+	$lock = get_post_meta( $post-&gt;ID, '_edit_lock', true );
+
+	if ( ! $lock ) {
+		return false;
+	}
+
+	$lock = explode( ':', $lock );
+	$time = $lock[0];
+	$user = isset( $lock[1] ) ? (int) $lock[1] : (int) get_post_meta( $post-&gt;ID, '_edit_last', true );
+
+	if ( ! get_userdata( $user ) ) {
+		return false;
+	}
+
+	/** This filter is documented in wp-admin/includes/ajax-actions.php */
+	$time_window = apply_filters( 'wp_check_post_lock_window', 150 );
+
+	if ( $time &amp;&amp; $time &gt; time() - $time_window &amp;&amp; get_current_user_id() !== $user ) {
+		return $user;
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/post.php#L1701">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/post.php#L1701-L1730">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_check_post_lock_window"><span class="hook-func">apply_filters</span>( ‘wp_check_post_lock_window’, <nobr><span class="arg-type">int</span> <span class="arg-name">$interval</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post lock window duration.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_check_post_lock" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_check_post_lock</a>
+  </p>
+</div>

@@ -1,0 +1,111 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Sidebars_Controller::prepare_item_for_response( <span class="arg-type">array</span> <span class="arg-name">$item</span>, <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span>
+</h1> <section><p>Prepares a single sidebar output for response.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$item</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Sidebar instance.</span></div></dd>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span> Prepared response object.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="318" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_item_for_response( $item, $request ) {
+	global $wp_registered_sidebars, $wp_registered_widgets;
+
+	// Restores the more descriptive, specific name for use within this method.
+	$raw_sidebar = $item;
+
+	$id      = $raw_sidebar['id'];
+	$sidebar = array( 'id' =&gt; $id );
+
+	if ( isset( $wp_registered_sidebars[ $id ] ) ) {
+		$registered_sidebar = $wp_registered_sidebars[ $id ];
+
+		$sidebar['status']        = 'active';
+		$sidebar['name']          = isset( $registered_sidebar['name'] ) ? $registered_sidebar['name'] : '';
+		$sidebar['description']   = isset( $registered_sidebar['description'] ) ? wp_sidebar_description( $id ) : '';
+		$sidebar['class']         = isset( $registered_sidebar['class'] ) ? $registered_sidebar['class'] : '';
+		$sidebar['before_widget'] = isset( $registered_sidebar['before_widget'] ) ? $registered_sidebar['before_widget'] : '';
+		$sidebar['after_widget']  = isset( $registered_sidebar['after_widget'] ) ? $registered_sidebar['after_widget'] : '';
+		$sidebar['before_title']  = isset( $registered_sidebar['before_title'] ) ? $registered_sidebar['before_title'] : '';
+		$sidebar['after_title']   = isset( $registered_sidebar['after_title'] ) ? $registered_sidebar['after_title'] : '';
+	} else {
+		$sidebar['status']      = 'inactive';
+		$sidebar['name']        = $raw_sidebar['name'];
+		$sidebar['description'] = '';
+		$sidebar['class']       = '';
+	}
+
+	if ( wp_is_block_theme() ) {
+		$sidebar['status'] = 'inactive';
+	}
+
+	$fields = $this-&gt;get_fields_for_response( $request );
+	if ( rest_is_field_included( 'widgets', $fields ) ) {
+		$sidebars = wp_get_sidebars_widgets();
+		$widgets  = array_filter(
+			isset( $sidebars[ $sidebar['id'] ] ) ? $sidebars[ $sidebar['id'] ] : array(),
+			static function ( $widget_id ) use ( $wp_registered_widgets ) {
+				return isset( $wp_registered_widgets[ $widget_id ] );
+			}
+		);
+
+		$sidebar['widgets'] = array_values( $widgets );
+	}
+
+	$schema = $this-&gt;get_item_schema();
+	$data   = array();
+	foreach ( $schema['properties'] as $property_id =&gt; $property ) {
+		if ( isset( $sidebar[ $property_id ] ) &amp;&amp; true === rest_validate_value_from_schema( $sidebar[ $property_id ], $property ) ) {
+			$data[ $property_id ] = $sidebar[ $property_id ];
+		} elseif ( isset( $property['default'] ) ) {
+			$data[ $property_id ] = $property['default'];
+		}
+	}
+
+	$context = ! empty( $request['context'] ) ? $request['context'] : 'view';
+	$data    = $this-&gt;add_additional_fields_to_object( $data, $request );
+	$data    = $this-&gt;filter_response_by_context( $data, $context );
+
+	$response = rest_ensure_response( $data );
+
+	if ( rest_is_field_included( '_links', $fields ) || rest_is_field_included( '_embedded', $fields ) ) {
+		$response-&gt;add_links( $this-&gt;prepare_links( $sidebar ) );
+	}
+
+	/**
+	 * Filters the REST API response for a sidebar.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param WP_REST_Response $response    The response object.
+	 * @param array            $raw_sidebar The raw sidebar data.
+	 * @param WP_REST_Request  $request     The request object.
+	 */
+	return apply_filters( 'rest_prepare_sidebar', $response, $raw_sidebar, $request );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-sidebars-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-sidebars-controller.php#L318">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-sidebars-controller.php#L318-L392">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_prepare_sidebar"><span class="hook-func">apply_filters</span>( ‘rest_prepare_sidebar’, <nobr><span class="arg-type">WP_REST_Response</span> <span class="arg-name">$response</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$raw_sidebar</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Filters the REST API response for a sidebar.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Renamed <code>$raw_sidebar</code> to <code>$item</code> to match parent class for PHP 8 named parameter support.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_sidebars_controller/prepare_item_for_response" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_sidebars_controller/prepare_item_for_response</a>
+  </p>
+</div>

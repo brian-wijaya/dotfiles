@@ -1,0 +1,64 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Block_Renderer_Controller::get_item( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Returns block output from block’s registered render_callback.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="153" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_item( $request ) {
+	global $post;
+
+	$post_id = isset( $request['post_id'] ) ? (int) $request['post_id'] : 0;
+
+	if ( $post_id &gt; 0 ) {
+		$post = get_post( $post_id );
+
+		// Set up postdata since this will be needed if post_id was set.
+		setup_postdata( $post );
+	}
+
+	$registry   = WP_Block_Type_Registry::get_instance();
+	$registered = $registry-&gt;get_registered( $request['name'] );
+
+	if ( null === $registered || ! $registered-&gt;is_dynamic() ) {
+		return new WP_Error(
+			'block_invalid',
+			__( 'Invalid block.' ),
+			array(
+				'status' =&gt; 404,
+			)
+		);
+	}
+
+	$attributes = $request-&gt;get_param( 'attributes' );
+
+	// Create an array representation simulating the output of parse_blocks.
+	$block = array(
+		'blockName'    =&gt; $request['name'],
+		'attrs'        =&gt; $attributes,
+		'innerHTML'    =&gt; '',
+		'innerContent' =&gt; array(),
+	);
+
+	// Render using render_block to ensure all relevant filters are used.
+	$data = array(
+		'rendered' =&gt; render_block( $block ),
+	);
+
+	return rest_ensure_response( $data );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-block-renderer-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-renderer-controller.php#L153">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-renderer-controller.php#L153-L194">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_block_renderer_controller/get_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_block_renderer_controller/get_item</a>
+  </p>
+</div>

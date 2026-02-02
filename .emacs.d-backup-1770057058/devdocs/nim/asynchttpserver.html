@@ -1,0 +1,66 @@
+<h1 class="title">std/asynchttpserver</h1> <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L1" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L1" target="_blank">Edit</a>  
+<p>This module implements a high performance asynchronous HTTP server.</p> <p>This HTTP server has not been designed to be used in production, but for testing applications locally. Because of this, when deploying your application in production you should use a reverse proxy (for example nginx) instead of allowing users to connect directly to this server.</p> <p><strong class="examples_text">Example: cmd: -r:off</strong></p> <pre class="listing" data-language="nim">import std/asynchttpserver
+# This example will create an HTTP server on an automatically chosen port.
+# It will respond to all requests with a `200 OK` response code and "Hello World"
+# as the response body.
+import std/asyncdispatch
+proc main {.async.} =
+  var server = newAsyncHttpServer()
+  proc cb(req: Request) {.async.} =
+    echo (req.reqMethod, req.url, req.headers)
+    let headers = {"Content-type": "text/plain; charset=utf-8"}
+    await req.respond(Http200, "Hello World", headers.newHttpHeaders())
+
+  server.listen(Port(0)) # or Port(8080) to hardcode the standard HTTP port.
+  let port = server.getPort
+  echo "test this with: curl localhost:" &amp; $port.uint16 &amp; "/"
+  while true:
+    if server.shouldAcceptRequest():
+      await server.acceptRequest(cb)
+    else:
+      # too many concurrent connections, `maxFDs` exceeded
+      # wait 500ms for FDs to be closed
+      await sleepAsync(500)
+
+waitFor main()</pre>  <h2 id="6">Imports</h2> <dl> <a href="asyncnet">asyncnet</a>, <a href="asyncdispatch">asyncdispatch</a>, <a href="parseutils">parseutils</a>, <a href="uri">uri</a>, <a href="strutils">strutils</a>, <a href="httpcore">httpcore</a>, <a href="nativesockets">nativesockets</a>, <a href="since">since</a> </dl>   <h2 id="7">Types</h2> <dl> <div id="AsyncHttpServer"> <dt><pre data-language="nim">AsyncHttpServer = ref object
+  ## The maximum content-length that will be read for the body.</pre></dt> <dd> <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L70" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L70" target="_blank">Edit</a> </dd> </div> <div id="Request"> <dt><pre data-language="nim">Request = object
+  client*: AsyncSocket
+  reqMethod*: HttpMethod
+  headers*: HttpHeaders
+  protocol*: tuple[orig: string, major, minor: int]
+  url*: Uri
+  hostname*: string          ## The hostname of the client that made the request.
+  body*: string</pre></dt> <dd> <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L61" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L61" target="_blank">Edit</a> </dd> </div> </dl>   <h2 id="10">Consts</h2> <dl> <div id="nimMaxDescriptorsFallback"> <dt><pre data-language="nim">nimMaxDescriptorsFallback {.intdefine.} = 16000</pre></dt> <dd> fallback value for when <code><span class="Identifier">maxDescriptors</span></code> is not available. This can be set on the command line during compilation via <code><span class="Operator">-</span><span class="Identifier">d</span><span class="Punctuation">:</span><span class="Identifier">nimMaxDescriptorsFallback</span><span class="Operator">=</span><span class="Identifier">N</span></code> <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L376" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L376" target="_blank">Edit</a> </dd> </div> </dl>   <h2 id="12">Procs</h2> <dl> <div id="acceptRequest-procs-all"> <div id="acceptRequest,AsyncHttpServer,proc(Request)"> <dt><pre data-language="nim">proc acceptRequest(server: AsyncHttpServer; callback: proc (request: Request): Future[
+    void] {.closure, ...gcsafe.}): owned(Future[void]) {....stackTrace: false,
+    raises: [Exception], tags: [RootEffect], forbids: [].}</pre></dt> <dd> Accepts a single request. Write an explicit loop around this proc so that errors can be handled properly. <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L405" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L405" target="_blank">Edit</a> </dd> </div> </div> <div id="close-procs-all"> <div id="close,AsyncHttpServer"> <dt><pre data-language="nim">proc close(server: AsyncHttpServer) {....raises: [LibraryError, Exception, SslError],
+                                      tags: [RootEffect], forbids: [].}</pre></dt> <dd> Terminates the async http server instance. <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L438" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L438" target="_blank">Edit</a> </dd> </div> </div> <div id="getPort-procs-all"> <div id="getPort,AsyncHttpServer"> <dt><pre data-language="nim">proc getPort(self: AsyncHttpServer): Port {....raises: [OSError, Exception],
+    tags: [], forbids: [].}</pre></dt> <dd> <p>Returns the port <code><span class="Identifier">self</span></code> was bound to.</p> <p>Useful for identifying what port <code><span class="Identifier">self</span></code> is bound to, if it was chosen automatically, for example via <code><span class="Identifier">listen</span><span class="Punctuation">(</span><span class="Identifier">Port</span><span class="Punctuation">(</span><span class="DecNumber">0</span><span class="Punctuation">)</span><span class="Punctuation">)</span></code>.</p> <p><strong class="examples_text">Example:</strong></p> <pre class="listing" data-language="nim">from std/nativesockets import Port
+let server = newAsyncHttpServer()
+server.listen(Port(0))
+assert server.getPort.uint16 &gt; 0
+server.close()</pre> <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L77" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L77" target="_blank">Edit</a> </dd> </div> </div> <div id="listen-procs-all"> <div id="listen,AsyncHttpServer,Port,string"> <dt><pre data-language="nim">proc listen(server: AsyncHttpServer; port: Port; address = ""; domain = AF_INET) {.
+    ...raises: [OSError, ValueError], tags: [WriteIOEffect, ReadIOEffect],
+    forbids: [].}</pre></dt> <dd> Listen to the given port and address. <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L381" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L381" target="_blank">Edit</a> </dd> </div> </div> <div id="newAsyncHttpServer-procs-all"> <div id="newAsyncHttpServer,int"> <dt><pre data-language="nim">proc newAsyncHttpServer(reuseAddr = true; reusePort = false; maxBody = 8388608): AsyncHttpServer {.
+    ...raises: [], tags: [], forbids: [].}</pre></dt> <dd> Creates a new <code><span class="Identifier">AsyncHttpServer</span></code> instance. <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L90" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L90" target="_blank">Edit</a> </dd> </div> </div> <div id="respond-procs-all"> <div id="respond,Request,HttpCode,string,HttpHeaders"> <dt><pre data-language="nim">proc respond(req: Request; code: HttpCode; content: string;
+             headers: HttpHeaders = nil): Future[void] {....raises: [Exception],
+    tags: [RootEffect], forbids: [].}</pre></dt> <dd> <p>Responds to the request with the specified <code><span class="Identifier">HttpCode</span></code>, headers and content.</p> <p>This procedure will <strong>not</strong> close the client socket.</p> <p>Example:</p> 
+<pre class="listing" data-language="nim">import std/json
+proc handler(req: Request) {.async.} =
+  if req.url.path == "/hello-world":
+    let msg = %* {"message": "Hello World"}
+    let headers = newHttpHeaders([("Content-Type","application/json")])
+    await req.respond(Http200, $msg, headers)
+  else:
+    await req.respond(Http404, "Not Found")</pre> <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L105" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L105" target="_blank">Edit</a> </dd> </div> </div> <div id="sendHeaders-procs-all"> <div id="sendHeaders,Request,HttpHeaders"> <dt><pre data-language="nim">proc sendHeaders(req: Request; headers: HttpHeaders): Future[void] {.
+    ...raises: [Exception], tags: [RootEffect], forbids: [].}</pre></dt> <dd> Sends the specified headers to the requesting client. <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L99" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L99" target="_blank">Edit</a> </dd> </div> </div> <div id="serve-procs-all"> <div id="serve,AsyncHttpServer,Port,proc(Request),string,int"> <dt><pre data-language="nim">proc serve(server: AsyncHttpServer; port: Port;
+           callback: proc (request: Request): Future[void] {.closure, ...gcsafe.};
+           address = ""; assumedDescriptorsPerRequest = -1; domain = AF_INET): owned(
+    Future[void]) {....stackTrace: false, raises: [Exception], tags: [
+    WriteIOEffect, ReadIOEffect, RootEffect, TimeEffect], forbids: [].}</pre></dt> <dd> <p>Starts the process of listening for incoming HTTP connections on the specified address and port.</p> <p>When a request is made by a client the specified callback will be called.</p> <p>If <code><span class="Identifier">assumedDescriptorsPerRequest</span></code> is 0 or greater the server cares about the process's maximum file descriptor limit. It then ensures that the process still has the resources for <code><span class="Identifier">assumedDescriptorsPerRequest</span></code> file descriptors before accepting a connection.</p> <p>You should prefer to call <code><span class="Identifier">acceptRequest</span></code> instead with a custom server loop so that you're in control over the error handling and logging.</p> <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L415" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L415" target="_blank">Edit</a> </dd> </div> </div> <div id="shouldAcceptRequest-procs-all"> <div id="shouldAcceptRequest,AsyncHttpServer,int"> <dt><pre data-language="nim">proc shouldAcceptRequest(server: AsyncHttpServer;
+                         assumedDescriptorsPerRequest = 5): bool {.inline,
+    ...raises: [], tags: [], forbids: [].}</pre></dt> <dd> Returns true if the process's current number of opened file descriptors is still within the maximum limit and so it's reasonable to accept yet another request. <a href="https://github.com/nim-lang/Nim/tree/version-2-2/lib/pure/asynchttpserver.nim#L396" target="_blank">Source</a> <a href="https://github.com/nim-lang/Nim/edit/devel/lib/pure/asynchttpserver.nim#L396" target="_blank">Edit</a> </dd> </div> </div> </dl><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2006&ndash;2024 Andreas Rumpf<br>Licensed under the MIT License.<br>
+    <a href="https://nim-lang.org/docs/asynchttpserver.html" class="_attribution-link">https://nim-lang.org/docs/asynchttpserver.html</a>
+  </p>
+</div>

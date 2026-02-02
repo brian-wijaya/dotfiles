@@ -1,0 +1,85 @@
+<h1 class="wp-block-wporg-code-reference-title">wpdb::print_error( <span class="arg-type">string</span> <span class="arg-name">$str</span> = <span class="arg-default">”</span> ): <span class="return-type">void|false</span>
+</h1> <section><p>Prints SQL/DB error.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$str</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The error to display.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">void|false</span> Void if the showing of errors is enabled, false if disabled.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1793" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function print_error( $str = '' ) {
+	global $EZSQL_ERROR;
+
+	if ( ! $str ) {
+		$str = mysqli_error( $this-&gt;dbh );
+	}
+
+	$EZSQL_ERROR[] = array(
+		'query'     =&gt; $this-&gt;last_query,
+		'error_str' =&gt; $str,
+	);
+
+	if ( $this-&gt;suppress_errors ) {
+		return false;
+	}
+
+	$caller = $this-&gt;get_caller();
+	if ( $caller ) {
+		// Not translated, as this will only appear in the error log.
+		$error_str = sprintf( 'WordPress database error %1$s for query %2$s made by %3$s', $str, $this-&gt;last_query, $caller );
+	} else {
+		$error_str = sprintf( 'WordPress database error %1$s for query %2$s', $str, $this-&gt;last_query );
+	}
+
+	error_log( $error_str );
+
+	// Are we showing errors?
+	if ( ! $this-&gt;show_errors ) {
+		return false;
+	}
+
+	wp_load_translations_early();
+
+	// If there is an error then take note of it.
+	if ( is_multisite() ) {
+		$msg = sprintf(
+			"%s [%s]\n%s\n",
+			__( 'WordPress database error:' ),
+			$str,
+			$this-&gt;last_query
+		);
+
+		if ( defined( 'ERRORLOGFILE' ) ) {
+			error_log( $msg, 3, ERRORLOGFILE );
+		}
+		if ( defined( 'DIEONDBERROR' ) ) {
+			wp_die( $msg );
+		}
+	} else {
+		$str   = htmlspecialchars( $str, ENT_QUOTES );
+		$query = htmlspecialchars( $this-&gt;last_query, ENT_QUOTES );
+
+		printf(
+			'&lt;div id="error"&gt;&lt;p class="wpdberror"&gt;&lt;strong&gt;%s&lt;/strong&gt; [%s]&lt;br /&gt;&lt;code&gt;%s&lt;/code&gt;&lt;/p&gt;&lt;/div&gt;',
+			__( 'WordPress database error:' ),
+			$str,
+			$query
+		);
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wpdb.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wpdb.php#L1793">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wpdb.php#L1793-L1852">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/0.71/">0.71</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wpdb/print_error" class="_attribution-link">https://developer.wordpress.org/reference/classes/wpdb/print_error</a>
+  </p>
+</div>

@@ -1,0 +1,72 @@
+<h1 class="wp-block-wporg-code-reference-title">_transition_post_status( <span class="arg-type">string</span> <span class="arg-name">$new_status</span>, <span class="arg-type">string</span> <span class="arg-name">$old_status</span>, <span class="arg-type">WP_Post</span> <span class="arg-name">$post</span> )</h1> <section><p>Hook for managing future post transitions to published.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_clear_scheduled_hook">wp_clear_scheduled_hook()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$new_status</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">New post status.</span></div></dd>
+<dt>
+<code>$old_status</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Previous post status.</span></div></dd>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post object.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="7787" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _transition_post_status( $new_status, $old_status, $post ) {
+	global $wpdb;
+
+	if ( 'publish' !== $old_status &amp;&amp; 'publish' === $new_status ) {
+		// Reset GUID if transitioning to publish and it is empty.
+		if ( '' === get_the_guid( $post-&gt;ID ) ) {
+			$wpdb-&gt;update( $wpdb-&gt;posts, array( 'guid' =&gt; get_permalink( $post-&gt;ID ) ), array( 'ID' =&gt; $post-&gt;ID ) );
+		}
+
+		/**
+		 * Fires when a post's status is transitioned from private to published.
+		 *
+		 * @since 1.5.0
+		 * @deprecated 2.3.0 Use <a href="../hooks/private_to_publish">'private_to_publish'</a> instead.
+		 *
+		 * @param int $post_id Post ID.
+		 */
+		do_action_deprecated( 'private_to_published', array( $post-&gt;ID ), '2.3.0', 'private_to_publish' );
+	}
+
+	// If published posts changed clear the lastpostmodified cache.
+	if ( 'publish' === $new_status || 'publish' === $old_status ) {
+		foreach ( array( 'server', 'gmt', 'blog' ) as $timezone ) {
+			wp_cache_delete( "lastpostmodified:$timezone", 'timeinfo' );
+			wp_cache_delete( "lastpostdate:$timezone", 'timeinfo' );
+			wp_cache_delete( "lastpostdate:$timezone:{$post-&gt;post_type}", 'timeinfo' );
+		}
+	}
+
+	if ( $new_status !== $old_status ) {
+		wp_cache_delete( _count_posts_cache_key( $post-&gt;post_type ), 'counts' );
+		wp_cache_delete( _count_posts_cache_key( $post-&gt;post_type, 'readable' ), 'counts' );
+	}
+
+	// Always clears the hook in case the post status bounced from future to draft.
+	wp_clear_scheduled_hook( 'publish_future_post', array( $post-&gt;ID ) );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L7787">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L7787-L7823">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/private_to_published"><span class="hook-func">do_action_deprecated</span>( ‘private_to_published’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires when a post’s status is transitioned from private to published.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_transition_post_status" class="_attribution-link">https://developer.wordpress.org/reference/functions/_transition_post_status</a>
+  </p>
+</div>

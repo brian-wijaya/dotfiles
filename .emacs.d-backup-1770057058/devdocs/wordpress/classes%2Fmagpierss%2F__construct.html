@@ -1,0 +1,47 @@
+<h1 class="wp-block-wporg-code-reference-title">MagpieRSS::__construct( <span class="arg-name">$source</span> )</h1> <section><p>PHP5 constructor.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="61" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function __construct( $source ) {
+
+	# Check if PHP xml isn't compiled
+	#
+	if ( ! function_exists('xml_parser_create') ) {
+		wp_trigger_error( '', "PHP's XML extension is not available. Please contact your hosting provider to enable PHP's XML extension." );
+		return;
+	}
+
+	$parser = xml_parser_create();
+
+	$this-&gt;parser = $parser;
+
+	# pass in parser, and a reference to this object
+	# set up handlers
+	#
+	xml_set_element_handler($this-&gt;parser,
+			array( $this, 'feed_start_element' ), array( $this, 'feed_end_element' ) );
+
+	xml_set_character_data_handler( $this-&gt;parser, array( $this, 'feed_cdata' ) );
+
+	$status = xml_parse( $this-&gt;parser, $source );
+
+	if (! $status ) {
+		$errorcode = xml_get_error_code( $this-&gt;parser );
+		if ( $errorcode != XML_ERROR_NONE ) {
+			$xml_error = xml_error_string( $errorcode );
+			$error_line = xml_get_current_line_number($this-&gt;parser);
+			$error_col = xml_get_current_column_number($this-&gt;parser);
+			$errormsg = "$xml_error at line $error_line, column $error_col";
+
+			$this-&gt;error( $errormsg );
+		}
+	}
+
+	xml_parser_free( $this-&gt;parser );
+	unset( $this-&gt;parser );
+
+	$this-&gt;normalize();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rss.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rss.php#L61">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rss.php#L61-L100">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/magpierss/__construct" class="_attribution-link">https://developer.wordpress.org/reference/classes/magpierss/__construct</a>
+  </p>
+</div>

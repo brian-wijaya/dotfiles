@@ -1,0 +1,137 @@
+<h1 class="wp-block-wporg-code-reference-title">get_header_image_tag( <span class="arg-type">array</span> <span class="arg-name">$attr</span> = <span class="arg-default">array()</span> ): <span class="return-type">string</span>
+</h1> <section><p>Creates image tag markup for a custom header image.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$attr</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Additional attributes for the image tag. Can be used to override the default attributes. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> HTML image element markup or empty string on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1257" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_header_image_tag( $attr = array() ) {
+	$header      = get_custom_header();
+	$header-&gt;url = get_header_image();
+
+	if ( ! $header-&gt;url ) {
+		return '';
+	}
+
+	$width  = absint( $header-&gt;width );
+	$height = absint( $header-&gt;height );
+	$alt    = '';
+
+	// Use alternative text assigned to the image, if available. Otherwise, leave it empty.
+	if ( ! empty( $header-&gt;attachment_id ) ) {
+		$image_alt = get_post_meta( $header-&gt;attachment_id, '_wp_attachment_image_alt', true );
+
+		if ( is_string( $image_alt ) ) {
+			$alt = $image_alt;
+		}
+	}
+
+	$attr = wp_parse_args(
+		$attr,
+		array(
+			'src'    =&gt; $header-&gt;url,
+			'width'  =&gt; $width,
+			'height' =&gt; $height,
+			'alt'    =&gt; $alt,
+		)
+	);
+
+	// Generate 'srcset' and 'sizes' if not already present.
+	if ( empty( $attr['srcset'] ) &amp;&amp; ! empty( $header-&gt;attachment_id ) ) {
+		$image_meta = get_post_meta( $header-&gt;attachment_id, '_wp_attachment_metadata', true );
+		$size_array = array( $width, $height );
+
+		if ( is_array( $image_meta ) ) {
+			$srcset = wp_calculate_image_srcset( $size_array, $header-&gt;url, $image_meta, $header-&gt;attachment_id );
+
+			if ( ! empty( $attr['sizes'] ) ) {
+				$sizes = $attr['sizes'];
+			} else {
+				$sizes = wp_calculate_image_sizes( $size_array, $header-&gt;url, $image_meta, $header-&gt;attachment_id );
+			}
+
+			if ( $srcset &amp;&amp; $sizes ) {
+				$attr['srcset'] = $srcset;
+				$attr['sizes']  = $sizes;
+			}
+		}
+	}
+
+	$attr = array_merge(
+		$attr,
+		wp_get_loading_optimization_attributes( 'img', $attr, 'get_header_image_tag' )
+	);
+
+	/*
+	 * If the default value of `lazy` for the `loading` attribute is overridden
+	 * to omit the attribute for this image, ensure it is not included.
+	 */
+	if ( isset( $attr['loading'] ) &amp;&amp; ! $attr['loading'] ) {
+		unset( $attr['loading'] );
+	}
+
+	// If the `fetchpriority` attribute is overridden and set to false or an empty string.
+	if ( isset( $attr['fetchpriority'] ) &amp;&amp; ! $attr['fetchpriority'] ) {
+		unset( $attr['fetchpriority'] );
+	}
+
+	// If the `decoding` attribute is overridden and set to false or an empty string.
+	if ( isset( $attr['decoding'] ) &amp;&amp; ! $attr['decoding'] ) {
+		unset( $attr['decoding'] );
+	}
+
+	/**
+	 * Filters the list of header image attributes.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param array  $attr   Array of the attributes for the image tag.
+	 * @param object $header The custom header object returned by 'get_custom_header()'.
+	 */
+	$attr = apply_filters( 'get_header_image_tag_attributes', $attr, $header );
+
+	$attr = array_map( 'esc_attr', $attr );
+	$html = '&lt;img';
+
+	foreach ( $attr as $name =&gt; $value ) {
+		$html .= ' ' . $name . '="' . $value . '"';
+	}
+
+	$html .= ' /&gt;';
+
+	/**
+	 * Filters the markup of header images.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param string $html   The HTML image tag markup being filtered.
+	 * @param object $header The custom header object returned by 'get_custom_header()'.
+	 * @param array  $attr   Array of the attributes for the image tag.
+	 */
+	return apply_filters( 'get_header_image_tag', $html, $header, $attr );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/theme.php#L1257">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/theme.php#L1257-L1361">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_header_image_tag"><span class="hook-func">apply_filters</span>( ‘get_header_image_tag’, <nobr><span class="arg-type">string</span> <span class="arg-name">$html</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$header</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$attr</span></nobr> )</a></dt>
+<dd>
+<p>Filters the markup of header images.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/get_header_image_tag_attributes"><span class="hook-func">apply_filters</span>( ‘get_header_image_tag_attributes’, <nobr><span class="arg-type">array</span> <span class="arg-name">$attr</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$header</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of header image attributes.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_header_image_tag" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_header_image_tag</a>
+  </p>
+</div>

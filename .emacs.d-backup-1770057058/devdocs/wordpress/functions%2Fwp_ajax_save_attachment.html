@@ -1,0 +1,96 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_save_attachment()</h1> <section><p>Handles updating attachment attributes via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3109" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_save_attachment() {
+	if ( ! isset( $_REQUEST['id'] ) || ! isset( $_REQUEST['changes'] ) ) {
+		wp_send_json_error();
+	}
+
+	$id = absint( $_REQUEST['id'] );
+	if ( ! $id ) {
+		wp_send_json_error();
+	}
+
+	check_ajax_referer( 'update-post_' . $id, 'nonce' );
+
+	if ( ! current_user_can( 'edit_post', $id ) ) {
+		wp_send_json_error();
+	}
+
+	$changes = $_REQUEST['changes'];
+	$post    = get_post( $id, ARRAY_A );
+
+	if ( 'attachment' !== $post['post_type'] ) {
+		wp_send_json_error();
+	}
+
+	if ( isset( $changes['parent'] ) ) {
+		$post['post_parent'] = $changes['parent'];
+	}
+
+	if ( isset( $changes['title'] ) ) {
+		$post['post_title'] = $changes['title'];
+	}
+
+	if ( isset( $changes['caption'] ) ) {
+		$post['post_excerpt'] = $changes['caption'];
+	}
+
+	if ( isset( $changes['description'] ) ) {
+		$post['post_content'] = $changes['description'];
+	}
+
+	if ( MEDIA_TRASH &amp;&amp; isset( $changes['status'] ) ) {
+		$post['post_status'] = $changes['status'];
+	}
+
+	if ( isset( $changes['alt'] ) ) {
+		$alt = wp_unslash( $changes['alt'] );
+		if ( get_post_meta( $id, '_wp_attachment_image_alt', true ) !== $alt ) {
+			$alt = wp_strip_all_tags( $alt, true );
+			update_post_meta( $id, '_wp_attachment_image_alt', wp_slash( $alt ) );
+		}
+	}
+
+	if ( wp_attachment_is( 'audio', $post['ID'] ) ) {
+		$changed = false;
+		$id3data = wp_get_attachment_metadata( $post['ID'] );
+
+		if ( ! is_array( $id3data ) ) {
+			$changed = true;
+			$id3data = array();
+		}
+
+		foreach ( wp_get_attachment_id3_keys( (object) $post, 'edit' ) as $key =&gt; $label ) {
+			if ( isset( $changes[ $key ] ) ) {
+				$changed         = true;
+				$id3data[ $key ] = sanitize_text_field( wp_unslash( $changes[ $key ] ) );
+			}
+		}
+
+		if ( $changed ) {
+			wp_update_attachment_metadata( $id, $id3data );
+		}
+	}
+
+	if ( MEDIA_TRASH &amp;&amp; isset( $changes['status'] ) &amp;&amp; 'trash' === $changes['status'] ) {
+		wp_delete_post( $id );
+	} else {
+		wp_update_post( $post );
+	}
+
+	wp_send_json_success();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L3109">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L3109-L3188">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.5.0/">3.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_save_attachment" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_save_attachment</a>
+  </p>
+</div>

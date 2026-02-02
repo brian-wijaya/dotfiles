@@ -1,0 +1,69 @@
+<h1 class="wp-block-wporg-code-reference-title">Plugin_Upgrader::delete_old_plugin( <span class="arg-type">bool|WP_Error</span> <span class="arg-name">$removed</span>, <span class="arg-type">string</span> <span class="arg-name">$local_destination</span>, <span class="arg-type">string</span> <span class="arg-name">$remote_destination</span>, <span class="arg-type">array</span> <span class="arg-name">$plugin</span> ): <span class="return-type">bool|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Deletes the old plugin during an upgrade.</p> </section> <section><h2 id="description">Description</h2> <p>Hooked to the <a href="../../hooks/upgrader_clear_destination">‘upgrader_clear_destination’</a> filter by Plugin_Upgrader::upgrade() and Plugin_Upgrader::bulk_upgrade().</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$removed</code><span class="type"><span class="bool">bool</span>|<span class="WP_Error"><a href="../wp_error" rel="class">WP_Error</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Whether the destination was cleared.<br> True on success, <a href="../wp_error" rel="class">WP_Error</a> on failure.</span></div></dd>
+<dt>
+<code>$local_destination</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The local package destination.</span></div></dd>
+<dt>
+<code>$remote_destination</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The remote package destination.</span></div></dd>
+<dt>
+<code>$plugin</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Extra arguments passed to hooked filters.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../wp_error" rel="class">WP_Error</a></span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="675" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function delete_old_plugin( $removed, $local_destination, $remote_destination, $plugin ) {
+	global $wp_filesystem;
+
+	if ( is_wp_error( $removed ) ) {
+		return $removed; // Pass errors through.
+	}
+
+	$plugin = isset( $plugin['plugin'] ) ? $plugin['plugin'] : '';
+	if ( empty( $plugin ) ) {
+		return new WP_Error( 'bad_request', $this-&gt;strings['bad_request'] );
+	}
+
+	$plugins_dir     = $wp_filesystem-&gt;wp_plugins_dir();
+	$this_plugin_dir = trailingslashit( dirname( $plugins_dir . $plugin ) );
+
+	if ( ! $wp_filesystem-&gt;exists( $this_plugin_dir ) ) { // If it's already vanished.
+		return $removed;
+	}
+
+	/*
+	 * If plugin is in its own directory, recursively delete the directory.
+	 * Base check on if plugin includes directory separator AND that it's not the root plugin folder.
+	 */
+	if ( strpos( $plugin, '/' ) &amp;&amp; $this_plugin_dir !== $plugins_dir ) {
+		$deleted = $wp_filesystem-&gt;delete( $this_plugin_dir, true );
+	} else {
+		$deleted = $wp_filesystem-&gt;delete( $plugins_dir . $plugin );
+	}
+
+	if ( ! $deleted ) {
+		return new WP_Error( 'remove_old_failed', $this-&gt;strings['remove_old_failed'] );
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-plugin-upgrader.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-plugin-upgrader.php#L675">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-plugin-upgrader.php#L675-L709">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/plugin_upgrader/delete_old_plugin" class="_attribution-link">https://developer.wordpress.org/reference/classes/plugin_upgrader/delete_old_plugin</a>
+  </p>
+</div>

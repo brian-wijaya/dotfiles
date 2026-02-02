@@ -1,0 +1,184 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_revision_ui_diff( <span class="arg-type">WP_Post|int</span> <span class="arg-name">$post</span>, <span class="arg-type">int</span> <span class="arg-name">$compare_from</span>, <span class="arg-type">int</span> <span class="arg-name">$compare_to</span> ): <span class="return-type">array|false</span>
+</h1> <section><p>Get the revision UI diff.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span>|<span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The post object or post ID.</span></div></dd>
+<dt>
+<code>$compare_from</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The revision ID to compare from.</span></div></dd>
+<dt>
+<code>$compare_to</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The revision ID to come to.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|false</span> Associative array of a post’s revisioned fields and their diffs.<br> Or, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="21" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_revision_ui_diff( $post, $compare_from, $compare_to ) {
+	$post = get_post( $post );
+	if ( ! $post ) {
+		return false;
+	}
+
+	if ( $compare_from ) {
+		$compare_from = get_post( $compare_from );
+		if ( ! $compare_from ) {
+			return false;
+		}
+	} else {
+		// If we're dealing with the first revision...
+		$compare_from = false;
+	}
+
+	$compare_to = get_post( $compare_to );
+	if ( ! $compare_to ) {
+		return false;
+	}
+
+	/*
+	 * If comparing revisions, make sure we are dealing with the right post parent.
+	 * The parent post may be a 'revision' when revisions are disabled and we're looking at autosaves.
+	 */
+	if ( $compare_from &amp;&amp; $compare_from-&gt;post_parent !== $post-&gt;ID &amp;&amp; $compare_from-&gt;ID !== $post-&gt;ID ) {
+		return false;
+	}
+	if ( $compare_to-&gt;post_parent !== $post-&gt;ID &amp;&amp; $compare_to-&gt;ID !== $post-&gt;ID ) {
+		return false;
+	}
+
+	if ( $compare_from &amp;&amp; strtotime( $compare_from-&gt;post_date_gmt ) &gt; strtotime( $compare_to-&gt;post_date_gmt ) ) {
+		$temp         = $compare_from;
+		$compare_from = $compare_to;
+		$compare_to   = $temp;
+	}
+
+	// Add default title if title field is empty.
+	if ( $compare_from &amp;&amp; empty( $compare_from-&gt;post_title ) ) {
+		$compare_from-&gt;post_title = __( '(no title)' );
+	}
+	if ( empty( $compare_to-&gt;post_title ) ) {
+		$compare_to-&gt;post_title = __( '(no title)' );
+	}
+
+	$return = array();
+
+	foreach ( _wp_post_revision_fields( $post ) as $field =&gt; $name ) {
+		/**
+		 * Contextually filter a post revision field.
+		 *
+		 * The dynamic portion of the hook name, `$field`, corresponds to a name of a
+		 * field of the revision object.
+		 *
+		 * Possible hook names include:
+		 *
+		 *  - `_wp_post_revision_field_post_title`
+		 *  - `_wp_post_revision_field_post_content`
+		 *  - `_wp_post_revision_field_post_excerpt`
+		 *
+		 * @since 3.6.0
+		 *
+		 * @param string  $revision_field The current revision field to compare to or from.
+		 * @param string  $field          The current revision field.
+		 * @param WP_Post $compare_from   The revision post object to compare to or from.
+		 * @param string  $context        The context of whether the current revision is the old
+		 *                                or the new one. Either 'to' or 'from'.
+		 */
+		$content_from = $compare_from ? apply_filters( "_wp_post_revision_field_{$field}", $compare_from-&gt;$field, $field, $compare_from, 'from' ) : '';
+
+		/** This filter is documented in wp-admin/includes/revision.php */
+		$content_to = apply_filters( "_wp_post_revision_field_{$field}", $compare_to-&gt;$field, $field, $compare_to, 'to' );
+
+		$args = array(
+			'show_split_view' =&gt; true,
+			'title_left'      =&gt; __( 'Removed' ),
+			'title_right'     =&gt; __( 'Added' ),
+		);
+
+		/**
+		 * Filters revisions text diff options.
+		 *
+		 * Filters the options passed to wp_text_diff() when viewing a post revision.
+		 *
+		 * @since 4.1.0
+		 *
+		 * @param array   $args {
+		 *     Associative array of options to pass to wp_text_diff().
+		 *
+		 *     @type bool $show_split_view True for split view (two columns), false for
+		 *                                 un-split view (single column). Default true.
+		 * }
+		 * @param string  $field        The current revision field.
+		 * @param WP_Post $compare_from The revision post to compare from.
+		 * @param WP_Post $compare_to   The revision post to compare to.
+		 */
+		$args = apply_filters( 'revision_text_diff_options', $args, $field, $compare_from, $compare_to );
+
+		$diff = wp_text_diff( $content_from, $content_to, $args );
+
+		if ( ! $diff &amp;&amp; 'post_title' === $field ) {
+			/*
+			 * It's a better user experience to still show the Title, even if it didn't change.
+			 * No, you didn't see this.
+			 */
+			$diff = '&lt;table class="diff"&gt;&lt;colgroup&gt;&lt;col class="content diffsplit left"&gt;&lt;col class="content diffsplit middle"&gt;&lt;col class="content diffsplit right"&gt;&lt;/colgroup&gt;&lt;tbody&gt;&lt;tr&gt;';
+
+			// In split screen mode, show the title before/after side by side.
+			if ( true === $args['show_split_view'] ) {
+				$diff .= '&lt;td&gt;' . esc_html( $compare_from-&gt;post_title ) . '&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;' . esc_html( $compare_to-&gt;post_title ) . '&lt;/td&gt;';
+			} else {
+				$diff .= '&lt;td&gt;' . esc_html( $compare_from-&gt;post_title ) . '&lt;/td&gt;';
+
+				// In single column mode, only show the title once if unchanged.
+				if ( $compare_from-&gt;post_title !== $compare_to-&gt;post_title ) {
+					$diff .= '&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;' . esc_html( $compare_to-&gt;post_title ) . '&lt;/td&gt;';
+				}
+			}
+
+			$diff .= '&lt;/tr&gt;&lt;/tbody&gt;';
+			$diff .= '&lt;/table&gt;';
+		}
+
+		if ( $diff ) {
+			$return[] = array(
+				'id'   =&gt; $field,
+				'name' =&gt; $name,
+				'diff' =&gt; $diff,
+			);
+		}
+	}
+
+	/**
+	 * Filters the fields displayed in the post revision diff UI.
+	 *
+	 * @since 4.1.0
+	 *
+	 * @param array[] $return       Array of revision UI fields. Each item is an array of id, name, and diff.
+	 * @param WP_Post $compare_from The revision post to compare from.
+	 * @param WP_Post $compare_to   The revision post to compare to.
+	 */
+	return apply_filters( 'wp_get_revision_ui_diff', $return, $compare_from, $compare_to );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/revision.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/revision.php#L21">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/revision.php#L21-L164">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/revision_text_diff_options"><span class="hook-func">apply_filters</span>( ‘revision_text_diff_options’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$field</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$compare_from</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$compare_to</span></nobr> )</a></dt>
+<dd>
+<p>Filters revisions text diff options.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_get_revision_ui_diff"><span class="hook-func">apply_filters</span>( ‘wp_get_revision_ui_diff’, <nobr><span class="arg-type">array[]</span> <span class="arg-name">$return</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$compare_from</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$compare_to</span></nobr> )</a></dt>
+<dd>
+<p>Filters the fields displayed in the post revision diff UI.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/_wp_post_revision_field_field"><span class="hook-func">apply_filters</span>( “_wp_post_revision_field_{$field}”, <nobr><span class="arg-type">string</span> <span class="arg-name">$revision_field</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$field</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$compare_from</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$context</span></nobr> )</a></dt>
+<dd>
+<p>Contextually filter a post revision field.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.6.0/">3.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_revision_ui_diff" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_revision_ui_diff</a>
+  </p>
+</div>

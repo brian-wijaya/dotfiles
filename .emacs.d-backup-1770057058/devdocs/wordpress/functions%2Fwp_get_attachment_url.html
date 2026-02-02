@@ -1,0 +1,93 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_attachment_url( <span class="arg-type">int</span> <span class="arg-name">$attachment_id</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Retrieves the URL for an attachment.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$attachment_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Attachment post ID. Defaults to global $post.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> Attachment URL, otherwise false.</section> <section><h2 id="more-information">More Information</h2> <p>You can change the output of this function through the <tt><a title="Plugin API/Filter Reference" href="../hooks/wp_get_attachment_url">wp get attachment url</a></tt> filter.</p> <p>This function will not URL encode the URL. If you have attachments with invalid characters in their name, you should raw URL encode the output of this function in order to have a valid URL.</p> <p>Sample code that gives you a root-relative URL to your attachment:</p> <pre class="wp-block-code" data-language="php"><code lang="php" class="language-php ">&lt;pre&gt;$parsed = parse_url( wp_get_attachment_url( $attachment-&gt;ID ) );
+$url = dirname( $parsed [ 'path' ] ) . '/' . rawurlencode( basename( $parsed[ 'path' ] ) );&lt;/pre&gt;
+&lt;pre&gt;</code></pre> <p>If you want a URI for the <a class="mw-redirect" title="Templates Hierarchy" href="https://codex.wordpress.org/Templates_Hierarchy#Attachment_display">attachment page</a>, not the attachment file itself, you can use <a title="Function Reference/get attachment link" href="get_attachment_link">get_attachment_link</a>.</p> <p>Also refer: <a title="Function Reference/wp insert attachment" href="wp_insert_attachment">wp_insert_attachment</a>, <a title="Function Reference/wp upload dir" href="wp_upload_dir">wp_upload_dir</a>, <a title="Function Reference/wp get attachment image src" href="wp_get_attachment_image_src">wp_get_attachment_image_src</a></p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="6829" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_attachment_url( $attachment_id = 0 ) {
+	global $pagenow;
+
+	$attachment_id = (int) $attachment_id;
+
+	$post = get_post( $attachment_id );
+
+	if ( ! $post ) {
+		return false;
+	}
+
+	if ( 'attachment' !== $post-&gt;post_type ) {
+		return false;
+	}
+
+	$url = '';
+	// Get attached file.
+	$file = get_post_meta( $post-&gt;ID, '_wp_attached_file', true );
+	if ( $file ) {
+		// Get upload directory.
+		$uploads = wp_get_upload_dir();
+		if ( $uploads &amp;&amp; false === $uploads['error'] ) {
+			// Check that the upload base exists in the file location.
+			if ( str_starts_with( $file, $uploads['basedir'] ) ) {
+				// Replace file location with url location.
+				$url = str_replace( $uploads['basedir'], $uploads['baseurl'], $file );
+			} elseif ( str_contains( $file, 'wp-content/uploads' ) ) {
+				// Get the directory name relative to the basedir (back compat for pre-2.7 uploads).
+				$url = trailingslashit( $uploads['baseurl'] . '/' . _wp_get_attachment_relative_path( $file ) ) . wp_basename( $file );
+			} else {
+				// It's a newly-uploaded file, therefore $file is relative to the basedir.
+				$url = $uploads['baseurl'] . "/$file";
+			}
+		}
+	}
+
+	/*
+	 * If any of the above options failed, Fallback on the GUID as used pre-2.7,
+	 * not recommended to rely upon this.
+	 */
+	if ( ! $url ) {
+		$url = get_the_guid( $post-&gt;ID );
+	}
+
+	// On SSL front end, URLs should be HTTPS.
+	if ( is_ssl() &amp;&amp; ! is_admin() &amp;&amp; 'wp-login.php' !== $pagenow ) {
+		$url = set_url_scheme( $url );
+	}
+
+	/**
+	 * Filters the attachment URL.
+	 *
+	 * @since 2.1.0
+	 *
+	 * @param string $url           URL for the given attachment.
+	 * @param int    $attachment_id Attachment post ID.
+	 */
+	$url = apply_filters( 'wp_get_attachment_url', $url, $post-&gt;ID );
+
+	if ( ! $url ) {
+		return false;
+	}
+
+	return $url;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L6829">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L6829-L6893">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_get_attachment_url"><span class="hook-func">apply_filters</span>( ‘wp_get_attachment_url’, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the attachment URL.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_attachment_url" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_attachment_url</a>
+  </p>
+</div>

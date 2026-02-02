@@ -1,0 +1,70 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_get_tagcloud()</h1> <section><p>Handles getting a tagcloud via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1180" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_get_tagcloud() {
+	if ( ! isset( $_POST['tax'] ) ) {
+		wp_die( 0 );
+	}
+
+	$taxonomy        = sanitize_key( $_POST['tax'] );
+	$taxonomy_object = get_taxonomy( $taxonomy );
+
+	if ( ! $taxonomy_object ) {
+		wp_die( 0 );
+	}
+
+	if ( ! current_user_can( $taxonomy_object-&gt;cap-&gt;assign_terms ) ) {
+		wp_die( -1 );
+	}
+
+	$tags = get_terms(
+		array(
+			'taxonomy' =&gt; $taxonomy,
+			'number'   =&gt; 45,
+			'orderby'  =&gt; 'count',
+			'order'    =&gt; 'DESC',
+		)
+	);
+
+	if ( empty( $tags ) ) {
+		wp_die( $taxonomy_object-&gt;labels-&gt;not_found );
+	}
+
+	if ( is_wp_error( $tags ) ) {
+		wp_die( $tags-&gt;get_error_message() );
+	}
+
+	foreach ( $tags as $key =&gt; $tag ) {
+		$tags[ $key ]-&gt;link = '#';
+		$tags[ $key ]-&gt;id   = $tag-&gt;term_id;
+	}
+
+	// We need raw tag names here, so don't filter the output.
+	$return = wp_generate_tag_cloud(
+		$tags,
+		array(
+			'filter' =&gt; 0,
+			'format' =&gt; 'list',
+		)
+	);
+
+	if ( empty( $return ) ) {
+		wp_die( 0 );
+	}
+
+	echo $return;
+	wp_die();
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L1180">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L1180-L1233">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_get_tagcloud" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_get_tagcloud</a>
+  </p>
+</div>

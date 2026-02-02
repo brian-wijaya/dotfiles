@@ -1,0 +1,72 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_MS_Users_List_Table::handle_row_actions( <span class="arg-type">WP_User</span> <span class="arg-name">$item</span>, <span class="arg-type">string</span> <span class="arg-name">$column_name</span>, <span class="arg-type">string</span> <span class="arg-name">$primary</span> ): <span class="return-type">string</span>
+</h1> <section><p>Generates and displays row action links.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$item</code><span class="type"><span class="WP_User"><a href="../wp_user" rel="class">WP_User</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">User being acted upon.</span></div></dd>
+<dt>
+<code>$column_name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Current column name.</span></div></dd>
+<dt>
+<code>$primary</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Primary column name.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Row actions output for users in Multisite, or an empty string if the current column is not the primary column.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="524" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function handle_row_actions( $item, $column_name, $primary ) {
+	if ( $primary !== $column_name ) {
+		return '';
+	}
+
+	// Restores the more descriptive, specific name for use within this method.
+	$user = $item;
+
+	$super_admins = get_super_admins();
+	$actions      = array();
+
+	if ( current_user_can( 'edit_user', $user-&gt;ID ) ) {
+		$edit_link       = esc_url( add_query_arg( 'wp_http_referer', urlencode( wp_unslash( $_SERVER['REQUEST_URI'] ) ), get_edit_user_link( $user-&gt;ID ) ) );
+		$actions['edit'] = '&lt;a href="' . $edit_link . '"&gt;' . __( 'Edit' ) . '&lt;/a&gt;';
+	}
+
+	if ( current_user_can( 'delete_user', $user-&gt;ID ) &amp;&amp; ! in_array( $user-&gt;user_login, $super_admins, true ) ) {
+		$actions['delete'] = '&lt;a href="' . esc_url( network_admin_url( add_query_arg( '_wp_http_referer', urlencode( wp_unslash( $_SERVER['REQUEST_URI'] ) ), wp_nonce_url( 'users.php', 'deleteuser' ) . '&amp;amp;action=deleteuser&amp;amp;id=' . $user-&gt;ID ) ) ) . '" class="delete"&gt;' . __( 'Delete' ) . '&lt;/a&gt;';
+	}
+
+	/**
+	 * Filters the action links displayed under each user in the Network Admin Users list table.
+	 *
+	 * @since 3.2.0
+	 *
+	 * @param string[] $actions An array of action links to be displayed. Default 'Edit', 'Delete'.
+	 * @param WP_User  $user    WP_User object.
+	 */
+	$actions = apply_filters( 'ms_user_row_actions', $actions, $user );
+
+	return $this-&gt;row_actions( $actions );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-ms-users-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-ms-users-list-table.php#L524">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-ms-users-list-table.php#L524-L555">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/ms_user_row_actions"><span class="hook-func">apply_filters</span>( ‘ms_user_row_actions’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$actions</span></nobr>, <nobr><span class="arg-type">WP_User</span> <span class="arg-name">$user</span></nobr> )</a></dt>
+<dd>
+<p>Filters the action links displayed under each user in the Network Admin Users list table.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Renamed <code>$user</code> to <code>$item</code> to match parent class for PHP 8 named parameter support.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.3.0/">4.3.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_ms_users_list_table/handle_row_actions" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_ms_users_list_table/handle_row_actions</a>
+  </p>
+</div>

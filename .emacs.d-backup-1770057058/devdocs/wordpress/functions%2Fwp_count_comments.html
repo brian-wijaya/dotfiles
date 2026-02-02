@@ -1,0 +1,74 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_count_comments( <span class="arg-type">int</span> <span class="arg-name">$post_id</span> ): <span class="return-type">stdClass</span>
+</h1> <section><p>Retrieves the total comment counts for the whole site or a single post.</p> </section> <section><h2 id="description">Description</h2> <p>The comment stats are cached and then retrieved, if they already exist in the cache.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li>
+<a href="get_comment_count">get_comment_count()</a>: Which handles fetching the live comment counts.</li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Restrict the comment counts to the given post. Default 0, which indicates that comment counts for the whole site will be retrieved.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">stdClass</span> The number of comments keyed by their status.<br> <ul class="param-hash">
+<li>
+<code>approved</code> <span class="type">int</span><div class="desc">The number of approved comments.</div>
+</li> <li>
+<code>moderated</code> <span class="type">int</span><div class="desc">The number of comments awaiting moderation (a.k.a. pending).</div>
+</li> <li>
+<code>spam</code> <span class="type">int</span><div class="desc">The number of spam comments.</div>
+</li> <li>
+<code>trash</code> <span class="type">int</span><div class="desc">The number of trashed comments.</div>
+</li> <li>
+<code>post-trashed</code> <span class="type">int</span><div class="desc">The number of comments for posts that are in the trash.</div>
+</li> <li>
+<code>total_comments</code> <span class="type">int</span><div class="desc">The total number of non-trashed comments, including spam.</div>
+</li> <li>
+<code>all</code> <span class="type">int</span><div class="desc">The total number of pending or approved comments.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1420" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_count_comments( $post_id = 0 ) {
+	$post_id = (int) $post_id;
+
+	/**
+	 * Filters the comments count for a given post or the whole site.
+	 *
+	 * @since 2.7.0
+	 *
+	 * @param array|stdClass $count   An empty array or an object containing comment counts.
+	 * @param int            $post_id The post ID. Can be 0 to represent the whole site.
+	 */
+	$filtered = apply_filters( 'wp_count_comments', array(), $post_id );
+	if ( ! empty( $filtered ) ) {
+		return $filtered;
+	}
+
+	$count = wp_cache_get( "comments-{$post_id}", 'counts' );
+	if ( false !== $count ) {
+		return $count;
+	}
+
+	$stats              = get_comment_count( $post_id );
+	$stats['moderated'] = $stats['awaiting_moderation'];
+	unset( $stats['awaiting_moderation'] );
+
+	$stats_object = (object) $stats;
+	wp_cache_set( "comments-{$post_id}", $stats_object, 'counts' );
+
+	return $stats_object;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment.php#L1420">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment.php#L1420-L1449">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_count_comments"><span class="hook-func">apply_filters</span>( ‘wp_count_comments’, <nobr><span class="arg-type">array|stdClass</span> <span class="arg-name">$count</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the comments count for a given post or the whole site.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_count_comments" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_count_comments</a>
+  </p>
+</div>

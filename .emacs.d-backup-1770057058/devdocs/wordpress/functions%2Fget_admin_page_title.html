@@ -1,0 +1,88 @@
+<h1 class="wp-block-wporg-code-reference-title">get_admin_page_title(): <span class="return-type">string</span>
+</h1> <section><p>Gets the title of the current admin page.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The title of the current admin page.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="2042" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_admin_page_title() {
+	global $title, $menu, $submenu, $pagenow, $typenow, $plugin_page;
+
+	if ( ! empty( $title ) ) {
+		return $title;
+	}
+
+	$hook = get_plugin_page_hook( $plugin_page, $pagenow );
+
+	$parent  = get_admin_page_parent();
+	$parent1 = $parent;
+
+	if ( empty( $parent ) ) {
+		foreach ( (array) $menu as $menu_array ) {
+			if ( isset( $menu_array[3] ) ) {
+				if ( $menu_array[2] === $pagenow ) {
+					$title = $menu_array[3];
+					return $menu_array[3];
+				} elseif ( isset( $plugin_page ) &amp;&amp; $plugin_page === $menu_array[2] &amp;&amp; $hook === $menu_array[5] ) {
+					$title = $menu_array[3];
+					return $menu_array[3];
+				}
+			} else {
+				$title = $menu_array[0];
+				return $title;
+			}
+		}
+	} else {
+		foreach ( array_keys( $submenu ) as $parent ) {
+			foreach ( $submenu[ $parent ] as $submenu_array ) {
+				if ( isset( $plugin_page )
+					&amp;&amp; $plugin_page === $submenu_array[2]
+					&amp;&amp; ( $pagenow === $parent
+						|| $plugin_page === $parent
+						|| $plugin_page === $hook
+						|| 'admin.php' === $pagenow &amp;&amp; $parent1 !== $submenu_array[2]
+						|| ! empty( $typenow ) &amp;&amp; "$pagenow?post_type=$typenow" === $parent )
+					) {
+						$title = $submenu_array[3];
+						return $submenu_array[3];
+				}
+
+				if ( $submenu_array[2] !== $pagenow || isset( $_GET['page'] ) ) { // Not the current page.
+					continue;
+				}
+
+				if ( isset( $submenu_array[3] ) ) {
+					$title = $submenu_array[3];
+					return $submenu_array[3];
+				} else {
+					$title = $submenu_array[0];
+					return $title;
+				}
+			}
+		}
+		if ( empty( $title ) ) {
+			foreach ( $menu as $menu_array ) {
+				if ( isset( $plugin_page )
+					&amp;&amp; $plugin_page === $menu_array[2]
+					&amp;&amp; 'admin.php' === $pagenow
+					&amp;&amp; $parent1 === $menu_array[2]
+				) {
+						$title = $menu_array[3];
+						return $menu_array[3];
+				}
+			}
+		}
+	}
+
+	return $title;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/plugin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/plugin.php#L2042">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/plugin.php#L2042-L2112">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_admin_page_title" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_admin_page_title</a>
+  </p>
+</div>

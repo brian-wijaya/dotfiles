@@ -1,0 +1,246 @@
+<section id="windows-remote-management"> <h1 id="windows-winrm">Windows Remote Management</h1> <p>Unlike Linux/Unix hosts, which use SSH by default, Windows hosts are configured with WinRM. This topic covers how to configure and use WinRM with Ansible.</p>  <ul class="simple"> <li><a class="reference internal" href="#what-is-winrm" id="id1">What is WinRM?</a></li> <li>
+<p><a class="reference internal" href="#winrm-setup" id="id2">WinRM Setup</a></p> <ul> <li><a class="reference internal" href="#enumerate-listeners" id="id3">Enumerate Listeners</a></li> <li><a class="reference internal" href="#create-listener" id="id4">Create Listener</a></li> <li><a class="reference internal" href="#remove-listener" id="id5">Remove Listener</a></li> </ul> </li> <li>
+<p><a class="reference internal" href="#winrm-authentication" id="id6">WinRM Authentication</a></p> <ul> <li><a class="reference internal" href="#basic" id="id7">Basic</a></li> <li><a class="reference internal" href="#certificate" id="id8">Certificate</a></li> <li><a class="reference internal" href="#ntlm" id="id9">NTLM</a></li> <li><a class="reference internal" href="#kerberos-and-negotiate" id="id10">Kerberos and Negotiate</a></li> <li><a class="reference internal" href="#credssp" id="id11">CredSSP</a></li> </ul> </li> <li><a class="reference internal" href="#non-administrator-accounts" id="id12">Non-Administrator Accounts</a></li> <li><a class="reference internal" href="#winrm-encryption" id="id13">WinRM Encryption</a></li> <li><a class="reference internal" href="#https-certificate-validation" id="id14">HTTPS Certificate Validation</a></li> <li><a class="reference internal" href="#winrm-limitations" id="id15">WinRM limitations</a></li> <li><a class="reference internal" href="#winrm-troubleshooting" id="id16">WinRM Troubleshooting</a></li> </ul>  <section id="what-is-winrm"> <h2>What is WinRM?</h2> <p>WinRM is a management protocol used by Windows to remotely communicate with another server. It is a SOAP-based protocol that communicates over HTTP/HTTPS and is included in all recent Windows operating systems. Since Windows Server 2012, WinRM has been enabled by default, but in some cases, extra configuration is required to use WinRM with Ansible.</p> <p>Ansible can use WinRM through the <a class="reference internal" href="../collections/ansible/builtin/psrp_connection#psrp-connection"><span class="std std-ref">psrp</span></a> or <a class="reference internal" href="../collections/ansible/builtin/winrm_connection#winrm-connection"><span class="std std-ref">winrm</span></a> connection plugins. These plugins have their own Python requirements that are not included in the Ansible package and must be installed separately.</p> <p>If you chose the <code>pipx</code> install instructions, you can install those requirements by running the following:</p> <pre data-language="shell">pipx inject ansible "pypsrp&lt;=1.0.0"  # for psrp
+pipx inject ansible "pywinrm&gt;=0.4.0"  # for winrm
+</pre> <p>Or, if you chose the <code>pip</code> install instructions:</p> <pre data-language="shell">pip3 install "pypsrp&lt;=1.0.0"  # for psrp
+pip3 install "pywinrm&gt;=0.4.0"  # for winrm
+</pre> <div class="admonition warning"> <p class="admonition-title">Warning</p> <p>Using the <code>winrm</code> or <code>psrp</code> connection plugins in Ansible on MacOS in the latest releases typically fails. This is a known problem that occurs deep within the Python stack and cannot be changed by Ansible. The only workaround today is to set the environment variable <code>OBJC_DISABLE_INITIALIZE_FORK_SAFETY=yes</code>, <code>no_proxy=*</code> and avoid using Kerberos auth.</p> </div> </section> <section id="winrm-setup"> <h2>WinRM Setup</h2> <p>Before Ansible can connect using WinRM, the Windows host must have a WinRM listener configured. This listener will listen on the configured port and accept incoming WinRM requests.</p> <p>While this guide covers more details on how to enumerate, add, and remove listeners, you can run the following PowerShell snippet to setup the HTTP listener with the defaults:</p> <pre data-language="powershell"># Enables the WinRM service and sets up the HTTP listener
+Enable-PSRemoting -Force
+
+# Opens port 5985 for all profiles
+$firewallParams = @{
+    Action      = 'Allow'
+    Description = 'Inbound rule for Windows Remote Management via WS-Management. [TCP 5985]'
+    Direction   = 'Inbound'
+    DisplayName = 'Windows Remote Management (HTTP-In)'
+    LocalPort   = 5985
+    Profile     = 'Any'
+    Protocol    = 'TCP'
+}
+New-NetFirewallRule @firewallParams
+
+# Allows local user accounts to be used with WinRM
+# This can be ignored if using domain accounts
+$tokenFilterParams = @{
+    Path         = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+    Name         = 'LocalAccountTokenFilterPolicy'
+    Value        = 1
+    PropertyType = 'DWORD'
+    Force        = $true
+}
+New-ItemProperty @tokenFilterParams
+</pre> <p>To also add a HTTPS listener with a self signed certificate we can run the following:</p> <pre data-language="powershell"># Create self signed certificate
+$certParams = @{
+    CertStoreLocation = 'Cert:\LocalMachine\My'
+    DnsName           = $env:COMPUTERNAME
+    NotAfter          = (Get-Date).AddYears(1)
+    Provider          = 'Microsoft Software Key Storage Provider'
+    Subject           = "CN=$env:COMPUTERNAME"
+}
+$cert = New-SelfSignedCertificate @certParams
+
+# Create HTTPS listener
+$httpsParams = @{
+    ResourceURI = 'winrm/config/listener'
+    SelectorSet = @{
+        Transport = "HTTPS"
+        Address   = "*"
+    }
+    ValueSet = @{
+        CertificateThumbprint = $cert.Thumbprint
+        Enabled               = $true
+    }
+}
+New-WSManInstance @httpsParams
+
+# Opens port 5986 for all profiles
+$firewallParams = @{
+    Action      = 'Allow'
+    Description = 'Inbound rule for Windows Remote Management via WS-Management. [TCP 5986]'
+    Direction   = 'Inbound'
+    DisplayName = 'Windows Remote Management (HTTPS-In)'
+    LocalPort   = 5986
+    Profile     = 'Any'
+    Protocol    = 'TCP'
+}
+New-NetFirewallRule @firewallParams
+</pre> <div class="admonition warning"> <p class="admonition-title">Warning</p> <p>The above scripts are for demonstration purposes only and should be reviewed before running in a production environment. Some changes, like opening the firewall port for all incoming connections, allowing local accounts to be used with WinRM, self signed certificates, may not be suitable for all environments.</p> </div> <section id="enumerate-listeners"> <h3>Enumerate Listeners</h3> <p>To view the current listeners that are running on the WinRM service:</p> <pre data-language="powershell">winrm enumerate winrm/config/Listener
+</pre> <p>This will output something like:</p> <pre data-language="powershell">Listener
+    Address = *
+    Transport = HTTP
+    Port = 5985
+    Hostname
+    Enabled = true
+    URLPrefix = wsman
+    CertificateThumbprint
+    ListeningOn = 10.0.2.15, 127.0.0.1, 192.168.56.155, ::1, fe80::5efe:10.0.2.15%6, fe80::5efe:192.168.56.155%8, fe80::
+ffff:ffff:fffe%2, fe80::203d:7d97:c2ed:ec78%3, fe80::e8ea:d765:2c69:7756%7
+
+Listener
+    Address = *
+    Transport = HTTPS
+    Port = 5986
+    Hostname = SERVER2016
+    Enabled = true
+    URLPrefix = wsman
+    CertificateThumbprint = E6CDAA82EEAF2ECE8546E05DB7F3E01AA47D76CE
+    ListeningOn = 10.0.2.15, 127.0.0.1, 192.168.56.155, ::1, fe80::5efe:10.0.2.15%6, fe80::5efe:192.168.56.155%8, fe80::
+ffff:ffff:fffe%2, fe80::203d:7d97:c2ed:ec78%3, fe80::e8ea:d765:2c69:7756%7
+</pre> <p>In the example above there are two WinRM listeners configured. One is listening on port 5985 over HTTP and the other is listening on port 5986 over HTTPS. Some of the key options that are useful to understand are:</p> <ul class="simple"> <li>
+<code>Transport</code>: Whether the listener is run over HTTP or HTTPS</li> <li>
+<code>Port</code>: The port the to listen on, default for HTTP is <code>5985</code> and HTTPS is <code>5986</code>
+</li> <li>
+<code>CertificateThumbprint</code>: For HTTPS, this is the thumbprint of the certificate used for the TLS connection</li> </ul> <p>To view the certificate details that is specified by the <code>CertificateThumbprint</code> you can run the following PowerShell command:</p> <pre data-language="powershell">$thumbprint = "E6CDAA82EEAF2ECE8546E05DB7F3E01AA47D76CE"
+Get-Item -Path "Cert:\LocalMachine\My\$thumbprint" | Select-Object *
+</pre> </section> <section id="create-listener"> <h3>Create Listener</h3> <p>Creating a HTTP listener can be done through the <code>Enable-PSRemoting</code> cmdlet but you can also use the following PowerShell code to manually create the HTTP listener.</p> <pre data-language="powershell">$listenerParams = @{
+    ResourceURI = 'winrm/config/listener'
+    SelectorSet = @{
+        Transport = "HTTP"
+        Address   = "*"
+    }
+    ValueSet    = @{
+        Enabled = $true
+        Port    = 5985
+    }
+}
+New-WSManInstance @listenerParams
+</pre> <p>Creating a HTTPS listener is similar but the <code>Port</code> is now <code>5986</code> and the <code>CertificateThumbprint</code> value must be set. The certificate can either be a self signed certificate or a certificate from a certificate authority. How to generate a certificate is outside the scope of this section.</p> <pre data-language="powershell">$listenerParams = @{
+    ResourceURI = 'winrm/config/listener'
+    SelectorSet = @{
+        Transport = "HTTPS"
+        Address   = "*"
+    }
+    ValueSet    = @{
+        CertificateThumbprint = 'E6CDAA82EEAF2ECE8546E05DB7F3E01AA47D76CE'
+        Enabled               = $true
+        Port                  = 5986
+    }
+}
+New-WSManInstance @listenerParams
+</pre> <p>The <code>CertificateThumbprint</code> value must be set to the thumbprint of a certificate that is installed in the <code>LocalMachine\My</code> certificate store.</p> <p>The <code>Address</code> selector value can be set to one of three values:</p> <ul class="simple"> <li>
+<code>*</code> - binds to all addresses</li> <li>
+<code>IP:...</code> - binds to the IPv4 or IPv6 address specified by <code>...</code>
+</li> <li>
+<code>MAC:32-a3-58-90-be-cc</code> - binds to the adapter with the MAC address specified</li> </ul> </section> <section id="remove-listener"> <h3>Remove Listener</h3> <p>The following code can remove all listeners or a specific one:</p> <pre data-language="powershell"> # Removes all listeners
+ Remove-Item -Path WSMan:\localhost\Listener\* -Recurse -Force
+
+ # Removes only HTTP listeners
+ Get-ChildItem -Path WSMan:\localhost\Listener |
+     Where-Object Keys -contains "Transport=HTTP" |
+     Remove-Item -Recurse -Force
+
+# Removes only HTTPS listeners
+ Get-ChildItem -Path WSMan:\localhost\Listener |
+     Where-Object Keys -contains "Transport=HTTPS" |
+     Remove-Item -Recurse -Force
+</pre> </section> </section> <section id="winrm-authentication"> <h2>WinRM Authentication</h2> <p>WinRM has several different authentication options that can be used to authenticate a user with a Windows host. Each option has their own advantages and disadvantages so it is important to understand when to use each one and when to not.</p> <p>The following matrix is a high-level overview of the options:</p> <table class="docutils align-default"> <thead> <tr>
+<th class="head"><p>Option</p></th> <th class="head"><p>Local Accounts</p></th> <th class="head"><p>Active Directory Accounts</p></th> <th class="head"><p>Credential Delegation</p></th> <th class="head"><p>HTTP Encryption</p></th> </tr> </thead>  <tr>
+<td><p>Basic</p></td> <td><p>Yes</p></td> <td><p>No</p></td> <td><p>No</p></td> <td><p>No</p></td> </tr> <tr>
+<td><p>Certificate</p></td> <td><p>Yes</p></td> <td><p>No</p></td> <td><p>No</p></td> <td><p>No</p></td> </tr> <tr>
+<td><p>Kerberos</p></td> <td><p>No</p></td> <td><p>Yes</p></td> <td><p>Yes</p></td> <td><p>Yes</p></td> </tr> <tr>
+<td><p>NTLM</p></td> <td><p>Yes</p></td> <td><p>Yes</p></td> <td><p>No</p></td> <td><p>Yes</p></td> </tr> <tr>
+<td><p>CredSSP</p></td> <td><p>Yes</p></td> <td><p>Yes</p></td> <td><p>Yes</p></td> <td><p>Yes</p></td> </tr>  </table> <p>The <code>Basic</code> and <code>NTLM</code> authentication options should not be used over a HTTP listener as they either offer no encryption or very weak encryption. The <code>psrp</code> connection plugin also offers the <code>Negotiate</code> authentication option which will attempt to use <code>Kerberos</code> before falling back to <code>NTLM</code>. The <code>winrm</code> connection plugin must either specify <code>kerberos</code> or <code>ntlm</code>.</p> <p>To specify the authentication protocol you can use the following variables:</p> <pre data-language="yaml+jinja"># For psrp
+ansible_psrp_auth: basic|certificate|negotiate|kerberos|ntlm|credssp
+
+# For winrm
+ansible_winrm_transport: basic|certificate|kerberos|ntlm|credssp
+</pre> <p>The recommendations for WinRM would be to use Kerberos auth over HTTP if in a domain environment or Basic/NTLM over HTTPS for local accounts. CredSSP should only be used when absolutely necessary as it can be a security risk due to its use of unconstrained delegation.</p> <section id="basic"> <h3>Basic</h3> <p>Basic authentication is one of the simplest authentication options to use but is also the most insecure. This is because the username and password are simply base64 encoded, and if a secure channel is not in use (eg, HTTPS) then it can be decoded by anyone. Basic authentication can only be used for local accounts (not domain accounts).</p> <p>The following example shows host vars configured for basic authentication:</p> <pre data-language="yaml+jinja">ansible_user: LocalUsername
+ansible_password: Password
+
+# psrp
+ansible_connection: psrp
+ansible_psrp_auth: basic
+
+# winrm
+ansible_connection: winrm
+ansible_winrm_transport: basic
+</pre> <p>Basic authentication is not enabled by default on a Windows host but can be enabled by running the following in PowerShell:</p> <pre data-language="powershell">Set-Item -Path WSMan:\localhost\Service\Auth\Basic -Value $true
+</pre> </section> <section id="certificate"> <h3>Certificate</h3> <p>See <a class="reference internal" href="windows_winrm_certificate#windows-winrm-certificate"><span class="std std-ref">WinRM Certificate Authentication</span></a> for more information on how to configure and use certificate authentication.</p> </section> <section id="ntlm"> <h3>NTLM</h3> <p>NTLM is an older authentication mechanism used by Microsoft that can support both local and domain accounts. NTLM is enabled by default on the WinRM service, so no setup is required before using it.</p> <p>NTLM is the easiest authentication protocol to use and is more secure than <code>Basic</code> authentication. If running in a domain environment, <code>Kerberos</code> should be used instead of NTLM.</p> <p>Kerberos has several advantages over using NTLM:</p> <ul class="simple"> <li>NTLM is an older protocol and does not support newer encryption protocols.</li> <li>NTLM is slower to authenticate because it requires more round trips to the host in the authentication stage.</li> <li>Unlike Kerberos, NTLM does not allow credential delegation.</li> </ul> <p>This example shows host variables configured to use NTLM authentication:</p> <pre data-language="yaml+jinja">ansible_user: LocalUsername
+ansible_password: Password
+
+# psrp
+ansible_connection: psrp
+ansible_psrp_auth: negotiate  # or ntlm to only use NTLM
+
+# winrm
+ansible_connection: winrm
+ansible_winrm_transport: ntlm
+</pre> </section> <section id="kerberos-and-negotiate"> <h3>Kerberos and Negotiate</h3> <p>Kerberos is the recommended authentication option to use when running in a domain environment. Kerberos supports features like credential delegation and message encryption over HTTP and is one of the more secure options that is available through WinRM.</p> <p>Kerberos does require some additional setup work on the Ansible host before it can be used properly. See <a class="reference internal" href="windows_winrm_kerberos#windows-winrm-kerberos"><span class="std std-ref">Kerberos Authentication</span></a> for more information on how to configure, use, and troubleshoot Kerberos authentication.</p> <p>The following example shows host vars configured for Kerberos authentication:</p> <pre data-language="yaml+jinja">ansible_user: username@MY.DOMAIN.COM
+ansible_password: Password
+
+# psrp
+ansible_connection: psrp
+ansible_psrp_auth: negotiate  # or kerberos to disable ntlm fallback
+
+# winrm
+ansible_connection: winrm
+ansible_winrm_transport: kerberos
+</pre> </section> <section id="credssp"> <h3>CredSSP</h3> <p>CredSSP authentication is a newer authentication protocol that allows credential delegation. This is achieved by encrypting the username and password after authentication has succeeded and sending that to the server using the CredSSP protocol.</p> <p>Because the username and password are sent to the server to be used for double hop authentication, ensure that the hosts that the Windows host communicates with are not compromised and are trusted.</p> <p>CredSSP can be used for both local and domain accounts and also supports message encryption over HTTP.</p> <p>To use CredSSP authentication, the host vars are configured like so:</p> <pre data-language="yaml+jinja">ansible_user: Username
+ansible_password: Password
+
+# psrp
+ansible_connection: psrp
+ansible_psrp_auth: credssp
+
+# winrm
+ansible_connection: winrm
+ansible_winrm_transport: credssp
+</pre> <p>CredSSP authentication is not enabled by default on a Windows host, but can be enabled by running the following in PowerShell:</p> <pre data-language="powershell">Enable-WSManCredSSP -Role Server -Force
+</pre> <p>CredSSP requires optional Python libraries to be installed and can be done with pipx:</p> <pre data-language="shell">pipx inject "pypsrp[credssp]&lt;=1.0.0"  # for psrp
+pipx inject "pywinrm[credssp]&gt;=0.4.0"  # for winrm
+</pre> <p>Or, if you chose the <code>pip</code> install instructions:</p> <pre data-language="shell">pip3 install "pypsrp[credssp]&lt;=1.0.0"  # for psrp
+pip3 install "pywinrm[credssp]&gt;=0.4.0"  # for winrm
+</pre> <p>CredSSP works by using a TLS connection to wrap the authentication tokens and subsequent messages sent over the connection. By default it will use a self-signed certificate automatically generated by Windows. While using CredSSP over a HTTPS connection will still need to validate the HTTPS certificate used by the WinRM listener, there is no validation done on the CredSSP certificate. It is possible to configure CredSSP to use a different certificate by setting the <code>CertificateThumbprint</code> option under the WinRM service configuration.</p> <pre data-language="powershell"># Note the value $thumprint will be different in each situation, this needs
+# to be set based on the cert that is used.
+$thumbprint = "7C8DCBD5427AFEE6560F4AF524E325915F51172C"
+
+# Set the thumbprint value
+Set-Item -Path WSMan:\localhost\Service\CertificateThumbprint -Value $thumbprint
+</pre> </section> </section> <section id="non-administrator-accounts"> <h2>Non-Administrator Accounts</h2> <p>WinRM is configured by default to only allow connections from accounts in the local <code>Administrators</code> group. This can be changed by running:</p> <pre data-language="powershell">winrm configSDDL default
+</pre> <p>This will display an ACL editor, where new users or groups may be added. To run commands over WinRM, users and groups must have at least the <code>Read</code> and <code>Execute</code> permissions enabled.</p> <p>While non-administrative accounts can be used with WinRM, most typical server administration tasks require some level of administrative access, so the utility is usually limited.</p> </section> <section id="winrm-encryption"> <h2>WinRM Encryption</h2> <p>By default, WinRM will fail to work when running over an unencrypted channel. The WinRM protocol considers the channel to be encrypted if using TLS over HTTP (HTTPS) or using message-level encryption. Using WinRM with TLS is the recommended option as it works with all authentication options, but requires a certificate to be created and used on the WinRM listener.</p> <p>If in a domain environment, ADCS can create a certificate for the host that is issued by the domain itself.</p> <p>If using HTTPS is not an option, then HTTP can be used when the authentication option is <code>NTLM</code>, <code>Kerberos</code> or <code>CredSSP</code>. These protocols will encrypt the WinRM payload with their own encryption method before sending it to the server. The message-level encryption is not used when running over HTTPS because the encryption uses the more secure TLS protocol instead. If both transport and message encryption is required, the following hostvars can be set:</p> <pre data-language="yaml+jinja"># psrp
+ansible_psrp_message_encryption: always
+
+# winrm
+ansible_winrm_message_encryption: always
+</pre> <div class="admonition note"> <p class="admonition-title">Note</p> <p>Message encryption over HTTP requires pywinrm&gt;=0.3.0.</p> </div> <p>A last resort is to disable the encryption requirement on the Windows host. This should only be used for development and debugging purposes, as anything sent from Ansible can be viewed or manipulated, and the remote session can be completely taken over by anyone on the same network. To disable the encryption requirement:</p> <pre data-language="powershell">Set-Item -Path WSMan:\localhost\Service\AllowUnencrypted -Value $true
+</pre> <div class="admonition note"> <p class="admonition-title">Note</p> <p>Do not disable the encryption check unless it is absolutely required. Doing so could allow sensitive information like credentials and files to be intercepted by others on the network.</p> </div> </section> <section id="https-certificate-validation"> <h2 id="windows-winrm-cert-validation">HTTPS Certificate Validation</h2> <p>As part of the TLS protocol, the certificate is validated to ensure the host matches the subject and the client trusts the issuer of the server certificate. If using a self-signed certificate, the certificate will not be trusted by the client and the connection will fail. To bypass this, set the following hostvars depending on the connection plugin used:</p> <ul class="simple"> <li><code>ansible_psrp_cert_validation: ignore</code></li> <li><code>ansible_winrm_server_cert_validation: ignore</code></li> </ul> <p>One of the more common ways of setting up an HTTPS listener in a domain environment is to use Active Directory Certificate Service (AD CS). AD CS is used to generate signed certificates from a Certificate Signing Request (CSR). If the WinRM HTTPS listener is using a certificate that has been signed by another authority, like AD CS, then Ansible can be set up to trust that issuer as part of the TLS handshake.</p> <p>To get Ansible to trust a Certificate Authority (CA) like AD CS, the issuer certificate of the CA can be exported as a PEM-encoded certificate. This certificate can then be copied locally to the Ansible control node and used as a source of certificate validation, otherwise known as a CA chain.</p> <p>The CA chain can contain a single or multiple issuer certificates and each entry is contained on a new line. To then use the custom CA chain as part of the validation process, set the following hostvar depending on the connection plugin used to the path of the CA PEM formatted file:</p> <ul class="simple"> <li><code>ansible_psrp_ca_cert</code></li> <li><code>ansible_winrm_ca_trust_path</code></li> </ul> <p>If this variable is not set, the default CA chain is used instead which is located in the install path of the Python package <a class="reference external" href="https://github.com/certifi/python-certifi">certifi</a>. Some Linux distributions may have configured the underlying Python <code>requests</code> library that the <code>psrp</code> and <code>winrm</code> connection plugins use to use the system’s certificate store rather than <code>certifi</code>. If this is the case, the CA chain will be the same as the system’s certificate store.</p> </section> <section id="winrm-limitations"> <h2>WinRM limitations</h2> <p>Due to the design of the WinRM protocol, there are a few limitations when using WinRM which can cause issues when creating playbooks for Ansible. These include:</p> <ul class="simple"> <li>Credentials are not delegated for most authentication types, which causes authentication errors when accessing network resources or installing certain programs.</li> <li>Many calls to the Windows Update API are blocked when running over WinRM.</li> <li>Some programs fail to install with WinRM due to no credential delegation or because they access forbidden Windows APIs like WUA over WinRM.</li> <li>Commands under WinRM are done under a non-interactive session, which can prevent certain commands or executables from running.</li> <li>You cannot run a process that interacts with <code>DPAPI</code>, which is used by some installers (like Microsoft SQL Server).</li> </ul> <p>Some of these limitations can be mitigated by doing one of the following:</p> <ul class="simple"> <li>Set the authentication method to use <code>credssp</code> or <code>kerberos</code> with credential delegation enabled</li> <li>Use <code>become</code> to bypass all WinRM restrictions and run a command as it would locally. Unlike using an authentication transport like <code>credssp</code>, this will also remove the non-interactive restriction and API restrictions like WUA and DPAPI</li> <li>Use a scheduled task to run a command that can be created with the <code>win_scheduled_task</code> module. Like <code>become</code>, this bypasses all WinRM restrictions but can only run a command and not modules.</li> </ul> </section> <section id="winrm-troubleshooting"> <h2>WinRM Troubleshooting</h2> <p>WinRM has a wide range of configuration options, which makes its configuration complex. As a result, errors that Ansible displays could in fact be problems with the host setup instead.</p> <p>To identify a host issue, run the following command from another Windows host to test out a connection to the target Windows host.</p> <ul class="simple"> <li>To test HTTP:</li> </ul> <pre data-language="powershell"># winrm
+winrs -r:http://server:5985/wsman -u:Username -p:Password ipconfig
+
+# psrp
+Invoke-Command -ComputerName server { ipconfig } -Credential username
+</pre> <ul class="simple"> <li>To test HTTPS:</li> </ul> <pre data-language="powershell"># winrm
+winrs -r:https://server:5986/wsman -u:Username -p:Password -ssl ipconfig
+
+# psrp
+Invoke-Command -UseSSL -ComputerName server { ipconfig } -Credential username
+
+# psrp ignoring certs
+$sessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck
+Invoke-Command -UseSSL -ComputerName server { ipconfig } -Credential username -SessionOption $sessionOption
+</pre> <p>To verify that the target hostname is resolvable on the Ansible control node, run one of the following commands:</p> <pre data-language="bash">dig +search server
+
+# May fail if the Windows firewall is set to block ICMP pings
+# but will show the hostname if resolvable.
+ping server
+</pre> <p>To verify that the WinRM service is listening and a firewall is not blocking the connection you can use <code>nc</code> to test the connection over the WinRM port:</p> <pre data-language="bash"># HTTP port
+&gt; nc -zv server 5985
+Connection to server port 5985 [tcp/wsman] succeeded!
+
+# HTTPS port
+&gt; nc -zv server 5986
+Connection to server port 5986 [tcp/wsmans] succeeded!
+</pre> <p>To verify that WinRM has a HTTPS listener and is working you can use <code>openssl s_client</code> to test the connection and view the certificate details with:</p> <pre data-language="bash">echo '' | openssl s_client -connect server:5986
+</pre> <div class="admonition note"> <p class="admonition-title">Note</p> <p>The <code>openssl s_client</code> command will use the system trust store to validate the certificate which may not align with the trust store used in Ansible. See <a class="reference internal" href="#windows-winrm-cert-validation"><span class="std std-ref">HTTPS Certificate Validation</span></a> for more information.</p> </div> <div class="admonition seealso"> <p class="admonition-title">See also</p> <dl class="simple"> <dt><a class="reference internal" href="../playbook_guide/playbooks_intro#playbooks-intro"><span class="std std-ref">Ansible playbooks</span></a></dt>
+<dd>
+<p>An introduction to playbooks</p> </dd> <dt><a class="reference internal" href="../tips_tricks/index#playbooks-best-practices"><span class="std std-ref">Ansible tips and tricks</span></a></dt>
+<dd>
+<p>Tips and tricks for playbooks</p> </dd> <dt><a class="reference external" href="https://docs.ansible.com/ansible/2.9/modules/list_of_windows_modules.html#windows-modules" title="(in Ansible v2.9)"><span class="xref std std-ref">List of Windows Modules</span></a></dt>
+<dd>
+<p>Windows-specific module list, all implemented in PowerShell</p> </dd> <dt><a class="reference internal" href="https://docs.ansible.com/ansible/latest/community/communication.html#communication"><span class="std std-ref">Communication</span></a></dt>
+<dd>
+<p>Got questions? Need help? Want to share your ideas? Visit the Ansible communication guide</p> </dd> </dl> </div> </section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2012&ndash;2018 Michael DeHaan<br>&copy; 2018&ndash;2025 Red Hat, Inc.<br>Licensed under the GNU General Public License version 3.<br>
+    <a href="https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html" class="_attribution-link">https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html</a>
+  </p>
+</div>

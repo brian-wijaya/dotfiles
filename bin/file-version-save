@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+"""Quick file version saver - called by LD_PRELOAD hook.
+
+Must be FAST - runs synchronously before file operations.
+"""
+
+import sys
+from pathlib import Path
+
+# Import from daemon (reuse VersionStore class)
+sys.path.insert(0, str(Path.home() / "bin"))
+
+try:
+    from file_version_daemon import VersionStore
+
+    if len(sys.argv) < 3:
+        sys.exit(0)
+
+    file_path = Path(sys.argv[1])
+    operation = sys.argv[2]
+
+    store = VersionStore()
+    store.save_version(file_path, operation)
+except Exception:
+    # Silent failure - don't break the calling program
+    pass

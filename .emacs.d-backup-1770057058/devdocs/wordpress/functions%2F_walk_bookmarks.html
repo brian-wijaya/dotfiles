@@ -1,0 +1,164 @@
+<h1 class="wp-block-wporg-code-reference-title">_walk_bookmarks( <span class="arg-type">array</span> <span class="arg-name">$bookmarks</span>, <span class="arg-type">string|array</span> <span class="arg-name">$args</span> = <span class="arg-default">”</span> ): <span class="return-type">string</span>
+</h1> <section><p>The formatted output of a list of bookmarks.</p> </section> <section><h2 id="description">Description</h2> <p>The $bookmarks array must contain bookmark objects and will be iterated over to retrieve the bookmark to be used in the output.</p> <p>The output is formatted as HTML with no way to change that format. However, what is between, before, and after can be changed. The link itself will be HTML.</p> <p>This function is used internally by <a href="wp_list_bookmarks" rel="function">wp_list_bookmarks()</a> and should not be used by themes.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$bookmarks</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">List of bookmarks to traverse.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="string">string</span>|<span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Bookmarks arguments.<br> <ul class="param-hash">
+<li>
+<code>show_updated</code> <span class="type">int|bool</span><div class="desc">Whether to show the time the bookmark was last updated.<br> Accepts <code>1|true</code> or <code>0|false</code>. Default <code>0|false</code>.</div>
+</li> <li>
+<code>show_description</code> <span class="type">int|bool</span><div class="desc">Whether to show the bookmark description. Accepts <code>1|true</code>, Accepts <code>1|true</code> or <code>0|false</code>. Default <code>0|false</code>.</div>
+</li> <li>
+<code>show_images</code> <span class="type">int|bool</span><div class="desc">Whether to show the link image if available. Accepts <code>1|true</code> or <code>0|false</code>. Default <code>1|true</code>.</div>
+</li> <li>
+<code>show_name</code> <span class="type">int|bool</span><div class="desc">Whether to show link name if available. Accepts <code>1|true</code> or <code>0|false</code>. Default <code>0|false</code>.</div>
+</li> <li>
+<code>before</code> <span class="type">string</span><div class="desc">The HTML or text to prepend to each bookmark. Default <code>&lt;li&gt;</code>.</div>
+</li> <li>
+<code>after</code> <span class="type">string</span><div class="desc">The HTML or text to append to each bookmark. Default <code>&lt;/li&gt;</code>.</div>
+</li> <li>
+<code>link_before</code> <span class="type">string</span><div class="desc">The HTML or text to prepend to each bookmark inside the anchor tags. </div>
+</li> <li>
+<code>link_after</code> <span class="type">string</span><div class="desc">The HTML or text to append to each bookmark inside the anchor tags. </div>
+</li> <li>
+<code>between</code> <span class="type">string</span><div class="desc">The string for use in between the link, description, and image.<br> Default "n".</div>
+</li> <li>
+<code>show_rating</code> <span class="type">int|bool</span><div class="desc">Whether to show the link rating. Accepts <code>1|true</code> or <code>0|false</code>.<br> Default <code>0|false</code>.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Formatted output in HTML</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="51" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _walk_bookmarks( $bookmarks, $args = '' ) {
+	$defaults = array(
+		'show_updated'     =&gt; 0,
+		'show_description' =&gt; 0,
+		'show_images'      =&gt; 1,
+		'show_name'        =&gt; 0,
+		'before'           =&gt; '&lt;li&gt;',
+		'after'            =&gt; '&lt;/li&gt;',
+		'between'          =&gt; "\n",
+		'show_rating'      =&gt; 0,
+		'link_before'      =&gt; '',
+		'link_after'       =&gt; '',
+	);
+
+	$parsed_args = wp_parse_args( $args, $defaults );
+
+	$output = ''; // Blank string to start with.
+
+	foreach ( (array) $bookmarks as $bookmark ) {
+		if ( ! isset( $bookmark-&gt;recently_updated ) ) {
+			$bookmark-&gt;recently_updated = false;
+		}
+		$output .= $parsed_args['before'];
+		if ( $parsed_args['show_updated'] &amp;&amp; $bookmark-&gt;recently_updated ) {
+			$output .= '&lt;em&gt;';
+		}
+		$the_link = '#';
+		if ( ! empty( $bookmark-&gt;link_url ) ) {
+			$the_link = esc_url( $bookmark-&gt;link_url );
+		}
+		$desc  = esc_attr( sanitize_bookmark_field( 'link_description', $bookmark-&gt;link_description, $bookmark-&gt;link_id, 'display' ) );
+		$name  = esc_attr( sanitize_bookmark_field( 'link_name', $bookmark-&gt;link_name, $bookmark-&gt;link_id, 'display' ) );
+		$title = $desc;
+
+		if ( $parsed_args['show_updated'] ) {
+			if ( ! str_starts_with( $bookmark-&gt;link_updated_f, '00' ) ) {
+				$title .= ' (';
+				$title .= sprintf(
+					/* translators: %s: Date and time of last update. */
+					__( 'Last updated: %s' ),
+					gmdate(
+						get_option( 'links_updated_date_format' ),
+						$bookmark-&gt;link_updated_f + (int) ( (float) get_option( 'gmt_offset' ) * HOUR_IN_SECONDS )
+					)
+				);
+				$title .= ')';
+			}
+		}
+		$alt = ' alt="' . $name . ( $parsed_args['show_description'] ? ' ' . $title : '' ) . '"';
+
+		if ( '' !== $title ) {
+			$title = ' title="' . $title . '"';
+		}
+		$rel = $bookmark-&gt;link_rel;
+
+		$target = $bookmark-&gt;link_target;
+		if ( '' !== $target ) {
+			if ( is_string( $rel ) &amp;&amp; '' !== $rel ) {
+				if ( ! str_contains( $rel, 'noopener' ) ) {
+					$rel = trim( $rel ) . ' noopener';
+				}
+			} else {
+				$rel = 'noopener';
+			}
+
+			$target = ' target="' . $target . '"';
+		}
+
+		if ( '' !== $rel ) {
+			$rel = ' rel="' . esc_attr( $rel ) . '"';
+		}
+
+		$output .= '&lt;a href="' . $the_link . '"' . $rel . $title . $target . '&gt;';
+
+		$output .= $parsed_args['link_before'];
+
+		if ( '' !== $bookmark-&gt;link_image &amp;&amp; $parsed_args['show_images'] ) {
+			if ( str_starts_with( $bookmark-&gt;link_image, 'http' ) ) {
+				$output .= '&lt;img src="' . $bookmark-&gt;link_image . '"' . $alt . $title . ' /&gt;';
+			} else { // If it's a relative path.
+				$output .= '&lt;img src="' . get_option( 'siteurl' ) . $bookmark-&gt;link_image . '"' . $alt . $title . ' /&gt;';
+			}
+			if ( $parsed_args['show_name'] ) {
+				$output .= " $name";
+			}
+		} else {
+			$output .= $name;
+		}
+
+		$output .= $parsed_args['link_after'];
+
+		$output .= '&lt;/a&gt;';
+
+		if ( $parsed_args['show_updated'] &amp;&amp; $bookmark-&gt;recently_updated ) {
+			$output .= '&lt;/em&gt;';
+		}
+
+		if ( $parsed_args['show_description'] &amp;&amp; '' !== $desc ) {
+			$output .= $parsed_args['between'] . $desc;
+		}
+
+		if ( $parsed_args['show_rating'] ) {
+			$output .= $parsed_args['between'] . sanitize_bookmark_field(
+				'link_rating',
+				$bookmark-&gt;link_rating,
+				$bookmark-&gt;link_id,
+				'display'
+			);
+		}
+		$output .= $parsed_args['after'] . "\n";
+	} // End while.
+
+	return $output;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/bookmark-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/bookmark-template.php#L51">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/bookmark-template.php#L51-L164">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_walk_bookmarks" class="_attribution-link">https://developer.wordpress.org/reference/functions/_walk_bookmarks</a>
+  </p>
+</div>

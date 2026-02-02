@@ -1,0 +1,120 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Comments_List_Table::prepare_items()</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="86" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_items() {
+	global $mode, $post_id, $comment_status, $comment_type, $search;
+
+	if ( ! empty( $_REQUEST['mode'] ) ) {
+		$mode = 'excerpt' === $_REQUEST['mode'] ? 'excerpt' : 'list';
+		set_user_setting( 'posts_list_mode', $mode );
+	} else {
+		$mode = get_user_setting( 'posts_list_mode', 'list' );
+	}
+
+	$comment_status = isset( $_REQUEST['comment_status'] ) ? $_REQUEST['comment_status'] : 'all';
+
+	if ( ! in_array( $comment_status, array( 'all', 'mine', 'moderated', 'approved', 'spam', 'trash' ), true ) ) {
+		$comment_status = 'all';
+	}
+
+	$comment_type = ! empty( $_REQUEST['comment_type'] ) ? $_REQUEST['comment_type'] : '';
+
+	$search = ( isset( $_REQUEST['s'] ) ) ? $_REQUEST['s'] : '';
+
+	$post_type = ( isset( $_REQUEST['post_type'] ) ) ? sanitize_key( $_REQUEST['post_type'] ) : '';
+
+	$user_id = ( isset( $_REQUEST['user_id'] ) ) ? $_REQUEST['user_id'] : '';
+
+	$orderby = ( isset( $_REQUEST['orderby'] ) ) ? $_REQUEST['orderby'] : '';
+	$order   = ( isset( $_REQUEST['order'] ) ) ? $_REQUEST['order'] : '';
+
+	$comments_per_page = $this-&gt;get_per_page( $comment_status );
+
+	$doing_ajax = wp_doing_ajax();
+
+	if ( isset( $_REQUEST['number'] ) ) {
+		$number = (int) $_REQUEST['number'];
+	} else {
+		$number = $comments_per_page + min( 8, $comments_per_page ); // Grab a few extra.
+	}
+
+	$page = $this-&gt;get_pagenum();
+
+	if ( isset( $_REQUEST['start'] ) ) {
+		$start = $_REQUEST['start'];
+	} else {
+		$start = ( $page - 1 ) * $comments_per_page;
+	}
+
+	if ( $doing_ajax &amp;&amp; isset( $_REQUEST['offset'] ) ) {
+		$start += $_REQUEST['offset'];
+	}
+
+	$status_map = array(
+		'mine'      =&gt; '',
+		'moderated' =&gt; 'hold',
+		'approved'  =&gt; 'approve',
+		'all'       =&gt; '',
+	);
+
+	$args = array(
+		'status'                    =&gt; isset( $status_map[ $comment_status ] ) ? $status_map[ $comment_status ] : $comment_status,
+		'search'                    =&gt; $search,
+		'user_id'                   =&gt; $user_id,
+		'offset'                    =&gt; $start,
+		'number'                    =&gt; $number,
+		'post_id'                   =&gt; $post_id,
+		'type'                      =&gt; $comment_type,
+		'orderby'                   =&gt; $orderby,
+		'order'                     =&gt; $order,
+		'post_type'                 =&gt; $post_type,
+		'update_comment_post_cache' =&gt; true,
+	);
+
+	/**
+	 * Filters the arguments for the comment query in the comments list table.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param array $args An array of get_comments() arguments.
+	 */
+	$args = apply_filters( 'comments_list_table_query_args', $args );
+
+	$_comments = get_comments( $args );
+
+	if ( is_array( $_comments ) ) {
+		$this-&gt;items       = array_slice( $_comments, 0, $comments_per_page );
+		$this-&gt;extra_items = array_slice( $_comments, $comments_per_page );
+
+		$_comment_post_ids = array_unique( wp_list_pluck( $_comments, 'comment_post_ID' ) );
+
+		$this-&gt;pending_count = get_pending_comments_num( $_comment_post_ids );
+	}
+
+	$total_comments = get_comments(
+		array_merge(
+			$args,
+			array(
+				'count'   =&gt; true,
+				'offset'  =&gt; 0,
+				'number'  =&gt; 0,
+				'orderby' =&gt; 'none',
+			)
+		)
+	);
+
+	$this-&gt;set_pagination_args(
+		array(
+			'total_items' =&gt; $total_comments,
+			'per_page'    =&gt; $comments_per_page,
+		)
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-comments-list-table.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-comments-list-table.php#L86">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-comments-list-table.php#L86-L194">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/comments_list_table_query_args"><span class="hook-func">apply_filters</span>( ‘comments_list_table_query_args’, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the arguments for the comment query in the comments list table.</p> </dd>
+</dl></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_comments_list_table/prepare_items" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_comments_list_table/prepare_items</a>
+  </p>
+</div>

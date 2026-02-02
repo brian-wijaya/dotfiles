@@ -1,0 +1,226 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_unique_post_slug( <span class="arg-type">string</span> <span class="arg-name">$slug</span>, <span class="arg-type">int</span> <span class="arg-name">$post_id</span>, <span class="arg-type">string</span> <span class="arg-name">$post_status</span>, <span class="arg-type">string</span> <span class="arg-name">$post_type</span>, <span class="arg-type">int</span> <span class="arg-name">$post_parent</span> ): <span class="return-type">string</span>
+</h1> <section><p>Computes a unique slug for the post, when given the desired slug and some post details.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$slug</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The desired slug (post_name).</span></div></dd>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID.</span></div></dd>
+<dt>
+<code>$post_status</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">No uniqueness checks are made if the post is still draft or pending.</span></div></dd>
+<dt>
+<code>$post_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post type.</span></div></dd>
+<dt>
+<code>$post_parent</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post parent ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Unique slug for the post, based on $post_name (with a -1, -2, etc. suffix)</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="5328" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_unique_post_slug( $slug, $post_id, $post_status, $post_type, $post_parent ) {
+	if ( in_array( $post_status, array( 'draft', 'pending', 'auto-draft' ), true )
+		|| ( 'inherit' === $post_status &amp;&amp; 'revision' === $post_type ) || 'user_request' === $post_type
+	) {
+		return $slug;
+	}
+
+	/**
+	 * Filters the post slug before it is generated to be unique.
+	 *
+	 * Returning a non-null value will short-circuit the
+	 * unique slug generation, returning the passed value instead.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param string|null $override_slug Short-circuit return value.
+	 * @param string      $slug          The desired slug (post_name).
+	 * @param int         $post_id       Post ID.
+	 * @param string      $post_status   The post status.
+	 * @param string      $post_type     Post type.
+	 * @param int         $post_parent   Post parent ID.
+	 */
+	$override_slug = apply_filters( 'pre_wp_unique_post_slug', null, $slug, $post_id, $post_status, $post_type, $post_parent );
+	if ( null !== $override_slug ) {
+		return $override_slug;
+	}
+
+	global $wpdb, $wp_rewrite;
+
+	$original_slug = $slug;
+
+	$feeds = $wp_rewrite-&gt;feeds;
+	if ( ! is_array( $feeds ) ) {
+		$feeds = array();
+	}
+
+	if ( 'attachment' === $post_type ) {
+		// Attachment slugs must be unique across all types.
+		$check_sql       = "SELECT post_name FROM $wpdb-&gt;posts WHERE post_name = %s AND ID != %d LIMIT 1";
+		$post_name_check = $wpdb-&gt;get_var( $wpdb-&gt;prepare( $check_sql, $slug, $post_id ) );
+
+		/**
+		 * Filters whether the post slug would make a bad attachment slug.
+		 *
+		 * @since 3.1.0
+		 *
+		 * @param bool   $bad_slug Whether the slug would be bad as an attachment slug.
+		 * @param string $slug     The post slug.
+		 */
+		$is_bad_attachment_slug = apply_filters( 'wp_unique_post_slug_is_bad_attachment_slug', false, $slug );
+
+		if ( $post_name_check
+			|| in_array( $slug, $feeds, true ) || 'embed' === $slug
+			|| $is_bad_attachment_slug
+		) {
+			$suffix = 2;
+			do {
+				$alt_post_name   = _truncate_post_slug( $slug, 200 - ( strlen( $suffix ) + 1 ) ) . "-$suffix";
+				$post_name_check = $wpdb-&gt;get_var( $wpdb-&gt;prepare( $check_sql, $alt_post_name, $post_id ) );
+				++$suffix;
+			} while ( $post_name_check );
+			$slug = $alt_post_name;
+		}
+	} elseif ( is_post_type_hierarchical( $post_type ) ) {
+		if ( 'nav_menu_item' === $post_type ) {
+			return $slug;
+		}
+
+		/*
+		 * Page slugs must be unique within their own trees. Pages are in a separate
+		 * namespace than posts so page slugs are allowed to overlap post slugs.
+		 */
+		$check_sql       = "SELECT post_name FROM $wpdb-&gt;posts WHERE post_name = %s AND post_type IN ( %s, 'attachment' ) AND ID != %d AND post_parent = %d LIMIT 1";
+		$post_name_check = $wpdb-&gt;get_var( $wpdb-&gt;prepare( $check_sql, $slug, $post_type, $post_id, $post_parent ) );
+
+		/**
+		 * Filters whether the post slug would make a bad hierarchical post slug.
+		 *
+		 * @since 3.1.0
+		 *
+		 * @param bool   $bad_slug    Whether the post slug would be bad in a hierarchical post context.
+		 * @param string $slug        The post slug.
+		 * @param string $post_type   Post type.
+		 * @param int    $post_parent Post parent ID.
+		 */
+		$is_bad_hierarchical_slug = apply_filters( 'wp_unique_post_slug_is_bad_hierarchical_slug', false, $slug, $post_type, $post_parent );
+
+		if ( $post_name_check
+			|| in_array( $slug, $feeds, true ) || 'embed' === $slug
+			|| preg_match( "@^($wp_rewrite-&gt;pagination_base)?\d+$@", $slug )
+			|| $is_bad_hierarchical_slug
+		) {
+			$suffix = 2;
+			do {
+				$alt_post_name   = _truncate_post_slug( $slug, 200 - ( strlen( $suffix ) + 1 ) ) . "-$suffix";
+				$post_name_check = $wpdb-&gt;get_var( $wpdb-&gt;prepare( $check_sql, $alt_post_name, $post_type, $post_id, $post_parent ) );
+				++$suffix;
+			} while ( $post_name_check );
+			$slug = $alt_post_name;
+		}
+	} else {
+		// Post slugs must be unique across all posts.
+		$check_sql       = "SELECT post_name FROM $wpdb-&gt;posts WHERE post_name = %s AND post_type = %s AND ID != %d LIMIT 1";
+		$post_name_check = $wpdb-&gt;get_var( $wpdb-&gt;prepare( $check_sql, $slug, $post_type, $post_id ) );
+
+		$post = get_post( $post_id );
+
+		// Prevent new post slugs that could result in URLs that conflict with date archives.
+		$conflicts_with_date_archive = false;
+		if ( 'post' === $post_type &amp;&amp; ( ! $post || $post-&gt;post_name !== $slug ) &amp;&amp; preg_match( '/^[0-9]+$/', $slug ) ) {
+			$slug_num = (int) $slug;
+
+			if ( $slug_num ) {
+				$permastructs   = array_values( array_filter( explode( '/', get_option( 'permalink_structure' ) ) ) );
+				$postname_index = array_search( '%postname%', $permastructs, true );
+
+				/*
+				* Potential date clashes are as follows:
+				*
+				* - Any integer in the first permastruct position could be a year.
+				* - An integer between 1 and 12 that follows 'year' conflicts with 'monthnum'.
+				* - An integer between 1 and 31 that follows 'monthnum' conflicts with 'day'.
+				*/
+				if ( 0 === $postname_index ||
+					( $postname_index &amp;&amp; '%year%' === $permastructs[ $postname_index - 1 ] &amp;&amp; 13 &gt; $slug_num ) ||
+					( $postname_index &amp;&amp; '%monthnum%' === $permastructs[ $postname_index - 1 ] &amp;&amp; 32 &gt; $slug_num )
+				) {
+					$conflicts_with_date_archive = true;
+				}
+			}
+		}
+
+		/**
+		 * Filters whether the post slug would be bad as a flat slug.
+		 *
+		 * @since 3.1.0
+		 *
+		 * @param bool   $bad_slug  Whether the post slug would be bad as a flat slug.
+		 * @param string $slug      The post slug.
+		 * @param string $post_type Post type.
+		 */
+		$is_bad_flat_slug = apply_filters( 'wp_unique_post_slug_is_bad_flat_slug', false, $slug, $post_type );
+
+		if ( $post_name_check
+			|| in_array( $slug, $feeds, true ) || 'embed' === $slug
+			|| $conflicts_with_date_archive
+			|| $is_bad_flat_slug
+		) {
+			$suffix = 2;
+			do {
+				$alt_post_name   = _truncate_post_slug( $slug, 200 - ( strlen( $suffix ) + 1 ) ) . "-$suffix";
+				$post_name_check = $wpdb-&gt;get_var( $wpdb-&gt;prepare( $check_sql, $alt_post_name, $post_type, $post_id ) );
+				++$suffix;
+			} while ( $post_name_check );
+			$slug = $alt_post_name;
+		}
+	}
+
+	/**
+	 * Filters the unique post slug.
+	 *
+	 * @since 3.3.0
+	 *
+	 * @param string $slug          The post slug.
+	 * @param int    $post_id       Post ID.
+	 * @param string $post_status   The post status.
+	 * @param string $post_type     Post type.
+	 * @param int    $post_parent   Post parent ID
+	 * @param string $original_slug The original post slug.
+	 */
+	return apply_filters( 'wp_unique_post_slug', $slug, $post_id, $post_status, $post_type, $post_parent, $original_slug );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L5328">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L5328-L5499">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_wp_unique_post_slug"><span class="hook-func">apply_filters</span>( ‘pre_wp_unique_post_slug’, <nobr><span class="arg-type">string|null</span> <span class="arg-name">$override_slug</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$slug</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_status</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_parent</span></nobr> )</a></dt>
+<dd>
+<p>Filters the post slug before it is generated to be unique.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_unique_post_slug"><span class="hook-func">apply_filters</span>( ‘wp_unique_post_slug’, <nobr><span class="arg-type">string</span> <span class="arg-name">$slug</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_status</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_parent</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$original_slug</span></nobr> )</a></dt>
+<dd>
+<p>Filters the unique post slug.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_unique_post_slug_is_bad_attachment_slug"><span class="hook-func">apply_filters</span>( ‘wp_unique_post_slug_is_bad_attachment_slug’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$bad_slug</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$slug</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether the post slug would make a bad attachment slug.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_unique_post_slug_is_bad_flat_slug"><span class="hook-func">apply_filters</span>( ‘wp_unique_post_slug_is_bad_flat_slug’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$bad_slug</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$slug</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether the post slug would be bad as a flat slug.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_unique_post_slug_is_bad_hierarchical_slug"><span class="hook-func">apply_filters</span>( ‘wp_unique_post_slug_is_bad_hierarchical_slug’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$bad_slug</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$slug</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$post_type</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_parent</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether the post slug would make a bad hierarchical post slug.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_unique_post_slug" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_unique_post_slug</a>
+  </p>
+</div>

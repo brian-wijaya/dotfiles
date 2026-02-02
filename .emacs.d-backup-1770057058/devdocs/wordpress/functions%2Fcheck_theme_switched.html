@@ -1,0 +1,59 @@
+<h1 class="wp-block-wporg-code-reference-title">check_theme_switched()</h1> <section><p>Checks if a theme has been changed and runs ‘after_switch_theme’ hook on the next WP load.</p> </section> <section><h2 id="description">Description</h2> <p>See <a href="../hooks/after_switch_theme">‘after_switch_theme’</a>.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3476" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function check_theme_switched() {
+	$stylesheet = get_option( 'theme_switched' );
+
+	if ( $stylesheet ) {
+		$old_theme = wp_get_theme( $stylesheet );
+
+		// Prevent widget &amp; menu mapping from running since Customizer already called it up front.
+		if ( get_option( 'theme_switched_via_customizer' ) ) {
+			remove_action( 'after_switch_theme', '_wp_menus_changed' );
+			remove_action( 'after_switch_theme', '_wp_sidebars_changed' );
+			update_option( 'theme_switched_via_customizer', false );
+		}
+
+		if ( $old_theme-&gt;exists() ) {
+			/**
+			 * Fires on the next WP load after the theme has been switched.
+			 *
+			 * The parameters differ according to whether the old theme exists or not.
+			 * If the old theme is missing, the old name will instead be the slug
+			 * of the old theme.
+			 *
+			 * See <a href="../hooks/switch_theme">'switch_theme'</a>.
+			 *
+			 * @since 3.3.0
+			 *
+			 * @param string   $old_name  Old theme name.
+			 * @param WP_Theme $old_theme WP_Theme instance of the old theme.
+			 */
+			do_action( 'after_switch_theme', $old_theme-&gt;get( 'Name' ), $old_theme );
+		} else {
+			/** This action is documented in wp-includes/theme.php */
+			do_action( 'after_switch_theme', $stylesheet, $old_theme );
+		}
+
+		flush_rewrite_rules();
+
+		update_option( 'theme_switched', false );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/theme.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/theme.php#L3476">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/theme.php#L3476-L3514">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/after_switch_theme"><span class="hook-func">do_action</span>( ‘after_switch_theme’, <nobr><span class="arg-type">string</span> <span class="arg-name">$old_name</span></nobr>, <nobr><span class="arg-type">WP_Theme</span> <span class="arg-name">$old_theme</span></nobr> )</a></dt>
+<dd>
+<p>Fires on the next WP load after the theme has been switched.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/check_theme_switched" class="_attribution-link">https://developer.wordpress.org/reference/functions/check_theme_switched</a>
+  </p>
+</div>

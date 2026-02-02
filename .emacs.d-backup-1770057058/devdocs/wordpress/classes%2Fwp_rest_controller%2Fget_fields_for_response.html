@@ -1,0 +1,97 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Controller::get_fields_for_response( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type">string[]</span>
+</h1> <section><p>Gets an array of fields to be included on the response.</p> </section> <section><h2 id="description">Description</h2> <p>Included fields are based on item schema and <code>_fields=</code> request argument.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string[]</span> Fields to be included in the response.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="572" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_fields_for_response( $request ) {
+	$schema     = $this-&gt;get_item_schema();
+	$properties = isset( $schema['properties'] ) ? $schema['properties'] : array();
+
+	$additional_fields = $this-&gt;get_additional_fields();
+
+	foreach ( $additional_fields as $field_name =&gt; $field_options ) {
+		/*
+		 * For back-compat, include any field with an empty schema
+		 * because it won't be present in $this-&gt;get_item_schema().
+		 */
+		if ( is_null( $field_options['schema'] ) ) {
+			$properties[ $field_name ] = $field_options;
+		}
+	}
+
+	// Exclude fields that specify a different context than the request context.
+	$context = $request['context'];
+	if ( $context ) {
+		foreach ( $properties as $name =&gt; $options ) {
+			if ( ! empty( $options['context'] ) &amp;&amp; ! in_array( $context, $options['context'], true ) ) {
+				unset( $properties[ $name ] );
+			}
+		}
+	}
+
+	$fields = array_keys( $properties );
+
+	/*
+	 * '_links' and '_embedded' are not typically part of the item schema,
+	 * but they can be specified in '_fields', so they are added here as a
+	 * convenience for checking with rest_is_field_included().
+	 */
+	$fields[] = '_links';
+	if ( $request-&gt;has_param( '_embed' ) ) {
+		$fields[] = '_embedded';
+	}
+
+	$fields = array_unique( $fields );
+
+	if ( ! isset( $request['_fields'] ) ) {
+		return $fields;
+	}
+	$requested_fields = wp_parse_list( $request['_fields'] );
+	if ( 0 === count( $requested_fields ) ) {
+		return $fields;
+	}
+	// Trim off outside whitespace from the comma delimited list.
+	$requested_fields = array_map( 'trim', $requested_fields );
+	// Always persist 'id', because it can be needed for add_additional_fields_to_object().
+	if ( in_array( 'id', $fields, true ) ) {
+		$requested_fields[] = 'id';
+	}
+	// Return the list of all requested fields which appear in the schema.
+	return array_reduce(
+		$requested_fields,
+		static function ( $response_fields, $field ) use ( $fields ) {
+			if ( in_array( $field, $fields, true ) ) {
+				$response_fields[] = $field;
+				return $response_fields;
+			}
+			// Check for nested fields if $field is not a direct match.
+			$nested_fields = explode( '.', $field );
+			/*
+			 * A nested field is included so long as its top-level property
+			 * is present in the schema.
+			 */
+			if ( in_array( $nested_fields[0], $fields, true ) ) {
+				$response_fields[] = $field;
+			}
+			return $response_fields;
+		},
+		array()
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-controller.php#L572">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-controller.php#L572-L646">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.6/">4.9.6</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_controller/get_fields_for_response" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_controller/get_fields_for_response</a>
+  </p>
+</div>

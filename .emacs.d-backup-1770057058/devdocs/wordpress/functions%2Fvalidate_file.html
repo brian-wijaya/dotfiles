@@ -1,0 +1,66 @@
+<h1 class="wp-block-wporg-code-reference-title">validate_file( <span class="arg-type">string</span> <span class="arg-name">$file</span>, <span class="arg-type">string[]</span> <span class="arg-name">$allowed_files</span> = <span class="arg-default">array()</span> ): <span class="return-type">int</span>
+</h1> <section><p>Validates a file name and path against an allowed set of rules.</p> </section> <section><h2 id="description">Description</h2> <p>A return value of <code>1</code> means the file path contains directory traversal.</p> <p>A return value of <code>2</code> means the file path contains a Windows drive path.</p> <p>A return value of <code>3</code> means the file is not in the allowed files list.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">File path.</span></div></dd>
+<dt>
+<code>$allowed_files</code><span class="type"><span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array of allowed files. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int</span> 0 means nothing is wrong, greater than 0 means something was wrong.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="6226" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function validate_file( $file, $allowed_files = array() ) {
+	if ( ! is_scalar( $file ) || '' === $file ) {
+		return 0;
+	}
+
+	// Normalize path for Windows servers.
+	$file = wp_normalize_path( $file );
+	// Normalize path for $allowed_files as well so it's an apples to apples comparison.
+	$allowed_files = array_map( 'wp_normalize_path', $allowed_files );
+
+	// `../` on its own is not allowed:
+	if ( '../' === $file ) {
+		return 1;
+	}
+
+	// More than one occurrence of `../` is not allowed:
+	if ( preg_match_all( '#\.\./#', $file, $matches, PREG_SET_ORDER ) &amp;&amp; ( count( $matches ) &gt; 1 ) ) {
+		return 1;
+	}
+
+	// `../` which does not occur at the end of the path is not allowed:
+	if ( str_contains( $file, '../' ) &amp;&amp; '../' !== mb_substr( $file, -3, 3 ) ) {
+		return 1;
+	}
+
+	// Files not in the allowed file list are not allowed:
+	if ( ! empty( $allowed_files ) &amp;&amp; ! in_array( $file, $allowed_files, true ) ) {
+		return 3;
+	}
+
+	// Absolute Windows drive paths are not allowed:
+	if ( ':' === substr( $file, 1, 1 ) ) {
+		return 2;
+	}
+
+	return 0;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/functions.php#L6226">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/functions.php#L6226-L6262">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.2.0/">1.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/validate_file" class="_attribution-link">https://developer.wordpress.org/reference/functions/validate_file</a>
+  </p>
+</div>

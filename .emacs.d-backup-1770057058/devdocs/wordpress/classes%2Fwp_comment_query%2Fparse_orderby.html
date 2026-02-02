@@ -1,0 +1,74 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Comment_Query::parse_orderby( <span class="arg-type">string</span> <span class="arg-name">$orderby</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Parse and sanitize ‘orderby’ keys passed to the comment query.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$orderby</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Alias for the field to order by.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> Value to used in the ORDER clause. False otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1176" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function parse_orderby( $orderby ) {
+	global $wpdb;
+
+	$allowed_keys = array(
+		'comment_agent',
+		'comment_approved',
+		'comment_author',
+		'comment_author_email',
+		'comment_author_IP',
+		'comment_author_url',
+		'comment_content',
+		'comment_date',
+		'comment_date_gmt',
+		'comment_ID',
+		'comment_karma',
+		'comment_parent',
+		'comment_post_ID',
+		'comment_type',
+		'user_id',
+	);
+
+	if ( ! empty( $this-&gt;query_vars['meta_key'] ) ) {
+		$allowed_keys[] = $this-&gt;query_vars['meta_key'];
+		$allowed_keys[] = 'meta_value';
+		$allowed_keys[] = 'meta_value_num';
+	}
+
+	$meta_query_clauses = $this-&gt;meta_query-&gt;get_clauses();
+	if ( $meta_query_clauses ) {
+		$allowed_keys = array_merge( $allowed_keys, array_keys( $meta_query_clauses ) );
+	}
+
+	$parsed = false;
+	if ( $this-&gt;query_vars['meta_key'] === $orderby || 'meta_value' === $orderby ) {
+		$parsed = "$wpdb-&gt;commentmeta.meta_value";
+	} elseif ( 'meta_value_num' === $orderby ) {
+		$parsed = "$wpdb-&gt;commentmeta.meta_value+0";
+	} elseif ( 'comment__in' === $orderby ) {
+		$comment__in = implode( ',', array_map( 'absint', $this-&gt;query_vars['comment__in'] ) );
+		$parsed      = "FIELD( {$wpdb-&gt;comments}.comment_ID, $comment__in )";
+	} elseif ( in_array( $orderby, $allowed_keys, true ) ) {
+
+		if ( isset( $meta_query_clauses[ $orderby ] ) ) {
+			$meta_clause = $meta_query_clauses[ $orderby ];
+			$parsed      = sprintf( 'CAST(%s.meta_value AS %s)', esc_sql( $meta_clause['alias'] ), esc_sql( $meta_clause['cast'] ) );
+		} else {
+			$parsed = "$wpdb-&gt;comments.$orderby";
+		}
+	}
+
+	return $parsed;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-comment-query.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-comment-query.php#L1176">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-comment-query.php#L1176-L1227">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_comment_query/parse_orderby" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_comment_query/parse_orderby</a>
+  </p>
+</div>

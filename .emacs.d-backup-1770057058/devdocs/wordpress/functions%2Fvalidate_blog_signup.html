@@ -1,0 +1,72 @@
+<h1 class="wp-block-wporg-code-reference-title">validate_blog_signup(): <span class="return-type">bool</span>
+</h1> <section><p>Validates new site signup.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if the site sign-up was validated, false on error.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="789" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function validate_blog_signup() {
+	// Re-validate user info.
+	$user_result = wpmu_validate_user_signup( $_POST['user_name'], $_POST['user_email'] );
+	$user_name   = $user_result['user_name'];
+	$user_email  = $user_result['user_email'];
+	$user_errors = $user_result['errors'];
+
+	if ( $user_errors-&gt;has_errors() ) {
+		signup_user( $user_name, $user_email, $user_errors );
+		return false;
+	}
+
+	$result     = wpmu_validate_blog_signup( $_POST['blogname'], $_POST['blog_title'] );
+	$domain     = $result['domain'];
+	$path       = $result['path'];
+	$blogname   = $result['blogname'];
+	$blog_title = $result['blog_title'];
+	$errors     = $result['errors'];
+
+	if ( $errors-&gt;has_errors() ) {
+		signup_blog( $user_name, $user_email, $blogname, $blog_title, $errors );
+		return false;
+	}
+
+	$public      = (int) $_POST['blog_public'];
+	$signup_meta = array(
+		'lang_id' =&gt; 1,
+		'public'  =&gt; $public,
+	);
+
+	// Handle the language setting for the new site.
+	if ( ! empty( $_POST['WPLANG'] ) ) {
+
+		$languages = signup_get_available_languages();
+
+		if ( in_array( $_POST['WPLANG'], $languages, true ) ) {
+			$language = wp_unslash( sanitize_text_field( $_POST['WPLANG'] ) );
+
+			if ( $language ) {
+				$signup_meta['WPLANG'] = $language;
+			}
+		}
+	}
+
+	/** This filter is documented in wp-signup.php */
+	$meta = apply_filters( 'add_signup_meta', $signup_meta );
+
+	wpmu_signup_blog( $domain, $path, $blog_title, $user_name, $user_email, $meta );
+	confirm_blog_signup( $domain, $path, $blog_title, $user_name, $user_email, $meta );
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-signup.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-signup.php#L789">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-signup.php#L789-L839">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/add_signup_meta"><span class="hook-func">apply_filters</span>( ‘add_signup_meta’, <nobr><span class="arg-type">array</span> <span class="arg-name">$meta</span></nobr> )</a></dt>
+<dd>
+<p>Filters the new default site meta variables.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/validate_blog_signup" class="_attribution-link">https://developer.wordpress.org/reference/functions/validate_blog_signup</a>
+  </p>
+</div>

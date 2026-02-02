@@ -1,0 +1,252 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_REST_Post_Search_Handler {}</h1> <section><p>Core class representing a search handler for posts in the REST API.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_rest_search_handler">WP_REST_Search_Handler</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_rest_post_search_handler/__construct">WP_REST_Post_Search_Handler::__construct</a></td>
+<td>Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_post_search_handler/detect_rest_item_route">WP_REST_Post_Search_Handler::detect_rest_item_route</a></td>
+<td>Attempts to detect the route to access a single item. — <span class="deprecated-method">deprecated</span>
+</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_post_search_handler/prepare_item">WP_REST_Post_Search_Handler::prepare_item</a></td>
+<td>Prepares the search result for a given post ID.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_post_search_handler/prepare_item_links">WP_REST_Post_Search_Handler::prepare_item_links</a></td>
+<td>Prepares links for the search result of a given ID.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_post_search_handler/protected_title_format">WP_REST_Post_Search_Handler::protected_title_format</a></td>
+<td>Overwrites the default protected and private title format.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_post_search_handler/search_items">WP_REST_Post_Search_Handler::search_items</a></td>
+<td>Searches posts for a given search request.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_REST_Post_Search_Handler extends WP_REST_Search_Handler {
+
+	/**
+	 * Constructor.
+	 *
+	 * @since 5.0.0
+	 */
+	public function __construct() {
+		$this-&gt;type = 'post';
+
+		// Support all public post types except attachments.
+		$this-&gt;subtypes = array_diff(
+			array_values(
+				get_post_types(
+					array(
+						'public'       =&gt; true,
+						'show_in_rest' =&gt; true,
+					),
+					'names'
+				)
+			),
+			array( 'attachment' )
+		);
+	}
+
+	/**
+	 * Searches posts for a given search request.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @param WP_REST_Request $request Full REST request.
+	 * @return array {
+	 *     Associative array containing found IDs and total count for the matching search results.
+	 *
+	 *     @type int[] $ids   Array containing the matching post IDs.
+	 *     @type int   $total Total count for the matching search results.
+	 * }
+	 */
+	public function search_items( WP_REST_Request $request ) {
+
+		// Get the post types to search for the current request.
+		$post_types = $request[ WP_REST_Search_Controller::PROP_SUBTYPE ];
+		if ( in_array( WP_REST_Search_Controller::TYPE_ANY, $post_types, true ) ) {
+			$post_types = $this-&gt;subtypes;
+		}
+
+		$query_args = array(
+			'post_type'           =&gt; $post_types,
+			'post_status'         =&gt; 'publish',
+			'paged'               =&gt; (int) $request['page'],
+			'posts_per_page'      =&gt; (int) $request['per_page'],
+			'ignore_sticky_posts' =&gt; true,
+		);
+
+		if ( ! empty( $request['search'] ) ) {
+			$query_args['s'] = $request['search'];
+		}
+
+		if ( ! empty( $request['exclude'] ) ) {
+			$query_args['post__not_in'] = $request['exclude'];
+		}
+
+		if ( ! empty( $request['include'] ) ) {
+			$query_args['post__in'] = $request['include'];
+		}
+
+		/**
+		 * Filters the query arguments for a REST API post search request.
+		 *
+		 * Enables adding extra arguments or setting defaults for a post search request.
+		 *
+		 * @since 5.1.0
+		 *
+		 * @param array           $query_args Key value array of query var to query value.
+		 * @param WP_REST_Request $request    The request used.
+		 */
+		$query_args = apply_filters( 'rest_post_search_query', $query_args, $request );
+
+		$query = new WP_Query();
+		$posts = $query-&gt;query( $query_args );
+		// Querying the whole post object will warm the object cache, avoiding an extra query per result.
+		$found_ids = wp_list_pluck( $posts, 'ID' );
+		$total     = $query-&gt;found_posts;
+
+		return array(
+			self::RESULT_IDS   =&gt; $found_ids,
+			self::RESULT_TOTAL =&gt; $total,
+		);
+	}
+
+	/**
+	 * Prepares the search result for a given post ID.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @param int   $id     Post ID.
+	 * @param array $fields Fields to include for the post.
+	 * @return array {
+	 *     Associative array containing fields for the post based on the `$fields` parameter.
+	 *
+	 *     @type int    $id    Optional. Post ID.
+	 *     @type string $title Optional. Post title.
+	 *     @type string $url   Optional. Post permalink URL.
+	 *     @type string $type  Optional. Post type.
+	 * }
+	 */
+	public function prepare_item( $id, array $fields ) {
+		$post = get_post( $id );
+
+		$data = array();
+
+		if ( in_array( WP_REST_Search_Controller::PROP_ID, $fields, true ) ) {
+			$data[ WP_REST_Search_Controller::PROP_ID ] = (int) $post-&gt;ID;
+		}
+
+		if ( in_array( WP_REST_Search_Controller::PROP_TITLE, $fields, true ) ) {
+			if ( post_type_supports( $post-&gt;post_type, 'title' ) ) {
+				add_filter( 'protected_title_format', array( $this, 'protected_title_format' ) );
+				add_filter( 'private_title_format', array( $this, 'protected_title_format' ) );
+				$data[ WP_REST_Search_Controller::PROP_TITLE ] = get_the_title( $post-&gt;ID );
+				remove_filter( 'protected_title_format', array( $this, 'protected_title_format' ) );
+				remove_filter( 'private_title_format', array( $this, 'protected_title_format' ) );
+			} else {
+				$data[ WP_REST_Search_Controller::PROP_TITLE ] = '';
+			}
+		}
+
+		if ( in_array( WP_REST_Search_Controller::PROP_URL, $fields, true ) ) {
+			$data[ WP_REST_Search_Controller::PROP_URL ] = get_permalink( $post-&gt;ID );
+		}
+
+		if ( in_array( WP_REST_Search_Controller::PROP_TYPE, $fields, true ) ) {
+			$data[ WP_REST_Search_Controller::PROP_TYPE ] = $this-&gt;type;
+		}
+
+		if ( in_array( WP_REST_Search_Controller::PROP_SUBTYPE, $fields, true ) ) {
+			$data[ WP_REST_Search_Controller::PROP_SUBTYPE ] = $post-&gt;post_type;
+		}
+
+		return $data;
+	}
+
+	/**
+	 * Prepares links for the search result of a given ID.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @param int $id Item ID.
+	 * @return array Links for the given item.
+	 */
+	public function prepare_item_links( $id ) {
+		$post = get_post( $id );
+
+		$links = array();
+
+		$item_route = rest_get_route_for_post( $post );
+		if ( ! empty( $item_route ) ) {
+			$links['self'] = array(
+				'href'       =&gt; rest_url( $item_route ),
+				'embeddable' =&gt; true,
+			);
+		}
+
+		$links['about'] = array(
+			'href' =&gt; rest_url( 'wp/v2/types/' . $post-&gt;post_type ),
+		);
+
+		return $links;
+	}
+
+	/**
+	 * Overwrites the default protected and private title format.
+	 *
+	 * By default, WordPress will show password protected or private posts with a title of
+	 * "Protected: %s" or "Private: %s", as the REST API communicates the status of a post
+	 * in a machine-readable format, we remove the prefix.
+	 *
+	 * @since 5.0.0
+	 *
+	 * @return string Title format.
+	 */
+	public function protected_title_format() {
+		return '%s';
+	}
+
+	/**
+	 * Attempts to detect the route to access a single item.
+	 *
+	 * @since 5.0.0
+	 * @deprecated 5.5.0 Use rest_get_route_for_post()
+	 * @see rest_get_route_for_post()
+	 *
+	 * @param WP_Post $post Post object.
+	 * @return string REST route relative to the REST base URI, or empty string if unknown.
+	 */
+	protected function detect_rest_item_route( $post ) {
+		_deprecated_function( __METHOD__, '5.5.0', 'rest_get_route_for_post()' );
+
+		return rest_get_route_for_post( $post );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/search/class-wp-rest-post-search-handler.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/search/class-wp-rest-post-search-handler.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/search/class-wp-rest-post-search-handler.php#L17-L217">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.0.0/">5.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_post_search_handler" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_post_search_handler</a>
+  </p>
+</div>

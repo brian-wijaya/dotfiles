@@ -1,0 +1,98 @@
+<h1 class="wp-block-wporg-code-reference-title">MO::import_from_reader( <span class="arg-type">POMO_FileReader</span> <span class="arg-name">$reader</span> ): <span class="return-type">bool</span>
+</h1>  <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$reader</code><span class="type"><span class="POMO_FileReader"><a href="../pomo_filereader" rel="class">POMO_FileReader</a></span></span><span class="required">required</span>
+</dt>
+
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True if the import was successful, otherwise false.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="222" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function import_from_reader( $reader ) {
+	$endian_string = MO::get_byteorder( $reader-&gt;readint32() );
+	if ( false === $endian_string ) {
+		return false;
+	}
+	$reader-&gt;setEndian( $endian_string );
+
+	$endian = ( 'big' === $endian_string ) ? 'N' : 'V';
+
+	$header = $reader-&gt;read( 24 );
+	if ( $reader-&gt;strlen( $header ) !== 24 ) {
+		return false;
+	}
+
+	// Parse header.
+	$header = unpack( "{$endian}revision/{$endian}total/{$endian}originals_lengths_addr/{$endian}translations_lengths_addr/{$endian}hash_length/{$endian}hash_addr", $header );
+	if ( ! is_array( $header ) ) {
+		return false;
+	}
+
+	// Support revision 0 of MO format specs, only.
+	if ( 0 !== $header['revision'] ) {
+		return false;
+	}
+
+	// Seek to data blocks.
+	$reader-&gt;seekto( $header['originals_lengths_addr'] );
+
+	// Read originals' indices.
+	$originals_lengths_length = $header['translations_lengths_addr'] - $header['originals_lengths_addr'];
+	if ( $originals_lengths_length !== $header['total'] * 8 ) {
+		return false;
+	}
+
+	$originals = $reader-&gt;read( $originals_lengths_length );
+	if ( $reader-&gt;strlen( $originals ) !== $originals_lengths_length ) {
+		return false;
+	}
+
+	// Read translations' indices.
+	$translations_lengths_length = $header['hash_addr'] - $header['translations_lengths_addr'];
+	if ( $translations_lengths_length !== $header['total'] * 8 ) {
+		return false;
+	}
+
+	$translations = $reader-&gt;read( $translations_lengths_length );
+	if ( $reader-&gt;strlen( $translations ) !== $translations_lengths_length ) {
+		return false;
+	}
+
+	// Transform raw data into set of indices.
+	$originals    = $reader-&gt;str_split( $originals, 8 );
+	$translations = $reader-&gt;str_split( $translations, 8 );
+
+	// Skip hash table.
+	$strings_addr = $header['hash_addr'] + $header['hash_length'] * 4;
+
+	$reader-&gt;seekto( $strings_addr );
+
+	$strings = $reader-&gt;read_all();
+	$reader-&gt;close();
+
+	for ( $i = 0; $i &lt; $header['total']; $i++ ) {
+		$o = unpack( "{$endian}length/{$endian}pos", $originals[ $i ] );
+		$t = unpack( "{$endian}length/{$endian}pos", $translations[ $i ] );
+		if ( ! $o || ! $t ) {
+			return false;
+		}
+
+		// Adjust offset due to reading strings to separate space before.
+		$o['pos'] -= $strings_addr;
+		$t['pos'] -= $strings_addr;
+
+		$original    = $reader-&gt;substr( $strings, $o['pos'], $o['length'] );
+		$translation = $reader-&gt;substr( $strings, $t['pos'], $t['length'] );
+
+		if ( '' === $original ) {
+			$this-&gt;set_headers( $this-&gt;make_headers( $translation ) );
+		} else {
+			$entry                          = &amp;$this-&gt;make_entry( $original, $translation );
+			$this-&gt;entries[ $entry-&gt;key() ] = &amp;$entry;
+		}
+	}
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/pomo/mo.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/pomo/mo.php#L222">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/pomo/mo.php#L222-L306">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/mo/import_from_reader" class="_attribution-link">https://developer.wordpress.org/reference/classes/mo/import_from_reader</a>
+  </p>
+</div>

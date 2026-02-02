@@ -1,0 +1,63 @@
+<h1 class="wp-block-wporg-code-reference-title">_close_comments_for_old_post( <span class="arg-type">bool</span> <span class="arg-name">$open</span>, <span class="arg-type">int</span> <span class="arg-name">$post_id</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Closes comments on an old post. Hooked to comments_open and pings_open.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$open</code><span class="type"><span class="bool">bool</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Comments open or closed.</span></div></dd>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> $open</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3434" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _close_comments_for_old_post( $open, $post_id ) {
+	if ( ! $open ) {
+		return $open;
+	}
+
+	if ( ! get_option( 'close_comments_for_old_posts' ) ) {
+		return $open;
+	}
+
+	$days_old = (int) get_option( 'close_comments_days_old' );
+	if ( ! $days_old ) {
+		return $open;
+	}
+
+	$post = get_post( $post_id );
+
+	/** This filter is documented in wp-includes/comment.php */
+	$post_types = apply_filters( 'close_comments_for_post_types', array( 'post' ) );
+	if ( ! in_array( $post-&gt;post_type, $post_types, true ) ) {
+		return $open;
+	}
+
+	// Undated drafts should not show up as comments closed.
+	if ( '0000-00-00 00:00:00' === $post-&gt;post_date_gmt ) {
+		return $open;
+	}
+
+	if ( time() - strtotime( $post-&gt;post_date_gmt ) &gt; ( $days_old * DAY_IN_SECONDS ) ) {
+		return false;
+	}
+
+	return $open;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/comment.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/comment.php#L3434">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/comment.php#L3434-L3466">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/close_comments_for_post_types"><span class="hook-func">apply_filters</span>( ‘close_comments_for_post_types’, <nobr><span class="arg-type">string[]</span> <span class="arg-name">$post_types</span></nobr> )</a></dt>
+<dd>
+<p>Filters the list of post types to automatically close comments for.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_close_comments_for_old_post" class="_attribution-link">https://developer.wordpress.org/reference/functions/_close_comments_for_old_post</a>
+  </p>
+</div>

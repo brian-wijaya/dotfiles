@@ -1,0 +1,141 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_schedule_event( <span class="arg-type">int</span> <span class="arg-name">$timestamp</span>, <span class="arg-type">string</span> <span class="arg-name">$recurrence</span>, <span class="arg-type">string</span> <span class="arg-name">$hook</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span>, <span class="arg-type">bool</span> <span class="arg-name">$wp_error</span> = <span class="arg-default">false</span> ): <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Schedules a recurring event.</p> </section> <section><h2 id="description">Description</h2> <p>Schedules a hook which will be triggered by WordPress at the specified interval.<br>The action will trigger when someone visits your WordPress site if the scheduled time has passed.</p> <p>Valid values for the recurrence are ‘hourly’, ‘twicedaily’, ‘daily’, and ‘weekly’.<br>These can be extended using the <a href="../hooks/cron_schedules">‘cron_schedules’</a> filter in <a href="wp_get_schedules" rel="function">wp_get_schedules()</a> .</p> <p>Use <a href="wp_next_scheduled" rel="function">wp_next_scheduled()</a> to prevent duplicate events.</p> <p>Use <a href="wp_schedule_single_event" rel="function">wp_schedule_single_event()</a> to schedule a non-recurring event.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$timestamp</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Unix timestamp (UTC) for when to next run the event.</span></div></dd>
+<dt>
+<code>$recurrence</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">How often the event should subsequently recur.<br> See <a href="wp_get_schedules" rel="function">wp_get_schedules()</a> for accepted values.</span></div></dd>
+<dt>
+<code>$hook</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Action hook to execute when the event is run.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array containing arguments to pass to the hook’s callback function. Each value in the array is passed to the callback as an individual parameter.<br> The array keys are ignored. </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$wp_error</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to return a <a href="../classes/wp_error" rel="class">WP_Error</a> on failure. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool|<a href="../classes/wp_error" rel="class">WP_Error</a></span> True if event successfully scheduled. False or <a href="../classes/wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="234" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_schedule_event( $timestamp, $recurrence, $hook, $args = array(), $wp_error = false ) {
+	// Make sure timestamp is a positive integer.
+	if ( ! is_numeric( $timestamp ) || $timestamp &lt;= 0 ) {
+		if ( $wp_error ) {
+			return new WP_Error(
+				'invalid_timestamp',
+				__( 'Event timestamp must be a valid Unix timestamp.' )
+			);
+		}
+
+		return false;
+	}
+
+	$schedules = wp_get_schedules();
+
+	if ( ! isset( $schedules[ $recurrence ] ) ) {
+		if ( $wp_error ) {
+			return new WP_Error(
+				'invalid_schedule',
+				__( 'Event schedule does not exist.' )
+			);
+		}
+
+		return false;
+	}
+
+	$event = (object) array(
+		'hook'      =&gt; $hook,
+		'timestamp' =&gt; $timestamp,
+		'schedule'  =&gt; $recurrence,
+		'args'      =&gt; $args,
+		'interval'  =&gt; $schedules[ $recurrence ]['interval'],
+	);
+
+	/** This filter is documented in wp-includes/cron.php */
+	$pre = apply_filters( 'pre_schedule_event', null, $event, $wp_error );
+
+	if ( null !== $pre ) {
+		if ( $wp_error &amp;&amp; false === $pre ) {
+			return new WP_Error(
+				'pre_schedule_event_false',
+				__( 'A plugin prevented the event from being scheduled.' )
+			);
+		}
+
+		if ( ! $wp_error &amp;&amp; is_wp_error( $pre ) ) {
+			return false;
+		}
+
+		return $pre;
+	}
+
+	/** This filter is documented in wp-includes/cron.php */
+	$event = apply_filters( 'schedule_event', $event );
+
+	// A plugin disallowed this event.
+	if ( ! $event ) {
+		if ( $wp_error ) {
+			return new WP_Error(
+				'schedule_event_false',
+				__( 'A plugin disallowed this event.' )
+			);
+		}
+
+		return false;
+	}
+
+	$key = md5( serialize( $event-&gt;args ) );
+
+	$crons = _get_cron_array();
+
+	$crons[ $event-&gt;timestamp ][ $event-&gt;hook ][ $key ] = array(
+		'schedule' =&gt; $event-&gt;schedule,
+		'args'     =&gt; $event-&gt;args,
+		'interval' =&gt; $event-&gt;interval,
+	);
+	uksort( $crons, 'strnatcasecmp' );
+
+	return _set_cron_array( $crons, $wp_error );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/cron.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/cron.php#L234">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/cron.php#L234-L313">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_schedule_event"><span class="hook-func">apply_filters</span>( ‘pre_schedule_event’, <nobr><span class="arg-type">null|bool|WP_Error</span> <span class="arg-name">$result</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$event</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$wp_error</span></nobr> )</a></dt>
+<dd>
+<p>Filter to override scheduling an event.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/schedule_event"><span class="hook-func">apply_filters</span>( ‘schedule_event’, <nobr><span class="arg-type">object|false</span> <span class="arg-name">$event</span></nobr> )</a></dt>
+<dd>
+<p>Modify an event before it is scheduled.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.7.0/">5.7.0</a></td>
+<td><span class="since-description">The <code>$wp_error</code> parameter was added.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td><span class="since-description">Return value modified to boolean indicating success or failure, <a href="../hooks/pre_schedule_event">'pre_schedule_event'</a> filter added to short-circuit the function.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.1.0/">2.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_schedule_event" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_schedule_event</a>
+  </p>
+</div>

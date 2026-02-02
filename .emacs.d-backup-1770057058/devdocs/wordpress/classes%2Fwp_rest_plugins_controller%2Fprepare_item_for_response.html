@@ -1,0 +1,73 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Plugins_Controller::prepare_item_for_response( <span class="arg-type">array</span> <span class="arg-name">$item</span>, <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Prepares the plugin for the REST response.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$item</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Unmarked up and untranslated plugin data from <a href="../../functions/get_plugin_data">get_plugin_data()</a>.</span></div></dd>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Request object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="578" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_item_for_response( $item, $request ) {
+	$fields = $this-&gt;get_fields_for_response( $request );
+
+	$item   = _get_plugin_data_markup_translate( $item['_file'], $item, false );
+	$marked = _get_plugin_data_markup_translate( $item['_file'], $item, true );
+
+	$data = array(
+		'plugin'       =&gt; substr( $item['_file'], 0, - 4 ),
+		'status'       =&gt; $this-&gt;get_plugin_status( $item['_file'] ),
+		'name'         =&gt; $item['Name'],
+		'plugin_uri'   =&gt; $item['PluginURI'],
+		'author'       =&gt; $item['Author'],
+		'author_uri'   =&gt; $item['AuthorURI'],
+		'description'  =&gt; array(
+			'raw'      =&gt; $item['Description'],
+			'rendered' =&gt; $marked['Description'],
+		),
+		'version'      =&gt; $item['Version'],
+		'network_only' =&gt; $item['Network'],
+		'requires_wp'  =&gt; $item['RequiresWP'],
+		'requires_php' =&gt; $item['RequiresPHP'],
+		'textdomain'   =&gt; $item['TextDomain'],
+	);
+
+	$data = $this-&gt;add_additional_fields_to_object( $data, $request );
+
+	$response = new WP_REST_Response( $data );
+
+	if ( rest_is_field_included( '_links', $fields ) || rest_is_field_included( '_embedded', $fields ) ) {
+		$response-&gt;add_links( $this-&gt;prepare_links( $item ) );
+	}
+
+	/**
+	 * Filters plugin data for a REST API response.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param WP_REST_Response $response The response object.
+	 * @param array            $item     The plugin item from <a href="../../functions/get_plugin_data">get_plugin_data()</a>.
+	 * @param WP_REST_Request  $request  The request object.
+	 */
+	return apply_filters( 'rest_prepare_plugin', $response, $item, $request );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-plugins-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-plugins-controller.php#L578">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-plugins-controller.php#L578-L620">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_prepare_plugin"><span class="hook-func">apply_filters</span>( ‘rest_prepare_plugin’, <nobr><span class="arg-type">WP_REST_Response</span> <span class="arg-name">$response</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$item</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Filters plugin data for a REST API response.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_plugins_controller/prepare_item_for_response" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_plugins_controller/prepare_item_for_response</a>
+  </p>
+</div>

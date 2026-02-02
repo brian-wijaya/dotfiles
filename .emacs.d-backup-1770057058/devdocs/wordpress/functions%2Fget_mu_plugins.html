@@ -1,0 +1,67 @@
+<h1 class="wp-block-wporg-code-reference-title">get_mu_plugins(): <span class="return-type">array[]</span>
+</h1> <section><p>Checks the mu-plugins directory and retrieve all mu-plugin files with any plugin data.</p> </section> <section><h2 id="description">Description</h2> <p>WordPress only includes mu-plugin files in the base mu-plugins directory (wp-content/mu-plugins).</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array[]</span> Array of arrays of mu-plugin data, keyed by plugin file name. See <a href="get_plugin_data" rel="function">get_plugin_data()</a> .</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="365" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_mu_plugins() {
+	$wp_plugins   = array();
+	$plugin_files = array();
+
+	if ( ! is_dir( WPMU_PLUGIN_DIR ) ) {
+		return $wp_plugins;
+	}
+
+	// Files in wp-content/mu-plugins directory.
+	$plugins_dir = @opendir( WPMU_PLUGIN_DIR );
+	if ( $plugins_dir ) {
+		while ( ( $file = readdir( $plugins_dir ) ) !== false ) {
+			if ( str_ends_with( $file, '.php' ) ) {
+				$plugin_files[] = $file;
+			}
+		}
+	} else {
+		return $wp_plugins;
+	}
+
+	closedir( $plugins_dir );
+
+	if ( empty( $plugin_files ) ) {
+		return $wp_plugins;
+	}
+
+	foreach ( $plugin_files as $plugin_file ) {
+		if ( ! is_readable( WPMU_PLUGIN_DIR . "/$plugin_file" ) ) {
+			continue;
+		}
+
+		// Do not apply markup/translate as it will be cached.
+		$plugin_data = get_plugin_data( WPMU_PLUGIN_DIR . "/$plugin_file", false, false );
+
+		if ( empty( $plugin_data['Name'] ) ) {
+			$plugin_data['Name'] = $plugin_file;
+		}
+
+		$wp_plugins[ $plugin_file ] = $plugin_data;
+	}
+
+	if ( isset( $wp_plugins['index.php'] ) &amp;&amp; filesize( WPMU_PLUGIN_DIR . '/index.php' ) &lt;= 30 ) {
+		// Silence is golden.
+		unset( $wp_plugins['index.php'] );
+	}
+
+	uasort( $wp_plugins, '_sort_uname_callback' );
+
+	return $wp_plugins;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/plugin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/plugin.php#L365">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/plugin.php#L365-L414">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_mu_plugins" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_mu_plugins</a>
+  </p>
+</div>

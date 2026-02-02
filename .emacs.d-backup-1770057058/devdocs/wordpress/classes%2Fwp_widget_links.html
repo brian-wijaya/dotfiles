@@ -1,0 +1,214 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Widget_Links {}</h1> <section><p>Core class used to implement a Links widget.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_widget">WP_Widget</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_widget_links/__construct">WP_Widget_Links::__construct</a></td>
+<td>Sets up a new Links widget instance.</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_links/form">WP_Widget_Links::form</a></td>
+<td>Outputs the settings form for the Links widget.</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_links/update">WP_Widget_Links::update</a></td>
+<td>Handles updating settings for the current Links widget instance.</td>
+</tr>
+<tr class="">
+<td><a href="wp_widget_links/widget">WP_Widget_Links::widget</a></td>
+<td>Outputs the content for the current Links widget instance.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Widget_Links extends WP_Widget {
+
+	/**
+	 * Sets up a new Links widget instance.
+	 *
+	 * @since 2.8.0
+	 */
+	public function __construct() {
+		$widget_ops = array(
+			'description'                 =&gt; __( 'Your blogroll' ),
+			'customize_selective_refresh' =&gt; true,
+		);
+		parent::__construct( 'links', __( 'Links' ), $widget_ops );
+	}
+
+	/**
+	 * Outputs the content for the current Links widget instance.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param array $args     Display arguments including 'before_title', 'after_title',
+	 *                        'before_widget', and 'after_widget'.
+	 * @param array $instance Settings for the current Links widget instance.
+	 */
+	public function widget( $args, $instance ) {
+		$show_description = isset( $instance['description'] ) ? $instance['description'] : false;
+		$show_name        = isset( $instance['name'] ) ? $instance['name'] : false;
+		$show_rating      = isset( $instance['rating'] ) ? $instance['rating'] : false;
+		$show_images      = isset( $instance['images'] ) ? $instance['images'] : true;
+		$category         = isset( $instance['category'] ) ? $instance['category'] : false;
+		$orderby          = isset( $instance['orderby'] ) ? $instance['orderby'] : 'name';
+		$order            = 'rating' === $orderby ? 'DESC' : 'ASC';
+		$limit            = isset( $instance['limit'] ) ? $instance['limit'] : -1;
+
+		$before_widget = preg_replace( '/ id="[^"]*"/', ' id="%id"', $args['before_widget'] );
+
+		$widget_links_args = array(
+			'title_before'     =&gt; $args['before_title'],
+			'title_after'      =&gt; $args['after_title'],
+			'category_before'  =&gt; $before_widget,
+			'category_after'   =&gt; $args['after_widget'],
+			'show_images'      =&gt; $show_images,
+			'show_description' =&gt; $show_description,
+			'show_name'        =&gt; $show_name,
+			'show_rating'      =&gt; $show_rating,
+			'category'         =&gt; $category,
+			'class'            =&gt; 'linkcat widget',
+			'orderby'          =&gt; $orderby,
+			'order'            =&gt; $order,
+			'limit'            =&gt; $limit,
+		);
+
+		/**
+		 * Filters the arguments for the Links widget.
+		 *
+		 * @since 2.6.0
+		 * @since 4.4.0 Added the `$instance` parameter.
+		 *
+		 * @see wp_list_bookmarks()
+		 *
+		 * @param array $widget_links_args An array of arguments to retrieve the links list.
+		 * @param array $instance          The settings for the particular instance of the widget.
+		 */
+		wp_list_bookmarks( apply_filters( 'widget_links_args', $widget_links_args, $instance ) );
+	}
+
+	/**
+	 * Handles updating settings for the current Links widget instance.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param array $new_instance New settings for this instance as input by the user via
+	 *                            WP_Widget::form().
+	 * @param array $old_instance Old settings for this instance.
+	 * @return array Updated settings to save.
+	 */
+	public function update( $new_instance, $old_instance ) {
+		$new_instance = (array) $new_instance;
+		$instance     = array(
+			'images'      =&gt; 0,
+			'name'        =&gt; 0,
+			'description' =&gt; 0,
+			'rating'      =&gt; 0,
+		);
+		foreach ( $instance as $field =&gt; $val ) {
+			if ( isset( $new_instance[ $field ] ) ) {
+				$instance[ $field ] = 1;
+			}
+		}
+
+		$instance['orderby'] = 'name';
+		if ( in_array( $new_instance['orderby'], array( 'name', 'rating', 'id', 'rand' ), true ) ) {
+			$instance['orderby'] = $new_instance['orderby'];
+		}
+
+		$instance['category'] = (int) $new_instance['category'];
+		$instance['limit']    = ! empty( $new_instance['limit'] ) ? (int) $new_instance['limit'] : -1;
+
+		return $instance;
+	}
+
+	/**
+	 * Outputs the settings form for the Links widget.
+	 *
+	 * @since 2.8.0
+	 *
+	 * @param array $instance Current settings.
+	 */
+	public function form( $instance ) {
+
+		// Defaults.
+		$instance  = wp_parse_args(
+			(array) $instance,
+			array(
+				'images'      =&gt; true,
+				'name'        =&gt; true,
+				'description' =&gt; false,
+				'rating'      =&gt; false,
+				'category'    =&gt; false,
+				'orderby'     =&gt; 'name',
+				'limit'       =&gt; -1,
+			)
+		);
+		$link_cats = get_terms( array( 'taxonomy' =&gt; 'link_category' ) );
+		$limit     = (int) $instance['limit'];
+		if ( ! $limit ) {
+			$limit = -1;
+		}
+		?&gt;
+		&lt;p&gt;
+			&lt;label for="&lt;?php echo $this-&gt;get_field_id( 'category' ); ?&gt;"&gt;&lt;?php _e( 'Select Link Category:' ); ?&gt;&lt;/label&gt;
+			&lt;select class="widefat" id="&lt;?php echo $this-&gt;get_field_id( 'category' ); ?&gt;" name="&lt;?php echo $this-&gt;get_field_name( 'category' ); ?&gt;"&gt;
+				&lt;option value=""&gt;&lt;?php _ex( 'All Links', 'links widget' ); ?&gt;&lt;/option&gt;
+				&lt;?php foreach ( $link_cats as $link_cat ) : ?&gt;
+					&lt;option value="&lt;?php echo (int) $link_cat-&gt;term_id; ?&gt;" &lt;?php selected( $instance['category'], $link_cat-&gt;term_id ); ?&gt;&gt;
+						&lt;?php echo esc_html( $link_cat-&gt;name ); ?&gt;
+					&lt;/option&gt;
+				&lt;?php endforeach; ?&gt;
+			&lt;/select&gt;
+			&lt;label for="&lt;?php echo $this-&gt;get_field_id( 'orderby' ); ?&gt;"&gt;&lt;?php _e( 'Sort by:' ); ?&gt;&lt;/label&gt;
+			&lt;select name="&lt;?php echo $this-&gt;get_field_name( 'orderby' ); ?&gt;" id="&lt;?php echo $this-&gt;get_field_id( 'orderby' ); ?&gt;" class="widefat"&gt;
+				&lt;option value="name"&lt;?php selected( $instance['orderby'], 'name' ); ?&gt;&gt;&lt;?php _e( 'Link title' ); ?&gt;&lt;/option&gt;
+				&lt;option value="rating"&lt;?php selected( $instance['orderby'], 'rating' ); ?&gt;&gt;&lt;?php _e( 'Link rating' ); ?&gt;&lt;/option&gt;
+				&lt;option value="id"&lt;?php selected( $instance['orderby'], 'id' ); ?&gt;&gt;&lt;?php _e( 'Link ID' ); ?&gt;&lt;/option&gt;
+				&lt;option value="rand"&lt;?php selected( $instance['orderby'], 'rand' ); ?&gt;&gt;&lt;?php _ex( 'Random', 'Links widget' ); ?&gt;&lt;/option&gt;
+			&lt;/select&gt;
+		&lt;/p&gt;
+
+		&lt;p&gt;
+			&lt;input class="checkbox" type="checkbox"&lt;?php checked( $instance['images'], true ); ?&gt; id="&lt;?php echo $this-&gt;get_field_id( 'images' ); ?&gt;" name="&lt;?php echo $this-&gt;get_field_name( 'images' ); ?&gt;" /&gt;
+			&lt;label for="&lt;?php echo $this-&gt;get_field_id( 'images' ); ?&gt;"&gt;&lt;?php _e( 'Show Link Image' ); ?&gt;&lt;/label&gt;
+			&lt;br /&gt;
+
+			&lt;input class="checkbox" type="checkbox"&lt;?php checked( $instance['name'], true ); ?&gt; id="&lt;?php echo $this-&gt;get_field_id( 'name' ); ?&gt;" name="&lt;?php echo $this-&gt;get_field_name( 'name' ); ?&gt;" /&gt;
+			&lt;label for="&lt;?php echo $this-&gt;get_field_id( 'name' ); ?&gt;"&gt;&lt;?php _e( 'Show Link Name' ); ?&gt;&lt;/label&gt;
+			&lt;br /&gt;
+
+			&lt;input class="checkbox" type="checkbox"&lt;?php checked( $instance['description'], true ); ?&gt; id="&lt;?php echo $this-&gt;get_field_id( 'description' ); ?&gt;" name="&lt;?php echo $this-&gt;get_field_name( 'description' ); ?&gt;" /&gt;
+			&lt;label for="&lt;?php echo $this-&gt;get_field_id( 'description' ); ?&gt;"&gt;&lt;?php _e( 'Show Link Description' ); ?&gt;&lt;/label&gt;
+			&lt;br /&gt;
+
+			&lt;input class="checkbox" type="checkbox"&lt;?php checked( $instance['rating'], true ); ?&gt; id="&lt;?php echo $this-&gt;get_field_id( 'rating' ); ?&gt;" name="&lt;?php echo $this-&gt;get_field_name( 'rating' ); ?&gt;" /&gt;
+			&lt;label for="&lt;?php echo $this-&gt;get_field_id( 'rating' ); ?&gt;"&gt;&lt;?php _e( 'Show Link Rating' ); ?&gt;&lt;/label&gt;
+		&lt;/p&gt;
+
+		&lt;p&gt;
+			&lt;label for="&lt;?php echo $this-&gt;get_field_id( 'limit' ); ?&gt;"&gt;&lt;?php _e( 'Number of links to show:' ); ?&gt;&lt;/label&gt;
+			&lt;input id="&lt;?php echo $this-&gt;get_field_id( 'limit' ); ?&gt;" name="&lt;?php echo $this-&gt;get_field_name( 'limit' ); ?&gt;" type="text" value="&lt;?php echo ( -1 !== $limit ) ? (int) $limit : ''; ?&gt;" size="3" /&gt;
+		&lt;/p&gt;
+		&lt;?php
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/widgets/class-wp-widget-links.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/widgets/class-wp-widget-links.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/widgets/class-wp-widget-links.php#L17-L188">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.8.0/">2.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_widget_links" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_widget_links</a>
+  </p>
+</div>

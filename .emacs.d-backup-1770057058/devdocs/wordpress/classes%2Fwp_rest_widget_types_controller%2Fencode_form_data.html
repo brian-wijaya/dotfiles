@@ -1,0 +1,112 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Widget_Types_Controller::encode_form_data( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>An RPC-style endpoint which can be used by clients to turn user input in a widget admin form into an encoded instance object.</p> </section> <section><h2 id="description">Description</h2> <p>Accepts:</p> <ul> <li>id: A widget type ID.</li> <li>instance: A widget’s encoded instance object. Optional.</li> <li>form_data: Form data from submitting a widget’s admin form. Optional.</li> </ul> <p>Returns:</p> <ul> <li>instance: The encoded instance object after updating the widget with the given form data.</li> <li>form: The widget’s admin form after updating the widget with the given form data.</li> </ul> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a>|<a href="../wp_error" rel="class">WP_Error</a></span> Response object on success, or <a href="../wp_error" rel="class">WP_Error</a> object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="454" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function encode_form_data( $request ) {
+	global $wp_widget_factory;
+
+	$id            = $request['id'];
+	$widget_object = $wp_widget_factory-&gt;get_widget_object( $id );
+
+	if ( ! $widget_object ) {
+		return new WP_Error(
+			'rest_invalid_widget',
+			__( 'Cannot preview a widget that does not extend WP_Widget.' ),
+			array( 'status' =&gt; 400 )
+		);
+	}
+
+	/*
+	 * Set the widget's number so that the id attributes in the HTML that we
+	 * return are predictable.
+	 */
+	if ( isset( $request['number'] ) &amp;&amp; is_numeric( $request['number'] ) ) {
+		$widget_object-&gt;_set( (int) $request['number'] );
+	} else {
+		$widget_object-&gt;_set( -1 );
+	}
+
+	if ( isset( $request['instance']['encoded'], $request['instance']['hash'] ) ) {
+		$serialized_instance = base64_decode( $request['instance']['encoded'] );
+		if ( ! hash_equals( wp_hash( $serialized_instance ), $request['instance']['hash'] ) ) {
+			return new WP_Error(
+				'rest_invalid_widget',
+				__( 'The provided instance is malformed.' ),
+				array( 'status' =&gt; 400 )
+			);
+		}
+		$instance = unserialize( $serialized_instance );
+	} else {
+		$instance = array();
+	}
+
+	if (
+		isset( $request['form_data'][ "widget-$id" ] ) &amp;&amp;
+		is_array( $request['form_data'][ "widget-$id" ] )
+	) {
+		$new_instance = array_values( $request['form_data'][ "widget-$id" ] )[0];
+		$old_instance = $instance;
+
+		$instance = $widget_object-&gt;update( $new_instance, $old_instance );
+
+		/** This filter is documented in wp-includes/class-wp-widget.php */
+		$instance = apply_filters(
+			'widget_update_callback',
+			$instance,
+			$new_instance,
+			$old_instance,
+			$widget_object
+		);
+	}
+
+	$serialized_instance = serialize( $instance );
+	$widget_key          = $wp_widget_factory-&gt;get_widget_key( $id );
+
+	$response = array(
+		'form'     =&gt; trim(
+			$this-&gt;get_widget_form(
+				$widget_object,
+				$instance
+			)
+		),
+		'preview'  =&gt; trim(
+			$this-&gt;get_widget_preview(
+				$widget_key,
+				$instance
+			)
+		),
+		'instance' =&gt; array(
+			'encoded' =&gt; base64_encode( $serialized_instance ),
+			'hash'    =&gt; wp_hash( $serialized_instance ),
+		),
+	);
+
+	if ( ! empty( $widget_object-&gt;widget_options['show_instance_in_rest'] ) ) {
+		// Use new stdClass so that JSON result is {} and not [].
+		$response['instance']['raw'] = empty( $instance ) ? new stdClass() : $instance;
+	}
+
+	return rest_ensure_response( $response );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-widget-types-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-widget-types-controller.php#L454">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-widget-types-controller.php#L454-L539">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/widget_update_callback"><span class="hook-func">apply_filters</span>( ‘widget_update_callback’, <nobr><span class="arg-type">array</span> <span class="arg-name">$instance</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$new_instance</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$old_instance</span></nobr>, <nobr><span class="arg-type">WP_Widget</span> <span class="arg-name">$widget</span></nobr> )</a></dt>
+<dd>
+<p>Filters a widget’s settings before saving.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_widget_types_controller/encode_form_data" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_widget_types_controller/encode_form_data</a>
+  </p>
+</div>

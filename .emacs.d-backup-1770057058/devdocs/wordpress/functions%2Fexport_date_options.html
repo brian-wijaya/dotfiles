@@ -1,0 +1,56 @@
+<h1 class="wp-block-wporg-code-reference-title">export_date_options( <span class="arg-type">string</span> <span class="arg-name">$post_type</span> = <span class="arg-default">‘post’</span> )</h1> <section><p>Creates the date options fields for exporting a given post type.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_type</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The post type. Default <code>'post'</code>.</span></div>
+<p class="default">Default:<code>'post'</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="139" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function export_date_options( $post_type = 'post' ) {
+	global $wpdb, $wp_locale;
+
+	$months = $wpdb-&gt;get_results(
+		$wpdb-&gt;prepare(
+			"SELECT DISTINCT YEAR( post_date ) AS year, MONTH( post_date ) AS month
+			FROM $wpdb-&gt;posts
+			WHERE post_type = %s AND post_status != 'auto-draft'
+			ORDER BY post_date DESC",
+			$post_type
+		)
+	);
+
+	$month_count = count( $months );
+	if ( ! $month_count || ( 1 === $month_count &amp;&amp; 0 === (int) $months[0]-&gt;month ) ) {
+		return;
+	}
+
+	foreach ( $months as $date ) {
+		if ( 0 === (int) $date-&gt;year ) {
+			continue;
+		}
+
+		$month = zeroise( $date-&gt;month, 2 );
+
+		printf(
+			'&lt;option value="%1$s"&gt;%2$s&lt;/option&gt;',
+			esc_attr( $date-&gt;year . '-' . $month ),
+			$wp_locale-&gt;get_month( $month ) . ' ' . $date-&gt;year
+		);
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/export.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/export.php#L139">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/export.php#L139-L170">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.1.0/">3.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/export_date_options" class="_attribution-link">https://developer.wordpress.org/reference/functions/export_date_options</a>
+  </p>
+</div>

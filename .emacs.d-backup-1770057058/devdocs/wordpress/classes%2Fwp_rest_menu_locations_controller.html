@@ -1,0 +1,354 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_REST_Menu_Locations_Controller {}</h1> <section><p>Core class used to access menu locations via the REST API.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_rest_controller">WP_REST_Controller</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/__construct">WP_REST_Menu_Locations_Controller::__construct</a></td>
+<td>Menu Locations Constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/get_collection_params">WP_REST_Menu_Locations_Controller::get_collection_params</a></td>
+<td>Retrieves the query params for collections.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/get_item">WP_REST_Menu_Locations_Controller::get_item</a></td>
+<td>Retrieves a specific menu location.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/get_item_permissions_check">WP_REST_Menu_Locations_Controller::get_item_permissions_check</a></td>
+<td>Checks if a given request has access to read a menu location.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/get_item_schema">WP_REST_Menu_Locations_Controller::get_item_schema</a></td>
+<td>Retrieves the menu location’s schema, conforming to JSON Schema.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/get_items">WP_REST_Menu_Locations_Controller::get_items</a></td>
+<td>Retrieves all menu locations, depending on user context.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/get_items_permissions_check">WP_REST_Menu_Locations_Controller::get_items_permissions_check</a></td>
+<td>Checks whether a given request has permission to read menu locations.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/prepare_item_for_response">WP_REST_Menu_Locations_Controller::prepare_item_for_response</a></td>
+<td>Prepares a menu location object for serialization.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/prepare_links">WP_REST_Menu_Locations_Controller::prepare_links</a></td>
+<td>Prepares links for the request.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_menu_locations_controller/register_routes">WP_REST_Menu_Locations_Controller::register_routes</a></td>
+<td>Registers the routes for the objects of the controller.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_REST_Menu_Locations_Controller extends WP_REST_Controller {
+
+	/**
+	 * Menu Locations Constructor.
+	 *
+	 * @since 5.9.0
+	 */
+	public function __construct() {
+		$this-&gt;namespace = 'wp/v2';
+		$this-&gt;rest_base = 'menu-locations';
+	}
+
+	/**
+	 * Registers the routes for the objects of the controller.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @see register_rest_route()
+	 */
+	public function register_routes() {
+		register_rest_route(
+			$this-&gt;namespace,
+			'/' . $this-&gt;rest_base,
+			array(
+				array(
+					'methods'             =&gt; WP_REST_Server::READABLE,
+					'callback'            =&gt; array( $this, 'get_items' ),
+					'permission_callback' =&gt; array( $this, 'get_items_permissions_check' ),
+					'args'                =&gt; $this-&gt;get_collection_params(),
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+
+		register_rest_route(
+			$this-&gt;namespace,
+			'/' . $this-&gt;rest_base . '/(?P&lt;location&gt;[\w-]+)',
+			array(
+				'args'   =&gt; array(
+					'location' =&gt; array(
+						'description' =&gt; __( 'An alphanumeric identifier for the menu location.' ),
+						'type'        =&gt; 'string',
+					),
+				),
+				array(
+					'methods'             =&gt; WP_REST_Server::READABLE,
+					'callback'            =&gt; array( $this, 'get_item' ),
+					'permission_callback' =&gt; array( $this, 'get_item_permissions_check' ),
+					'args'                =&gt; array(
+						'context' =&gt; $this-&gt;get_context_param( array( 'default' =&gt; 'view' ) ),
+					),
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+	}
+
+	/**
+	 * Checks whether a given request has permission to read menu locations.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error True if the request has read access, WP_Error object otherwise.
+	 */
+	public function get_items_permissions_check( $request ) {
+		if ( ! current_user_can( 'edit_theme_options' ) ) {
+			return new WP_Error(
+				'rest_cannot_view',
+				__( 'Sorry, you are not allowed to view menu locations.' ),
+				array( 'status' =&gt; rest_authorization_required_code() )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Retrieves all menu locations, depending on user context.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
+	 */
+	public function get_items( $request ) {
+		$data = array();
+
+		foreach ( get_registered_nav_menus() as $name =&gt; $description ) {
+			$location              = new stdClass();
+			$location-&gt;name        = $name;
+			$location-&gt;description = $description;
+
+			$location      = $this-&gt;prepare_item_for_response( $location, $request );
+			$data[ $name ] = $this-&gt;prepare_response_for_collection( $location );
+		}
+
+		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Checks if a given request has access to read a menu location.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error True if the request has read access for the item, WP_Error object otherwise.
+	 */
+	public function get_item_permissions_check( $request ) {
+		if ( ! current_user_can( 'edit_theme_options' ) ) {
+			return new WP_Error(
+				'rest_cannot_view',
+				__( 'Sorry, you are not allowed to view menu locations.' ),
+				array( 'status' =&gt; rest_authorization_required_code() )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Retrieves a specific menu location.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
+	 */
+	public function get_item( $request ) {
+		$registered_menus = get_registered_nav_menus();
+		if ( ! array_key_exists( $request['location'], $registered_menus ) ) {
+			return new WP_Error( 'rest_menu_location_invalid', __( 'Invalid menu location.' ), array( 'status' =&gt; 404 ) );
+		}
+
+		$location              = new stdClass();
+		$location-&gt;name        = $request['location'];
+		$location-&gt;description = $registered_menus[ $location-&gt;name ];
+
+		$data = $this-&gt;prepare_item_for_response( $location, $request );
+
+		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Prepares a menu location object for serialization.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param stdClass        $item    Post status data.
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response Menu location data.
+	 */
+	public function prepare_item_for_response( $item, $request ) {
+		// Restores the more descriptive, specific name for use within this method.
+		$location = $item;
+
+		$locations = get_nav_menu_locations();
+		$menu      = isset( $locations[ $location-&gt;name ] ) ? $locations[ $location-&gt;name ] : 0;
+
+		$fields = $this-&gt;get_fields_for_response( $request );
+		$data   = array();
+
+		if ( rest_is_field_included( 'name', $fields ) ) {
+			$data['name'] = $location-&gt;name;
+		}
+
+		if ( rest_is_field_included( 'description', $fields ) ) {
+			$data['description'] = $location-&gt;description;
+		}
+
+		if ( rest_is_field_included( 'menu', $fields ) ) {
+			$data['menu'] = (int) $menu;
+		}
+
+		$context = ! empty( $request['context'] ) ? $request['context'] : 'view';
+		$data    = $this-&gt;add_additional_fields_to_object( $data, $request );
+		$data    = $this-&gt;filter_response_by_context( $data, $context );
+
+		$response = rest_ensure_response( $data );
+
+		if ( rest_is_field_included( '_links', $fields ) || rest_is_field_included( '_embedded', $fields ) ) {
+			$response-&gt;add_links( $this-&gt;prepare_links( $location ) );
+		}
+
+		/**
+		 * Filters menu location data returned from the REST API.
+		 *
+		 * @since 5.9.0
+		 *
+		 * @param WP_REST_Response $response The response object.
+		 * @param object           $location The original location object.
+		 * @param WP_REST_Request  $request  Request used to generate the response.
+		 */
+		return apply_filters( 'rest_prepare_menu_location', $response, $location, $request );
+	}
+
+	/**
+	 * Prepares links for the request.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @param stdClass $location Menu location.
+	 * @return array Links for the given menu location.
+	 */
+	protected function prepare_links( $location ) {
+		$base = sprintf( '%s/%s', $this-&gt;namespace, $this-&gt;rest_base );
+
+		// Entity meta.
+		$links = array(
+			'self'       =&gt; array(
+				'href' =&gt; rest_url( trailingslashit( $base ) . $location-&gt;name ),
+			),
+			'collection' =&gt; array(
+				'href' =&gt; rest_url( $base ),
+			),
+		);
+
+		$locations = get_nav_menu_locations();
+		$menu      = isset( $locations[ $location-&gt;name ] ) ? $locations[ $location-&gt;name ] : 0;
+		if ( $menu ) {
+			$path = rest_get_route_for_term( $menu );
+			if ( $path ) {
+				$url = rest_url( $path );
+
+				$links['https://api.w.org/menu'][] = array(
+					'href'       =&gt; $url,
+					'embeddable' =&gt; true,
+				);
+			}
+		}
+
+		return $links;
+	}
+
+	/**
+	 * Retrieves the menu location's schema, conforming to JSON Schema.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @return array Item schema data.
+	 */
+	public function get_item_schema() {
+		if ( $this-&gt;schema ) {
+			return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+		}
+
+		$this-&gt;schema = array(
+			'$schema'    =&gt; 'http://json-schema.org/draft-04/schema#',
+			'title'      =&gt; 'menu-location',
+			'type'       =&gt; 'object',
+			'properties' =&gt; array(
+				'name'        =&gt; array(
+					'description' =&gt; __( 'The name of the menu location.' ),
+					'type'        =&gt; 'string',
+					'context'     =&gt; array( 'embed', 'view', 'edit' ),
+					'readonly'    =&gt; true,
+				),
+				'description' =&gt; array(
+					'description' =&gt; __( 'The description of the menu location.' ),
+					'type'        =&gt; 'string',
+					'context'     =&gt; array( 'embed', 'view', 'edit' ),
+					'readonly'    =&gt; true,
+				),
+				'menu'        =&gt; array(
+					'description' =&gt; __( 'The ID of the assigned menu.' ),
+					'type'        =&gt; 'integer',
+					'context'     =&gt; array( 'embed', 'view', 'edit' ),
+					'readonly'    =&gt; true,
+				),
+			),
+		);
+
+		return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+	}
+
+	/**
+	 * Retrieves the query params for collections.
+	 *
+	 * @since 5.9.0
+	 *
+	 * @return array Collection parameters.
+	 */
+	public function get_collection_params() {
+		return array(
+			'context' =&gt; $this-&gt;get_context_param( array( 'default' =&gt; 'view' ) ),
+		);
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-menu-locations-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menu-locations-controller.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menu-locations-controller.php#L17-L304">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_menu_locations_controller" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_menu_locations_controller</a>
+  </p>
+</div>

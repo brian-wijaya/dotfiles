@@ -1,0 +1,82 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_trash_post_comments( <span class="arg-type">int|WP_Post|null</span> <span class="arg-name">$post</span> = <span class="arg-default">null</span> ): <span class="return-type">mixed|void</span>
+</h1> <section><p>Moves comments for a post to the Trash.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="int">int</span>|<span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Post ID or post object. Defaults to global $post.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">mixed|void</span> False on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="4068" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_trash_post_comments( $post = null ) {
+	global $wpdb;
+
+	$post = get_post( $post );
+
+	if ( ! $post ) {
+		return;
+	}
+
+	$post_id = $post-&gt;ID;
+
+	/**
+	 * Fires before comments are sent to the Trash.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	do_action( 'trash_post_comments', $post_id );
+
+	$comments = $wpdb-&gt;get_results( $wpdb-&gt;prepare( "SELECT comment_ID, comment_approved FROM $wpdb-&gt;comments WHERE comment_post_ID = %d", $post_id ) );
+
+	if ( ! $comments ) {
+		return;
+	}
+
+	// Cache current status for each comment.
+	$statuses = array();
+	foreach ( $comments as $comment ) {
+		$statuses[ $comment-&gt;comment_ID ] = $comment-&gt;comment_approved;
+	}
+	add_post_meta( $post_id, '_wp_trash_meta_comments_status', $statuses );
+
+	// Set status for all comments to post-trashed.
+	$result = $wpdb-&gt;update( $wpdb-&gt;comments, array( 'comment_approved' =&gt; 'post-trashed' ), array( 'comment_post_ID' =&gt; $post_id ) );
+
+	clean_comment_cache( array_keys( $statuses ) );
+
+	/**
+	 * Fires after comments are sent to the Trash.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param int   $post_id  Post ID.
+	 * @param array $statuses Array of comment statuses.
+	 */
+	do_action( 'trashed_post_comments', $post_id, $statuses );
+
+	return $result;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/post.php#L4068">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/post.php#L4068-L4117">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/trashed_post_comments"><span class="hook-func">do_action</span>( ‘trashed_post_comments’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$statuses</span></nobr> )</a></dt>
+<dd>
+<p>Fires after comments are sent to the Trash.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/trash_post_comments"><span class="hook-func">do_action</span>( ‘trash_post_comments’, <nobr><span class="arg-type">int</span> <span class="arg-name">$post_id</span></nobr> )</a></dt>
+<dd>
+<p>Fires before comments are sent to the Trash.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.9.0/">2.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_trash_post_comments" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_trash_post_comments</a>
+  </p>
+</div>

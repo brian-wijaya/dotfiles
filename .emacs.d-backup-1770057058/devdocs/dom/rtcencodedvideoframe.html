@@ -1,0 +1,148 @@
+<h1>RTCEncodedVideoFrame</h1> <details class="baseline-indicator low" data-glean-toggle-open="baseline_toggle_open"> <summary>  <div class="status-title">  Baseline <span class="not-bold"> 2023 </span>  *  </div> <div class="pill">Newly available</div>   </summary> <div class="extra"> <p> Since ⁨August 2023⁩, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers. </p> <p>* Some parts of this feature may have varying levels of support.</p> <ul> <li> <a href="https://developer.mozilla.org/en-US/docs/Glossary/Baseline/Compatibility" data-glean-id="baseline_link_learn_more" target="_blank" class="learn-more"> Learn more </a> </li> <li> <a href="#browser_compatibility" data-glean-id="baseline_link_bcd_table"> See full compatibility </a> </li> <li> <a href="https://survey.alchemer.com/s3/7634825/MDN-baseline-feedback?page=%2Fen-US%2Fdocs%2FWeb%2FAPI%2FRTCEncodedVideoFrame&amp;level=low" data-glean-id="baseline_link_feedback" class="feedback-link" target="_blank" rel="noreferrer"> Report feedback </a> </li> </ul> </div> </details>   <div class="notecard note"><p><strong>Note:</strong> This feature is available in <a href="dedicatedworkerglobalscope">Dedicated Web Workers</a>.</p></div> <p>The <code>RTCEncodedVideoFrame</code> of the <a href="webrtc_api">WebRTC API</a> represents an encoded video frame in the WebRTC receiver or sender pipeline, which may be modified using a <a href="webrtc_api/using_encoded_transforms">WebRTC Encoded Transform</a>.</p>     <mdn-survey></mdn-survey>  <h2 id="instance_properties" class="heading">Instance properties</h2> <dl> <dt id="rtcencodedvideoframe.type">
+<a href="rtcencodedvideoframe/type"><code>RTCEncodedVideoFrame.type</code></a> <span class="badge inline readonly">Read only</span>
+</dt> <dd> <p>Returns whether the current frame is a key frame, delta frame, or empty frame.</p> </dd> <dt id="rtcencodedvideoframe.timestamp">
+<a href="rtcencodedvideoframe/timestamp"><code>RTCEncodedVideoFrame.timestamp</code></a> <span class="badge inline readonly">Read only</span> <abbr class="icon icon-deprecated" title="Deprecated. Not for use in new websites."> <span class="visually-hidden">Deprecated</span> </abbr> <abbr class="icon icon-nonstandard" title="Non-standard. Check cross-browser support before using."> <span class="visually-hidden">Non-standard</span> </abbr>
+</dt> <dd> <p>Returns the timestamp at which sampling of the frame started.</p> </dd> <dt id="rtcencodedvideoframe.data"><a href="rtcencodedvideoframe/data"><code>RTCEncodedVideoFrame.data</code></a></dt> <dd> <p>Return a buffer containing the encoded frame data.</p> </dd> </dl>  <h2 id="instance_methods" class="heading">Instance methods</h2> <dl> <dt id="rtcencodedvideoframe.getmetadata"><a href="rtcencodedvideoframe/getmetadata"><code>RTCEncodedVideoFrame.getMetadata()</code></a></dt> <dd> <p>Returns the metadata associated with the frame.</p> </dd> </dl>  <h2 id="description" class="heading">Description</h2> <p>Raw video data is generated as a sequence of frames, where each frame is a 2 dimensional array of pixel values. Video encoders transform this raw input into a compressed representation of the original for transmission and storage. A common approach is to send "key frames" that contain enough information to reproduce a whole image at a relatively low rate, and between key frames to send many much smaller "delta frames" that just encode the changes since the previous frame.</p> <p>There are many different codecs, such as H.264, VP8, and VP9, each that have a different encoding processes and configuration, which offer different trade-offs between compression efficiency and video quality.</p> <p>The <code>RTCEncodedVideoFrame</code> represents a single frame encoded with a particular video encoder. The <a href="rtcencodedvideoframe/type"><code>type</code></a> property indicates whether the frame is a "key" or "delta" frame, and you can use the <a href="rtcencodedvideoframe/getmetadata"><code>getMetadata()</code></a> method to get other details about the encoding method. The <a href="rtcencodedvideoframe/data"><code>data</code></a> property provides access to the encoded image data for the frame, which can then be modified ("transformed") when frames are sent or received.</p>  <h2 id="examples" class="heading">Examples</h2> <p>This code snippet shows a handler for the <code>rtctransform</code> event in a <a href="worker"><code>Worker</code></a> that implements a <a href="transformstream"><code>TransformStream</code></a>, and pipes encoded frames through it from the <code>event.transformer.readable</code> to <code>event.transformer.writable</code> (<code>event.transformer</code> is a <a href="rtcrtpscripttransformer"><code>RTCRtpScriptTransformer</code></a>, the worker-side counterpart of <a href="rtcrtpscripttransform"><code>RTCRtpScriptTransform</code></a>).</p> <p>If the transformer is inserted into a video stream, the <code>transform()</code> method is called with a <code>RTCEncodedVideoFrame</code> whenever a new frame is enqueued on <code>event.transformer.readable</code>. The <code>transform()</code> method shows how this might be read, modified by inverting the bits, and then enqueued on the controller (this ultimately pipes it through to the <code>event.transformer.writable</code>, and then back into the WebRTC pipeline).</p> <div class="code-example"><pre data-language="js">addEventListener("rtctransform", (event) =&gt; {
+  const transform = new TransformStream({
+    async transform(encodedFrame, controller) {
+      // Reconstruct the original frame.
+      const view = new DataView(encodedFrame.data);
+
+      // Construct a new buffer
+      const newData = new ArrayBuffer(encodedFrame.data.byteLength);
+      const newView = new DataView(newData);
+
+      // Negate all bits in the incoming frame
+      for (let i = 0; i &lt; encodedFrame.data.byteLength; ++i) {
+        newView.setInt8(i, ~view.getInt8(i));
+      }
+
+      encodedFrame.data = newData;
+      controller.enqueue(encodedFrame);
+    },
+  });
+  event.transformer.readable
+    .pipeThrough(transform)
+    .pipeTo(event.transformer.writable);
+});
+</pre></div> <p>Note that more complete examples are provided in <a href="webrtc_api/using_encoded_transforms">Using WebRTC Encoded Transforms</a>.</p>  <h2 id="specifications" class="heading">Specifications</h2> <div class="_table"><table> <thead> <tr> <th scope="col">Specification</th> </tr> </thead> <tbody> <tr> <td><a href="https://w3c.github.io/webrtc-encoded-transform/#rtcencodedvideoframe" rel="noopener" target="_blank">WebRTC Encoded Transform&gt;<br># rtcencodedvideoframe&gt;</a></td> </tr> </tbody> </table></div>  <h2 id="browser_compatibility" class="heading">Browser compatibility</h2> <div class="_table"><table>
+<thead>
+<tr id="bct-browser-type">
+<th></th>
+<th colspan="5">Desktop</th>
+<th colspan="7">Mobile</th>
+</tr>
+<tr id="bct-browsers">
+<th></th>
+<th>Chrome</th>
+<th>Edge</th>
+<th>Firefox</th>
+<th>Opera</th>
+<th>Safari</th>
+<th>Chrome Android</th>
+<th>Firefox for Android</th>
+<th>Opera Android</th>
+<th>Safari on IOS</th>
+<th>Samsung Internet</th>
+<th>WebView Android</th>
+<th>WebView on iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th><code>RTCEncodedVideoFrame</code></th>
+<td class="bc-supports-yes">127</td>
+<td class="bc-supports-yes">127</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">113</td>
+<td class="bc-supports-yes">26</td>
+<td class="bc-supports-yes">127</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">84</td>
+<td class="bc-supports-yes">26</td>
+<td class="bc-supports-yes">28.0</td>
+<td class="bc-supports-yes">127</td>
+<td class="bc-supports-yes">26</td>
+</tr>
+<tr>
+<th><code>RTCEncodedVideoFrame</code></th>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">72</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">61</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">14.0</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">15.4</td>
+</tr>
+<tr>
+<th><code>data</code></th>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">72</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">61</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">14.0</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">15.4</td>
+</tr>
+<tr>
+<th><code>getMetadata</code></th>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">72</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">61</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">14.0</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">15.4</td>
+</tr>
+<tr>
+<th><code>timestamp</code></th>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">72</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">61</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">14.0</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">15.4</td>
+</tr>
+<tr>
+<th><code>type</code></th>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">72</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">117</td>
+<td class="bc-supports-yes">61</td>
+<td class="bc-supports-yes">15.4</td>
+<td class="bc-supports-yes">14.0</td>
+<td class="bc-supports-yes">86</td>
+<td class="bc-supports-yes">15.4</td>
+</tr>
+</tbody>
+</table></div>  <h2 id="see_also" class="heading">See also</h2> <ul> <li><a href="webrtc_api/using_encoded_transforms">Using WebRTC Encoded Transforms</a></li> <li><a href="transformstream"><code>TransformStream</code></a></li> <li><a href="rtcrtpscripttransformer"><code>RTCRtpScriptTransformer</code></a></li> <li><a href="rtcencodedaudioframe"><code>RTCEncodedAudioFrame</code></a></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2005&ndash;2025 MDN contributors.<br>Licensed under the Creative Commons Attribution-ShareAlike License v2.5 or later.<br>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/RTCEncodedVideoFrame" class="_attribution-link">https://developer.mozilla.org/en-US/docs/Web/API/RTCEncodedVideoFrame</a>
+  </p>
+</div>

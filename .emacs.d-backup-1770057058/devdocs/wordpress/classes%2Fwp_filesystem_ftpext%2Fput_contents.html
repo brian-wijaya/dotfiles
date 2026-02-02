@@ -1,0 +1,66 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Filesystem_FTPext::put_contents( <span class="arg-type">string</span> <span class="arg-name">$file</span>, <span class="arg-type">string</span> <span class="arg-name">$contents</span>, <span class="arg-type">int|false</span> <span class="arg-name">$mode</span> = <span class="arg-default">false</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Writes a string to a file.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$file</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Remote path to the file where to write the data.</span></div></dd>
+<dt>
+<code>$contents</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The data to write.</span></div></dd>
+<dt>
+<code>$mode</code><span class="type"><span class="int">int</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The file permissions as octal number, usually 0644.<br> </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on success, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="188" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function put_contents( $file, $contents, $mode = false ) {
+	$tempfile   = wp_tempnam( $file );
+	$temphandle = fopen( $tempfile, 'wb+' );
+
+	if ( ! $temphandle ) {
+		unlink( $tempfile );
+		return false;
+	}
+
+	mbstring_binary_safe_encoding();
+
+	$data_length   = strlen( $contents );
+	$bytes_written = fwrite( $temphandle, $contents );
+
+	reset_mbstring_encoding();
+
+	if ( $data_length !== $bytes_written ) {
+		fclose( $temphandle );
+		unlink( $tempfile );
+		return false;
+	}
+
+	fseek( $temphandle, 0 ); // Skip back to the start of the file being written to.
+
+	$ret = ftp_fput( $this-&gt;link, $file, $temphandle, FTP_BINARY );
+
+	fclose( $temphandle );
+	unlink( $tempfile );
+
+	$this-&gt;chmod( $file, $mode );
+
+	return $ret;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-filesystem-ftpext.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-filesystem-ftpext.php#L188">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-filesystem-ftpext.php#L188-L220">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_filesystem_ftpext/put_contents" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_filesystem_ftpext/put_contents</a>
+  </p>
+</div>

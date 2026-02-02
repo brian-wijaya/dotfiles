@@ -1,0 +1,374 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_REST_Block_Directory_Controller {}</h1> <section><p>Controller which provides REST endpoint for the blocks.</p> </section> <section><h2 id="description">Description</h2> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="wp_rest_controller">WP_REST_Controller</a></li> </ul></section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_rest_block_directory_controller/__construct">WP_REST_Block_Directory_Controller::__construct</a></td>
+<td>Constructs the controller.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_directory_controller/find_plugin_for_slug">WP_REST_Block_Directory_Controller::find_plugin_for_slug</a></td>
+<td>Finds an installed plugin for the given slug.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_directory_controller/get_collection_params">WP_REST_Block_Directory_Controller::get_collection_params</a></td>
+<td>Retrieves the search params for the blocks collection.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_directory_controller/get_item_schema">WP_REST_Block_Directory_Controller::get_item_schema</a></td>
+<td>Retrieves the theme’s schema, conforming to JSON Schema.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_directory_controller/get_items">WP_REST_Block_Directory_Controller::get_items</a></td>
+<td>Search and retrieve blocks metadata</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_directory_controller/get_items_permissions_check">WP_REST_Block_Directory_Controller::get_items_permissions_check</a></td>
+<td>Checks whether a given request has permission to install and activate plugins.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_directory_controller/prepare_item_for_response">WP_REST_Block_Directory_Controller::prepare_item_for_response</a></td>
+<td>Parse block metadata for a block, and prepare it for an API response.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_directory_controller/prepare_links">WP_REST_Block_Directory_Controller::prepare_links</a></td>
+<td>Generates a list of links to include in the response for the plugin.</td>
+</tr>
+<tr class="">
+<td><a href="wp_rest_block_directory_controller/register_routes">WP_REST_Block_Directory_Controller::register_routes</a></td>
+<td>Registers the necessary REST API routes.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="17" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_REST_Block_Directory_Controller extends WP_REST_Controller {
+
+	/**
+	 * Constructs the controller.
+	 */
+	public function __construct() {
+		$this-&gt;namespace = 'wp/v2';
+		$this-&gt;rest_base = 'block-directory';
+	}
+
+	/**
+	 * Registers the necessary REST API routes.
+	 */
+	public function register_routes() {
+		register_rest_route(
+			$this-&gt;namespace,
+			'/' . $this-&gt;rest_base . '/search',
+			array(
+				array(
+					'methods'             =&gt; WP_REST_Server::READABLE,
+					'callback'            =&gt; array( $this, 'get_items' ),
+					'permission_callback' =&gt; array( $this, 'get_items_permissions_check' ),
+					'args'                =&gt; $this-&gt;get_collection_params(),
+				),
+				'schema' =&gt; array( $this, 'get_public_item_schema' ),
+			)
+		);
+	}
+
+	/**
+	 * Checks whether a given request has permission to install and activate plugins.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error True if the request has permission, WP_Error object otherwise.
+	 */
+	public function get_items_permissions_check( $request ) {
+		if ( ! current_user_can( 'install_plugins' ) || ! current_user_can( 'activate_plugins' ) ) {
+			return new WP_Error(
+				'rest_block_directory_cannot_view',
+				__( 'Sorry, you are not allowed to browse the block directory.' ),
+				array( 'status' =&gt; rest_authorization_required_code() )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Search and retrieve blocks metadata
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
+	 */
+	public function get_items( $request ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+
+		$response = plugins_api(
+			'query_plugins',
+			array(
+				'block'    =&gt; $request['term'],
+				'per_page' =&gt; $request['per_page'],
+				'page'     =&gt; $request['page'],
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			$response-&gt;add_data( array( 'status' =&gt; 500 ) );
+
+			return $response;
+		}
+
+		$result = array();
+
+		foreach ( $response-&gt;plugins as $plugin ) {
+			// If the API returned a plugin with empty data for 'blocks', skip it.
+			if ( empty( $plugin['blocks'] ) ) {
+				continue;
+			}
+
+			$data     = $this-&gt;prepare_item_for_response( $plugin, $request );
+			$result[] = $this-&gt;prepare_response_for_collection( $data );
+		}
+
+		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * Parse block metadata for a block, and prepare it for an API response.
+	 *
+	 * @since 5.5.0
+	 * @since 5.9.0 Renamed `$plugin` to `$item` to match parent class for PHP 8 named parameter support.
+	 *
+	 * @param array           $item    The plugin metadata.
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
+	 */
+	public function prepare_item_for_response( $item, $request ) {
+		// Restores the more descriptive, specific name for use within this method.
+		$plugin = $item;
+
+		$fields = $this-&gt;get_fields_for_response( $request );
+
+		// There might be multiple blocks in a plugin. Only the first block is mapped.
+		$block_data = reset( $plugin['blocks'] );
+
+		// A data array containing the properties we'll return.
+		$block = array(
+			'name'                =&gt; $block_data['name'],
+			'title'               =&gt; ( $block_data['title'] ? $block_data['title'] : $plugin['name'] ),
+			'description'         =&gt; wp_trim_words( $plugin['short_description'], 30, '...' ),
+			'id'                  =&gt; $plugin['slug'],
+			'rating'              =&gt; $plugin['rating'] / 20,
+			'rating_count'        =&gt; (int) $plugin['num_ratings'],
+			'active_installs'     =&gt; (int) $plugin['active_installs'],
+			'author_block_rating' =&gt; $plugin['author_block_rating'] / 20,
+			'author_block_count'  =&gt; (int) $plugin['author_block_count'],
+			'author'              =&gt; wp_strip_all_tags( $plugin['author'] ),
+			'icon'                =&gt; ( isset( $plugin['icons']['1x'] ) ? $plugin['icons']['1x'] : 'block-default' ),
+			'last_updated'        =&gt; gmdate( 'Y-m-d\TH:i:s', strtotime( $plugin['last_updated'] ) ),
+			'humanized_updated'   =&gt; sprintf(
+				/* translators: %s: Human-readable time difference. */
+				__( '%s ago' ),
+				human_time_diff( strtotime( $plugin['last_updated'] ) )
+			),
+		);
+
+		$this-&gt;add_additional_fields_to_object( $block, $request );
+
+		$response = new WP_REST_Response( $block );
+
+		if ( rest_is_field_included( '_links', $fields ) || rest_is_field_included( '_embedded', $fields ) ) {
+			$response-&gt;add_links( $this-&gt;prepare_links( $plugin ) );
+		}
+
+		return $response;
+	}
+
+	/**
+	 * Generates a list of links to include in the response for the plugin.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param array $plugin The plugin data from WordPress.org.
+	 * @return array
+	 */
+	protected function prepare_links( $plugin ) {
+		$links = array(
+			'https://api.w.org/install-plugin' =&gt; array(
+				'href' =&gt; add_query_arg( 'slug', urlencode( $plugin['slug'] ), rest_url( 'wp/v2/plugins' ) ),
+			),
+		);
+
+		$plugin_file = $this-&gt;find_plugin_for_slug( $plugin['slug'] );
+
+		if ( $plugin_file ) {
+			$links['https://api.w.org/plugin'] = array(
+				'href'       =&gt; rest_url( 'wp/v2/plugins/' . substr( $plugin_file, 0, - 4 ) ),
+				'embeddable' =&gt; true,
+			);
+		}
+
+		return $links;
+	}
+
+	/**
+	 * Finds an installed plugin for the given slug.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @param string $slug The WordPress.org directory slug for a plugin.
+	 * @return string The plugin file found matching it.
+	 */
+	protected function find_plugin_for_slug( $slug ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+
+		$plugin_files = get_plugins( '/' . $slug );
+
+		if ( ! $plugin_files ) {
+			return '';
+		}
+
+		$plugin_files = array_keys( $plugin_files );
+
+		return $slug . '/' . reset( $plugin_files );
+	}
+
+	/**
+	 * Retrieves the theme's schema, conforming to JSON Schema.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @return array Item schema data.
+	 */
+	public function get_item_schema() {
+		if ( $this-&gt;schema ) {
+			return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+		}
+
+		$this-&gt;schema = array(
+			'$schema'    =&gt; 'http://json-schema.org/draft-04/schema#',
+			'title'      =&gt; 'block-directory-item',
+			'type'       =&gt; 'object',
+			'properties' =&gt; array(
+				'name'                =&gt; array(
+					'description' =&gt; __( 'The block name, in namespace/block-name format.' ),
+					'type'        =&gt; 'string',
+					'context'     =&gt; array( 'view' ),
+				),
+				'title'               =&gt; array(
+					'description' =&gt; __( 'The block title, in human readable format.' ),
+					'type'        =&gt; 'string',
+					'context'     =&gt; array( 'view' ),
+				),
+				'description'         =&gt; array(
+					'description' =&gt; __( 'A short description of the block, in human readable format.' ),
+					'type'        =&gt; 'string',
+					'context'     =&gt; array( 'view' ),
+				),
+				'id'                  =&gt; array(
+					'description' =&gt; __( 'The block slug.' ),
+					'type'        =&gt; 'string',
+					'context'     =&gt; array( 'view' ),
+				),
+				'rating'              =&gt; array(
+					'description' =&gt; __( 'The star rating of the block.' ),
+					'type'        =&gt; 'number',
+					'context'     =&gt; array( 'view' ),
+				),
+				'rating_count'        =&gt; array(
+					'description' =&gt; __( 'The number of ratings.' ),
+					'type'        =&gt; 'integer',
+					'context'     =&gt; array( 'view' ),
+				),
+				'active_installs'     =&gt; array(
+					'description' =&gt; __( 'The number sites that have activated this block.' ),
+					'type'        =&gt; 'integer',
+					'context'     =&gt; array( 'view' ),
+				),
+				'author_block_rating' =&gt; array(
+					'description' =&gt; __( 'The average rating of blocks published by the same author.' ),
+					'type'        =&gt; 'number',
+					'context'     =&gt; array( 'view' ),
+				),
+				'author_block_count'  =&gt; array(
+					'description' =&gt; __( 'The number of blocks published by the same author.' ),
+					'type'        =&gt; 'integer',
+					'context'     =&gt; array( 'view' ),
+				),
+				'author'              =&gt; array(
+					'description' =&gt; __( 'The WordPress.org username of the block author.' ),
+					'type'        =&gt; 'string',
+					'context'     =&gt; array( 'view' ),
+				),
+				'icon'                =&gt; array(
+					'description' =&gt; __( 'The block icon.' ),
+					'type'        =&gt; 'string',
+					'format'      =&gt; 'uri',
+					'context'     =&gt; array( 'view' ),
+				),
+				'last_updated'        =&gt; array(
+					'description' =&gt; __( 'The date when the block was last updated.' ),
+					'type'        =&gt; 'string',
+					'format'      =&gt; 'date-time',
+					'context'     =&gt; array( 'view' ),
+				),
+				'humanized_updated'   =&gt; array(
+					'description' =&gt; __( 'The date when the block was last updated, in fuzzy human readable format.' ),
+					'type'        =&gt; 'string',
+					'context'     =&gt; array( 'view' ),
+				),
+			),
+		);
+
+		return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+	}
+
+	/**
+	 * Retrieves the search params for the blocks collection.
+	 *
+	 * @since 5.5.0
+	 *
+	 * @return array Collection parameters.
+	 */
+	public function get_collection_params() {
+		$query_params = parent::get_collection_params();
+
+		$query_params['context']['default'] = 'view';
+
+		$query_params['term'] = array(
+			'description' =&gt; __( 'Limit result set to blocks matching the search term.' ),
+			'type'        =&gt; 'string',
+			'required'    =&gt; true,
+			'minLength'   =&gt; 1,
+		);
+
+		unset( $query_params['search'] );
+
+		/**
+		 * Filters REST API collection parameters for the block directory controller.
+		 *
+		 * @since 5.5.0
+		 *
+		 * @param array $query_params JSON Schema-formatted collection parameters.
+		 */
+		return apply_filters( 'rest_block_directory_collection_params', $query_params );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-block-directory-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-directory-controller.php#L17">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-block-directory-controller.php#L17-L328">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_block_directory_controller" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_block_directory_controller</a>
+  </p>
+</div>

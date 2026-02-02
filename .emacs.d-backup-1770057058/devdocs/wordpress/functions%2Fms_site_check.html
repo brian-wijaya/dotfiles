@@ -1,0 +1,75 @@
+<h1 class="wp-block-wporg-code-reference-title">ms_site_check(): <span class="return-type">true|string</span>
+</h1> <section><p>Checks status of current blog.</p> </section> <section><h2 id="description">Description</h2> <p>Checks if the blog is deleted, inactive, archived, or spammed.</p> <p>Dies with a default message if the blog does not pass the check.</p> <p>To change the default message when a blog does not pass the check, use the wp-content/blog-deleted.php, blog-inactive.php and blog-suspended.php drop-ins.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">true|string</span> Returns true on success, or drop-in file to include.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="74" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function ms_site_check() {
+
+	/**
+	 * Filters checking the status of the current blog.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param bool|null $check Whether to skip the blog status check. Default null.
+	 */
+	$check = apply_filters( 'ms_site_check', null );
+	if ( null !== $check ) {
+		return true;
+	}
+
+	// Allow super admins to see blocked sites.
+	if ( is_super_admin() ) {
+		return true;
+	}
+
+	$blog = get_site();
+
+	if ( '1' === $blog-&gt;deleted ) {
+		if ( file_exists( WP_CONTENT_DIR . '/blog-deleted.php' ) ) {
+			return WP_CONTENT_DIR . '/blog-deleted.php';
+		} else {
+			wp_die( __( 'This site is no longer available.' ), '', array( 'response' =&gt; 410 ) );
+		}
+	}
+
+	if ( '2' === $blog-&gt;deleted ) {
+		if ( file_exists( WP_CONTENT_DIR . '/blog-inactive.php' ) ) {
+			return WP_CONTENT_DIR . '/blog-inactive.php';
+		} else {
+			$admin_email = str_replace( '@', ' AT ', get_site_option( 'admin_email', 'support@' . get_network()-&gt;domain ) );
+			wp_die(
+				sprintf(
+					/* translators: %s: Admin email link. */
+					__( 'This site has not been activated yet. If you are having problems activating your site, please contact %s.' ),
+					sprintf( '&lt;a href="mailto:%1$s"&gt;%1$s&lt;/a&gt;', $admin_email )
+				)
+			);
+		}
+	}
+
+	if ( '1' === $blog-&gt;archived || '1' === $blog-&gt;spam ) {
+		if ( file_exists( WP_CONTENT_DIR . '/blog-suspended.php' ) ) {
+			return WP_CONTENT_DIR . '/blog-suspended.php';
+		} else {
+			wp_die( __( 'This site has been archived or suspended.' ), '', array( 'response' =&gt; 410 ) );
+		}
+	}
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-load.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-load.php#L74">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-load.php#L74-L127">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/ms_site_check"><span class="hook-func">apply_filters</span>( ‘ms_site_check’, <nobr><span class="arg-type">bool|null</span> <span class="arg-name">$check</span></nobr> )</a></dt>
+<dd>
+<p>Filters checking the status of the current blog.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/ms_site_check" class="_attribution-link">https://developer.wordpress.org/reference/functions/ms_site_check</a>
+  </p>
+</div>

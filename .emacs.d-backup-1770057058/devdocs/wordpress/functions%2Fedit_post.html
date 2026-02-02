@@ -1,0 +1,253 @@
+<h1 class="wp-block-wporg-code-reference-title">edit_post( <span class="arg-type">array|null</span> <span class="arg-name">$post_data</span> = <span class="arg-default">null</span> ): <span class="return-type">int</span>
+</h1> <section><p>Updates an existing post with values provided in <code>$_POST</code>.</p> </section> <section><h2 id="description">Description</h2> <p>If post data is passed as an argument, it is treated as an array of data keyed appropriately for turning into a post object.</p> <p>If post data is not passed, the <code>$_POST</code> global variable is used instead.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_data</code><span class="type"><span class="array">array</span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The array of post data to process.<br> Defaults to the <code>$_POST</code> superglobal.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int</span> Post ID.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="259" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function edit_post( $post_data = null ) {
+	global $wpdb;
+
+	if ( empty( $post_data ) ) {
+		$post_data = &amp;$_POST;
+	}
+
+	// Clear out any data in internal vars.
+	unset( $post_data['filter'] );
+
+	$post_id = (int) $post_data['post_ID'];
+	$post    = get_post( $post_id );
+
+	$post_data['post_type']      = $post-&gt;post_type;
+	$post_data['post_mime_type'] = $post-&gt;post_mime_type;
+
+	if ( ! empty( $post_data['post_status'] ) ) {
+		$post_data['post_status'] = sanitize_key( $post_data['post_status'] );
+
+		if ( 'inherit' === $post_data['post_status'] ) {
+			unset( $post_data['post_status'] );
+		}
+	}
+
+	$ptype = get_post_type_object( $post_data['post_type'] );
+	if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		if ( 'page' === $post_data['post_type'] ) {
+			wp_die( __( 'Sorry, you are not allowed to edit this page.' ) );
+		} else {
+			wp_die( __( 'Sorry, you are not allowed to edit this post.' ) );
+		}
+	}
+
+	if ( post_type_supports( $ptype-&gt;name, 'revisions' ) ) {
+		$revisions = wp_get_post_revisions(
+			$post_id,
+			array(
+				'order'          =&gt; 'ASC',
+				'posts_per_page' =&gt; 1,
+			)
+		);
+		$revision  = current( $revisions );
+
+		// Check if the revisions have been upgraded.
+		if ( $revisions &amp;&amp; _wp_get_post_revision_version( $revision ) &lt; 1 ) {
+			_wp_upgrade_revisions_of_post( $post, wp_get_post_revisions( $post_id ) );
+		}
+	}
+
+	if ( isset( $post_data['visibility'] ) ) {
+		switch ( $post_data['visibility'] ) {
+			case 'public':
+				$post_data['post_password'] = '';
+				break;
+			case 'password':
+				unset( $post_data['sticky'] );
+				break;
+			case 'private':
+				$post_data['post_status']   = 'private';
+				$post_data['post_password'] = '';
+				unset( $post_data['sticky'] );
+				break;
+		}
+	}
+
+	$post_data = _wp_translate_postdata( true, $post_data );
+	if ( is_wp_error( $post_data ) ) {
+		wp_die( $post_data-&gt;get_error_message() );
+	}
+	$translated = _wp_get_allowed_postdata( $post_data );
+
+	// Post formats.
+	if ( isset( $post_data['post_format'] ) ) {
+		set_post_format( $post_id, $post_data['post_format'] );
+	}
+
+	$format_meta_urls = array( 'url', 'link_url', 'quote_source_url' );
+	foreach ( $format_meta_urls as $format_meta_url ) {
+		$keyed = '_format_' . $format_meta_url;
+		if ( isset( $post_data[ $keyed ] ) ) {
+			update_post_meta( $post_id, $keyed, wp_slash( sanitize_url( wp_unslash( $post_data[ $keyed ] ) ) ) );
+		}
+	}
+
+	$format_keys = array( 'quote', 'quote_source_name', 'image', 'gallery', 'audio_embed', 'video_embed' );
+
+	foreach ( $format_keys as $key ) {
+		$keyed = '_format_' . $key;
+		if ( isset( $post_data[ $keyed ] ) ) {
+			if ( current_user_can( 'unfiltered_html' ) ) {
+				update_post_meta( $post_id, $keyed, $post_data[ $keyed ] );
+			} else {
+				update_post_meta( $post_id, $keyed, wp_filter_post_kses( $post_data[ $keyed ] ) );
+			}
+		}
+	}
+
+	if ( 'attachment' === $post_data['post_type'] &amp;&amp; preg_match( '#^(audio|video)/#', $post_data['post_mime_type'] ) ) {
+		$id3data = wp_get_attachment_metadata( $post_id );
+		if ( ! is_array( $id3data ) ) {
+			$id3data = array();
+		}
+
+		foreach ( wp_get_attachment_id3_keys( $post, 'edit' ) as $key =&gt; $label ) {
+			if ( isset( $post_data[ 'id3_' . $key ] ) ) {
+				$id3data[ $key ] = sanitize_text_field( wp_unslash( $post_data[ 'id3_' . $key ] ) );
+			}
+		}
+		wp_update_attachment_metadata( $post_id, $id3data );
+	}
+
+	// Meta stuff.
+	if ( isset( $post_data['meta'] ) &amp;&amp; $post_data['meta'] ) {
+		foreach ( $post_data['meta'] as $key =&gt; $value ) {
+			$meta = get_post_meta_by_id( $key );
+			if ( ! $meta ) {
+				continue;
+			}
+
+			if ( (int) $meta-&gt;post_id !== $post_id ) {
+				continue;
+			}
+
+			if ( is_protected_meta( $meta-&gt;meta_key, 'post' )
+				|| ! current_user_can( 'edit_post_meta', $post_id, $meta-&gt;meta_key )
+			) {
+				continue;
+			}
+
+			if ( is_protected_meta( $value['key'], 'post' )
+				|| ! current_user_can( 'edit_post_meta', $post_id, $value['key'] )
+			) {
+				continue;
+			}
+
+			update_meta( $key, $value['key'], $value['value'] );
+		}
+	}
+
+	if ( isset( $post_data['deletemeta'] ) &amp;&amp; $post_data['deletemeta'] ) {
+		foreach ( $post_data['deletemeta'] as $key =&gt; $value ) {
+			$meta = get_post_meta_by_id( $key );
+			if ( ! $meta ) {
+				continue;
+			}
+
+			if ( (int) $meta-&gt;post_id !== $post_id ) {
+				continue;
+			}
+
+			if ( is_protected_meta( $meta-&gt;meta_key, 'post' )
+				|| ! current_user_can( 'delete_post_meta', $post_id, $meta-&gt;meta_key )
+			) {
+				continue;
+			}
+
+			delete_meta( $key );
+		}
+	}
+
+	// Attachment stuff.
+	if ( 'attachment' === $post_data['post_type'] ) {
+		if ( isset( $post_data['_wp_attachment_image_alt'] ) ) {
+			$image_alt = wp_unslash( $post_data['_wp_attachment_image_alt'] );
+
+			if ( get_post_meta( $post_id, '_wp_attachment_image_alt', true ) !== $image_alt ) {
+				$image_alt = wp_strip_all_tags( $image_alt, true );
+
+				// update_post_meta() expects slashed.
+				update_post_meta( $post_id, '_wp_attachment_image_alt', wp_slash( $image_alt ) );
+			}
+		}
+
+		$attachment_data = isset( $post_data['attachments'][ $post_id ] ) ? $post_data['attachments'][ $post_id ] : array();
+
+		/** This filter is documented in wp-admin/includes/media.php */
+		$translated = apply_filters( 'attachment_fields_to_save', $translated, $attachment_data );
+	}
+
+	// Convert taxonomy input to term IDs, to avoid ambiguity.
+	if ( isset( $post_data['tax_input'] ) ) {
+		foreach ( (array) $post_data['tax_input'] as $taxonomy =&gt; $terms ) {
+			$tax_object = get_taxonomy( $taxonomy );
+
+			if ( $tax_object &amp;&amp; isset( $tax_object-&gt;meta_box_sanitize_cb ) ) {
+				$translated['tax_input'][ $taxonomy ] = call_user_func_array( $tax_object-&gt;meta_box_sanitize_cb, array( $taxonomy, $terms ) );
+			}
+		}
+	}
+
+	add_meta( $post_id );
+
+	update_post_meta( $post_id, '_edit_last', get_current_user_id() );
+
+	$success = wp_update_post( $translated );
+
+	// If the save failed, see if we can confidence check the main fields and try again.
+	if ( ! $success &amp;&amp; is_callable( array( $wpdb, 'strip_invalid_text_for_column' ) ) ) {
+		$fields = array( 'post_title', 'post_content', 'post_excerpt' );
+
+		foreach ( $fields as $field ) {
+			if ( isset( $translated[ $field ] ) ) {
+				$translated[ $field ] = $wpdb-&gt;strip_invalid_text_for_column( $wpdb-&gt;posts, $field, $translated[ $field ] );
+			}
+		}
+
+		wp_update_post( $translated );
+	}
+
+	// Now that we have an ID we can fix any attachment anchor hrefs.
+	_fix_attachment_links( $post_id );
+
+	wp_set_post_lock( $post_id );
+
+	if ( current_user_can( $ptype-&gt;cap-&gt;edit_others_posts ) &amp;&amp; current_user_can( $ptype-&gt;cap-&gt;publish_posts ) ) {
+		if ( ! empty( $post_data['sticky'] ) ) {
+			stick_post( $post_id );
+		} else {
+			unstick_post( $post_id );
+		}
+	}
+
+	return $post_id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/post.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/post.php#L259">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/post.php#L259-L482">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/attachment_fields_to_save"><span class="hook-func">apply_filters</span>( ‘attachment_fields_to_save’, <nobr><span class="arg-type">array</span> <span class="arg-name">$post</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$attachment</span></nobr> )</a></dt>
+<dd>
+<p>Filters the attachment fields to be saved.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.5.0/">1.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/edit_post" class="_attribution-link">https://developer.wordpress.org/reference/functions/edit_post</a>
+  </p>
+</div>

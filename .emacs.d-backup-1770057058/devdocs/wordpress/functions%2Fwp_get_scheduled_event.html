@@ -1,0 +1,119 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_scheduled_event( <span class="arg-type">string</span> <span class="arg-name">$hook</span>, <span class="arg-type">array</span> <span class="arg-name">$args</span> = <span class="arg-default">array()</span>, <span class="arg-type">int|null</span> <span class="arg-name">$timestamp</span> = <span class="arg-default">null</span> ): <span class="return-type">object|false</span>
+</h1> <section><p>Retrieves a scheduled event.</p> </section> <section><h2 id="description">Description</h2> <p>Retrieves the full event object for a given event, if no timestamp is specified the next scheduled event is returned.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$hook</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Action hook of the event.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Array containing each separate argument to pass to the hook’s callback function.<br> Although not passed to a callback, these arguments are used to uniquely identify the event, so they should be the same as those used when originally scheduling the event.<br> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$timestamp</code><span class="type"><span class="int">int</span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Unix timestamp (UTC) of the event. If not specified, the next scheduled event is returned. </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">object|false</span> The event object. False if the event does not exist.<br> <ul class="param-hash">
+<li>
+<code>hook</code> <span class="type">string</span><div class="desc">Action hook to execute when the event is run.</div>
+</li> <li>
+<code>timestamp</code> <span class="type">int</span><div class="desc">Unix timestamp (UTC) for when to next run the event.</div>
+</li> <li>
+<code>schedule</code> <span class="type">string|false</span><div class="desc">How often the event should subsequently recur.</div>
+</li> <li>
+<code>args</code> <span class="type">array</span><div class="desc">Array containing each separate argument to pass to the hook’s callback function.</div>
+</li> <li>
+<code>interval</code> <span class="type">int</span><div class="desc">Optional. The interval time in seconds for the schedule. Only present for recurring events.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="751" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_scheduled_event( $hook, $args = array(), $timestamp = null ) {
+	/**
+	 * Filter to override retrieving a scheduled event.
+	 *
+	 * Returning a non-null value will short-circuit the normal process,
+	 * returning the filtered value instead.
+	 *
+	 * Return false if the event does not exist, otherwise an event object
+	 * should be returned.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param null|false|object $pre  Value to return instead. Default null to continue retrieving the event.
+	 * @param string            $hook Action hook of the event.
+	 * @param array             $args Array containing each separate argument to pass to the hook's callback function.
+	 *                                Although not passed to a callback, these arguments are used to uniquely identify
+	 *                                the event.
+	 * @param int|null  $timestamp Unix timestamp (UTC) of the event. Null to retrieve next scheduled event.
+	 */
+	$pre = apply_filters( 'pre_get_scheduled_event', null, $hook, $args, $timestamp );
+
+	if ( null !== $pre ) {
+		return $pre;
+	}
+
+	if ( null !== $timestamp &amp;&amp; ! is_numeric( $timestamp ) ) {
+		return false;
+	}
+
+	$crons = _get_cron_array();
+	if ( empty( $crons ) ) {
+		return false;
+	}
+
+	$key = md5( serialize( $args ) );
+
+	if ( ! $timestamp ) {
+		// Get next event.
+		$next = false;
+		foreach ( $crons as $timestamp =&gt; $cron ) {
+			if ( isset( $cron[ $hook ][ $key ] ) ) {
+				$next = $timestamp;
+				break;
+			}
+		}
+
+		if ( ! $next ) {
+			return false;
+		}
+
+		$timestamp = $next;
+	} elseif ( ! isset( $crons[ $timestamp ][ $hook ][ $key ] ) ) {
+		return false;
+	}
+
+	$event = (object) array(
+		'hook'      =&gt; $hook,
+		'timestamp' =&gt; $timestamp,
+		'schedule'  =&gt; $crons[ $timestamp ][ $hook ][ $key ]['schedule'],
+		'args'      =&gt; $args,
+	);
+
+	if ( isset( $crons[ $timestamp ][ $hook ][ $key ]['interval'] ) ) {
+		$event-&gt;interval = $crons[ $timestamp ][ $hook ][ $key ]['interval'];
+	}
+
+	return $event;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/cron.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/cron.php#L751">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/cron.php#L751-L818">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/pre_get_scheduled_event"><span class="hook-func">apply_filters</span>( ‘pre_get_scheduled_event’, <nobr><span class="arg-type">null|false|object</span> <span class="arg-name">$pre</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$hook</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr>, <nobr><span class="arg-type">int|null</span> <span class="arg-name">$timestamp</span></nobr> )</a></dt>
+<dd>
+<p>Filter to override retrieving a scheduled event.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_scheduled_event" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_scheduled_event</a>
+  </p>
+</div>

@@ -1,0 +1,112 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_unique_term_slug( <span class="arg-type">string</span> <span class="arg-name">$slug</span>, <span class="arg-type">object</span> <span class="arg-name">$term</span> ): <span class="return-type">string</span>
+</h1> <section><p>Makes term slug unique, if it isn’t already.</p> </section> <section><h2 id="description">Description</h2> <p>The <code>$slug</code> has to be unique global to every taxonomy, meaning that one taxonomy term can’t have a matching slug with another taxonomy term. Each slug has to be globally unique for every taxonomy.</p> <p>The way this works is that if the taxonomy that the term belongs to is hierarchical and has a parent, it will append that parent to the $slug.</p> <p>If that still doesn’t return a unique slug, then it tries to append a number until it finds a number that is truly unique.</p> <p>The only purpose for <code>$term</code> is for appending a parent, if one exists.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$slug</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The string that will be tried for a unique slug.</span></div></dd>
+<dt>
+<code>$term</code><span class="type"><span class="object">object</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The term object that the <code>$slug</code> will belong to.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> Will return a true unique slug.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="3084" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_unique_term_slug( $slug, $term ) {
+	global $wpdb;
+
+	$needs_suffix  = true;
+	$original_slug = $slug;
+
+	// As of 4.1, duplicate slugs are allowed as long as they're in different taxonomies.
+	if ( ! term_exists( $slug ) || get_option( 'db_version' ) &gt;= 30133 &amp;&amp; ! get_term_by( 'slug', $slug, $term-&gt;taxonomy ) ) {
+		$needs_suffix = false;
+	}
+
+	/*
+	 * If the taxonomy supports hierarchy and the term has a parent, make the slug unique
+	 * by incorporating parent slugs.
+	 */
+	$parent_suffix = '';
+	if ( $needs_suffix &amp;&amp; is_taxonomy_hierarchical( $term-&gt;taxonomy ) &amp;&amp; ! empty( $term-&gt;parent ) ) {
+		$the_parent = $term-&gt;parent;
+		while ( ! empty( $the_parent ) ) {
+			$parent_term = get_term( $the_parent, $term-&gt;taxonomy );
+			if ( is_wp_error( $parent_term ) || empty( $parent_term ) ) {
+				break;
+			}
+			$parent_suffix .= '-' . $parent_term-&gt;slug;
+			if ( ! term_exists( $slug . $parent_suffix ) ) {
+				break;
+			}
+
+			if ( empty( $parent_term-&gt;parent ) ) {
+				break;
+			}
+			$the_parent = $parent_term-&gt;parent;
+		}
+	}
+
+	// If we didn't get a unique slug, try appending a number to make it unique.
+
+	/**
+	 * Filters whether the proposed unique term slug is bad.
+	 *
+	 * @since 4.3.0
+	 *
+	 * @param bool   $needs_suffix Whether the slug needs to be made unique with a suffix.
+	 * @param string $slug         The slug.
+	 * @param object $term         Term object.
+	 */
+	if ( apply_filters( 'wp_unique_term_slug_is_bad_slug', $needs_suffix, $slug, $term ) ) {
+		if ( $parent_suffix ) {
+			$slug .= $parent_suffix;
+		}
+
+		if ( ! empty( $term-&gt;term_id ) ) {
+			$query = $wpdb-&gt;prepare( "SELECT slug FROM $wpdb-&gt;terms WHERE slug = %s AND term_id != %d", $slug, $term-&gt;term_id );
+		} else {
+			$query = $wpdb-&gt;prepare( "SELECT slug FROM $wpdb-&gt;terms WHERE slug = %s", $slug );
+		}
+
+		if ( $wpdb-&gt;get_var( $query ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$num = 2;
+			do {
+				$alt_slug = $slug . "-$num";
+				++$num;
+				$slug_check = $wpdb-&gt;get_var( $wpdb-&gt;prepare( "SELECT slug FROM $wpdb-&gt;terms WHERE slug = %s", $alt_slug ) );
+			} while ( $slug_check );
+			$slug = $alt_slug;
+		}
+	}
+
+	/**
+	 * Filters the unique term slug.
+	 *
+	 * @since 4.3.0
+	 *
+	 * @param string $slug          Unique term slug.
+	 * @param object $term          Term object.
+	 * @param string $original_slug Slug originally passed to the function for testing.
+	 */
+	return apply_filters( 'wp_unique_term_slug', $slug, $term, $original_slug );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/taxonomy.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/taxonomy.php#L3084">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/taxonomy.php#L3084-L3162">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_unique_term_slug"><span class="hook-func">apply_filters</span>( ‘wp_unique_term_slug’, <nobr><span class="arg-type">string</span> <span class="arg-name">$slug</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$term</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$original_slug</span></nobr> )</a></dt>
+<dd>
+<p>Filters the unique term slug.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_unique_term_slug_is_bad_slug"><span class="hook-func">apply_filters</span>( ‘wp_unique_term_slug_is_bad_slug’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$needs_suffix</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$slug</span></nobr>, <nobr><span class="arg-type">object</span> <span class="arg-name">$term</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether the proposed unique term slug is bad.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.3.0/">2.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_unique_term_slug" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_unique_term_slug</a>
+  </p>
+</div>

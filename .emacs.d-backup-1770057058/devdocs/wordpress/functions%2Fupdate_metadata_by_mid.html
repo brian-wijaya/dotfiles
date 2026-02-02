@@ -1,0 +1,164 @@
+<h1 class="wp-block-wporg-code-reference-title">update_metadata_by_mid( <span class="arg-type">string</span> <span class="arg-name">$meta_type</span>, <span class="arg-type">int</span> <span class="arg-name">$meta_id</span>, <span class="arg-type">string</span> <span class="arg-name">$meta_value</span>, <span class="arg-type">string|false</span> <span class="arg-name">$meta_key</span> = <span class="arg-default">false</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Updates metadata by meta ID.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$meta_type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Type of object metadata is for. Accepts <code>'post'</code>, <code>'comment'</code>, <code>'term'</code>, <code>'user'</code>, or any other object type with an associated meta table.</span></div></dd>
+<dt>
+<code>$meta_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">ID for a specific meta row.</span></div></dd>
+<dt>
+<code>$meta_value</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Metadata value. Must be serializable if non-scalar.</span></div></dd>
+<dt>
+<code>$meta_key</code><span class="type"><span class="string">string</span>|<span class="false">false</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">You can provide a meta key to update it. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> True on successful update, false on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="861" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function update_metadata_by_mid( $meta_type, $meta_id, $meta_value, $meta_key = false ) {
+	global $wpdb;
+
+	// Make sure everything is valid.
+	if ( ! $meta_type || ! is_numeric( $meta_id ) || floor( $meta_id ) != $meta_id ) {
+		return false;
+	}
+
+	$meta_id = (int) $meta_id;
+	if ( $meta_id &lt;= 0 ) {
+		return false;
+	}
+
+	$table = _get_meta_table( $meta_type );
+	if ( ! $table ) {
+		return false;
+	}
+
+	$column    = sanitize_key( $meta_type . '_id' );
+	$id_column = ( 'user' === $meta_type ) ? 'umeta_id' : 'meta_id';
+
+	/**
+	 * Short-circuits updating metadata of a specific type by meta ID.
+	 *
+	 * The dynamic portion of the hook name, `$meta_type`, refers to the meta object type
+	 * (post, comment, term, user, or any other type with an associated meta table).
+	 * Returning a non-null value will effectively short-circuit the function.
+	 *
+	 * Possible hook names include:
+	 *
+	 *  - `update_post_metadata_by_mid`
+	 *  - `update_comment_metadata_by_mid`
+	 *  - `update_term_metadata_by_mid`
+	 *  - `update_user_metadata_by_mid`
+	 *
+	 * @since 5.0.0
+	 *
+	 * @param null|bool    $check      Whether to allow updating metadata for the given type.
+	 * @param int          $meta_id    Meta ID.
+	 * @param mixed        $meta_value Meta value. Must be serializable if non-scalar.
+	 * @param string|false $meta_key   Meta key, if provided.
+	 */
+	$check = apply_filters( "update_{$meta_type}_metadata_by_mid", null, $meta_id, $meta_value, $meta_key );
+	if ( null !== $check ) {
+		return (bool) $check;
+	}
+
+	// Fetch the meta and go on if it's found.
+	$meta = get_metadata_by_mid( $meta_type, $meta_id );
+	if ( $meta ) {
+		$original_key = $meta-&gt;meta_key;
+		$object_id    = $meta-&gt;{$column};
+
+		/*
+		 * If a new meta_key (last parameter) was specified, change the meta key,
+		 * otherwise use the original key in the update statement.
+		 */
+		if ( false === $meta_key ) {
+			$meta_key = $original_key;
+		} elseif ( ! is_string( $meta_key ) ) {
+			return false;
+		}
+
+		$meta_subtype = get_object_subtype( $meta_type, $object_id );
+
+		// Sanitize the meta.
+		$_meta_value = $meta_value;
+		$meta_value  = sanitize_meta( $meta_key, $meta_value, $meta_type, $meta_subtype );
+		$meta_value  = maybe_serialize( $meta_value );
+
+		// Format the data query arguments.
+		$data = array(
+			'meta_key'   =&gt; $meta_key,
+			'meta_value' =&gt; $meta_value,
+		);
+
+		// Format the where query arguments.
+		$where               = array();
+		$where[ $id_column ] = $meta_id;
+
+		/** This action is documented in wp-includes/meta.php */
+		do_action( "update_{$meta_type}_meta", $meta_id, $object_id, $meta_key, $_meta_value );
+
+		if ( 'post' === $meta_type ) {
+			/** This action is documented in wp-includes/meta.php */
+			do_action( 'update_postmeta', $meta_id, $object_id, $meta_key, $meta_value );
+		}
+
+		// Run the update query, all fields in $data are %s, $where is a %d.
+		$result = $wpdb-&gt;update( $table, $data, $where, '%s', '%d' );
+		if ( ! $result ) {
+			return false;
+		}
+
+		// Clear the caches.
+		wp_cache_delete( $object_id, $meta_type . '_meta' );
+
+		/** This action is documented in wp-includes/meta.php */
+		do_action( "updated_{$meta_type}_meta", $meta_id, $object_id, $meta_key, $_meta_value );
+
+		if ( 'post' === $meta_type ) {
+			/** This action is documented in wp-includes/meta.php */
+			do_action( 'updated_postmeta', $meta_id, $object_id, $meta_key, $meta_value );
+		}
+
+		return true;
+	}
+
+	// And if the meta was not found.
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/meta.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/meta.php#L861">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/meta.php#L861-L971">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/updated_postmeta"><span class="hook-func">do_action</span>( ‘updated_postmeta’, <nobr><span class="arg-type">int</span> <span class="arg-name">$meta_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$meta_key</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$meta_value</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after updating a post’s metadata.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/updated_meta_type_meta"><span class="hook-func">do_action</span>( “updated_{$meta_type}_meta”, <nobr><span class="arg-type">int</span> <span class="arg-name">$meta_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$meta_key</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$_meta_value</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately after updating metadata of a specific type.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/update_postmeta"><span class="hook-func">do_action</span>( ‘update_postmeta’, <nobr><span class="arg-type">int</span> <span class="arg-name">$meta_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$meta_key</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$meta_value</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before updating a post’s metadata.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/update_meta_type_meta"><span class="hook-func">do_action</span>( “update_{$meta_type}_meta”, <nobr><span class="arg-type">int</span> <span class="arg-name">$meta_id</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$object_id</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$meta_key</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$_meta_value</span></nobr> )</a></dt>
+<dd>
+<p>Fires immediately before updating metadata of a specific type.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/update_meta_type_metadata_by_mid"><span class="hook-func">apply_filters</span>( “update_{$meta_type}_metadata_by_mid”, <nobr><span class="arg-type">null|bool</span> <span class="arg-name">$check</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$meta_id</span></nobr>, <nobr><span class="arg-type">mixed</span> <span class="arg-name">$meta_value</span></nobr>, <nobr><span class="arg-type">string|false</span> <span class="arg-name">$meta_key</span></nobr> )</a></dt>
+<dd>
+<p>Short-circuits updating metadata of a specific type by meta ID.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.3.0/">3.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/update_metadata_by_mid" class="_attribution-link">https://developer.wordpress.org/reference/functions/update_metadata_by_mid</a>
+  </p>
+</div>

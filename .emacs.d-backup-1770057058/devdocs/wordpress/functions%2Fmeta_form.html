@@ -1,0 +1,131 @@
+<h1 class="wp-block-wporg-code-reference-title">meta_form( <span class="arg-type">WP_Post</span> <span class="arg-name">$post</span> = <span class="arg-default">null</span> )</h1> <section><p>Prints the form in the Custom Fields meta box.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post</code><span class="type"><span class="WP_Post"><a href="../classes/wp_post" rel="class">WP_Post</a></span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">The post being edited.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="692" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function meta_form( $post = null ) {
+	global $wpdb;
+	$post = get_post( $post );
+
+	/**
+	 * Filters values for the meta key dropdown in the Custom Fields meta box.
+	 *
+	 * Returning a non-null value will effectively short-circuit and avoid a
+	 * potentially expensive query against postmeta.
+	 *
+	 * @since 4.4.0
+	 *
+	 * @param array|null $keys Pre-defined meta keys to be used in place of a postmeta query. Default null.
+	 * @param WP_Post    $post The current post object.
+	 */
+	$keys = apply_filters( 'postmeta_form_keys', null, $post );
+
+	if ( null === $keys ) {
+		/**
+		 * Filters the number of custom fields to retrieve for the drop-down
+		 * in the Custom Fields meta box.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param int $limit Number of custom fields to retrieve. Default 30.
+		 */
+		$limit = apply_filters( 'postmeta_form_limit', 30 );
+
+		$keys = $wpdb-&gt;get_col(
+			$wpdb-&gt;prepare(
+				"SELECT DISTINCT meta_key
+				FROM $wpdb-&gt;postmeta
+				WHERE meta_key NOT BETWEEN '_' AND '_z'
+				HAVING meta_key NOT LIKE %s
+				ORDER BY meta_key
+				LIMIT %d",
+				$wpdb-&gt;esc_like( '_' ) . '%',
+				$limit
+			)
+		);
+	}
+
+	if ( $keys ) {
+		natcasesort( $keys );
+	}
+	?&gt;
+&lt;p&gt;&lt;strong&gt;&lt;?php _e( 'Add New Custom Field:' ); ?&gt;&lt;/strong&gt;&lt;/p&gt;
+&lt;table id="newmeta"&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th class="left"&gt;&lt;label for="metakeyselect"&gt;&lt;?php _ex( 'Name', 'meta name' ); ?&gt;&lt;/label&gt;&lt;/th&gt;
+&lt;th&gt;&lt;label for="metavalue"&gt;&lt;?php _e( 'Value' ); ?&gt;&lt;/label&gt;&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td id="newmetaleft" class="left"&gt;
+	&lt;?php if ( $keys ) { ?&gt;
+&lt;select id="metakeyselect" name="metakeyselect"&gt;
+&lt;option value="#NONE#"&gt;&lt;?php _e( '&amp;mdash; Select &amp;mdash;' ); ?&gt;&lt;/option&gt;
+		&lt;?php
+		foreach ( $keys as $key ) {
+			if ( is_protected_meta( $key, 'post' ) || ! current_user_can( 'add_post_meta', $post-&gt;ID, $key ) ) {
+				continue;
+			}
+			echo "\n&lt;option value='" . esc_attr( $key ) . "'&gt;" . esc_html( $key ) . '&lt;/option&gt;';
+		}
+		?&gt;
+&lt;/select&gt;
+&lt;input class="hidden" type="text" id="metakeyinput" name="metakeyinput" value="" aria-label="&lt;?php _e( 'New custom field name' ); ?&gt;" /&gt;
+&lt;button type="button" id="newmeta-button" class="button button-small hide-if-no-js" onclick="jQuery('#metakeyinput, #metakeyselect, #enternew, #cancelnew').toggleClass('hidden');jQuery('#metakeyinput, #metakeyselect').filter(':visible').trigger('focus');"&gt;
+&lt;span id="enternew"&gt;&lt;?php _e( 'Enter new' ); ?&gt;&lt;/span&gt;
+&lt;span id="cancelnew" class="hidden"&gt;&lt;?php _e( 'Cancel' ); ?&gt;&lt;/span&gt;&lt;/button&gt;
+&lt;?php } else { ?&gt;
+&lt;input type="text" id="metakeyinput" name="metakeyinput" value="" /&gt;
+&lt;?php } ?&gt;
+&lt;/td&gt;
+&lt;td&gt;&lt;textarea id="metavalue" name="metavalue" rows="2" cols="25"&gt;&lt;/textarea&gt;
+	&lt;?php wp_nonce_field( 'add-meta', '_ajax_nonce-add-meta', false ); ?&gt;
+&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;div class="submit add-custom-field"&gt;
+	&lt;?php
+	submit_button(
+		__( 'Add Custom Field' ),
+		'',
+		'addmeta',
+		false,
+		array(
+			'id'            =&gt; 'newmeta-submit',
+			'data-wp-lists' =&gt; 'add:the-list:newmeta',
+		)
+	);
+	?&gt;
+&lt;/div&gt;
+	&lt;?php
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/template.php#L692">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/template.php#L692-L791">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/postmeta_form_keys"><span class="hook-func">apply_filters</span>( ‘postmeta_form_keys’, <nobr><span class="arg-type">array|null</span> <span class="arg-name">$keys</span></nobr>, <nobr><span class="arg-type">WP_Post</span> <span class="arg-name">$post</span></nobr> )</a></dt>
+<dd>
+<p>Filters values for the meta key dropdown in the Custom Fields meta box.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/postmeta_form_limit"><span class="hook-func">apply_filters</span>( ‘postmeta_form_limit’, <nobr><span class="arg-type">int</span> <span class="arg-name">$limit</span></nobr> )</a></dt>
+<dd>
+<p>Filters the number of custom fields to retrieve for the drop-down in the Custom Fields meta box.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/1.2.0/">1.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/meta_form" class="_attribution-link">https://developer.wordpress.org/reference/functions/meta_form</a>
+  </p>
+</div>

@@ -1,0 +1,64 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Embed::get_embed_handler_html( <span class="arg-type">array</span> <span class="arg-name">$attr</span>, <span class="arg-type">string</span> <span class="arg-name">$url</span> ): <span class="return-type">string|false</span>
+</h1> <section><p>Returns embed HTML for a given URL from embed handlers.</p> </section> <section><h2 id="description">Description</h2> <p>Attempts to convert a URL into embed HTML by checking the URL against the regex of the registered embed handlers.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$attr</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Shortcode attributes. Optional.<br> <ul class="param-hash">
+<li>
+<code>width</code> <span class="type">int</span><div class="desc">Width of the embed in pixels.</div>
+</li> <li>
+<code>height</code> <span class="type">int</span><div class="desc">Height of the embed in pixels.</div>
+</li> </ul> </span></div></dd>
+<dt>
+<code>$url</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The URL attempting to be embedded.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string|false</span> The embed HTML on success, false otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="149" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_embed_handler_html( $attr, $url ) {
+	$rawattr = $attr;
+	$attr    = wp_parse_args( $attr, wp_embed_defaults( $url ) );
+
+	ksort( $this-&gt;handlers );
+	foreach ( $this-&gt;handlers as $priority =&gt; $handlers ) {
+		foreach ( $handlers as $id =&gt; $handler ) {
+			if ( preg_match( $handler['regex'], $url, $matches ) &amp;&amp; is_callable( $handler['callback'] ) ) {
+				$return = call_user_func( $handler['callback'], $matches, $attr, $url, $rawattr );
+				if ( false !== $return ) {
+					/**
+					 * Filters the returned embed HTML.
+					 *
+					 * @since 2.9.0
+					 *
+					 * @see WP_Embed::shortcode()
+					 *
+					 * @param string|false $return The HTML result of the shortcode, or false on failure.
+					 * @param string       $url    The embed URL.
+					 * @param array        $attr   An array of shortcode attributes.
+					 */
+					return apply_filters( 'embed_handler_html', $return, $url, $attr );
+				}
+			}
+		}
+	}
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-embed.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-embed.php#L149">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-embed.php#L149-L177">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/embed_handler_html"><span class="hook-func">apply_filters</span>( ’embed_handler_html’, <nobr><span class="arg-type">string|false</span> <span class="arg-name">$return</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$attr</span></nobr> )</a></dt>
+<dd>
+<p>Filters the returned embed HTML.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.5.0/">5.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_embed/get_embed_handler_html" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_embed/get_embed_handler_html</a>
+  </p>
+</div>

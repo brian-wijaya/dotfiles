@@ -1,0 +1,87 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_get_missing_image_subsizes( <span class="arg-type">int</span> <span class="arg-name">$attachment_id</span> ): <span class="return-type">array[]</span>
+</h1> <section><p>Compare the existing image sub-sizes (as saved in the attachment meta) to the currently registered image sub-sizes, and return the difference.</p> </section> <section><h2 id="description">Description</h2> <p>Registered sub-sizes that are larger than the image are skipped.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$attachment_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The image attachment post ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array[]</span> Associative array of arrays of image sub-size information for missing image sizes, keyed by image size name.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="87" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_get_missing_image_subsizes( $attachment_id ) {
+	if ( ! wp_attachment_is_image( $attachment_id ) ) {
+		return array();
+	}
+
+	$registered_sizes = wp_get_registered_image_subsizes();
+	$image_meta       = wp_get_attachment_metadata( $attachment_id );
+
+	// Meta error?
+	if ( empty( $image_meta ) ) {
+		return $registered_sizes;
+	}
+
+	// Use the originally uploaded image dimensions as full_width and full_height.
+	if ( ! empty( $image_meta['original_image'] ) ) {
+		$image_file = wp_get_original_image_path( $attachment_id );
+		$imagesize  = wp_getimagesize( $image_file );
+	}
+
+	if ( ! empty( $imagesize ) ) {
+		$full_width  = $imagesize[0];
+		$full_height = $imagesize[1];
+	} else {
+		$full_width  = (int) $image_meta['width'];
+		$full_height = (int) $image_meta['height'];
+	}
+
+	$possible_sizes = array();
+
+	// Skip registered sizes that are too large for the uploaded image.
+	foreach ( $registered_sizes as $size_name =&gt; $size_data ) {
+		if ( image_resize_dimensions( $full_width, $full_height, $size_data['width'], $size_data['height'], $size_data['crop'] ) ) {
+			$possible_sizes[ $size_name ] = $size_data;
+		}
+	}
+
+	if ( empty( $image_meta['sizes'] ) ) {
+		$image_meta['sizes'] = array();
+	}
+
+	/*
+	 * Remove sizes that already exist. Only checks for matching "size names".
+	 * It is possible that the dimensions for a particular size name have changed.
+	 * For example the user has changed the values on the Settings -&gt; Media screen.
+	 * However we keep the old sub-sizes with the previous dimensions
+	 * as the image may have been used in an older post.
+	 */
+	$missing_sizes = array_diff_key( $possible_sizes, $image_meta['sizes'] );
+
+	/**
+	 * Filters the array of missing image sub-sizes for an uploaded image.
+	 *
+	 * @since 5.3.0
+	 *
+	 * @param array[] $missing_sizes Associative array of arrays of image sub-size information for
+	 *                               missing image sizes, keyed by image size name.
+	 * @param array   $image_meta    The image meta data.
+	 * @param int     $attachment_id The image attachment post ID.
+	 */
+	return apply_filters( 'wp_get_missing_image_subsizes', $missing_sizes, $image_meta, $attachment_id );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/image.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/image.php#L87">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/image.php#L87-L147">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_get_missing_image_subsizes"><span class="hook-func">apply_filters</span>( ‘wp_get_missing_image_subsizes’, <nobr><span class="arg-type">array[]</span> <span class="arg-name">$missing_sizes</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$image_meta</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the array of missing image sub-sizes for an uploaded image.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_get_missing_image_subsizes" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_get_missing_image_subsizes</a>
+  </p>
+</div>

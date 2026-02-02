@@ -1,0 +1,140 @@
+<h1 class="wp-block-wporg-code-reference-title">touch_time( <span class="arg-type">int|bool</span> <span class="arg-name">$edit</span> = <span class="arg-default">1</span>, <span class="arg-type">int|bool</span> <span class="arg-name">$for_post</span> = <span class="arg-default">1</span>, <span class="arg-type">int</span> <span class="arg-name">$tab_index</span>, <span class="arg-type">int|bool</span> <span class="arg-name">$multi</span> )</h1> <section><p>Prints out HTML form date elements for editing post or comment publish date.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$edit</code><span class="type"><span class="int">int</span>|<span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Accepts <code>1|true</code> for editing the date, <code>0|false</code> for adding the date.</span></div>
+<p class="default">Default:<code>1</code></p>
+</dd>
+<dt>
+<code>$for_post</code><span class="type"><span class="int">int</span>|<span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Accepts <code>1|true</code> for applying the date to a post, <code>0|false</code> for a comment.</span></div>
+<p class="default">Default:<code>1</code></p>
+</dd>
+<dt>
+<code>$tab_index</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The tabindex attribute to add. Default 0.</span></div></dd>
+<dt>
+<code>$multi</code><span class="type"><span class="int">int</span>|<span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Whether the additional fields and buttons should be added.<br> Default <code>0|false</code>.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="807" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function touch_time( $edit = 1, $for_post = 1, $tab_index = 0, $multi = 0 ) {
+	global $wp_locale;
+	$post = get_post();
+
+	if ( $for_post ) {
+		$edit = ! ( in_array( $post-&gt;post_status, array( 'draft', 'pending' ), true ) &amp;&amp; ( ! $post-&gt;post_date_gmt || '0000-00-00 00:00:00' === $post-&gt;post_date_gmt ) );
+	}
+
+	$tab_index_attribute = '';
+	if ( (int) $tab_index &gt; 0 ) {
+		$tab_index_attribute = " tabindex=\"$tab_index\"";
+	}
+
+	// @todo Remove this?
+	// echo '&lt;label for="timestamp" style="display: block;"&gt;&lt;input type="checkbox" class="checkbox" name="edit_date" value="1" id="timestamp"'.$tab_index_attribute.' /&gt; '.__( 'Edit timestamp' ).'&lt;/label&gt;&lt;br /&gt;';
+
+	$post_date = ( $for_post ) ? $post-&gt;post_date : get_comment()-&gt;comment_date;
+	$jj        = ( $edit ) ? mysql2date( 'd', $post_date, false ) : current_time( 'd' );
+	$mm        = ( $edit ) ? mysql2date( 'm', $post_date, false ) : current_time( 'm' );
+	$aa        = ( $edit ) ? mysql2date( 'Y', $post_date, false ) : current_time( 'Y' );
+	$hh        = ( $edit ) ? mysql2date( 'H', $post_date, false ) : current_time( 'H' );
+	$mn        = ( $edit ) ? mysql2date( 'i', $post_date, false ) : current_time( 'i' );
+	$ss        = ( $edit ) ? mysql2date( 's', $post_date, false ) : current_time( 's' );
+
+	$cur_jj = current_time( 'd' );
+	$cur_mm = current_time( 'm' );
+	$cur_aa = current_time( 'Y' );
+	$cur_hh = current_time( 'H' );
+	$cur_mn = current_time( 'i' );
+
+	$month = '&lt;label&gt;&lt;span class="screen-reader-text"&gt;' .
+		/* translators: Hidden accessibility text. */
+		__( 'Month' ) .
+	'&lt;/span&gt;&lt;select class="form-required" ' . ( $multi ? '' : 'id="mm" ' ) . 'name="mm"' . $tab_index_attribute . "&gt;\n";
+	for ( $i = 1; $i &lt; 13; $i = $i + 1 ) {
+		$monthnum  = zeroise( $i, 2 );
+		$monthtext = $wp_locale-&gt;get_month_abbrev( $wp_locale-&gt;get_month( $i ) );
+		$month    .= "\t\t\t" . '&lt;option value="' . $monthnum . '" data-text="' . $monthtext . '" ' . selected( $monthnum, $mm, false ) . '&gt;';
+		/* translators: 1: Month number (01, 02, etc.), 2: Month abbreviation. */
+		$month .= sprintf( __( '%1$s-%2$s' ), $monthnum, $monthtext ) . "&lt;/option&gt;\n";
+	}
+	$month .= '&lt;/select&gt;&lt;/label&gt;';
+
+	$day = '&lt;label&gt;&lt;span class="screen-reader-text"&gt;' .
+		/* translators: Hidden accessibility text. */
+		__( 'Day' ) .
+	'&lt;/span&gt;&lt;input type="text" ' . ( $multi ? '' : 'id="jj" ' ) . 'name="jj" value="' . $jj . '" size="2" maxlength="2"' . $tab_index_attribute . ' autocomplete="off" class="form-required" inputmode="numeric" /&gt;&lt;/label&gt;';
+	$year = '&lt;label&gt;&lt;span class="screen-reader-text"&gt;' .
+		/* translators: Hidden accessibility text. */
+		__( 'Year' ) .
+	'&lt;/span&gt;&lt;input type="text" ' . ( $multi ? '' : 'id="aa" ' ) . 'name="aa" value="' . $aa . '" size="4" maxlength="4"' . $tab_index_attribute . ' autocomplete="off" class="form-required" inputmode="numeric" /&gt;&lt;/label&gt;';
+	$hour = '&lt;label&gt;&lt;span class="screen-reader-text"&gt;' .
+		/* translators: Hidden accessibility text. */
+		__( 'Hour' ) .
+	'&lt;/span&gt;&lt;input type="text" ' . ( $multi ? '' : 'id="hh" ' ) . 'name="hh" value="' . $hh . '" size="2" maxlength="2"' . $tab_index_attribute . ' autocomplete="off" class="form-required" inputmode="numeric" /&gt;&lt;/label&gt;';
+	$minute = '&lt;label&gt;&lt;span class="screen-reader-text"&gt;' .
+		/* translators: Hidden accessibility text. */
+		__( 'Minute' ) .
+	'&lt;/span&gt;&lt;input type="text" ' . ( $multi ? '' : 'id="mn" ' ) . 'name="mn" value="' . $mn . '" size="2" maxlength="2"' . $tab_index_attribute . ' autocomplete="off" class="form-required" inputmode="numeric" /&gt;&lt;/label&gt;';
+
+	echo '&lt;div class="timestamp-wrap"&gt;';
+	/* translators: 1: Month, 2: Day, 3: Year, 4: Hour, 5: Minute. */
+	printf( __( '%1$s %2$s, %3$s at %4$s:%5$s' ), $month, $day, $year, $hour, $minute );
+
+	echo '&lt;/div&gt;&lt;input type="hidden" id="ss" name="ss" value="' . $ss . '" /&gt;';
+
+	if ( $multi ) {
+		return;
+	}
+
+	echo "\n\n";
+
+	$map = array(
+		'mm' =&gt; array( $mm, $cur_mm ),
+		'jj' =&gt; array( $jj, $cur_jj ),
+		'aa' =&gt; array( $aa, $cur_aa ),
+		'hh' =&gt; array( $hh, $cur_hh ),
+		'mn' =&gt; array( $mn, $cur_mn ),
+	);
+
+	foreach ( $map as $timeunit =&gt; $value ) {
+		list( $unit, $curr ) = $value;
+
+		echo '&lt;input type="hidden" id="hidden_' . $timeunit . '" name="hidden_' . $timeunit . '" value="' . $unit . '" /&gt;' . "\n";
+		$cur_timeunit = 'cur_' . $timeunit;
+		echo '&lt;input type="hidden" id="' . $cur_timeunit . '" name="' . $cur_timeunit . '" value="' . $curr . '" /&gt;' . "\n";
+	}
+	?&gt;
+
+&lt;p&gt;
+&lt;a href="#edit_timestamp" class="save-timestamp hide-if-no-js button"&gt;&lt;?php _e( 'OK' ); ?&gt;&lt;/a&gt;
+&lt;a href="#edit_timestamp" class="cancel-timestamp hide-if-no-js button-cancel"&gt;&lt;?php _e( 'Cancel' ); ?&gt;&lt;/a&gt;
+&lt;/p&gt;
+	&lt;?php
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/template.php#L807">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/template.php#L807-L901">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.4.0/">4.4.0</a></td>
+<td><span class="since-description">Converted to use <a href="get_comment" rel="function">get_comment()</a> instead of the global <code>$comment</code>.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/0.71/">0.71</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/touch_time" class="_attribution-link">https://developer.wordpress.org/reference/functions/touch_time</a>
+  </p>
+</div>

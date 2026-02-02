@@ -1,0 +1,48 @@
+<h1 class="wp-block-wporg-code-reference-title">POP3::top( <span class="arg-name">$msgNum</span>, <span class="arg-name">$numLines</span> = <span class="arg-default">"0"</span> )</h1>  <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="237" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function top ($msgNum, $numLines = "0") {
+    //  Gets the header and first $numLines of the msg body
+    //  returns data in an array with each returned line being
+    //  an array element. If $numLines is empty, returns
+    //  only the header information, and none of the body.
+
+    if(!isset($this-&gt;FP)) {
+        $this-&gt;ERROR = "POP3 top: " . _("No connection to server");
+        return false;
+    }
+    $this-&gt;update_timer();
+
+    $fp = $this-&gt;FP;
+    $buffer = $this-&gt;BUFFER;
+    $cmd = "TOP $msgNum $numLines";
+    fwrite($fp, "TOP $msgNum $numLines\r\n");
+    $reply = fgets($fp, $buffer);
+    $reply = $this-&gt;strip_clf($reply);
+    if($this-&gt;DEBUG) {
+        @error_log("POP3 SEND [$cmd] GOT [$reply]",0);
+    }
+    if(!$this-&gt;is_ok($reply))
+    {
+        $this-&gt;ERROR = "POP3 top: " . _("Error ") . "[$reply]";
+        return false;
+    }
+
+    $count = 0;
+    $MsgArray = array();
+
+    $line = fgets($fp,$buffer);
+    while ( !preg_match('/^\.\r\n/',$line))
+    {
+        $MsgArray[$count] = $line;
+        $count++;
+        $line = fgets($fp,$buffer);
+        if(empty($line))    { break; }
+    }
+
+    return $MsgArray;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-pop3.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-pop3.php#L237">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-pop3.php#L237-L277">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/pop3/top" class="_attribution-link">https://developer.wordpress.org/reference/classes/pop3/top</a>
+  </p>
+</div>

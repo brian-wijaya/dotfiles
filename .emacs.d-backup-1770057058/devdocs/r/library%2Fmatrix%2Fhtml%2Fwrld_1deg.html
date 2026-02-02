@@ -1,0 +1,32 @@
+<div class="container">
+<main>  <h2>
+<code>wrld_1deg</code> Contiguity Matrix of World One-Degree Grid Cells</h2> <h3>Description</h3> <p>This matrix gives the contiguities of 15260 one-degree grid cells of world land areas, using a criterion based on the great-circle distance between centers. </p> <h3>Usage</h3> <pre data-language="r"><code class="language-R">data(wrld_1deg)</code></pre> <h3>Format</h3> <p>A <code class="reqn">15260 \times 15260</code> sparse, symmetric matrix of class <code><a href="dscmatrix-class">dsCMatrix</a></code>, with 55973 nonzero entries. </p> <h3>Source</h3> <p>Shoreline data were read into <span class="rlang"><b>R</b></span> from the GSHHS database using function <code>Rgshhs</code> from package <a href="https://CRAN.R-project.org/package=maptools"><span class="pkg">maptools</span></a>. Antarctica was excluded. An approximately one-degree grid was generated using function <code>Sobj_SpatialGrid</code>, also from <a href="https://CRAN.R-project.org/package=maptools"><span class="pkg">maptools</span></a>. Grid cells with centers on land were identified using the <code>over</code> method for classes <code>SpatialPolygons</code> and <code>SpatialGrid</code>, defined in package <a href="https://CRAN.R-project.org/package=sp"><span class="pkg">sp</span></a>. Neighbours of these were identified by passing the resulting <code>SpatialPixels</code> object to function <code>dnearneigh</code> from package <a href="https://CRAN.R-project.org/package=spdep"><span class="pkg">spdep</span></a>, using as a cut-off a great-circle distance of <code>sqrt(2)</code> kilometers between centers. </p> <p>Neighbour lists were augmented with row-standardized (and then symmetrized) spatial weights, using functions <code>nb2listw</code> and <code>similar.listw</code> from packages <a href="https://CRAN.R-project.org/package=spdep"><span class="pkg">spdep</span></a> and <a href="https://CRAN.R-project.org/package=spatialreg"><span class="pkg">spatialreg</span></a>. The resulting <code>listw</code> object was coerced to class <code><a href="dscmatrix-class">dsTMatrix</a></code> using <code>as_dsTMatrix_listw</code> from <a href="https://CRAN.R-project.org/package=spatialreg"><span class="pkg">spatialreg</span></a>, and subsequently to class <code><a href="dscmatrix-class">dsCMatrix</a></code>. </p> <h3>References</h3> <p>Ord, J. K. (1975). Estimation methods for models of spatial interaction. <em>Journal of the American Statistical Association</em>, <em>70</em>(349), 120-126. <a href="https://doi.org/10.2307/2285387">doi:10.2307/2285387</a> </p> <h3>Examples</h3> <pre data-language="r"><code class="language-R">
+data(wrld_1deg, package = "Matrix")
+(n &lt;- ncol(wrld_1deg))
+I &lt;- .symDiagonal(n)
+
+doExtras &lt;- interactive() || nzchar(Sys.getenv("R_MATRIX_CHECK_EXTRA"))
+set.seed(1)
+r &lt;- if(doExtras) 20L else 3L
+rho &lt;- 1 / runif(r, 0, 0.5)
+
+system.time(MJ0 &lt;- sapply(rho, function(mult)
+    determinant(wrld_1deg + mult * I, logarithm = TRUE)$modulus))
+
+## Can be done faster by updating the Cholesky factor:
+
+C1 &lt;- Cholesky(wrld_1deg, Imult = 2)
+system.time(MJ1 &lt;- sapply(rho, function(mult)
+    determinant(update(C1, wrld_1deg, mult), sqrt = FALSE)$modulus))
+stopifnot(all.equal(MJ0, MJ1))
+
+C2 &lt;- Cholesky(wrld_1deg, super = TRUE, Imult = 2)
+system.time(MJ2 &lt;- sapply(rho, function(mult)
+    determinant(update(C2, wrld_1deg, mult), sqrt = FALSE)$modulus))
+stopifnot(all.equal(MJ0, MJ2))
+</code></pre> </main> </div><div class="_attribution">
+  <p class="_attribution-p">
+    Copyright (&copy;) 1999–2012 R Foundation for Statistical Computing.<br>Licensed under the <a href="https://www.gnu.org/copyleft/gpl.html">GNU General Public License</a>.<br>
+    
+  </p>
+</div>

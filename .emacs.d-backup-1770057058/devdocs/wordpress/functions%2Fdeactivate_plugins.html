@@ -1,0 +1,135 @@
+<h1 class="wp-block-wporg-code-reference-title">deactivate_plugins( <span class="arg-type">string|string[]</span> <span class="arg-name">$plugins</span>, <span class="arg-type">bool</span> <span class="arg-name">$silent</span> = <span class="arg-default">false</span>, <span class="arg-type">bool|null</span> <span class="arg-name">$network_wide</span> = <span class="arg-default">null</span> )</h1> <section><p>Deactivates a single plugin or multiple plugins.</p> </section> <section><h2 id="description">Description</h2> <p>The deactivation hook is disabled by the plugin upgrader by using the $silent parameter.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$plugins</code><span class="type"><span class="string">string</span>|<span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Single plugin or list of plugins to deactivate.</span></div></dd>
+<dt>
+<code>$silent</code><span class="type"><span class="bool">bool</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Prevent calling deactivation hooks. </span></div>
+<p class="default">Default:<code>false</code></p>
+</dd>
+<dt>
+<code>$network_wide</code><span class="type"><span class="bool">bool</span>|<span class="null">null</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Whether to deactivate the plugin for all sites in the network.<br> A value of null will deactivate plugins for both the network and the current site. Multisite only. </span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="more-information">More Information</h2> <p>This function is often used by a plugin to deactivate itself if the plugin requires the presence of certain features that are missing in environment after an administrator has activated it. This is usually the last step in a dependency-checking function.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="758" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function deactivate_plugins( $plugins, $silent = false, $network_wide = null ) {
+	if ( is_multisite() ) {
+		$network_current = get_site_option( 'active_sitewide_plugins', array() );
+	}
+	$current    = get_option( 'active_plugins', array() );
+	$do_blog    = false;
+	$do_network = false;
+
+	foreach ( (array) $plugins as $plugin ) {
+		$plugin = plugin_basename( trim( $plugin ) );
+		if ( ! is_plugin_active( $plugin ) ) {
+			continue;
+		}
+
+		$network_deactivating = ( false !== $network_wide ) &amp;&amp; is_plugin_active_for_network( $plugin );
+
+		if ( ! $silent ) {
+			/**
+			 * Fires before a plugin is deactivated.
+			 *
+			 * If a plugin is silently deactivated (such as during an update),
+			 * this hook does not fire.
+			 *
+			 * @since 2.9.0
+			 *
+			 * @param string $plugin               Path to the plugin file relative to the plugins directory.
+			 * @param bool   $network_deactivating Whether the plugin is deactivated for all sites in the network
+			 *                                     or just the current site. Multisite only. Default false.
+			 */
+			do_action( 'deactivate_plugin', $plugin, $network_deactivating );
+		}
+
+		if ( false !== $network_wide ) {
+			if ( is_plugin_active_for_network( $plugin ) ) {
+				$do_network = true;
+				unset( $network_current[ $plugin ] );
+			} elseif ( $network_wide ) {
+				continue;
+			}
+		}
+
+		if ( true !== $network_wide ) {
+			$key = array_search( $plugin, $current, true );
+			if ( false !== $key ) {
+				$do_blog = true;
+				unset( $current[ $key ] );
+			}
+		}
+
+		if ( $do_blog &amp;&amp; wp_is_recovery_mode() ) {
+			list( $extension ) = explode( '/', $plugin );
+			wp_paused_plugins()-&gt;delete( $extension );
+		}
+
+		if ( ! $silent ) {
+			/**
+			 * Fires as a specific plugin is being deactivated.
+			 *
+			 * This hook is the "deactivation" hook used internally by register_deactivation_hook().
+			 * The dynamic portion of the hook name, `$plugin`, refers to the plugin basename.
+			 *
+			 * If a plugin is silently deactivated (such as during an update), this hook does not fire.
+			 *
+			 * @since 2.0.0
+			 *
+			 * @param bool $network_deactivating Whether the plugin is deactivated for all sites in the network
+			 *                                   or just the current site. Multisite only. Default false.
+			 */
+			do_action( "deactivate_{$plugin}", $network_deactivating );
+
+			/**
+			 * Fires after a plugin is deactivated.
+			 *
+			 * If a plugin is silently deactivated (such as during an update),
+			 * this hook does not fire.
+			 *
+			 * @since 2.9.0
+			 *
+			 * @param string $plugin               Path to the plugin file relative to the plugins directory.
+			 * @param bool   $network_deactivating Whether the plugin is deactivated for all sites in the network
+			 *                                     or just the current site. Multisite only. Default false.
+			 */
+			do_action( 'deactivated_plugin', $plugin, $network_deactivating );
+		}
+	}
+
+	if ( $do_blog ) {
+		update_option( 'active_plugins', $current );
+	}
+	if ( $do_network ) {
+		update_site_option( 'active_sitewide_plugins', $network_current );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/plugin.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/plugin.php#L758">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/plugin.php#L758-L850">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deactivated_plugin"><span class="hook-func">do_action</span>( ‘deactivated_plugin’, <nobr><span class="arg-type">string</span> <span class="arg-name">$plugin</span></nobr>, <nobr><span class="arg-type">bool</span> <span class="arg-name">$network_deactivating</span></nobr> )</a></dt>
+<dd>
+<p>Fires after a plugin is deactivated.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/deactivate_plugin"><span class="hook-func">do_action</span>( “deactivate_{$plugin}”, <nobr><span class="arg-type">bool</span> <span class="arg-name">$network_deactivating</span></nobr> )</a></dt>
+<dd>
+<p>Fires as a specific plugin is being deactivated.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/deactivate_plugins" class="_attribution-link">https://developer.wordpress.org/reference/functions/deactivate_plugins</a>
+  </p>
+</div>

@@ -1,0 +1,163 @@
+<h1 class="wp-block-wporg-code-reference-title">Walker::paged_walk( <span class="arg-type">array</span> <span class="arg-name">$elements</span>, <span class="arg-type">int</span> <span class="arg-name">$max_depth</span>, <span class="arg-type">int</span> <span class="arg-name">$page_num</span>, <span class="arg-type">int</span> <span class="arg-name">$per_page</span>, <span class="arg-type">mixed</span> <span class="arg-name">$args</span> ): <span class="return-type">string</span>
+</h1> <section><p>Produces a page of nested elements.</p> </section> <section><h2 id="description">Description</h2> <p>Given an array of hierarchical elements, the maximum depth, a specific page number, and number of elements per page, this function first determines all top level root elements belonging to that page, then lists them and all of their children in hierarchical order.</p> <p>$max_depth = 0 means display all levels.<br>$max_depth &gt; 0 specifies the number of display levels.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$elements</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">An array of elements.</span></div></dd>
+<dt>
+<code>$max_depth</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The maximum hierarchical depth.</span></div></dd>
+<dt>
+<code>$page_num</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The specific page number, beginning with 1.</span></div></dd>
+<dt>
+<code>$per_page</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Number of elements per page.</span></div></dd>
+<dt>
+<code>$args</code><span class="type"><span class="mixed">mixed</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Optional additional arguments.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> XHTML of the specified page of elements.</section> <section><h2 id="more-information">More Information</h2> <p>This method can be used to initialize the <tt><a href="../walker">Walker</a></tt> class. This function works like <tt>walk()</tt> but allows for pagination. <tt>$page_num</tt> specifies the current page to render while <tt>$per_page</tt> specifies the number of items to show per page. Any <i>additional</i> arguments passed to this method will be passed unchanged to the other methods.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="292" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function paged_walk( $elements, $max_depth, $page_num, $per_page, ...$args ) {
+	$output = '';
+
+	$max_depth = (int) $max_depth;
+
+	if ( empty( $elements ) || $max_depth &lt; -1 ) {
+		return $output;
+	}
+
+	$parent_field = $this-&gt;db_fields['parent'];
+
+	$count = -1;
+	if ( -1 === $max_depth ) {
+		$total_top = count( $elements );
+	}
+	if ( $page_num &lt; 1 || $per_page &lt; 0 ) {
+		// No paging.
+		$paging = false;
+		$start  = 0;
+		if ( -1 === $max_depth ) {
+			$end = $total_top;
+		}
+		$this-&gt;max_pages = 1;
+	} else {
+		$paging = true;
+		$start  = ( (int) $page_num - 1 ) * (int) $per_page;
+		$end    = $start + $per_page;
+		if ( -1 === $max_depth ) {
+			$this-&gt;max_pages = (int) ceil( $total_top / $per_page );
+		}
+	}
+
+	// Flat display.
+	if ( -1 === $max_depth ) {
+		if ( ! empty( $args[0]['reverse_top_level'] ) ) {
+			$elements = array_reverse( $elements );
+			$oldstart = $start;
+			$start    = $total_top - $end;
+			$end      = $total_top - $oldstart;
+		}
+
+		$empty_array = array();
+		foreach ( $elements as $e ) {
+			++$count;
+			if ( $count &lt; $start ) {
+				continue;
+			}
+			if ( $count &gt;= $end ) {
+				break;
+			}
+			$this-&gt;display_element( $e, $empty_array, 1, 0, $args, $output );
+		}
+		return $output;
+	}
+
+	/*
+	 * Separate elements into two buckets: top level and children elements.
+	 * Children_elements is two dimensional array, e.g.
+	 * $children_elements[10][] contains all sub-elements whose parent is 10.
+	 */
+	$top_level_elements = array();
+	$children_elements  = array();
+	foreach ( $elements as $e ) {
+		if ( empty( $e-&gt;$parent_field ) ) {
+			$top_level_elements[] = $e;
+		} else {
+			$children_elements[ $e-&gt;$parent_field ][] = $e;
+		}
+	}
+
+	$total_top = count( $top_level_elements );
+	if ( $paging ) {
+		$this-&gt;max_pages = (int) ceil( $total_top / $per_page );
+	} else {
+		$end = $total_top;
+	}
+
+	if ( ! empty( $args[0]['reverse_top_level'] ) ) {
+		$top_level_elements = array_reverse( $top_level_elements );
+		$oldstart           = $start;
+		$start              = $total_top - $end;
+		$end                = $total_top - $oldstart;
+	}
+	if ( ! empty( $args[0]['reverse_children'] ) ) {
+		foreach ( $children_elements as $parent =&gt; $children ) {
+			$children_elements[ $parent ] = array_reverse( $children );
+		}
+	}
+
+	foreach ( $top_level_elements as $e ) {
+		++$count;
+
+		// For the last page, need to unset earlier children in order to keep track of orphans.
+		if ( $end &gt;= $total_top &amp;&amp; $count &lt; $start ) {
+				$this-&gt;unset_children( $e, $children_elements );
+		}
+
+		if ( $count &lt; $start ) {
+			continue;
+		}
+
+		if ( $count &gt;= $end ) {
+			break;
+		}
+
+		$this-&gt;display_element( $e, $children_elements, $max_depth, 0, $args, $output );
+	}
+
+	if ( $end &gt;= $total_top &amp;&amp; count( $children_elements ) &gt; 0 ) {
+		$empty_array = array();
+		foreach ( $children_elements as $orphans ) {
+			foreach ( $orphans as $op ) {
+				$this-&gt;display_element( $op, $empty_array, 1, 0, $args, $output );
+			}
+		}
+	}
+
+	return $output;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-walker.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-walker.php#L292">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-walker.php#L292-L410">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">Formalized the existing <code>...$args</code> parameter by adding it to the function signature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.7.0/">2.7.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/walker/paged_walk" class="_attribution-link">https://developer.wordpress.org/reference/classes/walker/paged_walk</a>
+  </p>
+</div>

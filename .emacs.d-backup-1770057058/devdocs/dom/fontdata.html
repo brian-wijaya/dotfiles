@@ -1,0 +1,175 @@
+<h1>FontData</h1> <details class="baseline-indicator not" data-glean-toggle-open="baseline_toggle_open"> <summary>  <div class="status-title"> <span class="not-bold">Limited availability</span> </div>    </summary> <div class="extra"> <p>This feature is not Baseline because it does not work in some of the most widely-used browsers.</p>  <ul> <li> <a href="https://developer.mozilla.org/en-US/docs/Glossary/Baseline/Compatibility" data-glean-id="baseline_link_learn_more" target="_blank" class="learn-more"> Learn more </a> </li> <li> <a href="#browser_compatibility" data-glean-id="baseline_link_bcd_table"> See full compatibility </a> </li> <li> <a href="https://survey.alchemer.com/s3/7634825/MDN-baseline-feedback?page=%2Fen-US%2Fdocs%2FWeb%2FAPI%2FFontData&amp;level=not" data-glean-id="baseline_link_feedback" class="feedback-link" target="_blank" rel="noreferrer"> Report feedback </a> </li> </ul> </div> </details>   <div class="notecard experimental"><p><strong>Experimental:</strong> <strong>This is an <a href="https://developer.mozilla.org/en-US/docs/MDN/Writing_guidelines/Experimental_deprecated_obsolete#experimental">experimental technology</a></strong><br>Check the <a href="#browser_compatibility">Browser compatibility table</a> carefully before using this in production.</p></div> <p>The <code>FontData</code> interface of the <a href="local_font_access_api">Local Font Access API</a> represents a single local font face.</p>     <mdn-survey></mdn-survey>  <h2 id="instance_properties" class="heading">Instance properties</h2> <dl> <dt id="fontdata.family">
+<a href="fontdata/family"><code>FontData.family</code></a> <span class="badge inline readonly">Read only</span> <abbr class="icon icon-experimental" title="Experimental. Expect behavior to change in the future."> <span class="visually-hidden">Experimental</span> </abbr>
+</dt> <dd> <p>Returns the family of the font face.</p> </dd> <dt id="fontdata.fullname">
+<a href="fontdata/fullname"><code>FontData.fullName</code></a> <span class="badge inline readonly">Read only</span> <abbr class="icon icon-experimental" title="Experimental. Expect behavior to change in the future."> <span class="visually-hidden">Experimental</span> </abbr>
+</dt> <dd> <p>Returns the full name of the font face.</p> </dd> <dt id="fontdata.postscriptname">
+<a href="fontdata/postscriptname"><code>FontData.postscriptName</code></a> <span class="badge inline readonly">Read only</span> <abbr class="icon icon-experimental" title="Experimental. Expect behavior to change in the future."> <span class="visually-hidden">Experimental</span> </abbr>
+</dt> <dd> <p>Returns the PostScript name of the font face.</p> </dd> <dt id="fontdata.style">
+<a href="fontdata/style"><code>FontData.style</code></a> <span class="badge inline readonly">Read only</span> <abbr class="icon icon-experimental" title="Experimental. Expect behavior to change in the future."> <span class="visually-hidden">Experimental</span> </abbr>
+</dt> <dd> <p>Returns the style of the font face.</p> </dd> </dl>  <h2 id="instance_methods" class="heading">Instance methods</h2> <dl> <dt id="fontdata.blob">
+<a href="fontdata/blob"><code>FontData.blob()</code></a> <abbr class="icon icon-experimental" title="Experimental. Expect behavior to change in the future."> <span class="visually-hidden">Experimental</span> </abbr>
+</dt> <dd> <p>Returns a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"><code>Promise</code></a> that fulfills with a <a href="blob"><code>Blob</code></a> containing the raw bytes of the underlying font file.</p> </dd> </dl>  <h2 id="examples" class="heading">Examples</h2> <p>For a live example, see our <a href="https://mdn.github.io/dom-examples/local-font-access/" target="_blank">Local Font Access API demo</a>.</p>  <h3 id="font_enumeration" class="heading">Font enumeration</h3> <p>The following snippet will query for all available fonts, and log metadata. This could be used, for example, to populate a font-picker control.</p> <div class="code-example"><pre data-language="js">async function logFontData() {
+  try {
+    const availableFonts = await window.queryLocalFonts();
+    for (const fontData of availableFonts) {
+      console.log(fontData.postscriptName);
+      console.log(fontData.fullName);
+      console.log(fontData.family);
+      console.log(fontData.style);
+    }
+  } catch (err) {
+    console.error(err.name, err.message);
+  }
+}
+</pre></div>  <h3 id="accessing_low-level_data" class="heading">Accessing low-level data</h3> <p>The <a href="fontdata/blob"><code>blob()</code></a> method provides access to low-level <a href="https://en.wikipedia.org/wiki/SFNT" target="_blank">SFNT</a> data — this is a font file format that can contain other font formats, such as PostScript, TrueType, OpenType, or Web Open Font Format (WOFF).</p> <div class="code-example"><pre data-language="js">async function computeOutlineFormat() {
+  try {
+    const availableFonts = await window.queryLocalFonts({
+      postscriptNames: ["ComicSansMS"],
+    });
+    for (const fontData of availableFonts) {
+      // `blob()` returns a Blob containing valid and complete
+      // SFNT-wrapped font data.
+      const sfnt = await fontData.blob();
+      // Slice out only the bytes we need: the first 4 bytes are the SFNT
+      // version info.
+      // Spec: https://learn.microsoft.com/en-us/typography/opentype/spec/otff#organization-of-an-opentype-font
+      const sfntVersion = await sfnt.slice(0, 4).text();
+
+      let outlineFormat = "UNKNOWN";
+      switch (sfntVersion) {
+        case "\x00\x01\x00\x00":
+        case "true":
+        case "typ1":
+          outlineFormat = "truetype";
+          break;
+        case "OTTO":
+          outlineFormat = "cff";
+          break;
+      }
+      console.log("Outline format:", outlineFormat);
+    }
+  } catch (err) {
+    console.error(err.name, err.message);
+  }
+}
+</pre></div>  <h2 id="specifications" class="heading">Specifications</h2> <div class="_table"><table> <thead> <tr> <th scope="col">Specification</th> </tr> </thead> <tbody> <tr> <td><a href="https://wicg.github.io/local-font-access/#fontdata-interface" rel="noopener" target="_blank">Local Font Access API&gt;<br># fontdata-interface&gt;</a></td> </tr> </tbody> </table></div>  <h2 id="browser_compatibility" class="heading">Browser compatibility</h2> <div class="_table"><table>
+<thead>
+<tr id="bct-browser-type">
+<th></th>
+<th colspan="5">Desktop</th>
+<th colspan="7">Mobile</th>
+</tr>
+<tr id="bct-browsers">
+<th></th>
+<th>Chrome</th>
+<th>Edge</th>
+<th>Firefox</th>
+<th>Opera</th>
+<th>Safari</th>
+<th>Chrome Android</th>
+<th>Firefox for Android</th>
+<th>Opera Android</th>
+<th>Safari on IOS</th>
+<th>Samsung Internet</th>
+<th>WebView Android</th>
+<th>WebView on iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th><code>FontData</code></th>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">89</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>blob</code></th>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">89</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>family</code></th>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">89</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>fullName</code></th>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">89</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>postscriptName</code></th>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">89</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+</tr>
+<tr>
+<th><code>style</code></th>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-yes">103</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-yes">89</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+<td class="bc-supports-no">No</td>
+</tr>
+</tbody>
+</table></div>  <h2 id="see_also" class="heading">See also</h2> <ul> <li><a href="https://developer.chrome.com/docs/capabilities/web-apis/local-fonts" target="_blank">Use advanced typography with local fonts</a></li> <li><a href="https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face"><code>@font-face</code></a></li> </ul><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2005&ndash;2025 MDN contributors.<br>Licensed under the Creative Commons Attribution-ShareAlike License v2.5 or later.<br>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/API/FontData" class="_attribution-link">https://developer.mozilla.org/en-US/docs/Web/API/FontData</a>
+  </p>
+</div>

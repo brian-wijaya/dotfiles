@@ -1,0 +1,61 @@
+<h1 class="wp-block-wporg-code-reference-title">shortcode_parse_atts( <span class="arg-type">string</span> <span class="arg-name">$text</span> ): <span class="return-type">array</span>
+</h1> <section><p>Retrieves all attributes from the shortcodes tag.</p> </section> <section><h2 id="description">Description</h2> <p>The attributes list has the attribute name as the key and the value of the attribute as the value in the key/value pair. This allows for easier retrieval of the attributes, since all attributes have to be known.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$text</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Shortcode arguments list.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Array of attribute values keyed by attribute name.<br> Returns empty array if there are no attributes or if the original arguments string cannot be parsed.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="613" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function shortcode_parse_atts( $text ) {
+	$atts    = array();
+	$pattern = get_shortcode_atts_regex();
+	$text    = preg_replace( "/[\x{00a0}\x{200b}]+/u", ' ', $text );
+	if ( preg_match_all( $pattern, $text, $match, PREG_SET_ORDER ) ) {
+		foreach ( $match as $m ) {
+			if ( ! empty( $m[1] ) ) {
+				$atts[ strtolower( $m[1] ) ] = stripcslashes( $m[2] );
+			} elseif ( ! empty( $m[3] ) ) {
+				$atts[ strtolower( $m[3] ) ] = stripcslashes( $m[4] );
+			} elseif ( ! empty( $m[5] ) ) {
+				$atts[ strtolower( $m[5] ) ] = stripcslashes( $m[6] );
+			} elseif ( isset( $m[7] ) &amp;&amp; strlen( $m[7] ) ) {
+				$atts[] = stripcslashes( $m[7] );
+			} elseif ( isset( $m[8] ) &amp;&amp; strlen( $m[8] ) ) {
+				$atts[] = stripcslashes( $m[8] );
+			} elseif ( isset( $m[9] ) ) {
+				$atts[] = stripcslashes( $m[9] );
+			}
+		}
+
+		// Reject any unclosed HTML elements.
+		foreach ( $atts as &amp;$value ) {
+			if ( str_contains( $value, '&lt;' ) ) {
+				if ( 1 !== preg_match( '/^[^&lt;]*+(?:&lt;[^&gt;]*+&gt;[^&lt;]*+)*+$/', $value ) ) {
+					$value = '';
+				}
+			}
+		}
+	}
+
+	return $atts;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/shortcodes.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/shortcodes.php#L613">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/shortcodes.php#L613-L645">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.5.0/">6.5.0</a></td>
+<td><span class="since-description">The function now always returns an array, even if the original arguments string cannot be parsed or is empty.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/shortcode_parse_atts" class="_attribution-link">https://developer.wordpress.org/reference/functions/shortcode_parse_atts</a>
+  </p>
+</div>

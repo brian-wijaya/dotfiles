@@ -1,0 +1,130 @@
+<h1 tabindex="-1">Testing services</h1> <header class="docs-header"> <docs-breadcrumb ng-version="21.0.3" _nghost-ng-c3945279308 ngh="8"></docs-breadcrumb>   </header> 
+<div class="docs-alert docs-alert-note"> <p><strong>NOTE:</strong> While this guide is being updated for Vitest, some code examples currently use Karma/Jasmine syntax and APIs. We are actively working to provide Vitest equivalents where applicable.</p> </div>  <p>To check that your services are working as you intend, you can write tests specifically for them.</p> <p>Services are often the smoothest files to unit test. Here are some synchronous and asynchronous unit tests of the <code>ValueService</code> written without assistance from Angular testing utilities.</p> <pre data-language="ts">// Straight Jasmine testing without Angular's testing support
+  describe('ValueService', () =&gt; {
+    let service: ValueService;
+    beforeEach(() =&gt; {
+      service = new ValueService();
+    });
+
+    it('#getValue should return real value', () =&gt; {
+      expect(service.getValue()).toBe('real value');
+    });
+
+    it('#getObservableValue should return value from observable', (done: DoneFn) =&gt; {
+      service.getObservableValue().subscribe((value) =&gt; {
+        expect(value).toBe('observable value');
+        done();
+      });
+    });
+
+    it('#getPromiseValue should return value from a promise', (done: DoneFn) =&gt; {
+      service.getPromiseValue().then((value) =&gt; {
+        expect(value).toBe('promise value');
+        done();
+      });
+    });
+  });</pre> <h2 id="testing-services-with-the-testbed"> Testing services with the TestBed </h2> <p>Your application relies on Angular <a href="../di">dependency injection (DI)</a> to create services. When a service has a dependent service, DI finds or creates that dependent service. And if that dependent service has its own dependencies, DI finds-or-creates them as well.</p> <p>As a service <em>consumer</em>, you don't worry about any of this. You don't worry about the order of constructor arguments or how they're created.</p> <p>As a service <em>tester</em>, you must at least think about the first level of service dependencies but you <em>can</em> let Angular DI do the service creation and deal with constructor argument order when you use the <a href="../../api/core/testing/testbed"><code>TestBed</code></a> testing utility to provide and create services.</p> <h2 id="angular-testbed"> Angular TestBed </h2> <p>The <a href="../../api/core/testing/testbed"><code>TestBed</code></a> is the most important of the Angular testing utilities. The <a href="../../api/core/testing/testbed"><code>TestBed</code></a> creates a dynamically-constructed Angular <em>test</em> module that emulates an Angular <a href="../ngmodules/overview">@NgModule</a>.</p> <p>The <a href="../../api/core/testing/testbed#configureTestingModule"><code>TestBed.configureTestingModule()</code></a> method takes a metadata object that can have most of the properties of an <a href="../ngmodules/overview">@NgModule</a>.</p> <p>To test a service, you set the <code>providers</code> metadata property with an array of the services that you'll test or mock.</p> <pre data-language="ts">let service: ValueService;
+
+    beforeEach(() =&gt; {
+      TestBed.configureTestingModule({providers: [ValueService]});
+    });</pre>
+<p>Then inject it inside a test by calling <a href="../../api/core/testing/testbed#inject"><code>TestBed.inject()</code></a> with the service class as the argument.</p> 
+<div class="docs-alert docs-alert-helpful"> <p><strong>HELPFUL:</strong> <a href="../../api/core/testing/testbed#get"><code>TestBed.get()</code></a> was deprecated as of Angular version 9. To help minimize breaking changes, Angular introduces a new function called <a href="../../api/core/testing/testbed#inject"><code>TestBed.inject()</code></a>, which you should use instead.</p> </div>  <pre data-language="ts">it('should use ValueService', () =&gt; {
+      service = TestBed.inject(ValueService);
+      expect(service.getValue()).toBe('real value');
+    });</pre>
+<p>Or inside the <code>beforeEach()</code> if you prefer to inject the service as part of your setup.</p> <pre data-language="ts">beforeEach(() =&gt; {
+      TestBed.configureTestingModule({providers: [ValueService]});
+      service = TestBed.inject(ValueService);
+    });</pre>
+<p>When testing a service with a dependency, provide the mock in the <code>providers</code> array.</p> <p>In the following example, the mock is a spy object.</p> <pre data-language="ts">let masterService: MasterService;
+    let valueServiceSpy: jasmine.SpyObj&lt;ValueService&gt;;
+
+    beforeEach(() =&gt; {
+      const spy = jasmine.createSpyObj('ValueService', ['getValue']);
+
+      TestBed.configureTestingModule({
+        // Provide both the service-to-test and its (spy) dependency
+        providers: [MasterService, {provide: ValueService, useValue: spy}],
+      });
+      // Inject both the service-to-test and its (spy) dependency
+      masterService = TestBed.inject(MasterService);
+      valueServiceSpy = TestBed.inject(ValueService) as jasmine.SpyObj&lt;ValueService&gt;;
+    });</pre>
+<p>The test consumes that spy in the same way it did earlier.</p> <pre data-language="ts">it('#getValue should return stubbed value from a spy', () =&gt; {
+      const stubValue = 'stub value';
+      valueServiceSpy.getValue.and.returnValue(stubValue);
+
+      expect(masterService.getValue()).withContext('service returned stub value').toBe(stubValue);
+      expect(valueServiceSpy.getValue.calls.count())
+        .withContext('spy method was called once')
+        .toBe(1);
+      expect(valueServiceSpy.getValue.calls.mostRecent().returnValue).toBe(stubValue);
+    });</pre> <h2 id="testing-without-beforeeach"> Testing without beforeEach() </h2> <p>Most test suites in this guide call <code>beforeEach()</code> to set the preconditions for each <code>it()</code> test and rely on the <a href="../../api/core/testing/testbed"><code>TestBed</code></a> to create classes and inject services.</p> <p>There's another school of testing that never calls <code>beforeEach()</code> and prefers to create classes explicitly rather than use the <a href="../../api/core/testing/testbed"><code>TestBed</code></a>.</p> <p>Here's how you might rewrite one of the <code>MasterService</code> tests in that style.</p> <p>Begin by putting re-usable, preparatory code in a <em>setup</em> function instead of <code>beforeEach()</code>.</p> <pre data-language="ts">function setup() {
+      const valueServiceSpy = jasmine.createSpyObj('ValueService', ['getValue']);
+      const stubValue = 'stub value';
+      const masterService = new MasterService(valueServiceSpy);
+
+      valueServiceSpy.getValue.and.returnValue(stubValue);
+      return {masterService, stubValue, valueServiceSpy};
+    }</pre>
+<p>The <code>setup()</code> function returns an object literal with the variables, such as <code>masterService</code>, that a test might reference. You don't define <em>semi-global</em> variables (for example, <code>let masterService: MasterService</code>) in the body of the <code>describe()</code>.</p> <p>Then each test invokes <code>setup()</code> in its first line, before continuing with steps that manipulate the test subject and assert expectations.</p> <pre data-language="ts">it('#getValue should return stubbed value from a spy', () =&gt; {
+      const {masterService, stubValue, valueServiceSpy} = setup();
+      expect(masterService.getValue()).withContext('service returned stub value').toBe(stubValue);
+      expect(valueServiceSpy.getValue.calls.count())
+        .withContext('spy method was called once')
+        .toBe(1);
+      expect(valueServiceSpy.getValue.calls.mostRecent().returnValue).toBe(stubValue);
+    });</pre>
+<p>Notice how the test uses <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Operators/Destructuring_assignment" target="_blank"><em>destructuring assignment</em></a> to extract the setup variables that it needs.</p> <pre data-language="ts">const {masterService, stubValue, valueServiceSpy} = setup();</pre>
+<p>Many developers feel this approach is cleaner and more explicit than the traditional <code>beforeEach()</code> style.</p> <p>Although this testing guide follows the traditional style and the default <a href="https://github.com/angular/angular-cli" target="_blank">CLI schematics</a> generate test files with <code>beforeEach()</code> and <a href="../../api/core/testing/testbed"><code>TestBed</code></a>, feel free to adopt <em>this alternative approach</em> in your own projects.</p> <h2 id="testing-http-services"> Testing HTTP services </h2> <p>Data services that make HTTP calls to remote servers typically inject and delegate to the Angular <a href="../../api/common/http/httpclient"><code>HttpClient</code></a> service for XHR calls.</p> <p>You can test a data service with an injected <a href="../../api/common/http/httpclient"><code>HttpClient</code></a> spy as you would test any service with a dependency.</p> <pre data-language="ts">let httpClientSpy: jasmine.SpyObj&lt;HttpClient&gt;;
+  let heroService: HeroService;
+
+  beforeEach(() =&gt; {
+    // TODO: spy on other methods too
+    httpClientSpy = jasmine.createSpyObj('HttpClient', ['get']);
+    heroService = new HeroService(httpClientSpy);
+  });
+
+  it('should return expected heroes (HttpClient called once)', (done: DoneFn) =&gt; {
+    const expectedHeroes: Hero[] = [
+      {id: 1, name: 'A'},
+      {id: 2, name: 'B'},
+    ];
+
+    httpClientSpy.get.and.returnValue(asyncData(expectedHeroes));
+
+    heroService.getHeroes().subscribe({
+      next: (heroes) =&gt; {
+        expect(heroes).withContext('expected heroes').toEqual(expectedHeroes);
+        done();
+      },
+      error: done.fail,
+    });
+    expect(httpClientSpy.get.calls.count()).withContext('one call').toBe(1);
+  });
+
+  it('should return an error when the server returns a 404', (done: DoneFn) =&gt; {
+    const errorResponse = new HttpErrorResponse({
+      error: 'test 404 error',
+      status: 404,
+      statusText: 'Not Found',
+    });
+
+    httpClientSpy.get.and.returnValue(asyncError(errorResponse));
+
+    heroService.getHeroes().subscribe({
+      next: (heroes) =&gt; done.fail('expected an error, not heroes'),
+      error: (error) =&gt; {
+        expect(error.message).toContain('test 404 error');
+        done();
+      },
+    });
+  });</pre>
+
+<div class="docs-alert docs-alert-important"> <p><strong>IMPORTANT:</strong> The <code>HeroService</code> methods return <code>Observables</code>. You must <em>subscribe</em> to an observable to (a) cause it to execute and (b) assert that the method succeeds or fails.</p> </div>  <p>The <code>subscribe()</code> method takes a success (<code>next</code>) and fail (<code>error</code>) callback. Make sure you provide <em>both</em> callbacks so that you capture errors. Neglecting to do so produces an asynchronous uncaught observable error that the test runner will likely attribute to a completely different test.</p> <h2 id="httpclienttestingmodule"> HttpClientTestingModule </h2> <p>Extended interactions between a data service and the <a href="../../api/common/http/httpclient"><code>HttpClient</code></a> can be complex and difficult to mock with spies.</p> <p>The <a href="../../api/common/http/testing/httpclienttestingmodule"><code>HttpClientTestingModule</code></a> can make these testing scenarios more manageable.</p> <p>While the <em>code sample</em> accompanying this guide demonstrates <a href="../../api/common/http/testing/httpclienttestingmodule"><code>HttpClientTestingModule</code></a>, this page defers to the <a href="../http/testing">Http guide</a>, which covers testing with the <a href="../../api/common/http/testing/httpclienttestingmodule"><code>HttpClientTestingModule</code></a> in detail.</p><div class="_attribution">
+  <p class="_attribution-p">
+    Super-powered by Google &copy;2010&ndash;2025.<br />Code licensed under an MIT-style License. Documentation licensed under CC BY 4.0.<br>
+    <a href="https://angular.dev/guide/testing/services" class="_attribution-link">https://angular.dev/guide/testing/services</a>
+  </p>
+</div>

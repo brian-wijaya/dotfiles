@@ -1,0 +1,230 @@
+<section id="community-general-deploy-helper-module-manages-some-of-the-steps-common-in-deploying-projects"> <h1>community.general.deploy_helper module – Manages some of the steps common in deploying projects</h1> <div class="admonition note"> <p class="admonition-title">Note</p> <p>This module is part of the <a class="reference external" href="https://galaxy.ansible.com/ui/repo/published/community/general/">community.general collection</a> (version 10.7.3).</p> <p>You might already have this collection installed if you are using the <code>ansible</code> package. It is not included in <code>ansible-core</code>. To check whether it is installed, run <code>ansible-galaxy collection list</code>.</p> <p>To install it, use: <code>ansible-galaxy collection install community.general</code>.</p> <p>To use it in a playbook, specify: <code>community.general.deploy_helper</code>.</p> </div>  <ul class="simple"> <li><a class="reference internal" href="#synopsis" id="id1">Synopsis</a></li> <li><a class="reference internal" href="#parameters" id="id2">Parameters</a></li> <li><a class="reference internal" href="#attributes" id="id3">Attributes</a></li> <li><a class="reference internal" href="#notes" id="id4">Notes</a></li> <li><a class="reference internal" href="#examples" id="id5">Examples</a></li> </ul>  <section id="synopsis"> <h2>Synopsis</h2> <ul class="simple"> <li>The Deploy Helper manages some of the steps common in deploying software. It creates a folder structure, manages a symlink for the current release and cleans up old releases.</li> <li>Running it with the <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=query</span></a></code> or <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=present</span></a></code> returns the <code>deploy_helper</code> fact. <code>project_path</code>, whatever you set in the <code><strong><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-path"><span class="std std-ref">path</span></a></strong></code> parameter, <code>current_path</code>, the path to the symlink that points to the active release, <code>releases_path</code>, the path to the folder to keep releases in, <code>shared_path</code>, the path to the folder to keep shared resources in, <code>unfinished_filename</code>, the file to check for to recognize unfinished builds, <code>previous_release</code>, the release the ‘current’ symlink is pointing to, <code>previous_release_path</code>, the full path to the ‘current’ symlink target, <code>new_release</code>, either the <code><strong><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-release"><span class="std std-ref">release</span></a></strong></code> parameter or a generated timestamp, <code>new_release_path</code>, the path to the new release folder (not created by the module).</li> </ul> </section> <section id="parameters"> <h2>Parameters</h2> <table class="longtable ansible-option-table docutils align-default" style="width: 100%"> <thead> <tr>
+<th class="head"><p>Parameter</p></th> <th class="head"><p>Comments</p></th> </tr> </thead>  <tr>
+<td><div class="ansible-option-cell">  
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-attributes"><strong id="ansible-collections-community-general-deploy-helper-module-parameter-attr">attributes</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-aliases">aliases: attr</span></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The attributes the resulting filesystem object should have.</p> <p>To get supported flags look at the man page for <code>chattr</code> on the target system.</p> <p>This string should contain the attributes in the same order as the one displayed by <code>lsattr</code>.</p> <p>The <code>=</code> operator is assumed as default, otherwise <code>+</code> or <code>-</code> operators need to be included in the string.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-clean"><strong>clean</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Whether to run the clean procedure in case of <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=finalize</span></a></code>.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li><code>false</code></li> <li>
+<code><strong>true</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> </ul> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-current-path"><strong>current_path</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The name of the symlink that is created when the deploy is finalized. Used in <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=finalize</span></a></code> and <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=clean</span></a></code>. Returned in the <code>deploy_helper.current_path</code> fact.</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>"current"</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-group"><strong>group</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Name of the group that should own the filesystem object, as would be fed to <code>chown</code>.</p> <p>When left unspecified, it uses the current group of the current user unless you are root, in which case it can preserve the previous ownership.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-keep-releases"><strong>keep_releases</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">integer</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The number of old releases to keep when cleaning. Used in <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=finalize</span></a></code> and <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=clean</span></a></code>. Any unfinished builds are deleted first, so only correct releases count. The current version does not count.</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>5</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-mode"><strong>mode</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">any</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The permissions the resulting filesystem object should have.</p> <p>For those used to <code>/usr/bin/chmod</code> remember that modes are actually octal numbers. You must give Ansible enough information to parse them correctly. For consistent results, quote octal numbers (for example, <code>'644'</code> or <code>'1777'</code>) so Ansible receives a string and can do its own conversion from string into number. Adding a leading zero (for example, <code>0755</code>) works sometimes, but can fail in loops and some other circumstances.</p> <p>Giving Ansible a number without following either of these rules will end up with a decimal number which will have unexpected results.</p> <p>As of Ansible 1.8, the mode may be specified as a symbolic mode (for example, <code>u+rwx</code> or <code>u=rw,g=r,o=r</code>).</p> <p>If <code><strong><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-mode"><span class="std std-ref">mode</span></a></strong></code> is not specified and the destination filesystem object <strong>does not</strong> exist, the default <code>umask</code> on the system will be used when setting the mode for the newly created filesystem object.</p> <p>If <code><strong><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-mode"><span class="std std-ref">mode</span></a></strong></code> is not specified and the destination filesystem object <strong>does</strong> exist, the mode of the existing filesystem object will be used.</p> <p>Specifying <code><strong><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-mode"><span class="std std-ref">mode</span></a></strong></code> is the best way to ensure filesystem objects are created with the correct permissions. See CVE-2020-1736 for further details.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-owner"><strong>owner</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Name of the user that should own the filesystem object, as would be fed to <code>chown</code>.</p> <p>When left unspecified, it uses the current user unless you are root, in which case it can preserve the previous ownership.</p> <p>Specifying a numeric username will be assumed to be a user ID and not a username. Avoid numeric usernames to avoid this confusion.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell">  
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-path"><strong id="ansible-collections-community-general-deploy-helper-module-parameter-dest">path</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-aliases">aliases: dest</span></p> <p class="ansible-option-type-line"><span class="ansible-option-type">path</span> / <span class="ansible-option-required">required</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The root path of the project. Returned in the <code>deploy_helper.project_path</code> fact.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-release"><strong>release</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The release version that is being deployed. Defaults to a timestamp format <code>%Y%m%d%H%M%S</code> (for example <code>20141119223359</code>). This parameter is optional during <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=present</span></a></code>, but needs to be set explicitly for <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=finalize</span></a></code>. You can use the generated fact <code>release={{ deploy_helper.new_release }}</code>.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-releases-path"><strong>releases_path</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The name of the folder that holds the releases. This can be relative to <code><strong><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-path"><span class="std std-ref">path</span></a></strong></code> or absolute. Returned in the <code>deploy_helper.releases_path</code> fact.</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>"releases"</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-selevel"><strong>selevel</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The level part of the SELinux filesystem object context.</p> <p>This is the MLS/MCS attribute, sometimes known as the <code>range</code>.</p> <p>When set to <code>_default</code>, it will use the <code>level</code> portion of the policy if available.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-serole"><strong>serole</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The role part of the SELinux filesystem object context.</p> <p>When set to <code>_default</code>, it will use the <code>role</code> portion of the policy if available.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-setype"><strong>setype</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The type part of the SELinux filesystem object context.</p> <p>When set to <code>_default</code>, it will use the <code>type</code> portion of the policy if available.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-seuser"><strong>seuser</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The user part of the SELinux filesystem object context.</p> <p>By default it uses the <code>system</code> policy, where applicable.</p> <p>When set to <code>_default</code>, it will use the <code>user</code> portion of the policy if available.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-shared-path"><strong>shared_path</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">path</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The name of the folder that holds the shared resources. This can be relative to <code><strong><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-path"><span class="std std-ref">path</span></a></strong></code> or absolute. If this is set to an empty string, no shared folder is created. Returned in the <code>deploy_helper.shared_path</code> fact.</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>"shared"</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-state"><strong>state</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The state of the project.</p> <p><code>query</code> gathers facts.</p> <p><code>present</code> creates the project <code>root</code> folder, and in it the <code>releases</code> and <code>shared</code> folders.</p> <p><code>finalize</code> removes the unfinished_filename file, creates a symlink to the newly deployed release and optionally cleans old releases.</p> <p><code>clean</code> removes failed &amp; old releases.</p> <p><code>absent</code> removes the project folder (synonymous to the <a class="reference internal" href="../../ansible/builtin/file_module#ansible-collections-ansible-builtin-file-module"><span class="std std-ref">ansible.builtin.file</span></a> module with <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=absent</span></a></code>).</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li>
+<code><strong>"present"</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> <li><code>"finalize"</code></li> <li><code>"absent"</code></li> <li><code>"clean"</code></li> <li><code>"query"</code></li> </ul> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-unfinished-filename"><strong>unfinished_filename</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">string</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>The name of the file that indicates a deploy has not finished. All folders in the <code><strong><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-releases-path"><span class="std std-ref">releases_path</span></a></strong></code> that contain this file are deleted on <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=finalize</span></a></code> with <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-clean"><span class="std std-ref">clean=true</span></a></code>, or <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=clean</span></a></code>. This file is automatically deleted from the <code>new_release_path</code> during <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=finalize</span></a></code>.</p> <p class="ansible-option-line"><strong class="ansible-option-default-bold">Default:</strong> <code>"DEPLOY_UNFINISHED"</code></p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-parameter-unsafe-writes"><strong>unsafe_writes</strong></p> <p class="ansible-option-type-line"><span class="ansible-option-type">boolean</span></p> </div></td> <td><div class="ansible-option-cell">
+<p>Influence when to use atomic operation to prevent data corruption or inconsistent reads from the target filesystem object.</p> <p>By default this module uses atomic operations to prevent data corruption or inconsistent reads from the target filesystem objects, but sometimes systems are configured or just broken in ways that prevent this. One example is docker mounted filesystem objects, which cannot be updated atomically from inside the container and can only be written in an unsafe manner.</p> <p>This option allows Ansible to fall back to unsafe methods of updating filesystem objects when atomic operations fail (however, it doesn’t force Ansible to perform unsafe writes).</p> <p>IMPORTANT! Unsafe writes are subject to race conditions and can lead to data corruption.</p> <p class="ansible-option-line"><strong class="ansible-option-choices">Choices:</strong></p> <ul class="simple"> <li>
+<code><strong>false</strong></code> <span class="ansible-option-choices-default-mark">← (default)</span>
+</li> <li><code>true</code></li> </ul> </div></td> </tr>  </table> </section> <section id="attributes"> <h2>Attributes</h2> <table class="longtable ansible-option-table docutils align-default" style="width: 100%"> <thead> <tr>
+<th class="head"><p>Attribute</p></th> <th class="head"><p>Support</p></th> <th class="head"><p>Description</p></th> </tr> </thead>  <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-attribute-check-mode"><strong>check_mode</strong></p> 
+</div></td> <td><div class="ansible-option-cell">
+<p><strong class="ansible-attribute-support-label">Support: </strong><strong class="ansible-attribute-support-full">full</strong></p> </div></td> <td><div class="ansible-option-cell">
+<p>Can run in <code>check_mode</code> and return changed status prediction without modifying target.</p> </div></td> </tr> <tr>
+<td><div class="ansible-option-cell"> 
+<p class="ansible-option-title" id="ansible-collections-community-general-deploy-helper-module-attribute-diff-mode"><strong>diff_mode</strong></p> 
+</div></td> <td><div class="ansible-option-cell">
+<p><strong class="ansible-attribute-support-label">Support: </strong><strong class="ansible-attribute-support-none">none</strong></p> </div></td> <td><div class="ansible-option-cell">
+<p>Will return details on what has changed (or possibly needs changing in <code>check_mode</code>), when in diff mode.</p> </div></td> </tr>  </table> </section> <section id="notes"> <h2>Notes</h2> <div class="admonition note"> <p class="admonition-title">Note</p> <ul class="simple"> <li>Facts are only returned for <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=query</span></a></code> and <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=present</span></a></code>. If you use both, you should pass any overridden parameters to both calls, otherwise the second call overwrites the facts of the first one.</li> <li>When using <code><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-state"><span class="std std-ref">state=clean</span></a></code>, the releases are ordered by <em>creation date</em>. You should be able to switch to a new naming strategy without problems.</li> <li>Because of the default behaviour of generating the <code>new_release</code> fact, this module is not idempotent unless you pass your own release name with <code><strong><a class="reference internal" href="#ansible-collections-community-general-deploy-helper-module-parameter-release"><span class="std std-ref">release</span></a></strong></code>. Due to the nature of deploying software, this should not be much of a problem.</li> </ul> </div> </section> <section id="examples"> <h2>Examples</h2> <pre data-language="yaml+jinja"># General explanation, starting with an example folder structure for a project:
+
+# root:
+#     releases:
+#         - 20140415234508
+#         - 20140415235146
+#         - 20140416082818
+#
+#     shared:
+#         - sessions
+#         - uploads
+#
+#     current: releases/20140416082818
+
+
+# The 'releases' folder holds all the available releases. A release is a complete build of the application being
+# deployed. This can be a clone of a repository for example, or a sync of a local folder on your filesystem.
+# Having timestamped folders is one way of having distinct releases, but you could choose your own strategy like
+# git tags or commit hashes.
+#
+# During a deploy, a new folder should be created in the releases folder and any build steps required should be
+# performed. Once the new build is ready, the deploy procedure is 'finalized' by replacing the 'current' symlink
+# with a link to this build.
+#
+# The 'shared' folder holds any resource that is shared between releases. Examples of this are web-server
+# session files, or files uploaded by users of your application. It's quite common to have symlinks from a release
+# folder pointing to a shared/subfolder, and creating these links would be automated as part of the build steps.
+#
+# The 'current' symlink points to one of the releases. Probably the latest one, unless a deploy is in progress.
+# The web-server's root for the project will go through this symlink, so the 'downtime' when switching to a new
+# release is reduced to the time it takes to switch the link.
+#
+# To distinguish between successful builds and unfinished ones, a file can be placed in the folder of the release
+# that is currently in progress. The existence of this file will mark it as unfinished, and allow an automated
+# procedure to remove it during cleanup.
+
+
+# Typical usage
+- name: Initialize the deploy root and gather facts
+  community.general.deploy_helper:
+    path: /path/to/root
+- name: Clone the project to the new release folder
+  ansible.builtin.git:
+    repo: ansible.builtin.git://foosball.example.org/path/to/repo.git
+    dest: '{{ deploy_helper.new_release_path }}'
+    version: v1.1.1
+- name: Add an unfinished file, to allow cleanup on successful finalize
+  ansible.builtin.file:
+    path: '{{ deploy_helper.new_release_path }}/{{ deploy_helper.unfinished_filename }}'
+    state: touch
+- name: Perform some build steps, like running your dependency manager for example
+  composer:
+    command: install
+    working_dir: '{{ deploy_helper.new_release_path }}'
+- name: Create some folders in the shared folder
+  ansible.builtin.file:
+    path: '{{ deploy_helper.shared_path }}/{{ item }}'
+    state: directory
+  with_items:
+    - sessions
+    - uploads
+- name: Add symlinks from the new release to the shared folder
+  ansible.builtin.file:
+    path: '{{ deploy_helper.new_release_path }}/{{ item.path }}'
+    src: '{{ deploy_helper.shared_path }}/{{ item.src }}'
+    state: link
+  with_items:
+    - path: app/sessions
+      src: sessions
+    - path: web/uploads
+      src: uploads
+- name: Finalize the deploy, removing the unfinished file and switching the symlink
+  community.general.deploy_helper:
+    path: /path/to/root
+    release: '{{ deploy_helper.new_release }}'
+    state: finalize
+
+# Retrieving facts before running a deploy
+- name: Run 'state=query' to gather facts without changing anything
+  community.general.deploy_helper:
+    path: /path/to/root
+    state: query
+# Remember to set the 'release' parameter when you actually call 'state=present' later
+- name: Initialize the deploy root
+  community.general.deploy_helper:
+    path: /path/to/root
+    release: '{{ deploy_helper.new_release }}'
+    state: present
+
+# all paths can be absolute or relative (to the 'path' parameter)
+- community.general.deploy_helper:
+    path: /path/to/root
+    releases_path: /var/www/project/releases
+    shared_path: /var/www/shared
+    current_path: /var/www/active
+
+# Using your own naming strategy for releases (a version tag in this case):
+- community.general.deploy_helper:
+    path: /path/to/root
+    release: v1.1.1
+    state: present
+- community.general.deploy_helper:
+    path: /path/to/root
+    release: '{{ deploy_helper.new_release }}'
+    state: finalize
+
+# Using a different unfinished_filename:
+- community.general.deploy_helper:
+    path: /path/to/root
+    unfinished_filename: README.md
+    release: '{{ deploy_helper.new_release }}'
+    state: finalize
+
+# Postponing the cleanup of older builds:
+- community.general.deploy_helper:
+    path: /path/to/root
+    release: '{{ deploy_helper.new_release }}'
+    state: finalize
+    clean: false
+- community.general.deploy_helper:
+    path: /path/to/root
+    state: clean
+# Or running the cleanup ahead of the new deploy
+- community.general.deploy_helper:
+    path: /path/to/root
+    state: clean
+- community.general.deploy_helper:
+    path: /path/to/root
+    state: present
+
+# Keeping more old releases:
+- community.general.deploy_helper:
+    path: /path/to/root
+    release: '{{ deploy_helper.new_release }}'
+    state: finalize
+    keep_releases: 10
+# Or, if you use 'clean=false' on finalize:
+- community.general.deploy_helper:
+    path: /path/to/root
+    state: clean
+    keep_releases: 10
+
+# Removing the entire project root folder
+- community.general.deploy_helper:
+    path: /path/to/root
+    state: absent
+
+# Debugging the facts returned by the module
+- community.general.deploy_helper:
+    path: /path/to/root
+- ansible.builtin.debug:
+    var: deploy_helper
+</pre> <section id="authors"> <h3>Authors</h3> <ul class="simple"> <li>Ramon de la Fuente (@ramondelafuente)</li> </ul> </section> <section id="collection-links"> <h3>Collection links</h3> <ul class="ansible-links"> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/community.general/issues" rel="noopener external" target="_blank">Issue Tracker</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/community.general" rel="noopener external" target="_blank">Repository (Sources)</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://forum.ansible.com/c/help/6/none" rel="noopener external" target="_blank">Ask for help</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/community.general/issues/new?assignees=&amp;labels=&amp;template=bug_report.yml" rel="noopener external" target="_blank">Submit a bug report</a></span></li> <li><span><a aria-role="button" class="ansible-link reference external" href="https://github.com/ansible-collections/community.general/issues/new?assignees=&amp;labels=&amp;template=feature_request.yml" rel="noopener external" target="_blank">Request a feature</a></span></li> <li><span><a class="reference internal" href="index#communication-for-community-general"><span class="std std-ref">Communication</span></a></span></li> </ul> </section> </section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2012&ndash;2018 Michael DeHaan<br>&copy; 2018&ndash;2025 Red Hat, Inc.<br>Licensed under the GNU General Public License version 3.<br>
+    <a href="https://docs.ansible.com/ansible/latest/collections/community/general/deploy_helper_module.html" class="_attribution-link">https://docs.ansible.com/ansible/latest/collections/community/general/deploy_helper_module.html</a>
+  </p>
+</div>

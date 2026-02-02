@@ -1,0 +1,92 @@
+<h1 class="wp-block-wporg-code-reference-title">newblog_notify_siteadmin( <span class="arg-type">WP_Site|int</span> <span class="arg-name">$blog_id</span>, <span class="arg-type">string</span> <span class="arg-name">$deprecated</span> = <span class="arg-default">”</span> ): <span class="return-type">bool</span>
+</h1> <section><p>Notifies the network admin that a new site has been activated.</p> </section> <section><h2 id="description">Description</h2> <p>Filter <a href="../hooks/newblog_notify_siteadmin">‘newblog_notify_siteadmin’</a> to change the content of the notification email.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$blog_id</code><span class="type"><span class="WP_Site"><a href="../classes/wp_site" rel="class">WP_Site</a></span>|<span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The new site’s object or ID.</span></div></dd>
+<dt>
+<code>$deprecated</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Not used.</span></div>
+<p class="default">Default:<code>''</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1425" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function newblog_notify_siteadmin( $blog_id, $deprecated = '' ) {
+	if ( is_object( $blog_id ) ) {
+		$blog_id = $blog_id-&gt;blog_id;
+	}
+
+	if ( 'yes' !== get_site_option( 'registrationnotification' ) ) {
+		return false;
+	}
+
+	$email = get_site_option( 'admin_email' );
+
+	if ( is_email( $email ) == false ) {
+		return false;
+	}
+
+	$options_site_url = esc_url( network_admin_url( 'settings.php' ) );
+
+	switch_to_blog( $blog_id );
+	$blogname = get_option( 'blogname' );
+	$siteurl  = site_url();
+	restore_current_blog();
+
+	$msg = sprintf(
+		/* translators: New site notification email. 1: Site URL, 2: User IP address, 3: URL to Network Settings screen. */
+		__(
+			'New Site: %1$s
+URL: %2$s
+Remote IP address: %3$s
+
+Disable these notifications: %4$s'
+		),
+		$blogname,
+		$siteurl,
+		wp_unslash( $_SERVER['REMOTE_ADDR'] ),
+		$options_site_url
+	);
+	/**
+	 * Filters the message body of the new site activation email sent
+	 * to the network administrator.
+	 *
+	 * @since MU (3.0.0)
+	 * @since 5.4.0 The `$blog_id` parameter was added.
+	 *
+	 * @param string     $msg     Email body.
+	 * @param int|string $blog_id The new site's ID as an integer or numeric string.
+	 */
+	$msg = apply_filters( 'newblog_notify_siteadmin', $msg, $blog_id );
+
+	/* translators: New site notification email subject. %s: New site URL. */
+	wp_mail( $email, sprintf( __( 'New Site Registration: %s' ), $siteurl ), $msg );
+
+	return true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-functions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-functions.php#L1425">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-functions.php#L1425-L1477">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/newblog_notify_siteadmin"><span class="hook-func">apply_filters</span>( ‘newblog_notify_siteadmin’, <nobr><span class="arg-type">string</span> <span class="arg-name">$msg</span></nobr>, <nobr><span class="arg-type">int|string</span> <span class="arg-name">$blog_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the message body of the new site activation email sent to the network administrator.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/mu.3.0.0/">MU (3.0.0)</a></td>
+<td><span class="since-description">MU (3.0.0)</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/newblog_notify_siteadmin" class="_attribution-link">https://developer.wordpress.org/reference/functions/newblog_notify_siteadmin</a>
+  </p>
+</div>

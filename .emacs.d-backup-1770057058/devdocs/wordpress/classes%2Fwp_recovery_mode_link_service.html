@@ -1,0 +1,157 @@
+<h1 class="wp-block-wporg-code-reference-title">
+<span class="keyword">class</span> WP_Recovery_Mode_Link_Service {}</h1> <section><p>Core class used to generate and handle recovery mode links.</p> </section> <section><h2 id="methods">Methods</h2> <section style="margin-top:var(--wp--preset--spacing--20);" id="uses"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Name</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="wp_recovery_mode_link_service/__construct">WP_Recovery_Mode_Link_Service::__construct</a></td>
+<td>
+<a href="wp_recovery_mode_link_service" rel="class">WP_Recovery_Mode_Link_Service</a> constructor.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_link_service/generate_url">WP_Recovery_Mode_Link_Service::generate_url</a></td>
+<td>Generates a URL to begin recovery mode.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_link_service/get_recovery_mode_begin_url">WP_Recovery_Mode_Link_Service::get_recovery_mode_begin_url</a></td>
+<td>Gets a URL to begin recovery mode.</td>
+</tr>
+<tr class="">
+<td><a href="wp_recovery_mode_link_service/handle_begin_link">WP_Recovery_Mode_Link_Service::handle_begin_link</a></td>
+<td>Enters recovery mode when the user hits wp-login.php with a valid recovery mode link.</td>
+</tr>
+</tbody>
+</table></figure></section> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="15" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">class WP_Recovery_Mode_Link_Service {
+	const LOGIN_ACTION_ENTER   = 'enter_recovery_mode';
+	const LOGIN_ACTION_ENTERED = 'entered_recovery_mode';
+
+	/**
+	 * Service to generate and validate recovery mode keys.
+	 *
+	 * @since 5.2.0
+	 * @var WP_Recovery_Mode_Key_Service
+	 */
+	private $key_service;
+
+	/**
+	 * Service to handle cookies.
+	 *
+	 * @since 5.2.0
+	 * @var WP_Recovery_Mode_Cookie_Service
+	 */
+	private $cookie_service;
+
+	/**
+	 * WP_Recovery_Mode_Link_Service constructor.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @param WP_Recovery_Mode_Cookie_Service $cookie_service Service to handle setting the recovery mode cookie.
+	 * @param WP_Recovery_Mode_Key_Service    $key_service    Service to handle generating recovery mode keys.
+	 */
+	public function __construct( WP_Recovery_Mode_Cookie_Service $cookie_service, WP_Recovery_Mode_Key_Service $key_service ) {
+		$this-&gt;cookie_service = $cookie_service;
+		$this-&gt;key_service    = $key_service;
+	}
+
+	/**
+	 * Generates a URL to begin recovery mode.
+	 *
+	 * Only one recovery mode URL can may be valid at the same time.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @return string Generated URL.
+	 */
+	public function generate_url() {
+		$token = $this-&gt;key_service-&gt;generate_recovery_mode_token();
+		$key   = $this-&gt;key_service-&gt;generate_and_store_recovery_mode_key( $token );
+
+		return $this-&gt;get_recovery_mode_begin_url( $token, $key );
+	}
+
+	/**
+	 * Enters recovery mode when the user hits wp-login.php with a valid recovery mode link.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @global string $pagenow The filename of the current screen.
+	 *
+	 * @param int $ttl Number of seconds the link should be valid for.
+	 */
+	public function handle_begin_link( $ttl ) {
+		if ( ! isset( $GLOBALS['pagenow'] ) || 'wp-login.php' !== $GLOBALS['pagenow'] ) {
+			return;
+		}
+
+		if ( ! isset( $_GET['action'], $_GET['rm_token'], $_GET['rm_key'] ) || self::LOGIN_ACTION_ENTER !== $_GET['action'] ) {
+			return;
+		}
+
+		if ( ! function_exists( 'wp_generate_password' ) ) {
+			require_once ABSPATH . WPINC . '/pluggable.php';
+		}
+
+		$validated = $this-&gt;key_service-&gt;validate_recovery_mode_key( $_GET['rm_token'], $_GET['rm_key'], $ttl );
+
+		if ( is_wp_error( $validated ) ) {
+			wp_die( $validated, '' );
+		}
+
+		$this-&gt;cookie_service-&gt;set_cookie();
+
+		$url = add_query_arg( 'action', self::LOGIN_ACTION_ENTERED, wp_login_url() );
+		wp_redirect( $url );
+		die;
+	}
+
+	/**
+	 * Gets a URL to begin recovery mode.
+	 *
+	 * @since 5.2.0
+	 *
+	 * @param string $token Recovery Mode token created by <a href="../functions/generate_recovery_mode_token">generate_recovery_mode_token()</a>.
+	 * @param string $key   Recovery Mode key created by <a href="../functions/generate_and_store_recovery_mode_key">generate_and_store_recovery_mode_key()</a>.
+	 * @return string Recovery mode begin URL.
+	 */
+	private function get_recovery_mode_begin_url( $token, $key ) {
+
+		$url = add_query_arg(
+			array(
+				'action'   =&gt; self::LOGIN_ACTION_ENTER,
+				'rm_token' =&gt; $token,
+				'rm_key'   =&gt; $key,
+			),
+			wp_login_url()
+		);
+
+		/**
+		 * Filters the URL to begin recovery mode.
+		 *
+		 * @since 5.2.0
+		 *
+		 * @param string $url   The generated recovery mode begin URL.
+		 * @param string $token The token used to identify the key.
+		 * @param string $key   The recovery mode key.
+		 */
+		return apply_filters( 'recovery_mode_begin_url', $url, $token, $key );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-recovery-mode-link-service.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-recovery-mode-link-service.php#L15">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-recovery-mode-link-service.php#L15-L130">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.2.0/">5.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_recovery_mode_link_service" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_recovery_mode_link_service</a>
+  </p>
+</div>

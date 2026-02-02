@@ -1,0 +1,112 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Automatic_Updater::after_core_update( <span class="arg-type">object</span> <span class="arg-name">$update_result</span> )</h1> <section><p>Checks whether to send an email and avoid processing future updates after attempting a core update.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$update_result</code><span class="type"><span class="object">object</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The result of the core update. Includes the update offer and result.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="797" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function after_core_update( $update_result ) {
+	$wp_version = wp_get_wp_version();
+
+	$core_update = $update_result-&gt;item;
+	$result      = $update_result-&gt;result;
+
+	if ( ! is_wp_error( $result ) ) {
+		$this-&gt;send_email( 'success', $core_update );
+		return;
+	}
+
+	$error_code = $result-&gt;get_error_code();
+
+	/*
+	 * Any of these WP_Error codes are critical failures, as in they occurred after we started to copy core files.
+	 * We should not try to perform a background update again until there is a successful one-click update performed by the user.
+	 */
+	$critical = false;
+	if ( 'disk_full' === $error_code || str_contains( $error_code, '__copy_dir' ) ) {
+		$critical = true;
+	} elseif ( 'rollback_was_required' === $error_code &amp;&amp; is_wp_error( $result-&gt;get_error_data()-&gt;rollback ) ) {
+		// A rollback is only critical if it failed too.
+		$critical        = true;
+		$rollback_result = $result-&gt;get_error_data()-&gt;rollback;
+	} elseif ( str_contains( $error_code, 'do_rollback' ) ) {
+		$critical = true;
+	}
+
+	if ( $critical ) {
+		$critical_data = array(
+			'attempted'  =&gt; $core_update-&gt;current,
+			'current'    =&gt; $wp_version,
+			'error_code' =&gt; $error_code,
+			'error_data' =&gt; $result-&gt;get_error_data(),
+			'timestamp'  =&gt; time(),
+			'critical'   =&gt; true,
+		);
+		if ( isset( $rollback_result ) ) {
+			$critical_data['rollback_code'] = $rollback_result-&gt;get_error_code();
+			$critical_data['rollback_data'] = $rollback_result-&gt;get_error_data();
+		}
+		update_site_option( 'auto_core_update_failed', $critical_data );
+		$this-&gt;send_email( 'critical', $core_update, $result );
+		return;
+	}
+
+	/*
+	 * Any other WP_Error code (like download_failed or files_not_writable) occurs before
+	 * we tried to copy over core files. Thus, the failures are early and graceful.
+	 *
+	 * We should avoid trying to perform a background update again for the same version.
+	 * But we can try again if another version is released.
+	 *
+	 * For certain 'transient' failures, like download_failed, we should allow retries.
+	 * In fact, let's schedule a special update for an hour from now. (It's possible
+	 * the issue could actually be on WordPress.org's side.) If that one fails, then email.
+	 */
+	$send               = true;
+	$transient_failures = array( 'incompatible_archive', 'download_failed', 'insane_distro', 'locked' );
+	if ( in_array( $error_code, $transient_failures, true ) &amp;&amp; ! get_site_option( 'auto_core_update_failed' ) ) {
+		wp_schedule_single_event( time() + HOUR_IN_SECONDS, 'wp_maybe_auto_update' );
+		$send = false;
+	}
+
+	$notified = get_site_option( 'auto_core_update_notified' );
+
+	// Don't notify if we've already notified the same email address of the same version of the same notification type.
+	if ( $notified
+		&amp;&amp; 'fail' === $notified['type']
+		&amp;&amp; get_site_option( 'admin_email' ) === $notified['email']
+		&amp;&amp; $notified['version'] === $core_update-&gt;current
+	) {
+		$send = false;
+	}
+
+	update_site_option(
+		'auto_core_update_failed',
+		array(
+			'attempted'  =&gt; $core_update-&gt;current,
+			'current'    =&gt; $wp_version,
+			'error_code' =&gt; $error_code,
+			'error_data' =&gt; $result-&gt;get_error_data(),
+			'timestamp'  =&gt; time(),
+			'retry'      =&gt; in_array( $error_code, $transient_failures, true ),
+		)
+	);
+
+	if ( $send ) {
+		$this-&gt;send_email( 'fail', $core_update, $result );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-wp-automatic-updater.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L797">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-wp-automatic-updater.php#L797-L887">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.7.0/">3.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_automatic_updater/after_core_update" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_automatic_updater/after_core_update</a>
+  </p>
+</div>

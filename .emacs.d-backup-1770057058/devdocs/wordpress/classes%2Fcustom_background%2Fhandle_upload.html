@@ -1,0 +1,72 @@
+<h1 class="wp-block-wporg-code-reference-title">Custom_Background::handle_upload()</h1> <section><p>Handles an Image upload for the background image.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="530" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function handle_upload() {
+	if ( empty( $_FILES ) ) {
+		return;
+	}
+
+	check_admin_referer( 'custom-background-upload', '_wpnonce-custom-background-upload' );
+
+	$overrides = array( 'test_form' =&gt; false );
+
+	$uploaded_file = $_FILES['import'];
+	$wp_filetype   = wp_check_filetype_and_ext( $uploaded_file['tmp_name'], $uploaded_file['name'] );
+	if ( ! wp_match_mime_types( 'image', $wp_filetype['type'] ) ) {
+		wp_die( __( 'The uploaded file is not a valid image. Please try again.' ) );
+	}
+
+	$file = wp_handle_upload( $uploaded_file, $overrides );
+
+	if ( isset( $file['error'] ) ) {
+		wp_die( $file['error'] );
+	}
+
+	$url      = $file['url'];
+	$type     = $file['type'];
+	$file     = $file['file'];
+	$filename = wp_basename( $file );
+
+	// Construct the attachment array.
+	$attachment = array(
+		'post_title'     =&gt; $filename,
+		'post_content'   =&gt; $url,
+		'post_mime_type' =&gt; $type,
+		'guid'           =&gt; $url,
+		'context'        =&gt; 'custom-background',
+	);
+
+	// Save the data.
+	$id = wp_insert_attachment( $attachment, $file );
+
+	// Add the metadata.
+	wp_update_attachment_metadata( $id, wp_generate_attachment_metadata( $id, $file ) );
+	update_post_meta( $id, '_wp_attachment_is_custom_background', get_option( 'stylesheet' ) );
+
+	set_theme_mod( 'background_image', sanitize_url( $url ) );
+
+	$thumbnail = wp_get_attachment_image_src( $id, 'thumbnail' );
+	set_theme_mod( 'background_image_thumb', sanitize_url( $thumbnail[0] ) );
+
+	/** This filter is documented in wp-admin/includes/class-custom-image-header.php */
+	$file = apply_filters( 'wp_create_file_in_uploads', $file, $id ); // For replication.
+
+	$this-&gt;updated = true;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/class-custom-background.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/class-custom-background.php#L530">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/class-custom-background.php#L530-L581">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/wp_create_file_in_uploads"><span class="hook-func">apply_filters</span>( ‘wp_create_file_in_uploads’, <nobr><span class="arg-type">string</span> <span class="arg-name">$file</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$attachment_id</span></nobr> )</a></dt>
+<dd>
+<p>Filters the attachment file path after the custom header or background image is set.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.0.0/">3.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/custom_background/handle_upload" class="_attribution-link">https://developer.wordpress.org/reference/classes/custom_background/handle_upload</a>
+  </p>
+</div>

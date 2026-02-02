@@ -1,0 +1,67 @@
+<h1 class="wp-block-wporg-code-reference-title">get_media_items( <span class="arg-type">int</span> <span class="arg-name">$post_id</span>, <span class="arg-type">array</span> <span class="arg-name">$errors</span> ): <span class="return-type">string</span>
+</h1> <section><p>Retrieves HTML for media items of post gallery.</p> </section> <section><h2 id="description">Description</h2> <p>The HTML markup retrieved will be created for the progress of SWF Upload component. Will also create link for showing and hiding the form to modify the image attachment.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$post_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Post ID.</span></div></dd>
+<dt>
+<code>$errors</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Errors for attachment, if any.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> HTML content for media items of post gallery.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1529" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function get_media_items( $post_id, $errors ) {
+	$attachments = array();
+
+	if ( $post_id ) {
+		$post = get_post( $post_id );
+
+		if ( $post &amp;&amp; 'attachment' === $post-&gt;post_type ) {
+			$attachments = array( $post-&gt;ID =&gt; $post );
+		} else {
+			$attachments = get_children(
+				array(
+					'post_parent' =&gt; $post_id,
+					'post_type'   =&gt; 'attachment',
+					'orderby'     =&gt; 'menu_order ASC, ID',
+					'order'       =&gt; 'DESC',
+				)
+			);
+		}
+	} else {
+		if ( is_array( $GLOBALS['wp_the_query']-&gt;posts ) ) {
+			foreach ( $GLOBALS['wp_the_query']-&gt;posts as $attachment ) {
+				$attachments[ $attachment-&gt;ID ] = $attachment;
+			}
+		}
+	}
+
+	$output = '';
+	foreach ( (array) $attachments as $id =&gt; $attachment ) {
+		if ( 'trash' === $attachment-&gt;post_status ) {
+			continue;
+		}
+
+		$item = get_media_item( $id, array( 'errors' =&gt; isset( $errors[ $id ] ) ? $errors[ $id ] : null ) );
+
+		if ( $item ) {
+			$output .= "\n&lt;div id='media-item-$id' class='media-item child-of-$attachment-&gt;post_parent preloaded'&gt;&lt;div class='progress hidden'&gt;&lt;div class='bar'&gt;&lt;/div&gt;&lt;/div&gt;&lt;div id='media-upload-error-$id' class='hidden'&gt;&lt;/div&gt;&lt;div class='filename hidden'&gt;&lt;/div&gt;$item\n&lt;/div&gt;";
+		}
+	}
+
+	return $output;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/media.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/media.php#L1529">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/media.php#L1529-L1569">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.5.0/">2.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/get_media_items" class="_attribution-link">https://developer.wordpress.org/reference/functions/get_media_items</a>
+  </p>
+</div>

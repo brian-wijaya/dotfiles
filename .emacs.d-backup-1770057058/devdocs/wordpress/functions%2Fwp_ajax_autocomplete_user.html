@@ -1,0 +1,93 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_ajax_autocomplete_user()</h1> <section><p>Handles user autocomplete via AJAX.</p> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="289" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_ajax_autocomplete_user() {
+	if ( ! is_multisite() || ! current_user_can( 'promote_users' ) || wp_is_large_network( 'users' ) ) {
+		wp_die( -1 );
+	}
+
+	/** This filter is documented in wp-admin/user-new.php */
+	if ( ! current_user_can( 'manage_network_users' ) &amp;&amp; ! apply_filters( 'autocomplete_users_for_site_admins', false ) ) {
+		wp_die( -1 );
+	}
+
+	$return = array();
+
+	/*
+	 * Check the type of request.
+	 * Current allowed values are `add` and `search`.
+	 */
+	if ( isset( $_REQUEST['autocomplete_type'] ) &amp;&amp; 'search' === $_REQUEST['autocomplete_type'] ) {
+		$type = $_REQUEST['autocomplete_type'];
+	} else {
+		$type = 'add';
+	}
+
+	/*
+	 * Check the desired field for value.
+	 * Current allowed values are `user_email` and `user_login`.
+	 */
+	if ( isset( $_REQUEST['autocomplete_field'] ) &amp;&amp; 'user_email' === $_REQUEST['autocomplete_field'] ) {
+		$field = $_REQUEST['autocomplete_field'];
+	} else {
+		$field = 'user_login';
+	}
+
+	// Exclude current users of this blog.
+	if ( isset( $_REQUEST['site_id'] ) ) {
+		$id = absint( $_REQUEST['site_id'] );
+	} else {
+		$id = get_current_blog_id();
+	}
+
+	$include_blog_users = ( 'search' === $type ? get_users(
+		array(
+			'blog_id' =&gt; $id,
+			'fields'  =&gt; 'ID',
+		)
+	) : array() );
+
+	$exclude_blog_users = ( 'add' === $type ? get_users(
+		array(
+			'blog_id' =&gt; $id,
+			'fields'  =&gt; 'ID',
+		)
+	) : array() );
+
+	$users = get_users(
+		array(
+			'blog_id'        =&gt; false,
+			'search'         =&gt; '*' . $_REQUEST['term'] . '*',
+			'include'        =&gt; $include_blog_users,
+			'exclude'        =&gt; $exclude_blog_users,
+			'search_columns' =&gt; array( 'user_login', 'user_nicename', 'user_email' ),
+		)
+	);
+
+	foreach ( $users as $user ) {
+		$return[] = array(
+			/* translators: 1: User login, 2: User email address. */
+			'label' =&gt; sprintf( _x( '%1$s (%2$s)', 'user autocomplete result' ), $user-&gt;user_login, $user-&gt;user_email ),
+			'value' =&gt; $user-&gt;$field,
+		);
+	}
+
+	wp_die( wp_json_encode( $return ) );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/ajax-actions.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/ajax-actions.php#L289">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/ajax-actions.php#L289-L361">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/autocomplete_users_for_site_admins"><span class="hook-func">apply_filters</span>( ‘autocomplete_users_for_site_admins’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$enable</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to enable user auto-complete for non-super admins in Multisite.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.4.0/">3.4.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_ajax_autocomplete_user" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_ajax_autocomplete_user</a>
+  </p>
+</div>

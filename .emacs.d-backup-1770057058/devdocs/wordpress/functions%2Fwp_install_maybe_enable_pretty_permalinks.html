@@ -1,0 +1,80 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_install_maybe_enable_pretty_permalinks(): <span class="return-type">bool</span>
+</h1> <section><p>Maybe enable pretty permalinks on installation.</p> </section> <section><h2 id="description">Description</h2> <p>If after enabling pretty permalinks don’t work, fallback to query-string permalinks.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">bool</span> Whether pretty permalinks are enabled. False otherwise.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="487" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_install_maybe_enable_pretty_permalinks() {
+	global $wp_rewrite;
+
+	// Bail if a permalink structure is already enabled.
+	if ( get_option( 'permalink_structure' ) ) {
+		return true;
+	}
+
+	/*
+	 * The Permalink structures to attempt.
+	 *
+	 * The first is designed for mod_rewrite or nginx rewriting.
+	 *
+	 * The second is PATHINFO-based permalinks for web server configurations
+	 * without a true rewrite module enabled.
+	 */
+	$permalink_structures = array(
+		'/%year%/%monthnum%/%day%/%postname%/',
+		'/index.php/%year%/%monthnum%/%day%/%postname%/',
+	);
+
+	foreach ( (array) $permalink_structures as $permalink_structure ) {
+		$wp_rewrite-&gt;set_permalink_structure( $permalink_structure );
+
+		/*
+		 * Flush rules with the hard option to force refresh of the web-server's
+		 * rewrite config file (e.g. .htaccess or web.config).
+		 */
+		$wp_rewrite-&gt;flush_rules( true );
+
+		$test_url = '';
+
+		// Test against a real WordPress post.
+		$first_post = get_page_by_path( sanitize_title( _x( 'hello-world', 'Default post slug' ) ), OBJECT, 'post' );
+		if ( $first_post ) {
+			$test_url = get_permalink( $first_post-&gt;ID );
+		}
+
+		/*
+		 * Send a request to the site, and check whether
+		 * the 'X-Pingback' header is returned as expected.
+		 *
+		 * Uses wp_remote_get() instead of wp_remote_head() because web servers
+		 * can block head requests.
+		 */
+		$response          = wp_remote_get( $test_url, array( 'timeout' =&gt; 5 ) );
+		$x_pingback_header = wp_remote_retrieve_header( $response, 'X-Pingback' );
+		$pretty_permalinks = $x_pingback_header &amp;&amp; get_bloginfo( 'pingback_url' ) === $x_pingback_header;
+
+		if ( $pretty_permalinks ) {
+			return true;
+		}
+	}
+
+	/*
+	 * If it makes it this far, pretty permalinks failed.
+	 * Fallback to query-string permalinks.
+	 */
+	$wp_rewrite-&gt;set_permalink_structure( '' );
+	$wp_rewrite-&gt;flush_rules( true );
+
+	return false;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/upgrade.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/upgrade.php#L487">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/upgrade.php#L487-L549">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.2.0/">4.2.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_install_maybe_enable_pretty_permalinks" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_install_maybe_enable_pretty_permalinks</a>
+  </p>
+</div>

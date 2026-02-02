@@ -1,0 +1,230 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Menu_Items_Controller::get_item_schema(): <span class="return-type">array</span>
+</h1> <section><p>Retrieves the nav menu item’s schema, conforming to JSON Schema.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Item schema data.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="714" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_item_schema() {
+	if ( $this-&gt;schema ) {
+		return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+	}
+
+	$schema = array(
+		'$schema' =&gt; 'http://json-schema.org/draft-04/schema#',
+		'title'   =&gt; $this-&gt;post_type,
+		'type'    =&gt; 'object',
+	);
+
+	$schema['properties']['title'] = array(
+		'description' =&gt; __( 'The title for the object.' ),
+		'type'        =&gt; array( 'string', 'object' ),
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'properties'  =&gt; array(
+			'raw'      =&gt; array(
+				'description' =&gt; __( 'Title for the object, as it exists in the database.' ),
+				'type'        =&gt; 'string',
+				'context'     =&gt; array( 'edit' ),
+			),
+			'rendered' =&gt; array(
+				'description' =&gt; __( 'HTML title for the object, transformed for display.' ),
+				'type'        =&gt; 'string',
+				'context'     =&gt; array( 'view', 'edit', 'embed' ),
+				'readonly'    =&gt; true,
+			),
+		),
+	);
+
+	$schema['properties']['id'] = array(
+		'description' =&gt; __( 'Unique identifier for the object.' ),
+		'type'        =&gt; 'integer',
+		'default'     =&gt; 0,
+		'minimum'     =&gt; 0,
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'readonly'    =&gt; true,
+	);
+
+	$schema['properties']['type_label'] = array(
+		'description' =&gt; __( 'The singular label used to describe this type of menu item.' ),
+		'type'        =&gt; 'string',
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'readonly'    =&gt; true,
+	);
+
+	$schema['properties']['type'] = array(
+		'description' =&gt; __( 'The family of objects originally represented, such as "post_type" or "taxonomy".' ),
+		'type'        =&gt; 'string',
+		'enum'        =&gt; array( 'taxonomy', 'post_type', 'post_type_archive', 'custom' ),
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'default'     =&gt; 'custom',
+	);
+
+	$schema['properties']['status'] = array(
+		'description' =&gt; __( 'A named status for the object.' ),
+		'type'        =&gt; 'string',
+		'enum'        =&gt; array_keys( get_post_stati( array( 'internal' =&gt; false ) ) ),
+		'default'     =&gt; 'publish',
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+	);
+
+	$schema['properties']['parent'] = array(
+		'description' =&gt; __( 'The ID for the parent of the object.' ),
+		'type'        =&gt; 'integer',
+		'minimum'     =&gt; 0,
+		'default'     =&gt; 0,
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+	);
+
+	$schema['properties']['attr_title'] = array(
+		'description' =&gt; __( 'Text for the title attribute of the link element for this menu item.' ),
+		'type'        =&gt; 'string',
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'arg_options' =&gt; array(
+			'sanitize_callback' =&gt; 'sanitize_text_field',
+		),
+	);
+
+	$schema['properties']['classes'] = array(
+		'description' =&gt; __( 'Class names for the link element of this menu item.' ),
+		'type'        =&gt; 'array',
+		'items'       =&gt; array(
+			'type' =&gt; 'string',
+		),
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'arg_options' =&gt; array(
+			'sanitize_callback' =&gt; static function ( $value ) {
+				return array_map( 'sanitize_html_class', wp_parse_list( $value ) );
+			},
+		),
+	);
+
+	$schema['properties']['description'] = array(
+		'description' =&gt; __( 'The description of this menu item.' ),
+		'type'        =&gt; 'string',
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'arg_options' =&gt; array(
+			'sanitize_callback' =&gt; 'sanitize_text_field',
+		),
+	);
+
+	$schema['properties']['menu_order'] = array(
+		'description' =&gt; __( 'The DB ID of the nav_menu_item that is this item\'s menu parent, if any, otherwise 0.' ),
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'type'        =&gt; 'integer',
+		'minimum'     =&gt; 1,
+		'default'     =&gt; 1,
+	);
+
+	$schema['properties']['object'] = array(
+		'description' =&gt; __( 'The type of object originally represented, such as "category", "post", or "attachment".' ),
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'type'        =&gt; 'string',
+		'arg_options' =&gt; array(
+			'sanitize_callback' =&gt; 'sanitize_key',
+		),
+	);
+
+	$schema['properties']['object_id'] = array(
+		'description' =&gt; __( 'The database ID of the original object this menu item represents, for example the ID for posts or the term_id for categories.' ),
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'type'        =&gt; 'integer',
+		'minimum'     =&gt; 0,
+		'default'     =&gt; 0,
+	);
+
+	$schema['properties']['target'] = array(
+		'description' =&gt; __( 'The target attribute of the link element for this menu item.' ),
+		'type'        =&gt; 'string',
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'enum'        =&gt; array(
+			'_blank',
+			'',
+		),
+	);
+
+	$schema['properties']['url'] = array(
+		'description' =&gt; __( 'The URL to which this menu item points.' ),
+		'type'        =&gt; 'string',
+		'format'      =&gt; 'uri',
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'arg_options' =&gt; array(
+			'validate_callback' =&gt; static function ( $url ) {
+				if ( '' === $url ) {
+					return true;
+				}
+
+				if ( sanitize_url( $url ) ) {
+					return true;
+				}
+
+				return new WP_Error(
+					'rest_invalid_url',
+					__( 'Invalid URL.' )
+				);
+			},
+		),
+	);
+
+	$schema['properties']['xfn'] = array(
+		'description' =&gt; __( 'The XFN relationship expressed in the link of this menu item.' ),
+		'type'        =&gt; 'array',
+		'items'       =&gt; array(
+			'type' =&gt; 'string',
+		),
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'arg_options' =&gt; array(
+			'sanitize_callback' =&gt; static function ( $value ) {
+				return array_map( 'sanitize_html_class', wp_parse_list( $value ) );
+			},
+		),
+	);
+
+	$schema['properties']['invalid'] = array(
+		'description' =&gt; __( 'Whether the menu item represents an object that no longer exists.' ),
+		'context'     =&gt; array( 'view', 'edit', 'embed' ),
+		'type'        =&gt; 'boolean',
+		'readonly'    =&gt; true,
+	);
+
+	$taxonomies = wp_list_filter( get_object_taxonomies( $this-&gt;post_type, 'objects' ), array( 'show_in_rest' =&gt; true ) );
+
+	foreach ( $taxonomies as $taxonomy ) {
+		$base                          = ! empty( $taxonomy-&gt;rest_base ) ? $taxonomy-&gt;rest_base : $taxonomy-&gt;name;
+		$schema['properties'][ $base ] = array(
+			/* translators: %s: taxonomy name */
+			'description' =&gt; sprintf( __( 'The terms assigned to the object in the %s taxonomy.' ), $taxonomy-&gt;name ),
+			'type'        =&gt; 'array',
+			'items'       =&gt; array(
+				'type' =&gt; 'integer',
+			),
+			'context'     =&gt; array( 'view', 'edit' ),
+		);
+
+		if ( 'nav_menu' === $taxonomy-&gt;name ) {
+			$schema['properties'][ $base ]['type'] = 'integer';
+			unset( $schema['properties'][ $base ]['items'] );
+		}
+	}
+
+	$schema['properties']['meta'] = $this-&gt;meta-&gt;get_field_schema();
+
+	$schema_links = $this-&gt;get_schema_links();
+
+	if ( $schema_links ) {
+		$schema['links'] = $schema_links;
+	}
+
+	$this-&gt;schema = $schema;
+
+	return $this-&gt;add_additional_fields_schema( $this-&gt;schema );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php#L714">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-menu-items-controller.php#L714-L926">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_menu_items_controller/get_item_schema" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_menu_items_controller/get_item_schema</a>
+  </p>
+</div>

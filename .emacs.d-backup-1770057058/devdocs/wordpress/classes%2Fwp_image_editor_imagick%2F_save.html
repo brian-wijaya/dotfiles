@@ -1,0 +1,123 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Image_Editor_Imagick::_save( <span class="arg-type">Imagick</span> <span class="arg-name">$image</span>, <span class="arg-type">string</span> <span class="arg-name">$filename</span> = <span class="arg-default">null</span>, <span class="arg-type">string</span> <span class="arg-name">$mime_type</span> = <span class="arg-default">null</span> ): <span class="return-type">array|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1>  <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$image</code><span class="type"><span class="Imagick">Imagick</span></span><span class="required">required</span>
+</dt>
+
+<dt>
+<code>$filename</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$mime_type</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array|<a href="../wp_error" rel="class">WP_Error</a></span> Array on success or <a href="../wp_error" rel="class">WP_Error</a> if the file failed to save.<br> <ul class="param-hash">
+<li>
+<code>path</code> <span class="type">string</span><div class="desc">Path to the image file.</div>
+</li> <li>
+<code>file</code> <span class="type">string</span><div class="desc">Name of the image file.</div>
+</li> <li>
+<code>width</code> <span class="type">int</span><div class="desc">Image width.</div>
+</li> <li>
+<code>height</code> <span class="type">int</span><div class="desc">Image height.</div>
+</li> <li>
+<code>mime-type</code> <span class="type">string</span><div class="desc">The mime type of the image.</div>
+</li> <li>
+<code>filesize</code> <span class="type">int</span><div class="desc">File size of the image.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="818" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function _save( $image, $filename = null, $mime_type = null ) {
+	list( $filename, $extension, $mime_type ) = $this-&gt;get_output_format( $filename, $mime_type );
+
+	if ( ! $filename ) {
+		$filename = $this-&gt;generate_filename( null, null, $extension );
+	}
+
+	try {
+		// Store initial format.
+		$orig_format = $this-&gt;image-&gt;getImageFormat();
+
+		$this-&gt;image-&gt;setImageFormat( strtoupper( $this-&gt;get_extension( $mime_type ) ) );
+	} catch ( Exception $e ) {
+		return new WP_Error( 'image_save_error', $e-&gt;getMessage(), $filename );
+	}
+
+	if ( method_exists( $this-&gt;image, 'setInterlaceScheme' )
+		&amp;&amp; method_exists( $this-&gt;image, 'getInterlaceScheme' )
+		&amp;&amp; defined( 'Imagick::INTERLACE_PLANE' )
+	) {
+		$orig_interlace = $this-&gt;image-&gt;getInterlaceScheme();
+
+		/** This filter is documented in wp-includes/class-wp-image-editor-gd.php */
+		if ( apply_filters( 'image_save_progressive', false, $mime_type ) ) {
+			$this-&gt;image-&gt;setInterlaceScheme( Imagick::INTERLACE_PLANE ); // True - line interlace output.
+		} else {
+			$this-&gt;image-&gt;setInterlaceScheme( Imagick::INTERLACE_NO ); // False - no interlace output.
+		}
+	}
+
+	$write_image_result = $this-&gt;write_image( $this-&gt;image, $filename );
+	if ( is_wp_error( $write_image_result ) ) {
+		return $write_image_result;
+	}
+
+	try {
+		// Reset original format.
+		$this-&gt;image-&gt;setImageFormat( $orig_format );
+
+		if ( isset( $orig_interlace ) ) {
+			$this-&gt;image-&gt;setInterlaceScheme( $orig_interlace );
+		}
+	} catch ( Exception $e ) {
+		return new WP_Error( 'image_save_error', $e-&gt;getMessage(), $filename );
+	}
+
+	// Set correct file permissions.
+	$stat  = stat( dirname( $filename ) );
+	$perms = $stat['mode'] &amp; 0000666; // Same permissions as parent folder, strip off the executable bits.
+	chmod( $filename, $perms );
+
+	return array(
+		'path'      =&gt; $filename,
+		/** This filter is documented in wp-includes/class-wp-image-editor-gd.php */
+		'file'      =&gt; wp_basename( apply_filters( 'image_make_intermediate_size', $filename ) ),
+		'width'     =&gt; $this-&gt;size['width'],
+		'height'    =&gt; $this-&gt;size['height'],
+		'mime-type' =&gt; $mime_type,
+		'filesize'  =&gt; wp_filesize( $filename ),
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-image-editor-imagick.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-image-editor-imagick.php#L818">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-image-editor-imagick.php#L818-L878">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/image_make_intermediate_size"><span class="hook-func">apply_filters</span>( ‘image_make_intermediate_size’, <nobr><span class="arg-type">string</span> <span class="arg-name">$filename</span></nobr> )</a></dt>
+<dd>
+<p>Filters the name of the saved image file.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/image_save_progressive"><span class="hook-func">apply_filters</span>( ‘image_save_progressive’, <nobr><span class="arg-type">bool</span> <span class="arg-name">$interlace</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$mime_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters whether to output progressive images (if available).</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.0.0/">6.0.0</a></td>
+<td><span class="since-description">The <code>$filesize</code> value was added to the returned array.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.5.0/">3.5.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_image_editor_imagick/_save" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_image_editor_imagick/_save</a>
+  </p>
+</div>

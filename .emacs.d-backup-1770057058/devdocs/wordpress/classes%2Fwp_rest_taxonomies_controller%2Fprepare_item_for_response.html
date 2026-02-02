@@ -1,0 +1,120 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Taxonomies_Controller::prepare_item_for_response( <span class="arg-type">WP_Taxonomy</span> <span class="arg-name">$item</span>, <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span>
+</h1> <section><p>Prepares a taxonomy object for serialization.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$item</code><span class="type"><span class="WP_Taxonomy"><a href="../wp_taxonomy" rel="class">WP_Taxonomy</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Taxonomy data.</span></div></dd>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full details about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type"><a href="../wp_rest_response" rel="class">WP_REST_Response</a></span> Response object.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="209" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function prepare_item_for_response( $item, $request ) {
+	// Restores the more descriptive, specific name for use within this method.
+	$taxonomy = $item;
+
+	$base = ! empty( $taxonomy-&gt;rest_base ) ? $taxonomy-&gt;rest_base : $taxonomy-&gt;name;
+
+	$fields = $this-&gt;get_fields_for_response( $request );
+	$data   = array();
+
+	if ( in_array( 'name', $fields, true ) ) {
+		$data['name'] = $taxonomy-&gt;label;
+	}
+
+	if ( in_array( 'slug', $fields, true ) ) {
+		$data['slug'] = $taxonomy-&gt;name;
+	}
+
+	if ( in_array( 'capabilities', $fields, true ) ) {
+		$data['capabilities'] = $taxonomy-&gt;cap;
+	}
+
+	if ( in_array( 'description', $fields, true ) ) {
+		$data['description'] = $taxonomy-&gt;description;
+	}
+
+	if ( in_array( 'labels', $fields, true ) ) {
+		$data['labels'] = $taxonomy-&gt;labels;
+	}
+
+	if ( in_array( 'types', $fields, true ) ) {
+		$data['types'] = array_values( $taxonomy-&gt;object_type );
+	}
+
+	if ( in_array( 'show_cloud', $fields, true ) ) {
+		$data['show_cloud'] = $taxonomy-&gt;show_tagcloud;
+	}
+
+	if ( in_array( 'hierarchical', $fields, true ) ) {
+		$data['hierarchical'] = $taxonomy-&gt;hierarchical;
+	}
+
+	if ( in_array( 'rest_base', $fields, true ) ) {
+		$data['rest_base'] = $base;
+	}
+
+	if ( in_array( 'rest_namespace', $fields, true ) ) {
+		$data['rest_namespace'] = $taxonomy-&gt;rest_namespace;
+	}
+
+	if ( in_array( 'visibility', $fields, true ) ) {
+		$data['visibility'] = array(
+			'public'             =&gt; (bool) $taxonomy-&gt;public,
+			'publicly_queryable' =&gt; (bool) $taxonomy-&gt;publicly_queryable,
+			'show_admin_column'  =&gt; (bool) $taxonomy-&gt;show_admin_column,
+			'show_in_nav_menus'  =&gt; (bool) $taxonomy-&gt;show_in_nav_menus,
+			'show_in_quick_edit' =&gt; (bool) $taxonomy-&gt;show_in_quick_edit,
+			'show_ui'            =&gt; (bool) $taxonomy-&gt;show_ui,
+		);
+	}
+
+	$context = ! empty( $request['context'] ) ? $request['context'] : 'view';
+	$data    = $this-&gt;add_additional_fields_to_object( $data, $request );
+	$data    = $this-&gt;filter_response_by_context( $data, $context );
+
+	// Wrap the data in a response object.
+	$response = rest_ensure_response( $data );
+
+	if ( rest_is_field_included( '_links', $fields ) || rest_is_field_included( '_embedded', $fields ) ) {
+		$response-&gt;add_links( $this-&gt;prepare_links( $taxonomy ) );
+	}
+
+	/**
+	 * Filters a taxonomy returned from the REST API.
+	 *
+	 * Allows modification of the taxonomy data right before it is returned.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param WP_REST_Response $response The response object.
+	 * @param WP_Taxonomy      $item     The original taxonomy object.
+	 * @param WP_REST_Request  $request  Request used to generate the response.
+	 */
+	return apply_filters( 'rest_prepare_taxonomy', $response, $taxonomy, $request );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-taxonomies-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-taxonomies-controller.php#L209">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-taxonomies-controller.php#L209-L292">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_prepare_taxonomy"><span class="hook-func">apply_filters</span>( ‘rest_prepare_taxonomy’, <nobr><span class="arg-type">WP_REST_Response</span> <span class="arg-name">$response</span></nobr>, <nobr><span class="arg-type">WP_Taxonomy</span> <span class="arg-name">$item</span></nobr>, <nobr><span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Filters a taxonomy returned from the REST API.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Renamed <code>$taxonomy</code> to <code>$item</code> to match parent class for PHP 8 named parameter support.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_taxonomies_controller/prepare_item_for_response" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_taxonomies_controller/prepare_item_for_response</a>
+  </p>
+</div>

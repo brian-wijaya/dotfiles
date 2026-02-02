@@ -1,0 +1,239 @@
+<h1 class="wp-block-wporg-code-reference-title">_wp_privacy_send_request_confirmation_notification( <span class="arg-type">int</span> <span class="arg-name">$request_id</span> )</h1> <section><p>Notifies the site administrator via email when a request is confirmed.</p> </section> <section><h2 id="description">Description</h2> <p>Without this, the admin would have to manually check the site to see if any action was needed on their part yet.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The ID of the request.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="4107" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _wp_privacy_send_request_confirmation_notification( $request_id ) {
+	$request = wp_get_user_request( $request_id );
+
+	if ( ! ( $request instanceof WP_User_Request ) || 'request-confirmed' !== $request-&gt;status ) {
+		return;
+	}
+
+	$already_notified = (bool) get_post_meta( $request_id, '_wp_admin_notified', true );
+
+	if ( $already_notified ) {
+		return;
+	}
+
+	if ( 'export_personal_data' === $request-&gt;action_name ) {
+		$manage_url = admin_url( 'export-personal-data.php' );
+	} elseif ( 'remove_personal_data' === $request-&gt;action_name ) {
+		$manage_url = admin_url( 'erase-personal-data.php' );
+	}
+	$action_description = wp_user_request_action_description( $request-&gt;action_name );
+
+	/**
+	 * Filters the recipient of the data request confirmation notification.
+	 *
+	 * In a Multisite environment, this will default to the email address of the
+	 * network admin because, by default, single site admins do not have the
+	 * capabilities required to process requests. Some networks may wish to
+	 * delegate those capabilities to a single-site admin, or a dedicated person
+	 * responsible for managing privacy requests.
+	 *
+	 * @since 4.9.6
+	 *
+	 * @param string          $admin_email The email address of the notification recipient.
+	 * @param WP_User_Request $request     The request that is initiating the notification.
+	 */
+	$admin_email = apply_filters( 'user_request_confirmed_email_to', get_site_option( 'admin_email' ), $request );
+
+	$email_data = array(
+		'request'     =&gt; $request,
+		'user_email'  =&gt; $request-&gt;email,
+		'description' =&gt; $action_description,
+		'manage_url'  =&gt; $manage_url,
+		'sitename'    =&gt; wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES ),
+		'siteurl'     =&gt; home_url(),
+		'admin_email' =&gt; $admin_email,
+	);
+
+	$subject = sprintf(
+		/* translators: Privacy data request confirmed notification email subject. 1: Site title, 2: Name of the confirmed action. */
+		__( '[%1$s] Action Confirmed: %2$s' ),
+		$email_data['sitename'],
+		$action_description
+	);
+
+	/**
+	 * Filters the subject of the user request confirmation email.
+	 *
+	 * @since 4.9.8
+	 *
+	 * @param string $subject    The email subject.
+	 * @param string $sitename   The name of the site.
+	 * @param array  $email_data {
+	 *     Data relating to the account action email.
+	 *
+	 *     @type WP_User_Request $request     User request object.
+	 *     @type string          $user_email  The email address confirming a request.
+	 *     @type string          $description Description of the action being performed so the user knows what the email is for.
+	 *     @type string          $manage_url  The link to click manage privacy requests of this type.
+	 *     @type string          $sitename    The site name sending the mail.
+	 *     @type string          $siteurl     The site URL sending the mail.
+	 *     @type string          $admin_email The administrator email receiving the mail.
+	 * }
+	 */
+	$subject = apply_filters( 'user_request_confirmed_email_subject', $subject, $email_data['sitename'], $email_data );
+
+	/* translators: Do not translate SITENAME, USER_EMAIL, DESCRIPTION, MANAGE_URL, SITEURL; those are placeholders. */
+	$content = __(
+		'Howdy,
+
+A user data privacy request has been confirmed on ###SITENAME###:
+
+User: ###USER_EMAIL###
+Request: ###DESCRIPTION###
+
+You can view and manage these data privacy requests here:
+
+###MANAGE_URL###
+
+Regards,
+All at ###SITENAME###
+###SITEURL###'
+	);
+
+	/**
+	 * Filters the body of the user request confirmation email.
+	 *
+	 * The email is sent to an administrator when a user request is confirmed.
+	 *
+	 * The following strings have a special meaning and will get replaced dynamically:
+	 *
+	 * ###SITENAME###    The name of the site.
+	 * ###USER_EMAIL###  The user email for the request.
+	 * ###DESCRIPTION### Description of the action being performed so the user knows what the email is for.
+	 * ###MANAGE_URL###  The URL to manage requests.
+	 * ###SITEURL###     The URL to the site.
+	 *
+	 * @since 4.9.6
+	 * @deprecated 5.8.0 Use <a href="../hooks/user_request_confirmed_email_content">'user_request_confirmed_email_content'</a> instead.
+	 *                   For user erasure fulfillment email content
+	 *                   use <a href="../hooks/user_erasure_fulfillment_email_content">'user_erasure_fulfillment_email_content'</a> instead.
+	 *
+	 * @param string $content    The email content.
+	 * @param array  $email_data {
+	 *     Data relating to the account action email.
+	 *
+	 *     @type WP_User_Request $request     User request object.
+	 *     @type string          $user_email  The email address confirming a request.
+	 *     @type string          $description Description of the action being performed
+	 *                                        so the user knows what the email is for.
+	 *     @type string          $manage_url  The link to click manage privacy requests of this type.
+	 *     @type string          $sitename    The site name sending the mail.
+	 *     @type string          $siteurl     The site URL sending the mail.
+	 *     @type string          $admin_email The administrator email receiving the mail.
+	 * }
+	 */
+	$content = apply_filters_deprecated(
+		'user_confirmed_action_email_content',
+		array( $content, $email_data ),
+		'5.8.0',
+		sprintf(
+			/* translators: 1 &amp; 2: Deprecation replacement options. */
+			__( '%1$s or %2$s' ),
+			'user_request_confirmed_email_content',
+			'user_erasure_fulfillment_email_content'
+		)
+	);
+
+	/**
+	 * Filters the body of the user request confirmation email.
+	 *
+	 * The email is sent to an administrator when a user request is confirmed.
+	 * The following strings have a special meaning and will get replaced dynamically:
+	 *
+	 * ###SITENAME###    The name of the site.
+	 * ###USER_EMAIL###  The user email for the request.
+	 * ###DESCRIPTION### Description of the action being performed so the user knows what the email is for.
+	 * ###MANAGE_URL###  The URL to manage requests.
+	 * ###SITEURL###     The URL to the site.
+	 *
+	 * @since 5.8.0
+	 *
+	 * @param string $content    The email content.
+	 * @param array  $email_data {
+	 *     Data relating to the account action email.
+	 *
+	 *     @type WP_User_Request $request     User request object.
+	 *     @type string          $user_email  The email address confirming a request.
+	 *     @type string          $description Description of the action being performed so the user knows what the email is for.
+	 *     @type string          $manage_url  The link to click manage privacy requests of this type.
+	 *     @type string          $sitename    The site name sending the mail.
+	 *     @type string          $siteurl     The site URL sending the mail.
+	 *     @type string          $admin_email The administrator email receiving the mail.
+	 * }
+	 */
+	$content = apply_filters( 'user_request_confirmed_email_content', $content, $email_data );
+
+	$content = str_replace( '###SITENAME###', $email_data['sitename'], $content );
+	$content = str_replace( '###USER_EMAIL###', $email_data['user_email'], $content );
+	$content = str_replace( '###DESCRIPTION###', $email_data['description'], $content );
+	$content = str_replace( '###MANAGE_URL###', sanitize_url( $email_data['manage_url'] ), $content );
+	$content = str_replace( '###SITEURL###', sanitize_url( $email_data['siteurl'] ), $content );
+
+	$headers = '';
+
+	/**
+	 * Filters the headers of the user request confirmation email.
+	 *
+	 * @since 5.4.0
+	 *
+	 * @param string|array $headers    The email headers.
+	 * @param string       $subject    The email subject.
+	 * @param string       $content    The email content.
+	 * @param int          $request_id The request ID.
+	 * @param array        $email_data {
+	 *     Data relating to the account action email.
+	 *
+	 *     @type WP_User_Request $request     User request object.
+	 *     @type string          $user_email  The email address confirming a request.
+	 *     @type string          $description Description of the action being performed so the user knows what the email is for.
+	 *     @type string          $manage_url  The link to click manage privacy requests of this type.
+	 *     @type string          $sitename    The site name sending the mail.
+	 *     @type string          $siteurl     The site URL sending the mail.
+	 *     @type string          $admin_email The administrator email receiving the mail.
+	 * }
+	 */
+	$headers = apply_filters( 'user_request_confirmed_email_headers', $headers, $subject, $content, $request_id, $email_data );
+
+	$email_sent = wp_mail( $email_data['admin_email'], $subject, $content, $headers );
+
+	if ( $email_sent ) {
+		update_post_meta( $request_id, '_wp_admin_notified', true );
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/user.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/user.php#L4107">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/user.php#L4107-L4308">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/user_confirmed_action_email_content"><span class="hook-func">apply_filters_deprecated</span>( ‘user_confirmed_action_email_content’, <nobr><span class="arg-type">string</span> <span class="arg-name">$content</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$email_data</span></nobr> )</a></dt>
+<dd>
+<p>Filters the body of the data erasure fulfillment notification.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/user_request_confirmed_email_content"><span class="hook-func">apply_filters</span>( ‘user_request_confirmed_email_content’, <nobr><span class="arg-type">string</span> <span class="arg-name">$content</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$email_data</span></nobr> )</a></dt>
+<dd>
+<p>Filters the body of the user request confirmation email.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/user_request_confirmed_email_headers"><span class="hook-func">apply_filters</span>( ‘user_request_confirmed_email_headers’, <nobr><span class="arg-type">string|array</span> <span class="arg-name">$headers</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$subject</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$content</span></nobr>, <nobr><span class="arg-type">int</span> <span class="arg-name">$request_id</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$email_data</span></nobr> )</a></dt>
+<dd>
+<p>Filters the headers of the user request confirmation email.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/user_request_confirmed_email_subject"><span class="hook-func">apply_filters</span>( ‘user_request_confirmed_email_subject’, <nobr><span class="arg-type">string</span> <span class="arg-name">$subject</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$sitename</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$email_data</span></nobr> )</a></dt>
+<dd>
+<p>Filters the subject of the user request confirmation email.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/user_request_confirmed_email_to"><span class="hook-func">apply_filters</span>( ‘user_request_confirmed_email_to’, <nobr><span class="arg-type">string</span> <span class="arg-name">$admin_email</span></nobr>, <nobr><span class="arg-type">WP_User_Request</span> <span class="arg-name">$request</span></nobr> )</a></dt>
+<dd>
+<p>Filters the recipient of the data request confirmation notification.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.9.6/">4.9.6</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_wp_privacy_send_request_confirmation_notification" class="_attribution-link">https://developer.wordpress.org/reference/functions/_wp_privacy_send_request_confirmation_notification</a>
+  </p>
+</div>

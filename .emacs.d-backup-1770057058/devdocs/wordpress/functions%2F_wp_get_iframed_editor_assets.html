@@ -1,0 +1,116 @@
+<h1 class="wp-block-wporg-code-reference-title">_wp_get_iframed_editor_assets(): <span class="return-type">array</span>
+</h1> <section><p>Collect the block editor assets that need to be loaded into the editor’s iframe.</p> </section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The block editor assets.<br> <ul class="param-hash">
+<li>
+<code>styles</code> <span class="type">string|false</span><div class="desc">String containing the HTML for styles.</div>
+</li> <li>
+<code>scripts</code> <span class="type">string|false</span><div class="desc">String containing the HTML for scripts.</div>
+</li> </ul> </section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="300" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function _wp_get_iframed_editor_assets() {
+	global $wp_styles, $wp_scripts;
+
+	// Keep track of the styles and scripts instance to restore later.
+	$current_wp_styles  = $wp_styles;
+	$current_wp_scripts = $wp_scripts;
+
+	// Create new instances to collect the assets.
+	$wp_styles  = new WP_Styles();
+	$wp_scripts = new WP_Scripts();
+
+	/*
+	 * Register all currently registered styles and scripts. The actions that
+	 * follow enqueue assets, but don't necessarily register them.
+	 */
+	$wp_styles-&gt;registered  = $current_wp_styles-&gt;registered;
+	$wp_scripts-&gt;registered = $current_wp_scripts-&gt;registered;
+
+	/*
+	 * We generally do not need reset styles for the iframed editor.
+	 * However, if it's a classic theme, margins will be added to every block,
+	 * which is reset specifically for list items, so classic themes rely on
+	 * these reset styles.
+	 */
+	$wp_styles-&gt;done =
+		wp_theme_has_theme_json() ? array( 'wp-reset-editor-styles' ) : array();
+
+	wp_enqueue_script( 'wp-polyfill' );
+	// Enqueue the `editorStyle` handles for all core block, and dependencies.
+	wp_enqueue_style( 'wp-edit-blocks' );
+
+	if ( current_theme_supports( 'wp-block-styles' ) ) {
+		wp_enqueue_style( 'wp-block-library-theme' );
+	}
+
+	/*
+	 * We don't want to load EDITOR scripts in the iframe, only enqueue
+	 * front-end assets for the content.
+	 */
+	add_filter( 'should_load_block_editor_scripts_and_styles', '__return_false' );
+	do_action( 'enqueue_block_assets' );
+	remove_filter( 'should_load_block_editor_scripts_and_styles', '__return_false' );
+
+	$block_registry = WP_Block_Type_Registry::get_instance();
+
+	/*
+	 * Additionally, do enqueue `editorStyle` assets for all blocks, which
+	 * contains editor-only styling for blocks (editor content).
+	 */
+	foreach ( $block_registry-&gt;get_all_registered() as $block_type ) {
+		if ( isset( $block_type-&gt;editor_style_handles ) &amp;&amp; is_array( $block_type-&gt;editor_style_handles ) ) {
+			foreach ( $block_type-&gt;editor_style_handles as $style_handle ) {
+				wp_enqueue_style( $style_handle );
+			}
+		}
+	}
+
+	/**
+	 * Remove the deprecated `print_emoji_styles` handler.
+	 * It avoids breaking style generation with a deprecation message.
+	 */
+	$has_emoji_styles = has_action( 'wp_print_styles', 'print_emoji_styles' );
+	if ( $has_emoji_styles ) {
+		remove_action( 'wp_print_styles', 'print_emoji_styles' );
+	}
+
+	ob_start();
+	wp_print_styles();
+	wp_print_font_faces();
+	wp_print_font_faces_from_style_variations();
+	$styles = ob_get_clean();
+
+	if ( $has_emoji_styles ) {
+		add_action( 'wp_print_styles', 'print_emoji_styles' );
+	}
+
+	ob_start();
+	wp_print_head_scripts();
+	wp_print_footer_scripts();
+	$scripts = ob_get_clean();
+
+	// Restore the original instances.
+	$wp_styles  = $current_wp_styles;
+	$wp_scripts = $current_wp_scripts;
+
+	return array(
+		'styles'  =&gt; $styles,
+		'scripts' =&gt; $scripts,
+	);
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/block-editor.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/block-editor.php#L300">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/block-editor.php#L300-L389">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/enqueue_block_assets"><span class="hook-func">do_action</span>( ‘enqueue_block_assets’ )</a></dt>
+<dd>
+<p>Fires after enqueuing block assets for both editor and front-end.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.0.0/">6.0.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/_wp_get_iframed_editor_assets" class="_attribution-link">https://developer.wordpress.org/reference/functions/_wp_get_iframed_editor_assets</a>
+  </p>
+</div>

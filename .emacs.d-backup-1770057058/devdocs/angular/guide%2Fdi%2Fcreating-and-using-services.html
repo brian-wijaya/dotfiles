@@ -1,0 +1,61 @@
+<h1 tabindex="-1">Creating and using services</h1> <header class="docs-header"> <docs-breadcrumb ng-version="21.0.3" _nghost-ng-c3945279308 ngh="8"></docs-breadcrumb>   </header> <p>Services are reusable pieces of code that can be shared across your Angular application. They typically handle data fetching, business logic, or other functionality that multiple components need to access.</p> <h2 id="creating-a-service"> Creating a service </h2> <p>You can create a service with the <a href="https://angular.dev/tools/cli">Angular CLI</a> with the following command:</p> <pre data-language="ts">ng generate service CUSTOM_NAME</pre>
+<p>This creates a dedicated <code>CUSTOM_NAME.ts</code> file in your <code>src</code> directory.</p> <p>You can also manually create a service by adding the <a href="../../api/core/injectable"><code>@Injectable()</code></a> decorator to a TypeScript class. This tells Angular that the service can be injected as a dependency.</p> <p>Here is an example of a service that allows users to add and request data:</p> <pre data-language="ts">// 📄 src/app/basic-data-store.ts
+import { Injectable } from '@angular/core';
+
+@Injectable({ providedIn: 'root' })
+export class BasicDataStore {
+  private data: string[] = []
+
+  addData(item: string): void {
+   this.data.push(item)
+  }
+
+  getData(): string[] {
+    return [...this.data]
+  }
+}</pre> <h2 id="how-services-become-available"> How services become available </h2> <p>When you use <code>@Injectable({ providedIn: 'root' })</code> in your service, Angular:</p> <ul class="docs-list"> <li>
+<strong>Creates a single instance</strong> (singleton) for your entire application</li> <li>
+<strong>Makes it available everywhere</strong> without any additional configuration</li> <li>
+<strong>Enables tree-shaking</strong> so the service is only included in your JavaScript bundle if it's actually used</li> </ul> <p>This is the recommended approach for most services.</p> <h2 id="injecting-a-service"> Injecting a service </h2> <p>Once you've created a service with <code>providedIn: 'root'</code>, you can inject it anywhere in your application using the <code>inject()</code> function from <code>@angular/core</code>.</p> <h3 id="injecting-into-a-component"> Injecting into a component </h3> <pre data-language="ts">import { Component, inject } from '@angular/core';
+import { BasicDataStore } from './basic-data-store';
+
+@Component({
+  selector: 'app-example',
+  template: `
+    &lt;div&gt;
+      &lt;p&gt;{{ dataStore.getData() }}&lt;/p&gt;
+      &lt;button (click)="dataStore.addData('More data')"&gt;
+        Add more data
+      &lt;/button&gt;
+    &lt;/div&gt;
+  `
+})
+export class ExampleComponent {
+  dataStore = inject(BasicDataStore);
+}</pre> <h3 id="injecting-into-another-service"> Injecting into another service </h3> <pre data-language="ts">import { inject, Injectable } from '@angular/core';
+import { AdvancedDataStore } from './advanced-data-store';
+
+@Injectable({
+  providedIn: 'root',
+})
+export class BasicDataStore {
+  private advancedDataStore = inject(AdvancedDataStore);
+  private data: string[] = [];
+
+  addData(item: string): void {
+    this.data.push(item);
+  }
+
+  getData(): string[] {
+    return [...this.data, ...this.advancedDataStore.getData()];
+  }
+}</pre> <h2 id="next-steps"> Next steps </h2> <p>While <code>providedIn: 'root'</code> covers most use cases, Angular offers additional ways to provide services for specialized scenarios:</p> <ul class="docs-list"> <li>
+<strong>Component-specific instances</strong> - When components need their own isolated service instances</li> <li>
+<strong>Manual configuration</strong> - For services that require runtime configuration</li> <li>
+<strong>Factory providers</strong> - For dynamic service creation based on runtime conditions</li> <li>
+<strong>Value providers</strong> - For providing configuration objects or constants</li> </ul> <p>You can learn more about these advanced patterns in the next guide: <a href="defining-dependency-providers">defining dependency providers</a>.</p><div class="_attribution">
+  <p class="_attribution-p">
+    Super-powered by Google &copy;2010&ndash;2025.<br />Code licensed under an MIT-style License. Documentation licensed under CC BY 4.0.<br>
+    <a href="https://angular.dev/guide/di/creating-and-using-services" class="_attribution-link">https://angular.dev/guide/di/creating-and-using-services</a>
+  </p>
+</div>

@@ -1,0 +1,72 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_update_site( <span class="arg-type">int</span> <span class="arg-name">$site_id</span>, <span class="arg-type">array</span> <span class="arg-name">$data</span> ): <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Updates a site in the database.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$site_id</code><span class="type"><span class="int">int</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">ID of the site that should be updated.</span></div></dd>
+<dt>
+<code>$data</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Site data to update. See <a href="wp_insert_site">wp_insert_site()</a> for the list of supported keys.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">int|<a href="../classes/wp_error" rel="class">WP_Error</a></span> The updated site’s ID on success, or error object on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="159" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_update_site( $site_id, array $data ) {
+	global $wpdb;
+
+	if ( empty( $site_id ) ) {
+		return new WP_Error( 'site_empty_id', __( 'Site ID must not be empty.' ) );
+	}
+
+	$old_site = get_site( $site_id );
+	if ( ! $old_site ) {
+		return new WP_Error( 'site_not_exist', __( 'Site does not exist.' ) );
+	}
+
+	$defaults                 = $old_site-&gt;to_array();
+	$defaults['network_id']   = (int) $defaults['site_id'];
+	$defaults['last_updated'] = current_time( 'mysql', true );
+	unset( $defaults['blog_id'], $defaults['site_id'] );
+
+	$data = wp_prepare_site_data( $data, $defaults, $old_site );
+	if ( is_wp_error( $data ) ) {
+		return $data;
+	}
+
+	if ( false === $wpdb-&gt;update( $wpdb-&gt;blogs, $data, array( 'blog_id' =&gt; $old_site-&gt;id ) ) ) {
+		return new WP_Error( 'db_update_error', __( 'Could not update site in the database.' ), $wpdb-&gt;last_error );
+	}
+
+	clean_blog_cache( $old_site );
+
+	$new_site = get_site( $old_site-&gt;id );
+
+	/**
+	 * Fires once a site has been updated in the database.
+	 *
+	 * @since 5.1.0
+	 *
+	 * @param WP_Site $new_site New site object.
+	 * @param WP_Site $old_site Old site object.
+	 */
+	do_action( 'wp_update_site', $new_site, $old_site );
+
+	return (int) $new_site-&gt;id;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/ms-site.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/ms-site.php#L159">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/ms-site.php#L159-L200">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_update_site"><span class="hook-func">do_action</span>( ‘wp_update_site’, <nobr><span class="arg-type">WP_Site</span> <span class="arg-name">$new_site</span></nobr>, <nobr><span class="arg-type">WP_Site</span> <span class="arg-name">$old_site</span></nobr> )</a></dt>
+<dd>
+<p>Fires once a site has been updated in the database.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.1.0/">5.1.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_update_site" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_update_site</a>
+  </p>
+</div>

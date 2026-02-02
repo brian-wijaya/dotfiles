@@ -1,0 +1,151 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Theme_JSON::get_stylesheet( <span class="arg-type">string[]</span> <span class="arg-name">$types</span> = <span class="arg-default">array(‘variables’, ‘styles’, ‘presets’)</span>, <span class="arg-type">string[]</span> <span class="arg-name">$origins</span> = <span class="arg-default">null</span>, <span class="arg-type">array</span> <span class="arg-name">$options</span> = <span class="arg-default">array()</span> ): <span class="return-type">string</span>
+</h1> <section><p>Returns the stylesheet that results of processing the theme.json structure this object represents.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$types</code><span class="type"><span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">Types of styles to load. Will load all by default. It accepts:<br> <ul>
+<li>
+<code>variables</code>: only the CSS Custom Properties for presets &amp; custom ones.</li> <li>
+<code>styles</code>: only the styles section in theme.json.</li> <li>
+<code>presets</code>: only the classes for the presets.</li>
+</ul></span></div>
+<p class="default">Default:<code>array('variables', 'styles', 'presets')</code></p>
+</dd>
+<dt>
+<code>$origins</code><span class="type"><span class="string[]">string[]</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">A list of origins to include. By default it includes VALID_ORIGINS.</span></div>
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$options</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">An array of options for now used for internal purposes only (may change without notice).<br> The options currently supported are <code>'scope'</code> that makes sure all style are scoped to a given selector, and root_selector which overwrites and forces a given selector to be used on the root node.</span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The resulting stylesheet.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1027" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">		if ( ! empty( $style_variation_names ) ) {
+			$schema_styles_variations = array_fill_keys( $style_variation_names, $block_style_variation_styles );
+		}
+
+		$schema_styles_blocks[ $block ]['variations'] = $schema_styles_variations;
+	}
+
+	$schema['styles']                                 = static::VALID_STYLES;
+	$schema['styles']['blocks']                       = $schema_styles_blocks;
+	$schema['styles']['elements']                     = $schema_styles_elements;
+	$schema['settings']                               = static::VALID_SETTINGS;
+	$schema['settings']['blocks']                     = $schema_settings_blocks;
+	$schema['settings']['typography']['fontFamilies'] = static::schema_in_root_and_per_origin( static::FONT_FAMILY_SCHEMA );
+
+	// Remove anything that's not present in the schema.
+	foreach ( array( 'styles', 'settings' ) as $subtree ) {
+		if ( ! isset( $input[ $subtree ] ) ) {
+			continue;
+		}
+
+		if ( ! is_array( $input[ $subtree ] ) ) {
+			unset( $output[ $subtree ] );
+			continue;
+		}
+
+		$result = static::remove_keys_not_in_schema( $input[ $subtree ], $schema[ $subtree ] );
+
+		if ( empty( $result ) ) {
+			unset( $output[ $subtree ] );
+		} else {
+			$output[ $subtree ] = static::resolve_custom_css_format( $result );
+		}
+	}
+
+	return $output;
+}
+
+/**
+ * Appends a sub-selector to an existing one.
+ *
+ * Given the compounded $selector "h1, h2, h3"
+ * and the $to_append selector ".some-class" the result will be
+ * "h1.some-class, h2.some-class, h3.some-class".
+ *
+ * @since 5.8.0
+ * @since 6.1.0 Added append position.
+ * @since 6.3.0 Removed append position parameter.
+ *
+ * @param string $selector  Original selector.
+ * @param string $to_append Selector to append.
+ * @return string The new selector.
+ */
+protected static function append_to_selector( $selector, $to_append ) {
+	if ( ! str_contains( $selector, ',' ) ) {
+		return $selector . $to_append;
+	}
+	$new_selectors = array();
+	$selectors     = explode( ',', $selector );
+	foreach ( $selectors as $sel ) {
+		$new_selectors[] = $sel . $to_append;
+	}
+	return implode( ',', $new_selectors );
+}
+
+/**
+ * Prepends a sub-selector to an existing one.
+ *
+ * Given the compounded $selector "h1, h2, h3"
+ * and the $to_prepend selector ".some-class " the result will be
+ * ".some-class h1, .some-class  h2, .some-class  h3".
+ *
+ * @since 6.3.0
+ *
+ * @param string $selector   Original selector.
+ * @param string $to_prepend Selector to prepend.
+ * @return string The new selector.
+ */
+protected static function prepend_to_selector( $selector, $to_prepend ) {
+	if ( ! str_contains( $selector, ',' ) ) {
+		return $to_prepend . $selector;
+	}
+	$new_selectors = array();
+	$selectors     = explode( ',', $selector );
+	foreach ( $selectors as $sel ) {
+		$new_selectors[] = $to_prepend . $sel;
+	}
+	return implode( ',', $new_selectors );
+}
+
+/**
+ * Returns the metadata for each block.
+ *
+ * Example:
+ *
+ *     {
+ *       'core/paragraph': {
+ *         'selector': 'p',
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-theme-json.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-theme-json.php#L1027">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-theme-json.php#L1027-L1123">View on GitHub</a></p></section> <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description">Add fallback layout styles for Post Template when block gap support isn’t available.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.9.0/">5.9.0</a></td>
+<td><span class="since-description">Removed the <code>$type</code> parameter, added the <code>$types</code> and <code>$origins</code> parameters.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_theme_json/get_stylesheet" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_theme_json/get_stylesheet</a>
+  </p>
+</div>

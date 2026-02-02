@@ -1,0 +1,72 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_REST_Terms_Controller::prepare_links( <span class="arg-type">WP_Term</span> <span class="arg-name">$term</span> ): <span class="return-type">array</span>
+</h1> <section><p>Prepares links for the request.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$term</code><span class="type"><span class="WP_Term"><a href="../wp_term" rel="class">WP_Term</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Term object.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> Links for the given term.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="951" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function prepare_links( $term ) {
+	$links = array(
+		'self'       =&gt; array(
+			'href' =&gt; rest_url( rest_get_route_for_term( $term ) ),
+		),
+		'collection' =&gt; array(
+			'href' =&gt; rest_url( rest_get_route_for_taxonomy_items( $this-&gt;taxonomy ) ),
+		),
+		'about'      =&gt; array(
+			'href' =&gt; rest_url( sprintf( 'wp/v2/taxonomies/%s', $this-&gt;taxonomy ) ),
+		),
+	);
+
+	if ( $term-&gt;parent ) {
+		$parent_term = get_term( (int) $term-&gt;parent, $term-&gt;taxonomy );
+
+		if ( $parent_term ) {
+			$links['up'] = array(
+				'href'       =&gt; rest_url( rest_get_route_for_term( $parent_term ) ),
+				'embeddable' =&gt; true,
+			);
+		}
+	}
+
+	$taxonomy_obj = get_taxonomy( $term-&gt;taxonomy );
+
+	if ( empty( $taxonomy_obj-&gt;object_type ) ) {
+		return $links;
+	}
+
+	$post_type_links = array();
+
+	foreach ( $taxonomy_obj-&gt;object_type as $type ) {
+		$rest_path = rest_get_route_for_post_type_items( $type );
+
+		if ( empty( $rest_path ) ) {
+			continue;
+		}
+
+		$post_type_links[] = array(
+			'href' =&gt; add_query_arg( $this-&gt;rest_base, $term-&gt;term_id, rest_url( $rest_path ) ),
+		);
+	}
+
+	if ( ! empty( $post_type_links ) ) {
+		$links['https://api.w.org/post_type'] = $post_type_links;
+	}
+
+	return $links;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/rest-api/endpoints/class-wp-rest-terms-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-terms-controller.php#L951">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/rest-api/endpoints/class-wp-rest-terms-controller.php#L951-L1000">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.7.0/">4.7.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_rest_terms_controller/prepare_links" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_rest_terms_controller/prepare_links</a>
+  </p>
+</div>

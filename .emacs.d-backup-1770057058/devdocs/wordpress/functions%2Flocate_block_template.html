@@ -1,0 +1,111 @@
+<h1 class="wp-block-wporg-code-reference-title">locate_block_template( <span class="arg-type">string</span> <span class="arg-name">$template</span>, <span class="arg-type">string</span> <span class="arg-name">$type</span>, <span class="arg-type">string[]</span> <span class="arg-name">$templates</span> ): <span class="return-type">string</span>
+</h1> <section><p>Finds a block template with equal or higher specificity than a given PHP template file.</p> </section> <section><h2 id="description">Description</h2> <p>Internally, this communicates the block content that needs to be used by the template canvas through a global variable.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$template</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc">
+<span class="description">Path to the template. See <a href="locate_template" rel="function">locate_template()</a> .</span><details class="extended-description"><summary>More Arguments from locate_template( … $args )</summary><span class="description">Additional arguments passed to the template.<br> </span></details>
+</div></dd>
+<dt>
+<code>$type</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Sanitized filename without extension.</span></div></dd>
+<dt>
+<code>$templates</code><span class="type"><span class="string[]">string[]</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">A list of template candidates, in descending order of priority.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">string</span> The path to the Site Editor template canvas file, or the fallback PHP template.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="36" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function locate_block_template( $template, $type, array $templates ) {
+	global $_wp_current_template_content, $_wp_current_template_id;
+
+	if ( ! current_theme_supports( 'block-templates' ) ) {
+		return $template;
+	}
+
+	if ( $template ) {
+		/*
+		 * locate_template() has found a PHP template at the path specified by $template.
+		 * That means that we have a fallback candidate if we cannot find a block template
+		 * with higher specificity.
+		 *
+		 * Thus, before looking for matching block themes, we shorten our list of candidate
+		 * templates accordingly.
+		 */
+
+		// Locate the index of $template (without the theme directory path) in $templates.
+		$relative_template_path = str_replace(
+			array( get_stylesheet_directory() . '/', get_template_directory() . '/' ),
+			'',
+			$template
+		);
+		$index                  = array_search( $relative_template_path, $templates, true );
+
+		// If the template hierarchy algorithm has successfully located a PHP template file,
+		// we will only consider block templates with higher or equal specificity.
+		$templates = array_slice( $templates, 0, $index + 1 );
+	}
+
+	$block_template = resolve_block_template( $type, $templates, $template );
+
+	if ( $block_template ) {
+		$_wp_current_template_id = $block_template-&gt;id;
+
+		if ( empty( $block_template-&gt;content ) &amp;&amp; is_user_logged_in() ) {
+			$_wp_current_template_content =
+			sprintf(
+				/* translators: %s: Template title */
+				__( 'Empty template: %s' ),
+				$block_template-&gt;title
+			);
+		} elseif ( ! empty( $block_template-&gt;content ) ) {
+			$_wp_current_template_content = $block_template-&gt;content;
+		}
+		if ( isset( $_GET['_wp-find-template'] ) ) {
+			wp_send_json_success( $block_template );
+		}
+	} else {
+		if ( $template ) {
+			return $template;
+		}
+
+		if ( 'index' === $type ) {
+			if ( isset( $_GET['_wp-find-template'] ) ) {
+				wp_send_json_error( array( 'message' =&gt; __( 'No matching template found.' ) ) );
+			}
+		} else {
+			return ''; // So that the template loader keeps looking for templates.
+		}
+	}
+
+	// Add hooks for template canvas.
+	// Add viewport meta tag.
+	add_action( 'wp_head', '_block_template_viewport_meta_tag', 0 );
+
+	// Render title tag with content, regardless of whether theme has title-tag support.
+	remove_action( 'wp_head', '_wp_render_title_tag', 1 );    // Remove conditional title tag rendering...
+	add_action( 'wp_head', '_block_template_render_title_tag', 1 ); // ...and make it unconditional.
+
+	// This file will be included instead of the theme's template file.
+	return ABSPATH . WPINC . '/template-canvas.php';
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/block-template.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/block-template.php#L36">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/block-template.php#L36-L108">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/6.3.0/">6.3.0</a></td>
+<td><span class="since-description">Added <code>$_wp_current_template_id</code> global for editing of current template directly from the admin bar.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/locate_block_template" class="_attribution-link">https://developer.wordpress.org/reference/functions/locate_block_template</a>
+  </p>
+</div>

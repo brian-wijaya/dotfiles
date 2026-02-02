@@ -1,0 +1,150 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Widget_Media_Image::render_media( <span class="arg-type">array</span> <span class="arg-name">$instance</span> )</h1> <section><p>Render the media on the frontend.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$instance</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Widget instance props.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="177" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function render_media( $instance ) {
+	$instance = array_merge( wp_list_pluck( $this-&gt;get_instance_schema(), 'default' ), $instance );
+	$instance = wp_parse_args(
+		$instance,
+		array(
+			'size' =&gt; 'thumbnail',
+		)
+	);
+
+	$attachment = null;
+
+	if ( $this-&gt;is_attachment_with_mime_type( $instance['attachment_id'], $this-&gt;widget_options['mime_type'] ) ) {
+		$attachment = get_post( $instance['attachment_id'] );
+	}
+
+	if ( $attachment ) {
+		$caption = '';
+		if ( ! isset( $instance['caption'] ) ) {
+			$caption = $attachment-&gt;post_excerpt;
+		} elseif ( trim( $instance['caption'] ) ) {
+			$caption = $instance['caption'];
+		}
+
+		$image_attributes = array(
+			'class' =&gt; sprintf( 'image wp-image-%d %s', $attachment-&gt;ID, $instance['image_classes'] ),
+			'style' =&gt; 'max-width: 100%; height: auto;',
+		);
+		if ( ! empty( $instance['image_title'] ) ) {
+			$image_attributes['title'] = $instance['image_title'];
+		}
+
+		if ( $instance['alt'] ) {
+			$image_attributes['alt'] = $instance['alt'];
+		}
+
+		$size = $instance['size'];
+
+		if ( 'custom' === $size || ! in_array( $size, array_merge( get_intermediate_image_sizes(), array( 'full' ) ), true ) ) {
+			$size  = array( $instance['width'], $instance['height'] );
+			$width = $instance['width'];
+		} else {
+			$caption_size = _wp_get_image_size_from_meta( $instance['size'], wp_get_attachment_metadata( $attachment-&gt;ID ) );
+			$width        = empty( $caption_size[0] ) ? 0 : $caption_size[0];
+		}
+
+		$image_attributes['class'] .= sprintf( ' attachment-%1$s size-%1$s', is_array( $size ) ? implode( 'x', $size ) : $size );
+
+		$image = wp_get_attachment_image( $attachment-&gt;ID, $size, false, $image_attributes );
+
+	} else {
+		if ( empty( $instance['url'] ) ) {
+			return;
+		}
+
+		$instance['size'] = 'custom';
+		$caption          = $instance['caption'];
+		$width            = $instance['width'];
+		$classes          = 'image ' . $instance['image_classes'];
+		if ( 0 === $instance['width'] ) {
+			$instance['width'] = '';
+		}
+		if ( 0 === $instance['height'] ) {
+			$instance['height'] = '';
+		}
+
+		$attr = array(
+			'class'  =&gt; $classes,
+			'src'    =&gt; $instance['url'],
+			'alt'    =&gt; $instance['alt'],
+			'width'  =&gt; $instance['width'],
+			'height' =&gt; $instance['height'],
+		);
+
+		$loading_optimization_attr = wp_get_loading_optimization_attributes(
+			'img',
+			$attr,
+			'widget_media_image'
+		);
+
+		$attr = array_merge( $attr, $loading_optimization_attr );
+
+		$attr  = array_map( 'esc_attr', $attr );
+		$image = '&lt;img';
+
+		foreach ( $attr as $name =&gt; $value ) {
+			$image .= ' ' . $name . '="' . $value . '"';
+		}
+
+		$image .= ' /&gt;';
+	} // End if().
+
+	$url = '';
+	if ( 'file' === $instance['link_type'] ) {
+		$url = $attachment ? wp_get_attachment_url( $attachment-&gt;ID ) : $instance['url'];
+	} elseif ( $attachment &amp;&amp; 'post' === $instance['link_type'] ) {
+		$url = get_attachment_link( $attachment-&gt;ID );
+	} elseif ( 'custom' === $instance['link_type'] &amp;&amp; ! empty( $instance['link_url'] ) ) {
+		$url = $instance['link_url'];
+	}
+
+	if ( $url ) {
+		$link = sprintf( '&lt;a href="%s"', esc_url( $url ) );
+		if ( ! empty( $instance['link_classes'] ) ) {
+			$link .= sprintf( ' class="%s"', esc_attr( $instance['link_classes'] ) );
+		}
+		if ( ! empty( $instance['link_rel'] ) ) {
+			$link .= sprintf( ' rel="%s"', esc_attr( $instance['link_rel'] ) );
+		}
+		if ( ! empty( $instance['link_target_blank'] ) ) {
+			$link .= ' target="_blank"';
+		}
+		$link .= '&gt;';
+		$link .= $image;
+		$link .= '&lt;/a&gt;';
+		$image = $link;
+	}
+
+	if ( $caption ) {
+		$image = img_caption_shortcode(
+			array(
+				'width'   =&gt; $width,
+				'caption' =&gt; $caption,
+			),
+			$image
+		);
+	}
+
+	echo $image;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/widgets/class-wp-widget-media-image.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/widgets/class-wp-widget-media-image.php#L177">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/widgets/class-wp-widget-media-image.php#L177-L305">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.8.0/">4.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_widget_media_image/render_media" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_widget_media_image/render_media</a>
+  </p>
+</div>

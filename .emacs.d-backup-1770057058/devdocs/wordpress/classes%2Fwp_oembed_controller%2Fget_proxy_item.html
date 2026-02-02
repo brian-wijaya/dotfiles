@@ -1,0 +1,108 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_oEmbed_Controller::get_proxy_item( <span class="arg-type">WP_REST_Request</span> <span class="arg-name">$request</span> ): <span class="return-type">object|<a href="../wp_error" rel="class">WP_Error</a></span>
+</h1> <section><p>Callback for the proxy API endpoint.</p> </section> <section><h2 id="description">Description</h2> <p>Returns the JSON object for the proxied item.</p> <h3 id="see-also">See also</h3>
+<ul>
+<li><a href="../wp_oembed/get_html">WP_oEmbed::get_html()</a></li> </ul></section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$request</code><span class="type"><span class="WP_REST_Request"><a href="../wp_rest_request" rel="class">WP_REST_Request</a></span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Full data about the request.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">object|<a href="../wp_error" rel="class">WP_Error</a></span> oEmbed response data or <a href="../wp_error" rel="class">WP_Error</a> on failure.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="169" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">public function get_proxy_item( $request ) {
+	global $wp_embed, $wp_scripts;
+
+	$args = $request-&gt;get_params();
+
+	// Serve oEmbed data from cache if set.
+	unset( $args['_wpnonce'] );
+	$cache_key = 'oembed_' . md5( serialize( $args ) );
+	$data      = get_transient( $cache_key );
+	if ( ! empty( $data ) ) {
+		return $data;
+	}
+
+	$url = $request['url'];
+	unset( $args['url'] );
+
+	// Copy maxwidth/maxheight to width/height since WP_oEmbed::fetch() uses these arg names.
+	if ( isset( $args['maxwidth'] ) ) {
+		$args['width'] = $args['maxwidth'];
+	}
+	if ( isset( $args['maxheight'] ) ) {
+		$args['height'] = $args['maxheight'];
+	}
+
+	// Short-circuit process for URLs belonging to the current site.
+	$data = get_oembed_response_data_for_url( $url, $args );
+
+	if ( $data ) {
+		return $data;
+	}
+
+	$data = _wp_oembed_get_object()-&gt;get_data( $url, $args );
+
+	if ( false === $data ) {
+		// Try using a classic embed, instead.
+		/* @var WP_Embed $wp_embed */
+		$html = $wp_embed-&gt;get_embed_handler_html( $args, $url );
+
+		if ( $html ) {
+			// Check if any scripts were enqueued by the shortcode, and include them in the response.
+			$enqueued_scripts = array();
+
+			foreach ( $wp_scripts-&gt;queue as $script ) {
+				$enqueued_scripts[] = $wp_scripts-&gt;registered[ $script ]-&gt;src;
+			}
+
+			return (object) array(
+				'provider_name' =&gt; __( 'Embed Handler' ),
+				'html'          =&gt; $html,
+				'scripts'       =&gt; $enqueued_scripts,
+			);
+		}
+
+		return new WP_Error( 'oembed_invalid_url', get_status_header_desc( 404 ), array( 'status' =&gt; 404 ) );
+	}
+
+	/** This filter is documented in wp-includes/class-wp-oembed.php */
+	$data-&gt;html = apply_filters( 'oembed_result', _wp_oembed_get_object()-&gt;data2html( (object) $data, $url ), $url, $args );
+
+	/**
+	 * Filters the oEmbed TTL value (time to live).
+	 *
+	 * Similar to the <a href="../../hooks/oembed_ttl">'oembed_ttl'</a> filter, but for the REST API
+	 * oEmbed proxy endpoint.
+	 *
+	 * @since 4.8.0
+	 *
+	 * @param int    $time    Time to live (in seconds).
+	 * @param string $url     The attempted embed URL.
+	 * @param array  $args    An array of embed request arguments.
+	 */
+	$ttl = apply_filters( 'rest_oembed_ttl', DAY_IN_SECONDS, $url, $args );
+
+	set_transient( $cache_key, $data, $ttl );
+
+	return $data;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-oembed-controller.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-oembed-controller.php#L169">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-oembed-controller.php#L169-L245">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/oembed_result"><span class="hook-func">apply_filters</span>( ‘oembed_result’, <nobr><span class="arg-type">string|false</span> <span class="arg-name">$data</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr>, <nobr><span class="arg-type">string|array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the HTML returned by the oEmbed provider.</p> </dd>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/rest_oembed_ttl"><span class="hook-func">apply_filters</span>( ‘rest_oembed_ttl’, <nobr><span class="arg-type">int</span> <span class="arg-name">$time</span></nobr>, <nobr><span class="arg-type">string</span> <span class="arg-name">$url</span></nobr>, <nobr><span class="arg-type">array</span> <span class="arg-name">$args</span></nobr> )</a></dt>
+<dd>
+<p>Filters the oEmbed TTL value (time to live).</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/4.8.0/">4.8.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_oembed_controller/get_proxy_item" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_oembed_controller/get_proxy_item</a>
+  </p>
+</div>

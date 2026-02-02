@@ -1,0 +1,101 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_register_sidebar_widget( <span class="arg-type">int|string</span> <span class="arg-name">$id</span>, <span class="arg-type">string</span> <span class="arg-name">$name</span>, <span class="arg-type">callable</span> <span class="arg-name">$output_callback</span>, <span class="arg-type">array</span> <span class="arg-name">$options</span> = <span class="arg-default">array()</span>, <span class="arg-type">mixed</span> <span class="arg-name">$params</span> )</h1> <section><p>Register an instance of a widget.</p> </section> <section><h2 id="description">Description</h2> <p>The default widget option is ‘classname’ that can be overridden.</p> <p>The function can also be used to un-register widgets when <code>$output_callback</code> parameter is an empty string.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$id</code><span class="type"><span class="int">int</span>|<span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Widget ID.</span></div></dd>
+<dt>
+<code>$name</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Widget display title.</span></div></dd>
+<dt>
+<code>$output_callback</code><span class="type"><span class="callable">callable</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">Run when widget is called.</span></div></dd>
+<dt>
+<code>$options</code><span class="type"><span class="array">array</span></span><span class="required">optional</span>
+</dt>
+<dd>
+<div class="desc"><span class="description">An array of supplementary widget options for the instance.<br> <ul class="param-hash">
+<li>
+<code>classname</code> <span class="type">string</span><div class="desc">Class name for the widget’s HTML container. Default is a shortened version of the output callback name.</div>
+</li> <li>
+<code>description</code> <span class="type">string</span><div class="desc">Widget description for display in the widget administration panel and/or theme.</div>
+</li> <li>
+<code>show_instance_in_rest</code> <span class="type">bool</span><div class="desc">Whether to show the widget’s instance settings in the REST API.<br> Only available for <a href="../classes/wp_widget" rel="class">WP_Widget</a> based widgets.</div>
+</li> </ul> </span></div>
+<p class="default">Default:<code>array()</code></p>
+</dd>
+<dt>
+<code>$params</code><span class="type"><span class="mixed">mixed</span></span><span class="required">optional</span>
+</dt>
+<dd><div class="desc"><span class="description">Optional additional parameters to pass to the callback function when it’s called.</span></div></dd>
+</dl></section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="396" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_register_sidebar_widget( $id, $name, $output_callback, $options = array(), ...$params ) {
+	global $wp_registered_widgets, $wp_registered_widget_controls, $wp_registered_widget_updates, $_wp_deprecated_widgets_callbacks;
+
+	$id = strtolower( $id );
+
+	if ( empty( $output_callback ) ) {
+		unset( $wp_registered_widgets[ $id ] );
+		return;
+	}
+
+	$id_base = _get_widget_id_base( $id );
+	if ( in_array( $output_callback, $_wp_deprecated_widgets_callbacks, true ) &amp;&amp; ! is_callable( $output_callback ) ) {
+		unset( $wp_registered_widget_controls[ $id ] );
+		unset( $wp_registered_widget_updates[ $id_base ] );
+		return;
+	}
+
+	$defaults = array( 'classname' =&gt; $output_callback );
+	$options  = wp_parse_args( $options, $defaults );
+	$widget   = array(
+		'name'     =&gt; $name,
+		'id'       =&gt; $id,
+		'callback' =&gt; $output_callback,
+		'params'   =&gt; $params,
+	);
+	$widget   = array_merge( $widget, $options );
+
+	if ( is_callable( $output_callback ) &amp;&amp; ( ! isset( $wp_registered_widgets[ $id ] ) || did_action( 'widgets_init' ) ) ) {
+
+		/**
+		 * Fires once for each registered widget.
+		 *
+		 * @since 3.0.0
+		 *
+		 * @param array $widget An array of default widget arguments.
+		 */
+		do_action( 'wp_register_sidebar_widget', $widget );
+		$wp_registered_widgets[ $id ] = $widget;
+	}
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/widgets.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/widgets.php#L396">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/widgets.php#L396-L435">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../hooks/wp_register_sidebar_widget"><span class="hook-func">do_action</span>( ‘wp_register_sidebar_widget’, <nobr><span class="arg-type">array</span> <span class="arg-name">$widget</span></nobr> )</a></dt>
+<dd>
+<p>Fires once for each registered widget.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.8.0/">5.8.0</a></td>
+<td><span class="since-description">Added show_instance_in_rest option.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/5.3.0/">5.3.0</a></td>
+<td><span class="since-description">Formalized the existing and already documented <code>...$params</code> parameter by adding it to the function signature.</span></td>
+</tr>
+<tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/2.2.0/">2.2.0</a></td>
+<td>Introduced.</td>
+</tr>
+</tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_register_sidebar_widget" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_register_sidebar_widget</a>
+  </p>
+</div>

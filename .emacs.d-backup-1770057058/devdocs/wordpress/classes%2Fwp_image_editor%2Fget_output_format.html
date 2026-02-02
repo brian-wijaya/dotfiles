@@ -1,0 +1,115 @@
+<h1 class="wp-block-wporg-code-reference-title">WP_Image_Editor::get_output_format( <span class="arg-type">string</span> <span class="arg-name">$filename</span> = <span class="arg-default">null</span>, <span class="arg-type">string</span> <span class="arg-name">$mime_type</span> = <span class="arg-default">null</span> ): <span class="return-type">array</span>
+</h1> <section><p>Returns preferred mime-type and extension based on provided file’s extension and mime, or current file’s extension and mime.</p> </section> <section><h2 id="description">Description</h2> <p>Will default to $this-&gt;default_mime_type if requested is not supported.</p> <p>Provides corrected filename only if filename is provided.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$filename</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>null</code></p>
+</dd>
+<dt>
+<code>$mime_type</code><span class="type"><span class="string">string</span></span><span class="required">optional</span>
+</dt>
+<dd>
+
+<p class="default">Default:<code>null</code></p>
+</dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> <code>filename|null</code>, extension, mime-type</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="342" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">protected function get_output_format( $filename = null, $mime_type = null ) {
+	$new_ext = null;
+
+	// By default, assume specified type takes priority.
+	if ( $mime_type ) {
+		$new_ext = $this-&gt;get_extension( $mime_type );
+	}
+
+	if ( $filename ) {
+		$file_ext  = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
+		$file_mime = $this-&gt;get_mime_type( $file_ext );
+	} else {
+		// If no file specified, grab editor's current extension and mime-type.
+		$file_ext  = strtolower( pathinfo( $this-&gt;file, PATHINFO_EXTENSION ) );
+		$file_mime = $this-&gt;mime_type;
+	}
+
+	/*
+	 * Check to see if specified mime-type is the same as type implied by
+	 * file extension. If so, prefer extension from file.
+	 */
+	if ( ! $mime_type || ( $file_mime === $mime_type ) ) {
+		$mime_type = $file_mime;
+		$new_ext   = $file_ext;
+	}
+
+	$output_format = wp_get_image_editor_output_format( $filename, $mime_type );
+
+	if ( isset( $output_format[ $mime_type ] )
+		&amp;&amp; $this-&gt;supports_mime_type( $output_format[ $mime_type ] )
+	) {
+		$mime_type = $output_format[ $mime_type ];
+		$new_ext   = $this-&gt;get_extension( $mime_type );
+	}
+
+	/*
+	 * Double-check that the mime-type selected is supported by the editor.
+	 * If not, choose a default instead.
+	 */
+	if ( ! $this-&gt;supports_mime_type( $mime_type ) ) {
+		/**
+		 * Filters default mime type prior to getting the file extension.
+		 *
+		 * @see wp_get_mime_types()
+		 *
+		 * @since 3.5.0
+		 *
+		 * @param string $mime_type Mime type string.
+		 */
+		$mime_type = apply_filters( 'image_editor_default_mime_type', $this-&gt;default_mime_type );
+		$new_ext   = $this-&gt;get_extension( $mime_type );
+	}
+
+	/*
+	 * Ensure both $filename and $new_ext are not empty.
+	 * $this-&gt;get_extension() returns false on error which would effectively remove the extension
+	 * from $filename. That shouldn't happen, files without extensions are not supported.
+	 */
+	if ( $filename &amp;&amp; $new_ext ) {
+		$dir = pathinfo( $filename, PATHINFO_DIRNAME );
+		$ext = pathinfo( $filename, PATHINFO_EXTENSION );
+
+		$filename = trailingslashit( $dir ) . wp_basename( $filename, ".$ext" ) . ".{$new_ext}";
+	}
+
+	if ( $mime_type &amp;&amp; ( $mime_type !== $this-&gt;mime_type ) ) {
+		// The image will be converted when saving. Set the quality for the new mime-type if not already set.
+		if ( $mime_type !== $this-&gt;output_mime_type ) {
+			$this-&gt;output_mime_type = $mime_type;
+		}
+		$this-&gt;set_quality();
+	} elseif ( ! empty( $this-&gt;output_mime_type ) ) {
+		// Reset output_mime_type and quality.
+		$this-&gt;output_mime_type = null;
+		$this-&gt;set_quality();
+	}
+
+	return array( $filename, $new_ext, $mime_type );
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/class-wp-image-editor.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/class-wp-image-editor.php#L342">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/class-wp-image-editor.php#L342-L420">View on GitHub</a></p></section> <section><h2 id="hooks">Hooks</h2> <dl>
+<dt class="wp-block-wporg-code-reference-title has-normal-font-size"><a href="../../hooks/image_editor_default_mime_type"><span class="hook-func">apply_filters</span>( ‘image_editor_default_mime_type’, <nobr><span class="arg-type">string</span> <span class="arg-name">$mime_type</span></nobr> )</a></dt>
+<dd>
+<p>Filters default mime type prior to getting the file extension.</p> </dd>
+</dl></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.5.0/">3.5.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/wp_image_editor/get_output_format" class="_attribution-link">https://developer.wordpress.org/reference/classes/wp_image_editor/get_output_format</a>
+  </p>
+</div>

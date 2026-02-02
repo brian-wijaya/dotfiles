@@ -1,0 +1,53 @@
+<h1 class="wp-block-wporg-code-reference-title">AtomParser::parse()</h1>  <section><h2 class="wp-block-heading has-heading-5-font-size">Source</h2> <pre class="wp-block-code" data-start="148" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function parse() {
+
+    set_error_handler(array(&amp;$this, 'error_handler'));
+
+    array_unshift($this-&gt;ns_contexts, array());
+
+    if ( ! function_exists( 'xml_parser_create_ns' ) ) {
+    	trigger_error( __( "PHP's XML extension is not available. Please contact your hosting provider to enable PHP's XML extension." ) );
+    	return false;
+    }
+
+    $parser = xml_parser_create_ns();
+    xml_set_element_handler($parser, array($this, "start_element"), array($this, "end_element"));
+    xml_parser_set_option($parser,XML_OPTION_CASE_FOLDING,0);
+    xml_parser_set_option($parser,XML_OPTION_SKIP_WHITE,0);
+    xml_set_character_data_handler($parser, array($this, "cdata"));
+    xml_set_default_handler($parser, array($this, "_default"));
+    xml_set_start_namespace_decl_handler($parser, array($this, "start_ns"));
+    xml_set_end_namespace_decl_handler($parser, array($this, "end_ns"));
+
+    $this-&gt;content = '';
+
+    $ret = true;
+
+    $fp = fopen($this-&gt;FILE, "r");
+    while ($data = fread($fp, 4096)) {
+        if($this-&gt;debug) $this-&gt;content .= $data;
+
+        if(!xml_parse($parser, $data, feof($fp))) {
+            /* translators: 1: Error message, 2: Line number. */
+            trigger_error(sprintf(__('XML Error: %1$s at line %2$s')."\n",
+                xml_error_string(xml_get_error_code($parser)),
+                xml_get_current_line_number($parser)));
+            $ret = false;
+            break;
+        }
+    }
+    fclose($fp);
+
+    xml_parser_free($parser);
+    unset($parser);
+
+    restore_error_handler();
+
+    return $ret;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-includes/atomlib.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-includes/atomlib.php#L148">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-includes/atomlib.php#L148-L193">View on GitHub</a></p></section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/classes/atomparser/parse" class="_attribution-link">https://developer.wordpress.org/reference/classes/atomparser/parse</a>
+  </p>
+</div>

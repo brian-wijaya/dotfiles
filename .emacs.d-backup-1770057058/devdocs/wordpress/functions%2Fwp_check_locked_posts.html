@@ -1,0 +1,70 @@
+<h1 class="wp-block-wporg-code-reference-title">wp_check_locked_posts( <span class="arg-type">array</span> <span class="arg-name">$response</span>, <span class="arg-type">array</span> <span class="arg-name">$data</span>, <span class="arg-type">string</span> <span class="arg-name">$screen_id</span> ): <span class="return-type">array</span>
+</h1> <section><p>Checks lock status for posts displayed on the Posts screen.</p> </section> <section><h2 id="parameters">Parameters</h2> <dl>
+<dt>
+<code>$response</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The Heartbeat response.</span></div></dd>
+<dt>
+<code>$data</code><span class="type"><span class="array">array</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The $_POST data sent.</span></div></dd>
+<dt>
+<code>$screen_id</code><span class="type"><span class="string">string</span></span><span class="required">required</span>
+</dt>
+<dd><div class="desc"><span class="description">The screen ID.</span></div></dd>
+</dl></section> <section><h2 id="return">Return</h2> <span class="return-type">array</span> The Heartbeat response.</section> <section><h2 id="source">Source</h2> <pre class="wp-block-code" data-start="1135" aria-label="Function source code" data-language="php"><code id="wporg-source-code" lang="php" class="language-php line-numbers">function wp_check_locked_posts( $response, $data, $screen_id ) {
+	$checked = array();
+
+	if ( array_key_exists( 'wp-check-locked-posts', $data ) &amp;&amp; is_array( $data['wp-check-locked-posts'] ) ) {
+		foreach ( $data['wp-check-locked-posts'] as $key ) {
+			$post_id = absint( substr( $key, 5 ) );
+
+			if ( ! $post_id ) {
+				continue;
+			}
+
+			$user_id = wp_check_post_lock( $post_id );
+
+			if ( $user_id ) {
+				$user = get_userdata( $user_id );
+
+				if ( $user &amp;&amp; current_user_can( 'edit_post', $post_id ) ) {
+					$send = array(
+						'name' =&gt; $user-&gt;display_name,
+						/* translators: %s: User's display name. */
+						'text' =&gt; sprintf( __( '%s is currently editing' ), $user-&gt;display_name ),
+					);
+
+					if ( get_option( 'show_avatars' ) ) {
+						$send['avatar_src']    = get_avatar_url( $user-&gt;ID, array( 'size' =&gt; 18 ) );
+						$send['avatar_src_2x'] = get_avatar_url( $user-&gt;ID, array( 'size' =&gt; 36 ) );
+					}
+
+					$checked[ $key ] = $send;
+				}
+			}
+		}
+	}
+
+	if ( ! empty( $checked ) ) {
+		$response['wp-check-locked-posts'] = $checked;
+	}
+
+	return $response;
+}
+</code></pre>
+<p class="wporg-dot-link-list"><a href="https://developer.wordpress.org/reference/files/wp-admin/includes/misc.php/">View all references</a> <a href="https://core.trac.wordpress.org/browser/tags/6.7/src/wp-admin/includes/misc.php#L1135">View on Trac</a> <a href="https://github.com/WordPress/wordpress-develop/blob/6.7/src/wp-admin/includes/misc.php#L1135-L1174">View on GitHub</a></p></section>  <section><h2 id="changelog">Changelog</h2> <section style="margin-top:var(--wp--preset--spacing--20);"><figure class="wp-block-table "><table>
+<thead><tr>
+<th scope="col">Version</th>
+<th scope="col">Description</th>
+</tr></thead>
+<tbody><tr class="">
+<td><a href="https://developer.wordpress.org/reference/since/3.6.0/">3.6.0</a></td>
+<td>Introduced.</td>
+</tr></tbody>
+</table></figure></section> </section><div class="_attribution">
+  <p class="_attribution-p">
+    &copy; 2003&ndash;2024 WordPress Foundation<br>Licensed under the GNU GPLv2+ License.<br>
+    <a href="https://developer.wordpress.org/reference/functions/wp_check_locked_posts" class="_attribution-link">https://developer.wordpress.org/reference/functions/wp_check_locked_posts</a>
+  </p>
+</div>
