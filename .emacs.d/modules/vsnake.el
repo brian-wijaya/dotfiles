@@ -367,7 +367,7 @@ Columns show truly sequential content - each starts where previous ended."
                 (save-excursion
                   (goto-char next-start-pos)
                   (forward-line bw/vsnake--col-height)
-                  (point)))))
+                  (point))))))
 
       ;; Pass 2: Refine positions using actual window-end
       (redisplay t)
@@ -375,7 +375,12 @@ Columns show truly sequential content - each starts where previous ended."
         (let* ((win (nth i bw/vsnake--windows))
                (next-win (nth (1+ i) bw/vsnake--windows))
                (actual-end (window-end win t)))
-          (set-window-start next-win actual-end))))))
+          (set-window-start next-win actual-end)))
+
+      ;; Lock positions after setup to prevent drift
+      (bw/vsnake--lock-window-positions)
+      ;; Ensure only selected column shows cursor
+      (bw/vsnake--update-cursor-visibility)))
 
 (defun bw/vsnake--rebuild-columns (num-cols col-width)
   "Rebuild column layout with new dimensions.
@@ -441,6 +446,9 @@ Maintains sequential column positioning accounting for word-wrapping."
 
 ;; --- Cursor Movement (Tapestry Model) ---
 
+(defvar-local bw/vsnake--locked-positions nil
+  "Saved window-start positions for each column to prevent drift.")
+
 (defun bw/vsnake--current-column-index ()
   "Return index of currently selected column window (0-based)."
   (cl-position (selected-window) bw/vsnake--windows :test #'eq))
@@ -459,6 +467,30 @@ Maintains sequential column positioning accounting for word-wrapping."
       (setq idx (1+ idx)))
     found))
 
+(defun bw/vsnake--lock-window-positions ()
+  "Save current window-start positions for all columns."
+  (setq bw/vsnake--locked-positions
+        (mapcar #'window-start bw/vsnake--windows)))
+
+(defun bw/vsnake--restore-window-positions ()
+  "Restore saved window-start positions to prevent drift.
+Only restores non-selected windows to keep them frozen."
+  (when bw/vsnake--locked-positions
+    (let ((selected-win (selected-window)))
+      (dotimes (i (length bw/vsnake--windows))
+        (let ((win (nth i bw/vsnake--windows))
+              (pos (nth i bw/vsnake--locked-positions)))
+          ;; Only restore position if this is NOT the selected window
+          (unless (eq win selected-win)
+            (set-window-start win pos t)))))))
+
+(defun bw/vsnake--update-cursor-visibility ()
+  "Show cursor only in currently selected window, hide in others."
+  (let ((selected-win (selected-window)))
+    (dolist (win bw/vsnake--windows)
+      (with-selected-window win
+        (setq cursor-type (if (eq win selected-win) t nil))))))
+
 (defun bw/vsnake-move-down-line ()
   "Move cursor down one line, flowing seamlessly across columns.
 The columns act as a unified tapestry - cursor flows from bottom of one column
@@ -468,25 +500,38 @@ to top of the next without scrolling. Only scrolls when reaching bottom of right
          (next-pos (save-excursion (forward-line 1) (point)))
          (target-col-idx (bw/vsnake--find-column-containing-pos next-pos)))
 
+    ;; Lock current positions before any movement
+    (bw/vsnake--lock-window-positions)
+
     (cond
-     ;; Target position visible in same column - move without triggering auto-scroll
+     ;; Target position visible in same column
      ((and target-col-idx (= target-col-idx current-col-idx))
-      (goto-char next-pos))  ; Use goto-char instead of forward-line to prevent auto-scroll
+      ;; Already in correct window, just move point
+      (goto-char next-pos))
 
      ;; Target position visible in another column - flow to that column
      (target-col-idx
+      ;; CRITICAL: Select target window BEFORE moving point
+      ;; This ensures point is always visible in the selected window
       (select-window (nth target-col-idx bw/vsnake--windows))
       (goto-char next-pos))
 
      ;; Target position not visible anywhere - scroll entire view down
      (t
       (bw/vsnake--scroll-all-columns 1)
-      (goto-char next-pos)  ; Use goto-char instead of forward-line
-      ;; Ensure cursor stays visible in correct column
-      (let ((new-col-idx (bw/vsnake--find-column-containing-pos (point))))
+      ;; Re-lock positions after scroll
+      (bw/vsnake--lock-window-positions)
+      ;; Find and select column containing new position
+      (let ((new-col-idx (bw/vsnake--find-column-containing-pos
+                          (save-excursion (forward-line 1) (point)))))
         (when new-col-idx
-          (select-window (nth new-col-idx bw/vsnake--windows))))))
+          (select-window (nth new-col-idx bw/vsnake--windows))))
+      (goto-char next-pos)))
 
+    ;; Restore locked positions to freeze non-selected columns
+    (bw/vsnake--restore-window-positions)
+    ;; Update cursor visibility (only show in selected window)
+    (bw/vsnake--update-cursor-visibility)
     (force-mode-line-update)))
 
 (defun bw/vsnake-move-up-line ()
@@ -498,25 +543,37 @@ Only scrolls when reaching top of leftmost column."
          (prev-pos (save-excursion (forward-line -1) (point)))
          (target-col-idx (bw/vsnake--find-column-containing-pos prev-pos)))
 
+    ;; Lock current positions before any movement
+    (bw/vsnake--lock-window-positions)
+
     (cond
-     ;; Target position visible in same column - move without triggering auto-scroll
+     ;; Target position visible in same column
      ((and target-col-idx (= target-col-idx current-col-idx))
-      (goto-char prev-pos))  ; Use goto-char instead of forward-line to prevent auto-scroll
+      ;; Already in correct window, just move point
+      (goto-char prev-pos))
 
      ;; Target position visible in another column - flow to that column
      (target-col-idx
+      ;; CRITICAL: Select target window BEFORE moving point
       (select-window (nth target-col-idx bw/vsnake--windows))
       (goto-char prev-pos))
 
      ;; Target position not visible anywhere - scroll entire view up
      (t
       (bw/vsnake--scroll-all-columns -1)
-      (goto-char prev-pos)  ; Use goto-char instead of forward-line
-      ;; Ensure cursor stays visible in correct column
-      (let ((new-col-idx (bw/vsnake--find-column-containing-pos (point))))
+      ;; Re-lock positions after scroll
+      (bw/vsnake--lock-window-positions)
+      ;; Find and select column containing new position
+      (let ((new-col-idx (bw/vsnake--find-column-containing-pos
+                          (save-excursion (forward-line -1) (point)))))
         (when new-col-idx
-          (select-window (nth new-col-idx bw/vsnake--windows))))))
+          (select-window (nth new-col-idx bw/vsnake--windows))))
+      (goto-char prev-pos)))
 
+    ;; Restore locked positions to freeze non-selected columns
+    (bw/vsnake--restore-window-positions)
+    ;; Update cursor visibility (only show in selected window)
+    (bw/vsnake--update-cursor-visibility)
     (force-mode-line-update)))
 
 (defun bw/vsnake-next-column ()

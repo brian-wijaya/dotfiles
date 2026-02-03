@@ -2,8 +2,8 @@
 (use-package doom-themes
   :demand t
   :config
-  ;; Use doom-gruvbox - modern, sleek, high-contrast alternative to doom-one
-  (load-theme 'doom-gruvbox t)
+  ;; Use doom-tokyo-night to match ghostty/nvim theme
+  (load-theme 'doom-tokyo-night t)
   (doom-themes-org-config))
 
 (use-package doom-modeline
@@ -19,7 +19,7 @@
 
 (set-face-attribute 'default nil
                     :family "JetBrainsMono Nerd Font"
-                    :height 110)
+                    :height 100)
 (set-face-attribute 'fixed-pitch nil
                     :family "JetBrainsMono Nerd Font")
 (set-face-attribute 'variable-pitch nil
