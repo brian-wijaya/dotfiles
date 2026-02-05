@@ -32,7 +32,7 @@
   (load (expand-file-name "savehist" mod))
   (load (expand-file-name "hl-todo" mod))
   (load (expand-file-name "treesitter" mod))
-  (load (expand-file-name "kotlin-ts-mode" mod))
+  ;; kotlin-mode installed from MELPA (no custom ts-mode needed)
   (load (expand-file-name "vterm-config" mod))
   (load (expand-file-name "eglot" mod))
   (load (expand-file-name "backups" mod))

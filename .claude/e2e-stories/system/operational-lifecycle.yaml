@@ -1,0 +1,84 @@
+vocabulary:
+  somatic-daemon: C++ process hosting somatic/ and executive/ modules
+  cortex-jar: Kotlin/JVM process hosting cortex/ and memory/ modules
+  fail-stop: both processes restart together on any crash
+  consistency-sweep: startup validation of cross-store invariants
+
+stories:
+  - name: process-crash-recovery
+    description: When either process crashes, systemd restarts both within bounded time
+    preconditions:
+      - somatic-daemon running as systemd user service
+      - cortex-jar running as systemd user service
+      - services configured with Restart=always
+    steps:
+      - somatic-daemon crashes (SIGSEGV, OOM, panic)
+      - systemd detects exit within 1s
+      - systemd stops cortex-jar (PartOf= dependency)
+      - systemd restarts somatic-daemon
+      - systemd restarts cortex-jar
+      - both services reach ready state
+    verify:
+      - total recovery time < 30s
+      - no zombie processes remain
+      - ring buffers reinitialized empty
+      - consistency sweep completes before accepting MCP calls
+
+  - name: cold-boot-initialization
+    description: System becomes operational within 30s of boot
+    preconditions:
+      - systemd user session starts
+      - no prior state in /dev/shm
+    steps:
+      - systemd starts somatic-daemon
+      - somatic-daemon initializes X11 connection
+      - somatic-daemon loads TensorRT engines (Moondream, SigLIP)
+      - somatic-daemon creates ring buffers in /dev/shm
+      - systemd starts cortex-jar (After= somatic)
+      - cortex-jar initializes JVM, loads ONNX embedder
+      - cortex-jar connects to Qdrant
+      - cortex-jar runs consistency sweep (background, non-blocking)
+      - both processes signal ready to systemd (Type=notify)
+    verify:
+      - mcp__somatic__get_snapshot responds within 30s of boot
+      - mcp__memory__search_hybrid responds within 30s of boot
+      - TensorRT engines loaded and warm
+
+  - name: ring-buffer-overflow-handling
+    description: When ring buffer fills, data spills to disk without loss
+    preconditions:
+      - ring buffer configured for 60s window (~2GB)
+      - consumer (cortex-jar) falls behind producer (somatic-daemon)
+    steps:
+      - ring buffer reaches 80% capacity
+      - somatic-daemon begins spilling oldest entries to /tmp/somatic-spill/
+      - somatic-daemon signals via eventfd
+      - cortex-jar reads spill files via mmap
+      - cortex-jar catches up, spill files deleted
+    verify:
+      - no data loss during spill
+      - spill files cleaned up within 60s of consumption
+      - ring buffer never blocks producer
+
+enforced_constraints:
+  - name: startup-time-budget
+    value: 30s
+    rationale: Balances responsiveness with proper initialization; allows JVM warmup, model loading, index validation
+
+  - name: ring-buffer-window
+    value: 60s
+    size: ~2GB
+    rationale: Sufficient for anomaly detection baseline and commentary context; <2% of 128GB RAM
+
+  - name: restart-mechanism
+    value: systemd user services
+    rationale: Standard, battle-tested, handles crash loops, integrates with journal, no custom supervision code
+
+opinionated_constraints:
+  - name: fail-stop-coupling
+    description: Both processes restart together on any crash
+    rationale: Simplifies reasoning about cross-process state; consistency sweep on restart heals any divergence
+
+  - name: non-blocking-consistency-sweep
+    description: Startup sweep runs in background, does not block MCP readiness
+    rationale: Accepts brief window of potentially stale data to meet 30s startup budget

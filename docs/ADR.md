@@ -90,3 +90,17 @@ For most screens, this means displaying:
 1. Rely on which-key alone - Still requires knowing the first key to press
 2. Documentation/cheatsheets - External to the interface, gets stale
 3. Hydras everywhere - Too intrusive, blocks workflow
+
+**Amendment (2026-02-05): State-Aware Hints**
+
+The keyhint strip now adapts to evil state. In insert mode (vterm), it shows
+`ESC, SPC:👑leader` instead of `SPC:👑leader`, telling the user exactly how
+to reach the leader from their current context. Three bugs were fixed:
+
+1. Buffer context inversion — `bw/format-keyhints` was called inside
+   `with-current-buffer *keyhints*`, reading `evil-state` from the wrong buffer
+2. Leader detection via wrong keymap layer — `lookup-key evil-normal-state-map`
+   misses bindings in evil's intercept maps; switched to checking `bw/leader-map` directly
+3. Missing `evil-emacs-state-entry-hook` — strip didn't update on C-z toggle
+
+See `vault/org/notes/evil-states-and-keyhints.org` for full technical writeup.

@@ -278,6 +278,8 @@ return {
         "rust_analyzer",
         "clangd",
         "gopls",
+        "kotlin_language_server",
+        "jdtls",
         "taplo",
         "lua_ls",
       },
@@ -304,7 +306,7 @@ return {
       ensure_installed = {
         "lua", "luadoc", "vim", "vimdoc",
         "html", "css", "javascript", "typescript", "tsx", "json",
-        "rust", "cpp", "c", "go",
+        "rust", "cpp", "c", "go", "kotlin", "java",
         "markdown", "markdown_inline", "yaml", "toml", "sql",
         "bash", "regex",
       },

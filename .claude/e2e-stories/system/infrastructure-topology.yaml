@@ -1,0 +1,93 @@
+vocabulary:
+  qdrant: Vector database for semantic search (Rust-native, runs as separate process)
+  vram-budget: Allocation strategy for RTX 3090 Ti 24GB
+  aggressive-caching: Use available VRAM for frame/embedding cache
+  reserved-mode: Cap VRAM at model requirements only, leave headroom
+
+stories:
+  - name: qdrant-container-lifecycle
+    description: Qdrant starts before cortex.jar, stops after
+    preconditions:
+      - Docker installed and running
+      - qdrant container image pulled (qdrant/qdrant:latest)
+    steps:
+      - systemd starts cortex.service
+      - ExecStartPre runs "docker start qdrant" (or creates if missing)
+      - cortex.jar waits for Qdrant health check (http://localhost:6333/health)
+      - cortex.jar connects to Qdrant gRPC (localhost:6334)
+      - on cortex.service stop, Qdrant container keeps running (deliberate)
+      - on explicit system shutdown, docker stop qdrant
+    verify:
+      - Qdrant responsive before cortex.jar accepts MCP calls
+      - Qdrant data persists across cortex.jar restarts
+      - container memory capped at 4GB (--memory=4g)
+
+  - name: qdrant-unavailable-handling
+    description: cortex.jar degrades gracefully if Qdrant is unreachable
+    preconditions:
+      - cortex.jar running
+      - Qdrant container stopped or network partitioned
+    steps:
+      - mcp__memory__search_hybrid called
+      - Qdrant connection times out (5s)
+      - cortex.jar returns FTS-only results with warning
+      - cortex.jar logs Qdrant unavailability
+      - cortex.jar retries Qdrant connection on next call
+    verify:
+      - no crash on Qdrant unavailability
+      - degraded results clearly marked
+      - automatic recovery when Qdrant returns
+
+  - name: vram-mode-switch
+    description: Switch between aggressive caching and reserved VRAM modes
+    preconditions:
+      - somatic-daemon running
+      - current mode is aggressive (default)
+    steps:
+      - user runs "somatic-ctl vram reserved"
+      - somatic-daemon receives SIGUSR1
+      - somatic-daemon flushes VRAM caches
+      - somatic-daemon reloads models with workspace cap
+      - somatic-daemon confirms mode change via stdout
+    verify:
+      - VRAM usage drops from ~20GB to ~8GB within 10s
+      - no interruption to MCP tool availability
+      - mode persists until next switch or restart
+
+  - name: vram-aggressive-default
+    description: On startup, somatic-daemon uses aggressive VRAM caching
+    preconditions:
+      - somatic-daemon starting fresh
+      - no explicit mode override in config
+    steps:
+      - somatic-daemon loads TensorRT engines
+      - somatic-daemon allocates remaining VRAM for frame cache
+      - somatic-daemon allocates embedding cache
+      - total VRAM usage reaches ~20GB
+    verify:
+      - frame cache holds ~1000 recent frames
+      - embedding cache holds ~10000 recent vectors
+      - cache eviction is LRU
+
+enforced_constraints:
+  - name: qdrant-memory-cap
+    value: 4GB
+    rationale: Leaves RAM for JVM heap, ONNX runtime, and OS; Qdrant indexes fit comfortably
+
+  - name: vram-ceiling
+    value: 24GB (RTX 3090 Ti)
+    rationale: Hardware limit; must be explicitly budgeted
+
+opinionated_constraints:
+  - name: qdrant-as-docker
+    description: Qdrant runs as Docker container, not embedded or system service
+    rationale: Clean isolation, explicit memory limits, lifecycle tied to LLM system but crash-independent
+
+  - name: vram-aggressive-default
+    description: Default to aggressive VRAM caching (~20GB), switchable to reserved (~8GB)
+    rationale: Maximize performance by default; provide escape hatch for concurrent GPU workloads
+    switch_command: "somatic-ctl vram [aggressive|reserved]"
+
+  - name: qdrant-graceful-degradation
+    description: Vector search unavailability falls back to FTS-only, does not crash
+    rationale: Partial results better than no results; transient failures should not cascade

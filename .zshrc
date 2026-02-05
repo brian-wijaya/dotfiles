@@ -16,6 +16,9 @@ elif [[ "$TERMINAL_EMULATOR" == *"JetBrains"* ]]; then
     _in_ide=1
 elif [[ -n "$JETBRAINS_INTELLIJ_ZSH_DIR" ]] || [[ -n "$INTELLIJ_TERMINAL_COMMAND_BLOCKS_REWORKED" ]]; then
     _in_ide=1
+# Emacs terminals (vterm, term, eshell, ansi-term)
+elif [[ -n "$INSIDE_EMACS" ]] || [[ -n "$EMACS_VTERM_PATH" ]] || [[ "$TERM" == "eterm-color" ]]; then
+    _in_ide=1
 fi
 
 if [[ $_in_ide -eq 1 ]]; then

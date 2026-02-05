@@ -13,8 +13,8 @@ export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
 export INPUTRC="$XDG_CONFIG_HOME/readline/inputrc"
 
 # Editor
-export EDITOR="nvim"
-export VISUAL="nvim"
+export EDITOR="emacsclient -c"
+export VISUAL="emacsclient -c"
 
 # Terminal
 export TERM="xterm-256color"
