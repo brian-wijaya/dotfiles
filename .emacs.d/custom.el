@@ -9,8 +9,8 @@
                 consult-dir corfu devdocs dired-hist dirvish
                 doom-modeline doom-themes eldoc-box elfeed evil
                 evil-collection gcmh github-dark-vscode-theme gptel
-                hl-todo hotfuzz imenu-list imenus magit marginalia
-                markdown-mode moe-theme neotree nerd-icons
+                hl-todo hotfuzz imenu-list imenus kotlin-mode magit
+                marginalia markdown-mode moe-theme neotree nerd-icons
                 nerd-icons-dired nov orderless org-journal org-noter
                 org-visibility popper posframe shackle simple-httpd
                 solaire-mode symbols-outline use-package vertico

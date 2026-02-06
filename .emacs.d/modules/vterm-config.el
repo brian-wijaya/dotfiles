@@ -6,8 +6,8 @@
   ;; Enable OSC52 clipboard manipulation for better copy/paste
   (setq vterm-enable-manipulate-selection-data-by-osc52 t)
   
-  ;; Set shell to use bracketed paste mode
-  (setq vterm-shell (executable-find "bash"))
+  ;; Use zsh (IDE detection in .zshrc prevents tmux auto-attach)
+  (setq vterm-shell (executable-find "zsh"))
   
   ;; Better kill-ring integration
   (setq vterm-copy-exclude-prompt t)

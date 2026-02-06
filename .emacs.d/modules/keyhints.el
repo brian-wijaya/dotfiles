@@ -9,8 +9,12 @@
          (has-bracket-close nil)
          (has-z nil))
     (when (and (bound-and-true-p evil-mode)
-               (keymapp (lookup-key evil-normal-state-map (kbd "SPC"))))
-      (push '("SPC" . "👑leader") prefixes))
+               (boundp 'bw/leader-map)
+               (keymapp bw/leader-map))
+      (pcase evil-state
+        ('normal (push '("SPC" . "👑leader") prefixes))
+        ('insert (push '("ESC, SPC" . "👑leader") prefixes))
+        ('emacs  (push '("C-z, SPC" . "👑leader") prefixes))))
     (dolist (b bindings)
       (let ((key (car b))
             (desc (cdr b)))
@@ -59,16 +63,19 @@
                 (window-parameters . ((no-delete-other-windows . t)
                                      (mode-line-format . none)))))))
     (when win
-      (set-window-dedicated-p win t))))
+      (set-window-dedicated-p win t)
+      (set-window-parameter win 'no-other-window t)
+      (window-preserve-size win nil t))))
 
 (defun bw/keyhints-update ()
   "Update keyhints content based on current context."
   (when (buffer-live-p bw/keyhints-buffer)
-    (with-current-buffer bw/keyhints-buffer
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (insert (propertize (bw/format-keyhints)
-                           'face '(:foreground "#7c828d")))))))
+    (let ((hint-text (bw/format-keyhints)))
+      (with-current-buffer bw/keyhints-buffer
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert (propertize hint-text
+                             'face '(:foreground "#7c828d"))))))))
 
 ;; Initialize keyhints after which-key loads
 (with-eval-after-load 'which-key
@@ -86,7 +93,8 @@
 (with-eval-after-load 'evil
   (add-hook 'evil-normal-state-entry-hook #'bw/keyhints-update)
   (add-hook 'evil-insert-state-entry-hook #'bw/keyhints-update)
-  (add-hook 'evil-visual-state-entry-hook #'bw/keyhints-update))
+  (add-hook 'evil-visual-state-entry-hook #'bw/keyhints-update)
+  (add-hook 'evil-emacs-state-entry-hook #'bw/keyhints-update))
 
 ;; Mode-specific hooks for robustness
 (with-eval-after-load 'magit

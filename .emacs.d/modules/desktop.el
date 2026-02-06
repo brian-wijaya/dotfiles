@@ -3,7 +3,7 @@
       desktop-base-file-name ".emacs.desktop"
       desktop-save t
       desktop-load-locked-desktop t
-      desktop-restore-eager t
+      desktop-restore-eager 10
       desktop-auto-save-timeout 60)
 (desktop-save-mode 1)
 

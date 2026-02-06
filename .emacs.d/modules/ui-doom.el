@@ -12,6 +12,18 @@
   (doom-modeline-mode 1)
   (setq doom-modeline-height 25))
 
+;; Fix mode-line stripes after theme loads
+(defun bw/fix-modeline-faces ()
+  "Remove box and match modeline bg to default background."
+  (let ((bg (face-attribute 'default :background)))
+    (set-face-attribute 'mode-line nil :box nil :background bg)
+    (set-face-attribute 'mode-line-inactive nil :box nil :background bg)
+    (when (facep 'mode-line-active)
+      (set-face-attribute 'mode-line-active nil :box nil :background bg))))
+
+(add-hook 'after-init-hook #'bw/fix-modeline-faces)
+(add-hook 'doom-load-theme-hook #'bw/fix-modeline-faces 90)
+
 (use-package solaire-mode
   :demand t
   :config

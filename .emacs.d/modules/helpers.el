@@ -13,9 +13,11 @@
   (when (and buffer-file-name (string-match "\\.el\\'" buffer-file-name))
     (eval-buffer)
     (message "Evaluated %s" buffer-file-name))
-  (desktop-save-in-desktop-dir)
+  (condition-case err
+      (desktop-save-in-desktop-dir)
+    (error (message "Desktop save skipped: %s" (error-message-string err))))
   (call-process-shell-command
-   "nohup sh -c 'sleep 0.5 && emacsclient -c' >/dev/null 2>&1 &")
+   "nohup sh -c 'sleep 0.5 && emacs --daemon && emacsclient -c' >/dev/null 2>&1 &")
   (kill-emacs))
 
 (defun bw/open-cheatsheet ()

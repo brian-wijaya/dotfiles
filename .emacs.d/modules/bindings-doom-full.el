@@ -193,6 +193,7 @@
 (define-key bw/leader-o-map (kbd "T") 'neotree-toggle)
 (define-key bw/leader-o-map (kbd "F") 'neotree-find)
 (define-key bw/leader-o-map (kbd "w") 'eww)
+(define-key bw/leader-o-map (kbd ".") 'bw/edit-init)
 (define-key bw/leader-o-map (kbd "D") 'docs-home)
 ;; SPC o h - reference pages
 (define-key bw/leader-oh-map (kbd "c") 'bw/open-cheatsheet)
@@ -309,6 +310,25 @@
 (define-key bw/leader-w-map (kbd "V") 'bw/vsnake-toggle)
 ;; Spec 05: explorer
 (define-key bw/leader-w-map (kbd "~") (lambda () (interactive) (bw/which-key-explore-prefix "SPC w")))
+
+;; Repeatable window resize keys (2s timeout)
+(repeat-mode 1)
+(setq repeat-exit-timeout 2.0)
+
+(defvar bw/window-resize-repeat-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "+" #'enlarge-window)
+    (define-key map "-" #'shrink-window)
+    (define-key map "<" #'shrink-window-horizontally)
+    (define-key map ">" #'enlarge-window-horizontally)
+    (define-key map "=" #'balance-windows)
+    map)
+  "Repeat map for window resize commands.")
+
+(dolist (cmd '(enlarge-window shrink-window
+               shrink-window-horizontally enlarge-window-horizontally
+               balance-windows))
+  (put cmd 'repeat-map 'bw/window-resize-repeat-map))
 
 
 ;; =========================================================================
@@ -508,6 +528,7 @@
     "t" "💻 vterm"
     "T" "🌲 neotree"
     "w" "🌐 eww"
+    "." "⚙️ init.el"
     "~" "🔭 explore")
 
   ;; --- Open refs ---
