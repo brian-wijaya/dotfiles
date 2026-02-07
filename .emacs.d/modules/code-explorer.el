@@ -464,6 +464,8 @@ Preserve ~/prefix and tail. Cut at 1/3 point with ... separator."
         ;; Display
         (set-window-buffer bw/ce--display-window buf)
         (setq bw/ce--display-buffer buf)
+        ;; Update pin indicator on new buffer
+        (bw/ce--update-pin-indicator)
         ;; Adaptive width via vsnake
         (let* ((metrics (with-current-buffer buf
                           (bw/vsnake--analyze-content)))
@@ -657,12 +659,29 @@ Preserve ~/prefix and tail. Cut at 1/3 point with ... separator."
 ;; Pin / Unpin
 ;; ═══════════════════════════════════════════════════════════════════
 
+(defun bw/ce--update-pin-indicator ()
+  "Update display pane header-line to show pin state."
+  (when (and (window-live-p bw/ce--display-window)
+             (buffer-live-p (window-buffer bw/ce--display-window)))
+    (with-current-buffer (window-buffer bw/ce--display-window)
+      (setq-local header-line-format
+                  (when bw/ce--pinned-file
+                    (list " "
+                          (propertize " PIN "
+                                      'face '(:background "#da8548"
+                                              :foreground "#1B2229"
+                                              :weight bold))
+                          " "
+                          (propertize (file-name-nondirectory bw/ce--pinned-file)
+                                      'face '(:foreground "#bbc2cf"))))))))
+
 (defun bw/ce--toggle-pin ()
   "Toggle pin state. RET pins current file; RET again unpins."
   (interactive)
   (if bw/ce--pinned-file
       (progn
         (setq bw/ce--pinned-file nil)
+        (bw/ce--update-pin-indicator)
         (message "Unpinned")
         ;; Resume auto-open immediately
         (setq bw/ce--last-previewed nil)
@@ -671,6 +690,7 @@ Preserve ~/prefix and tail. Cut at 1/3 point with ... separator."
       (let ((file (buffer-file-name bw/ce--display-buffer)))
         (when file
           (setq bw/ce--pinned-file file)
+          (bw/ce--update-pin-indicator)
           (message "Pinned: %s" (file-name-nondirectory file))))))
   (force-mode-line-update))
 
@@ -1099,6 +1119,9 @@ Preserve ~/prefix and tail. Cut at 1/3 point with ... separator."
                              (project-root (project-current)))
                         default-directory))
          (prev-buf (current-buffer))
+         ;; Find last editor file (same logic as bw/editor)
+         (editor-buf (cl-find-if #'buffer-file-name (buffer-list)))
+         (editor-file (when editor-buf (buffer-file-name editor-buf)))
          (nav-buf (get-buffer-create "*code-explorer*")))
     ;; Kill existing explorer if any
     (when (get-buffer "*code-explorer*")
@@ -1159,18 +1182,38 @@ Preserve ~/prefix and tail. Cut at 1/3 point with ... separator."
           (recenter (/ (window-body-height) 3))
           ;; Activate mode
           (bw/code-explorer-mode 1)
-          ;; Trigger initial preview — find first file entry in band
-          (save-excursion
-            (goto-char (point-min))
-            (let ((found nil))
-              (while (and (not found) (not (eobp)))
-                (let ((p (get-text-property (point) 'bw/ce-path))
-                      (d (get-text-property (point) 'bw/ce-is-dir)))
-                  (when (and p (not d))
-                    (setq found p)))
-                (forward-line 1))
-              (when found
-                (bw/ce--do-preview found)))))))))
+          ;; Initial preview: pin last editor file, place cursor on it
+          (if editor-file
+              (progn
+                ;; Preview and pin
+                (bw/ce--do-preview editor-file)
+                (setq bw/ce--pinned-file editor-file)
+                (bw/ce--update-pin-indicator)
+                ;; Place cursor on the editor file's entry if visible
+                (let ((target-line nil))
+                  (save-excursion
+                    (goto-char (point-min))
+                    (while (and (not target-line) (not (eobp)))
+                      (when (string= (get-text-property (point) 'bw/ce-path)
+                                     editor-file)
+                        (setq target-line (line-number-at-pos)))
+                      (forward-line 1)))
+                  (when target-line
+                    (goto-char (point-min))
+                    (forward-line (1- target-line))
+                    (recenter (/ (window-body-height) 3)))))
+            ;; Fallback: find first file entry
+            (save-excursion
+              (goto-char (point-min))
+              (let ((found nil))
+                (while (and (not found) (not (eobp)))
+                  (let ((p (get-text-property (point) 'bw/ce-path))
+                        (d (get-text-property (point) 'bw/ce-is-dir)))
+                    (when (and p (not d))
+                      (setq found p)))
+                  (forward-line 1))
+                (when found
+                  (bw/ce--do-preview found))))))))))
 
 (defun bw/code-explorer-quit ()
   "Exit code-explorer. Keep last displayed file as active buffer."

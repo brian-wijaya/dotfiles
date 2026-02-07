@@ -1,0 +1,519 @@
+---
+system: vsnake
+version: 1
+status: stable
+premise: |
+  vsnake is an interactive newspaper-column layout engine for Emacs.
+  It splits a single buffer across N side-by-side windows showing sequential
+  content slices (col1: lines 1-H, col2: lines H+1-2H, etc.).
+  It is NOT a reading mode — the underlying buffer remains fully interactive.
+  The buffer's native keymap (Evil, vterm, eshell, etc.) handles all input.
+  vsnake owns only layout-level meta-controls behind a dedicated prefix.
+  Must work on any buffer type: file-visiting, vterm, eshell, compilation,
+  help, info, org, and arbitrary process buffers.
+  Assumes hostile environments: fast-mutating buffers, large scrollback,
+  adversarial output rates, and long operational sessions.
+
+enforced_constraints:
+  - id: EC-1
+    statement: |
+      vsnake must never install top-level key bindings that shadow the
+      buffer's native keymap. All vsnake controls live behind a prefix
+      or are triggered via the toggle binding (SPC w V).
+    rationale: |
+      Interactive use requires the buffer to own all input. Any key
+      interception by vsnake breaks vterm char mode, Evil normal state,
+      and every other mode that expects to own the keyboard.
+
+  - id: EC-2
+    statement: |
+      Column repositioning must be synchronous with buffer content
+      changes. All columns must reposition on every buffer modification
+      to maintain perfect visual continuity — the columns are one
+      connected surface. Repositioning is chained: col N+1 start =
+      col N window-end. Hook point: after-change-functions.
+      set-window-start is O(1) and does not force redisplay; Emacs
+      renders all dirty windows in one display cycle.
+    rationale: |
+      The columns must feel perfectly connected. When new output
+      appears at the bottom of the rightmost column, content cascades
+      leftward through all columns synchronously. A line falling off
+      the top of column N immediately appears at the bottom of column
+      N-1. Debounced refresh breaks this illusion — the user sees
+      columns drift apart and snap back together, destroying the
+      newspaper continuity that is vsnake's core proposition.
+    supersedes: |
+      Previous draft specified debounced idle timer (100-200ms).
+      Rejected because it breaks visual continuity.
+
+  - id: EC-3
+    statement: |
+      vsnake must preserve and restore the prior window configuration
+      exactly on exit. No window, buffer, or layout state may leak.
+    rationale: |
+      vsnake is a transient layout overlay. Any leaked state (killed
+      buffers, altered window parameters, changed faces) degrades the
+      user's session over time.
+    note: |
+      For vterm buffers, exit restores window config via
+      set-window-configuration, which triggers vterm's
+      window-size-change hook. vterm auto-resizes PTY to full
+      frame width and reflows content. No vterm-specific exit
+      code needed. The EC-8 advice on vterm--redraw is conditioned
+      on bw/vsnake-reading-mode — when the minor mode deactivates,
+      the advice becomes a no-op without removal.
+
+  - id: EC-4
+    statement: |
+      All columns display the same buffer. vsnake must not create
+      indirect buffers, cloned buffers, or snapshot copies.
+    rationale: |
+      Interactive use requires that edits, process output, and point
+      movement in any column are immediately real. Copies break this.
+
+  - id: EC-5
+    statement: |
+      Column repositioning must never call (redisplay t) or force
+      synchronous display. The repositioning architecture is:
+        (a) after-change-functions sets a buffer-local dirty flag
+            (bw/vsnake--needs-reposition). Cost: O(1), no work.
+        (b) pre-redisplay-functions checks the flag. If set,
+            chain-updates all window-starts and clears the flag.
+            Cost: N set-window-start calls, O(1) each.
+        (c) Emacs renders all dirty windows in one display cycle.
+      This coalesces multiple buffer modifications within a single
+      vterm render batch into one repositioning pass per frame.
+    rationale: |
+      vterm--redraw produces 10-50 buffer modifications per render
+      batch (inserts, deletes, property changes). Each fires
+      after-change-functions. Doing chained repositioning on every
+      modification is wasteful (50 × N set-window-start calls per
+      batch). The dirty-flag + pre-redisplay pattern coalesces to
+      exactly one repositioning pass per display frame regardless
+      of how many modifications occurred. pre-redisplay-functions
+      is available since Emacs 26; Emacs 30 has it.
+
+  - id: EC-6
+    statement: |
+      Column repositioning must use buffer positions (markers or
+      integer positions), never line-counting from point-min.
+      O(1) relative to buffer size is required.
+    rationale: |
+      vterm scrollback grows unboundedly. Line-counting from point-min
+      (count-lines, forward-line from bob) is O(n) in buffer size.
+      The current implementation uses forward-line from the previous
+      column's start, which is O(col-height) per column — acceptable.
+      But any path that counts from point-min will degrade on large
+      scrollback.
+
+  - id: EC-7
+    statement: |
+      vsnake must not suppress vterm PTY resize. When vsnake activates
+      on a vterm buffer, the PTY must be resized to column width so
+      that (a) libvterm reflows scrollback to the new width, and
+      (b) TUI programs (Claude Code, htop, vim, less) render correctly
+      within columns. This is non-negotiable for vterm buffers.
+      Column width for vterm buffers is taken directly from the
+      min-width table (currently 50). Content analysis
+      (bw/vsnake--analyze-content) is skipped for process-backed
+      buffers — line lengths depend on the PTY width which is about
+      to change, making sampling meaningless.
+    rationale: |
+      Claude Code working inside vterm under vsnake is a hard
+      requirement. Claude Code queries terminal dimensions for TUI
+      layout. If the PTY reports full frame width while the visible
+      column is narrower, the TUI renders garbled. libvterm reflows
+      scrollback on resize, so pre-existing output also renders
+      correctly at column width — no visual artifacts.
+    note: |
+      For non-vterm buffers with pre-rendered fixed-width content
+      (help, info), hard line breaks at the old width will soft-wrap
+      within columns. This is cosmetic, not a correctness failure.
+
+  - id: EC-8
+    statement: |
+      When vsnake is active on a vterm buffer and the selected window
+      is NOT the terminal-cursor column, vterm--redraw must not move
+      the selected window's point. Implementation: :around advice on
+      vterm--redraw that saves (window-point (selected-window)) before
+      and restores it via set-window-point after, conditioned on
+      vsnake being active and selected window != cursor column.
+    rationale: |
+      vterm--redraw calls goto-char to the terminal cursor position.
+      goto-char moves the buffer's point, which is the selected
+      window's window-point. If the user is in a scrollback column,
+      this moves that column's point into the screen area near
+      point-max. Emacs then scrolls the scrollback column to make
+      point visible, destroying the column layout. The :around
+      advice isolates the selected window from vterm's point
+      manipulation.
+    rejected_alternative: |
+      Generic pre-redisplay point clamping (save point on first
+      after-change-functions call, restore in pre-redisplay). This
+      relies on a timing assumption: that the first buffer
+      modification in a vterm render batch occurs before goto-char.
+      True today, but it's an undocumented internal ordering
+      dependency on another package. If vterm rearranges its redraw
+      sequence, the save captures corrupted point silently. The
+      :around advice has no ordering dependency — it wraps the
+      entire function. Additionally, compilation-mode and eshell
+      do NOT have the aggressive goto-char behavior, so the
+      generality buys nothing. Per-mode advice is the correct
+      primitive for a per-mode problem.
+
+  - id: EC-9
+    statement: |
+      The terminal-cursor column's window-point must track the
+      process mark even when that column is not selected.
+      Implementation: in the pre-redisplay-functions repositioning
+      hook, set-window-point on the cursor column to
+      (process-mark (get-buffer-process buf)).
+    rationale: |
+      When the user is in a scrollback column, vterm's goto-char
+      only affects the selected window (scrollback column, which
+      is protected by EC-8). The cursor column's window-point
+      becomes stale. If the user later clicks into the cursor
+      column, they would land at a stale position instead of the
+      terminal cursor. Updating window-point in pre-redisplay
+      ensures the cursor column always reflects the live terminal
+      cursor position.
+
+  - id: EC-10
+    statement: |
+      A post-command-hook must prevent Emacs from scrolling the
+      selected window when point moves outside its viewport. After
+      every command, check point's location relative to column
+      viewports and handle three cases:
+        (a) Point inside selected window's viewport → no action.
+        (b) Point inside a different column's viewport → select
+            that column via select-window. The user's cursor
+            appears in the correct column naturally.
+        (c) Point outside all columns' viewports (large jump) →
+            reposition all columns so that point is visible in
+            one of them, then select that column.
+      Cost: O(1) for case (a), O(N) for case (b) where N is
+      column count (typically 3-4), expensive only for case (c)
+      which fires on rare large jumps (G, gg, goto-line).
+    rationale: |
+      Without the old cursor-flow keymap, user navigation commands
+      (Evil G, gg, /, goto-line) run unmodified. If they move point
+      to a position visible in a different column, Emacs would
+      scroll the selected window to chase point, destroying the
+      layout. The post-command-hook detects this and selects the
+      correct column instead. The user's experience: "I pressed G,
+      and now I'm in the rightmost column looking at the end of
+      the buffer." Natural and unsurprising.
+
+  - id: EC-11
+    statement: |
+      vsnake owns the entire frame. If the window configuration
+      changes unexpectedly (user splits a window, display-buffer
+      pops a help buffer, eldoc popup, etc.), vsnake must exit
+      automatically and restore the previous window configuration.
+      Implementation: window-configuration-change-hook checks whether
+      bw/vsnake--windows matches the current window list. If not,
+      call bw/vsnake-exit. The check must be suppressed during
+      vsnake's own rebuild operations (add/remove column, recalculate)
+      via a buffer-local inhibit flag.
+    rationale: |
+      vsnake is a full-frame layout. No transient windows (help,
+      eldoc, completions) can coexist with the column layout.
+      Allowing partial breakage (some columns survive, others
+      don't) produces half-broken states that are harder to recover
+      from than a clean exit. The implicit contract: any external
+      window operation means the user is done with column view.
+    rejected_alternatives: |
+      (A) Protect layout via window-size-fixed: too rigid, prevents
+      display-buffer entirely, forces new frames for help.
+      (B) Detect and rebuild: fragile, hard to distinguish vsnake's
+      own changes from external ones, complex to implement correctly.
+
+opinionated_constraints:
+  - id: OC-1
+    statement: |
+      The column-flow cursor model (j/k flowing from bottom of col N
+      to top of col N+1) is eliminated. Point lives wherever the buffer
+      or user puts it. The column containing point is the active column.
+    rationale: |
+      Two interaction models (reading stance vs editing stance) in the
+      same visual layout is a maintenance trap and user-confusion source.
+      vsnake is purely geometric.
+    acceptable_loss: |
+      Newspaper-style sequential reading by pressing j repeatedly is
+      no longer possible. Users must explicitly navigate or scroll.
+
+  - id: OC-2
+    statement: |
+      vsnake meta-controls (add/remove column, widen/narrow, recalculate,
+      exit) are accessible only via a key prefix, not top-level bindings.
+      SPC w V becomes a prefix map (was previously a direct toggle):
+        SPC w V V — toggle (activate/deactivate, double-tap)
+        SPC w V + — add column
+        SPC w V - — remove column
+        SPC w V = — widen columns
+        SPC w V _ — narrow columns
+        SPC w V r — recalculate from content analysis
+        SPC w V q — exit (alias for toggle-off)
+      SPC w V alone (with which-key timeout) shows the control submenu.
+      q and V both exit — q for "quit this mode", V for "toggle off".
+      Same function, two mnemonics.
+    rationale: |
+      Prevents collision with any buffer-native binding. The prefix
+      cost (one extra keystroke for toggle) is acceptable because
+      activation is infrequent — the user enters vsnake, stays for
+      a while, exits. The which-key discoverability gain justifies
+      the regression from the previous direct SPC w V toggle.
+      No hydra/transient dependency.
+    acceptable_loss: |
+      Toggle requires SPC w V V instead of SPC w V. One extra
+      keystroke (~100ms). Previous muscle memory must be retrained.
+
+  - id: OC-3
+    statement: |
+      SUPERSEDED. Hold-and-refresh is rejected. All columns reposition
+      synchronously per EC-2. The connected-surface illusion is
+      non-negotiable — content cascading through columns in real time
+      is vsnake's core visual proposition.
+    supersedes: |
+      Previous draft specified hold-and-refresh for non-active columns.
+      Rejected because it breaks the connected-column illusion that
+      the user considers essential.
+
+  - id: OC-3a
+    statement: |
+      Chained repositioning accepts one-frame lag in column
+      synchronization. window-end values used for chaining reflect
+      the previous display cycle. Under fast output, columns may
+      be off by a few lines for one frame, converging on the next.
+      (window-end win t) with forced layout computation is rejected.
+    rationale: |
+      At normal output rates, one-frame lag is sub-perceptual
+      (~16ms at 60fps). At extreme rates, buffer content itself
+      is a blur — column misalignment is lost in the noise.
+      Forced per-column layout computation (window-end win t)
+      defeats the coalescing benefit of the dirty-flag pattern
+      and scales with column count.
+
+  - id: OC-5
+    statement: |
+      On activation, columns are positioned so that the user's
+      current point is visible in one of the N columns. The
+      starting position is computed to place point within the
+      visible range rather than always starting from point-min.
+      For vterm buffers, point is near the terminal cursor
+      (bottom of buffer), so columns naturally show the most
+      recent content.
+    rationale: |
+      Starting from point-min forces the user to navigate back
+      to where they were. The user activates vsnake to view their
+      current context in columns, not to start reading from the
+      top of the buffer. Anchoring on point preserves context.
+
+  - id: OC-4
+    statement: |
+      bw/vsnake-reading-mode survives as a minor mode but is reduced
+      to a state-tracking skeleton. Its keymap is emptied of all
+      navigation bindings. It exists solely to:
+        (a) provide a predicate (bound-and-true-p bw/vsnake-reading-mode)
+        (b) provide a lighter (" vsnake") in the mode line
+        (c) provide a hook (bw/vsnake-reading-mode-hook) for setup/teardown
+        (d) hang cleanup logic on mode deactivation
+      The minor mode name is a misnomer inherited from v0 and may be
+      renamed to bw/vsnake-mode in implementation, but the story file
+      does not govern naming.
+    rationale: |
+      The minor mode is the correct Emacs primitive for "this buffer
+      has a transient layout overlay active." Eliminating it forces
+      reimplementation of predicate, hook, lighter, and cleanup with
+      ad-hoc buffer-local flags. The keymap is emptied, not deleted.
+
+user_stories:
+  - id: US-1
+    title: "Activate vsnake on any buffer"
+    as_a: user
+    i_want: to press SPC w V on any buffer (file, vterm, help, org, compilation)
+    so_that: the buffer's content is displayed in newspaper-column layout
+    given: |
+      Any buffer is focused. Buffer may be empty, file-visiting,
+      process-backed, or special.
+    when: I press SPC w V V
+    then: |
+      Frame splits into N uniform-width columns showing sequential
+      content. Buffer's native keymap remains fully active.
+      All Evil bindings, vterm input, eshell prompts work normally.
+      vsnake's only visible effect is the column geometry.
+
+  - id: US-2
+    title: "Interactive editing in column view"
+    as_a: user
+    i_want: to edit, type, and interact with the buffer while columns are active
+    so_that: the column layout is a visual aid, not an interaction barrier
+    given: vsnake is active on a file-visiting buffer in Evil normal state
+    when: I type i to enter insert mode and type text
+    then: |
+      Text is inserted at point. All columns reposition synchronously
+      per EC-2 — the edit's effect cascades through the connected
+      column surface.
+
+  - id: US-3
+    title: "vterm interaction in column view"
+    as_a: user
+    i_want: to use vterm normally while its scrollback is in column layout
+    so_that: I can read long output (build logs, find results) across columns while the terminal remains interactive
+    given: vsnake is active on a vterm buffer
+    when: I type a command that produces fast output (e.g., find /)
+    then: |
+      PTY is resized to column width. libvterm reflows scrollback.
+      All columns reposition synchronously as output arrives.
+      New lines at the bottom of the rightmost column cascade
+      leftward — content that overflows the top of column N
+      immediately appears at the bottom of column N-1. The columns
+      feel like one connected surface. No flicker (set-window-start
+      is O(1), Emacs batches dirty windows into one render frame).
+      Keyboard input reaches the PTY without interception.
+
+  - id: US-3a
+    title: "Claude Code in vterm under vsnake"
+    as_a: user
+    i_want: to run Claude Code inside vterm while vsnake columns are active
+    so_that: Claude Code's TUI renders correctly within the column width
+    given: vsnake is active on a vterm buffer running Claude Code
+    when: Claude Code renders its TUI (input box, tool calls, status)
+    then: |
+      Claude Code sees column width as terminal width via TIOCGWINSZ.
+      TUI elements render within column bounds. No soft-wrap artifacts.
+      Input, output, and interactive elements function normally.
+
+  - id: US-3b
+    title: "Browse scrollback while vterm outputs"
+    as_a: user
+    i_want: to click into an earlier column to read or select scrollback text while terminal output continues in the rightmost column
+    so_that: I can review earlier output without stopping the running process
+    given: vsnake is active on a vterm buffer, output flowing in rightmost column
+    when: I click into column 1 and move my cursor around in the scrollback
+    then: |
+      Column 1 becomes the selected window. My cursor stays where
+      I put it in the scrollback — vterm's goto-char does NOT hijack
+      my point to the terminal cursor (protected by EC-8). All
+      columns continue to flow synchronously. When I click back into
+      the rightmost column, my cursor lands at the live terminal
+      cursor position (maintained by EC-9).
+
+  - id: US-4
+    title: "Exit vsnake restores layout"
+    as_a: user
+    i_want: to exit column view
+    so_that: my previous window configuration is restored exactly
+    given: vsnake is active
+    when: I press SPC w V q (or SPC w V V to toggle off)
+    then: |
+      All column windows are removed. Previous window configuration
+      is restored. No buffer killed. No face altered. No window
+      parameter leaked.
+
+  - id: US-5
+    title: "Column adjustment while interactive"
+    as_a: user
+    i_want: to add, remove, widen, or narrow columns without leaving the buffer
+    so_that: I can tune the layout to the content without interrupting work
+    given: vsnake is active
+    when: I use the vsnake prefix + adjustment key
+    then: |
+      Columns are rebuilt with new geometry. Point position is
+      preserved. Buffer interaction is not interrupted.
+
+  - id: US-6
+    title: "Cross-column interaction during live output"
+    as_a: user
+    i_want: to move my cursor into an earlier column to highlight or copy text while output continues flowing in the rightmost column
+    so_that: I can grab text from scrollback without stopping the process
+    given: vsnake is active on a vterm buffer with active output
+    when: I select a region in column 1 while output flows in column 3
+    then: |
+      The selection is valid (buffer positions are stable). All
+      columns continue to shift synchronously — the viewport drifts
+      upward relative to the selection. The connected-surface
+      illusion is maintained. If stable visual selection is needed,
+      the user pauses output first (Ctrl-S flow control or wait
+      for command completion).
+    acceptable_tradeoff: |
+      Visual selection drifts in the viewport during active output.
+      This is the same behavior as selecting text in a scrolling
+      terminal. Freezing a column to stabilize selection would break
+      the connected-surface continuity, which is non-negotiable.
+
+  - id: US-7
+    title: "Navigation jumps across columns"
+    as_a: user
+    i_want: to use Evil G, gg, /, goto-line, and other jump commands normally
+    so_that: large navigation works naturally in column view
+    given: vsnake is active, cursor in column 1
+    when: I press G (goto end of buffer)
+    then: |
+      Point moves to end of buffer. The column containing that
+      position (rightmost) becomes the selected window. I see
+      my cursor in the rightmost column at the end of the buffer.
+      No column is scrolled out of position. The layout remains
+      intact with all columns showing sequential content.
+
+  - id: US-7a
+    title: "Jump to position outside all visible columns"
+    as_a: user
+    i_want: goto-line or search to work even when the target is beyond all visible columns
+    so_that: I'm not limited to content currently on screen
+    given: vsnake is active, viewing lines 1-150 across 3 columns
+    when: I search for a pattern at line 500
+    then: |
+      All columns reposition so that line 500 is visible in one
+      of them. That column becomes selected. The connected-surface
+      layout is rebuilt around the new position.
+
+collective_user_lifetime_stories:
+  - id: CL-1
+    title: "Long-running vterm sessions"
+    description: |
+      User runs vterm sessions lasting hours or days. vsnake may be
+      toggled on and off many times. vterm scrollback grows to tens
+      of thousands of lines. Synchronous repositioning must not
+      leak timers or degrade performance as scrollback grows.
+      Column repositioning must remain O(1) relative to scrollback
+      size (use buffer positions, not line counting from point-min).
+
+  - id: CL-2
+    title: "Adversarial output rates"
+    description: |
+      User runs commands that produce output faster than Emacs can
+      redisplay (e.g., yes, cat /dev/urandom | xxd, recursive find
+      on large filesystem). vsnake's after-change-functions hook
+      adds N set-window-start calls per buffer modification — O(1)
+      each. The marginal cost is rendering N windows instead of 1
+      per display frame (constant multiplier). vsnake must not
+      introduce additional per-modification work beyond the chained
+      set-window-start calls. No forced redisplay, no buffer
+      scanning, no line counting in the hot path.
+
+  - id: CL-3
+    title: "Mode heterogeneity over time"
+    description: |
+      User activates vsnake on dozens of different major modes over
+      weeks. Each mode has different content geometry, keymap
+      expectations, and rendering behavior. vsnake must not accumulate
+      mode-specific hacks. The architecture must be buffer-agnostic
+      with mode-specific behavior limited to the min-width table
+      and the vterm point-protection advice (EC-8/EC-9), which is
+      the one permitted exception for the priority buffer type.
+
+  - id: CL-4
+    title: "vterm advice durability"
+    description: |
+      The :around advice on vterm--redraw (EC-8) must survive
+      vterm package updates, Emacs upgrades, and config reloads.
+      vterm--redraw is a Lisp function (not a C subr), so
+      advice-add works reliably. However, if vterm changes its
+      internal architecture (renames vterm--redraw, changes how
+      it positions point), the advice may silently stop protecting
+      the selected window. Defensive checks: the advice must
+      verify that vterm--redraw still exists and is advised on
+      vsnake activation. If not, warn and degrade gracefully
+      (vsnake still works, but scrollback browsing during output
+      may cause column jumps).
