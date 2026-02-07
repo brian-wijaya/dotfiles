@@ -308,7 +308,7 @@
 (define-key bw/leader-w-map (kbd "w") 'ace-window)
 (define-key bw/leader-w-map (kbd "x") 'ace-swap-window)
 ;; Spec 04: vsnake
-(define-key bw/leader-w-map (kbd "V") 'bw/vsnake-toggle)
+(define-key bw/leader-w-map (kbd "V") bw/vsnake-prefix-map)
 ;; Spec 05: explorer
 (define-key bw/leader-w-map (kbd "~") (lambda () (interactive) (bw/which-key-explore-prefix "SPC w")))
 
@@ -632,7 +632,7 @@
     "u" "↩️ undo"
     "v" "➕ split-v"
     ;; Spec 04: vsnake
-    "V" "📰 vsnake"
+    "V" "📰 vsnake..."
     "w" "🔄 ace"
     "x" "🔀 swap"
     "~" "🔭 explore"))

@@ -58,7 +58,7 @@
         which-key-max-description-length 35)
 
   (set-face-attribute 'which-key-posframe nil :background "#21242b")
-  (set-face-attribute 'which-key-posframe-border nil :background "#51afef")
+  (set-face-attribute 'which-key-posframe-border nil :background "#4a5464")
 
   (defvar bw/which-key-vertical-separator
     (propertize " │ " 'face '(:foreground "#3f444a"))
@@ -558,7 +558,11 @@ Used by both the main show-buffer and nav-mode to (re-)display the popup."
     (let* ((total-height (with-current-buffer buffer
                            (count-lines (point-min) (point-max))))
            (max-height (min total-height (/ (* (frame-height) 2) 3)))
-           (text-edges (window-body-pixel-edges))
+           ;; Use leftmost window's gutter (vsnake-aware: avoids column offset)
+           (gutter-win (if (bound-and-true-p bw/vsnake--windows)
+                           (car bw/vsnake--windows)
+                         (selected-window)))
+           (text-edges (window-body-pixel-edges gutter-win))
            (gutter-px (car text-edges)))
       (posframe-show buffer
                      :height max-height
@@ -578,8 +582,8 @@ Used by both the main show-buffer and nav-mode to (re-)display the popup."
                                (- parent-height child-height bottom-margin))))
                      :background-color "#21242b"
                      :foreground-color "#bbc2cf"
-                     :border-width 1
-                     :border-color "#51afef")))
+                     :border-width 2
+                     :border-color "#4a5464")))
 
   (defun bw/which-key--nav-execute-entry (buf)
     "Execute the currently highlighted entry and clean up nav state."
@@ -770,7 +774,10 @@ ACT-POPUP-DIM is the (height . width) from which-key's default rendering."
             ;; Non-sectioned: use act-popup-dim height, same posframe appearance
             (let* ((total-height (car act-popup-dim))
                    (max-height (min total-height (/ (* (frame-height) 2) 3)))
-                   (text-edges (window-body-pixel-edges))
+                   (gutter-win (if (bound-and-true-p bw/vsnake--windows)
+                                   (car bw/vsnake--windows)
+                                 (selected-window)))
+                   (text-edges (window-body-pixel-edges gutter-win))
                    (gutter-px (car text-edges)))
               (posframe-show buffer
                              :height max-height
@@ -790,8 +797,8 @@ ACT-POPUP-DIM is the (height . width) from which-key's default rendering."
                                        (- parent-height child-height bottom-margin))))
                              :background-color "#21242b"
                              :foreground-color "#bbc2cf"
-                             :border-width 1
-                             :border-color "#51afef")))))))
+                             :border-width 2
+                             :border-color "#4a5464")))))))
 
   ;; Clean up stale functions from previous code versions
   (dolist (sym '(bw/wk--resolve-keymap-sym bw/wk-sections bw/wk--render-sectioned
@@ -824,10 +831,24 @@ ACT-POPUP-DIM is the (height . width) from which-key's default rendering."
         (when (subrp original)
           (fset 'which-key--update original)))))
 
-  ;; Remove any stale override from previous versions, then install ours
+  ;; Remove any stale override advice from previous versions
   (advice-remove 'which-key-posframe--show-buffer 'bw/which-key-posframe--show-buffer)
-  (advice-add 'which-key-posframe--show-buffer :override
-              #'bw/which-key-posframe--show-buffer)
+  (ignore-errors
+    (advice-mapc (lambda (fn _props)
+                   (advice-remove 'which-key-posframe--show-buffer fn))
+                 'which-key-posframe--show-buffer))
+
+  ;; Bypass the C subr entirely: which-key's C code calls the custom show
+  ;; function, but when it points to a C subr symbol, it may call the subr
+  ;; directly, bypassing Lisp-level advice.  Using a pure-Lisp wrapper
+  ;; forces the call through Lisp dispatch every time.
+  (defun bw/which-key-show-wrapper (act-popup-dim)
+    "Pure-Lisp wrapper that delegates to our sectioned renderer.
+Points `which-key-custom-show-popup-function' here instead of the
+C subr `which-key-posframe--show-buffer' to ensure our override runs."
+    (bw/which-key-posframe--show-buffer act-popup-dim))
+
+  (setq which-key-custom-show-popup-function #'bw/which-key-show-wrapper)
 
   ;; Wrap the hide function to suppress hiding during nav mode.
   ;; which-key-posframe--hide is a C subr (Emacs 30) so we can't advise it;

@@ -11,6 +11,13 @@
   
   ;; Better kill-ring integration
   (setq vterm-copy-exclude-prompt t)
+
+  ;; Never prompt when killing vterm buffers
+  (add-hook 'vterm-mode-hook
+            (lambda ()
+              (when (get-buffer-process (current-buffer))
+                (set-process-query-on-exit-flag
+                 (get-buffer-process (current-buffer)) nil))))
   
   ;; Evil integration - yank from vterm to kill-ring
   (with-eval-after-load 'evil

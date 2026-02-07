@@ -23,12 +23,8 @@ fi
 
 if [[ $_in_ide -eq 1 ]]; then
     export CURSOR_NO_TMUX=1
-    pkill -9 -f "tmux attach.*main" 2>/dev/null || true
-    if [[ -n "$TMUX" ]]; then
-        tmux detach 2>/dev/null
-        unset TMUX TMUX_PANE
-        exec zsh
-    fi
+    # Clear inherited TMUX env so this shell doesn't think it's in tmux
+    unset TMUX TMUX_PANE
 fi
 
 # --- PATH ---
