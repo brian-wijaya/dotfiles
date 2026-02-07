@@ -1,0 +1,392 @@
+title: "code-explorer: sibling-continuous depth-zoom file browser"
+version: 8
+status: extracting — topology + sort stable, approaching completeness
+
+# Vocabulary
+#
+# Depth     — number of l presses from initial view. Depth 0 = initial.
+# Band      — the full set of groups visible at the current depth.
+# Group     — one directory's contents (files + dirs) within the band. Flat, no nesting.
+# Focus group — the group containing the cursor.
+# Anchor    — the 1/3-from-top viewport position. Cursor aligns here on depth change.
+# Zone mapping — proportional position calc: cursor's old-view % maps to new-view entry at anchor.
+# Pin       — a file locked in the display pane; survives navigation.
+# Wall      — boundary reached when l or h has nowhere to go. Orange flash.
+# Display pane — right pane: real editor buffer. Min 60% frame width.
+# Navigator — left pane: the band of groups.
+
+concept: |
+  Two-pane file browser for people who prefer flat hierarchies.
+
+  NAVIGATOR (left pane):
+  Shows a band of groups at the current depth. Each group is the flat
+  contents (files + directories) of one directory. Groups are separated
+  only by a subtle visual line — no headers. Each entry shows its full
+  file path (~/path/to/name.ext), so group identity is self-evident.
+
+  l = increase depth. ALL directories across ALL groups in the current band
+      expand into new groups. The new band is a depth-slice of the tree.
+      Cursor placement: zone mapping — cursor's proportional position in
+      old view maps to an entry in new view, placed at the anchor (1/3).
+      If no directories exist anywhere in the band, wall-hit (orange right).
+  h = decrease depth. Reverse of l. Previous band is restored.
+      Cursor placement: zone mapping back to proportional position.
+      At filesystem root (/), wall-hit (orange left).
+  j/k = move cursor through entries, crossing group dividers seamlessly.
+  PgUp/PgDn = move within group (stop at group boundary).
+  S-PgUp/S-PgDn = jump cursor to next/prev group.
+  ESC = recenter view (cursor at anchor).
+  / = fuzzy search current dir + all subdirs.
+  H/L = history back/forward through zoom path.
+  c,d = copy directory path. c,f = copy filename. c,n = copy name no ext.
+  . = sort mode menu (global default / directory sort / group sort)
+  . ! = reset all sort overrides to default
+  . ~ = reset sort at current depth and deeper
+  . _ = reset sort for current dir tree (recursive)
+
+  FILE DISPLAY (right pane, min 60% of frame):
+  Real editor buffer. Editable. Scrollable via scroll-other-window.
+  Default: auto-opens whatever FILE is under cursor as you navigate.
+  When cursor lands on a directory, display pane is sticky (retains last file).
+  RET = pin current file (survives further navigation and depth changes).
+  RET again = unpin (resumes auto-open immediately).
+
+  PATH DISPLAY:
+  Entries show full paths, right-aligned. When truncated:
+  ~/folde.../source/include/thing.hpp
+  Truncation preserves the head (~/ prefix) and the tail (last 2/3 of path).
+  The ... appears at the 1/3 point of the full path string.
+
+  INITIAL STATE:
+  Always shows neighborhood — starting directory's parent's children as
+  the band. Sibling directories are immediately visible.
+
+  EXIT:
+  q closes navigator. Last-displayed file remains open as active buffer.
+
+user_stories:
+  - id: US-1
+    title: "Increase depth (l)"
+    given: "Band at depth N contains groups with directory entries"
+    when: "User presses l"
+    then: |
+      Depth becomes N+1.
+      Every directory entry across ALL groups in the band expands.
+      New band = contents of each of those directories, one group per dir.
+      Files from depth N vanish (they have no children).
+      Groups ordered by their parent directory's sort method.
+      Cursor placed via zone mapping at the anchor.
+      Zoom step recorded in history.
+
+  - id: US-2
+    title: "Wall hit on l (no directories in band)"
+    given: "No entries in any group are directories"
+    when: "User presses l"
+    then: "No change. Orange flash on right edge of navigator."
+
+  - id: US-3
+    title: "Decrease depth (h)"
+    given: "Depth > 0"
+    when: "User presses h"
+    then: |
+      Depth becomes N-1.
+      Band reverts to the parent-level view.
+      Cursor placed via zone mapping at the anchor.
+      Zoom step recorded in history.
+
+  - id: US-3b
+    title: "Wall hit on h (filesystem root)"
+    given: "Current band represents children of /"
+    when: "User presses h"
+    then: "No change. Orange flash on LEFT edge of navigator."
+
+  - id: US-4
+    title: "Cross-group cursor movement"
+    given: "Cursor is on the last entry of a group"
+    when: "User presses j"
+    then: "Cursor moves to first entry of the next group (crosses divider)"
+
+  - id: US-5
+    title: "Group jumping (S-PgDn / S-PgUp)"
+    given: "Cursor is in group N"
+    when: "User presses S-PgDn"
+    then: "Cursor moves to first entry of group N+1"
+
+  - id: US-6
+    title: "PgUp/PgDn stops at group boundary"
+    given: "Cursor is in the middle of a group"
+    when: "User presses PgDn"
+    then: "Cursor moves to last entry of current group (not past divider)"
+
+  - id: US-7
+    title: "Auto-open on navigate (unpinned)"
+    given: "No file is pinned, cursor lands on a file entry"
+    when: "User moves cursor with j/k"
+    then: |
+      File opens in display pane as a real editor buffer.
+      Previous temp buffer replaced (killed if not user-modified).
+      Display pane width adapts via vsnake algorithm.
+
+  - id: US-7b
+    title: "Display pane sticky on directory cursor"
+    given: "Cursor moves to a directory entry"
+    when: "User moves cursor with j/k"
+    then: "Display pane retains last-displayed file. No change."
+
+  - id: US-8
+    title: "Pin file (RET)"
+    given: "Display pane shows a file, not pinned"
+    when: "User presses RET"
+    then: |
+      File is pinned. Display pane survives further navigation and
+      depth changes (l/h). Visual indicator of pin state.
+
+  - id: US-9
+    title: "Unpin file (RET again)"
+    given: "A file is pinned"
+    when: "User presses RET"
+    then: "Pin released. Auto-open resumes. Current cursor file opens immediately."
+
+  - id: US-10
+    title: "Initial view (neighborhood)"
+    given: "Explorer invoked on ~/projects/myapp/"
+    when: "Explorer opens"
+    then: |
+      Band = contents of each child directory of ~/projects/.
+      myapp/ is one group among its siblings.
+      Cursor on first entry of myapp/ group, at the anchor.
+
+  - id: US-11
+    title: "Recenter (ESC)"
+    when: "User presses ESC"
+    then: "View scrolls so cursor is at the anchor (1/3 from top)"
+
+  - id: US-12
+    title: "Exit (q)"
+    when: "User presses q"
+    then: "Navigator pane closes. Last file in display pane becomes active buffer."
+
+  - id: US-13
+    title: "History back/forward (H/L)"
+    given: "User has multiple zoom steps in history"
+    when: "User presses H (back) or L (forward)"
+    then: "View returns to a previous/next zoom state (depth + cursor position)."
+
+  - id: US-14
+    title: "Fuzzy search (/)"
+    when: "User presses /"
+    then: "Fuzzy search across current dir + subdirs. Result navigates to match."
+
+  - id: US-15
+    title: "Copy commands (c prefix)"
+    when: "User presses c then d / f / n"
+    then: |
+      c,d = copy directory path of entry under cursor to kill ring / clipboard
+      c,f = copy filename (with extension)
+      c,n = copy filename without extension
+
+  - id: US-16
+    title: "Scroll display pane from navigator"
+    when: "User presses C-M-v (scroll-other-window)"
+    then: "Display pane scrolls. Focus remains in navigator."
+
+  - id: US-17
+    title: "Zone mapping on depth change"
+    given: "Cursor is at position P% of the current band's total lines"
+    when: "User presses l or h"
+    then: |
+      New band is computed.
+      The entry at P% of the new band's total lines becomes the cursor target.
+      That entry is placed at the anchor (1/3 from top).
+      This creates spatial continuity: "middle of the view stays middle."
+
+  - id: US-17b
+    title: "Band ordering across parent boundaries"
+    given: |
+      Depth 2. Parents at depth 1 were sra/, src/, src2/ (children of ~).
+      src/ has directory sort = alphabetical.
+      sra/ has directory sort = by-date.
+      ~/ has directory sort = alphabetical.
+    when: "Band at depth 2 is rendered"
+    then: |
+      Top-level cluster order: sra-children, src-children, src2-children
+      (determined by ~/'s directory sort = alphabetical on sra, src, src2).
+      Within sra-children: ordered by sra/'s sort (by-date).
+      Within src-children: ordered by src/'s sort (alphabetical -> folder1,2,3,4).
+      The band reads top-to-bottom as a depth-first walk of the ancestor tree.
+
+  - id: US-18
+    title: "Sort mode menu (.)"
+    when: "User presses ."
+    then: |
+      Opens a sort mode menu with three scopes:
+      1. Global default mode — changes the fallback sort for all directories
+         that don't have a per-directory override. Applies everywhere.
+      2. Directory sort mode — sets how GROUPS are ordered in the NEXT
+         band when pressing l from this directory. Controls group ordering
+         at depth N+1 for entries under this directory.
+      3. Group sort mode — sets how ENTRIES within the current focus group
+         are ordered (files and dirs within one group).
+      Sort options: alphabetical, date modified, size, type (extension).
+      All choices persist across sessions by default (stored in cache).
+
+  - id: US-19
+    title: "Sort reset: all to default (. !)"
+    when: "User presses . then !"
+    then: |
+      Nuclear reset. ALL per-directory sort overrides cleared.
+      Every directory reverts to the global default sort.
+
+  - id: US-20
+    title: "Sort reset: current depth and deeper (. ~)"
+    when: "User presses . then ~"
+    then: |
+      Resets sort overrides for all directories at the current depth
+      level and all deeper levels. Shallower levels keep their overrides.
+      Scope: horizontal (depth-based).
+
+  - id: US-21
+    title: "Sort reset: recursive from current dir (. _)"
+    when: "User presses . then _"
+    then: |
+      Resets sort overrides for the focus group's directory and ALL
+      its child directories recursively (traditional tree-scoped reset).
+      Sibling directories at the same depth are unaffected.
+      Scope: vertical (tree-based).
+
+collective_lifetime_stories:
+  - id: CL-1
+    title: "Scale: many sibling directories"
+    scenario: |
+      Parent directory contains 80+ child directories. User presses l.
+      New band must enumerate all 80 directories' contents.
+    behavior: |
+      All groups rendered unconditionally. Async progressive rendering:
+      focus group + nearest groups render first (cursor immediately usable).
+      Remaining groups fill in with spinner/loading indicator.
+      Total: 80 dirs x 200 files avg = 16,000 entries.
+      Emacs text buffer handles this (no font-lock in navigator).
+
+  - id: CL-2
+    title: "Scale: deep trees (15+ levels)"
+    behavior: |
+      Zoom stack stores (depth, parent-path, cursor-%) tuples.
+      ~100 bytes/level. No recursive state accumulation. No risk.
+
+  - id: CL-3
+    title: "Filesystem edge cases"
+    behavior: |
+      Symlinks: followed, cycle detection via visited inodes.
+      Permission errors: group shows "Permission denied" dim text. Others unaffected.
+      Empty directories: group with divider but no entries.
+      Special files: shown with type indicator, not openable (sticky display).
+
+  - id: CL-4
+    title: "Unbounded upward zoom"
+    behavior: |
+      h zooms through entire hierarchy until /. At /, wall-hit (orange left).
+
+  - id: CL-5
+    title: "Auto-open buffer accumulation"
+    behavior: |
+      Temp buffer ring (max 5-10). Explorer-opened unmodified buffers
+      are killed when ring overflows. Pre-existing and pinned buffers
+      are never killed.
+
+enforced_constraints:
+  - id: EC-1
+    statement: "Emacs 30, Evil mode, single-frame TUI or GUI"
+  - id: EC-2
+    statement: "Must integrate with existing Evil leader (SPC) keymap"
+  - id: EC-3
+    statement: "Display pane uses vsnake adaptive-width algorithm"
+  - id: EC-4
+    statement: "Display pane is a real editor buffer (not read-only preview)"
+  - id: EC-5
+    statement: "Display pane minimum width: 60% of frame"
+  - id: EC-6
+    statement: "Zoom transitions < 100ms to first usable frame (async remainder)"
+
+opinionated_constraints:
+  - id: OC-1
+    statement: "l always increases depth, h always decreases — no entry-type special cases"
+    status: confirmed
+  - id: OC-2
+    statement: "l expands ALL directories across ALL groups (full depth-slice)"
+    status: confirmed
+  - id: OC-3
+    statement: |
+      Band ordering follows depth-first traversal of the ancestor tree.
+      Each ancestor node's directory sort determines the order of its
+      direct children's groups. Groups from different parents interleave
+      based on the closest shared ancestor's directory sort.
+      Effect: groups cluster by parent, parents cluster by grandparent, etc.
+    status: confirmed
+  - id: OC-4
+    statement: "Each group sorted by its own 'group sort' (controls entry ordering within group)"
+    status: confirmed
+  - id: OC-4b
+    statement: "Global default sort: alphabetical, case-insensitive, dirs-first"
+    status: confirmed
+  - id: OC-4c
+    statement: "Three-tier sort: global default < per-directory override < per-session change"
+    status: confirmed
+  - id: OC-4d
+    statement: "Sort overrides persist across sessions (cache file)"
+    status: confirmed
+  - id: OC-4e
+    statement: "Three reset scopes: . ! (all), . ~ (depth+deeper), . _ (tree-recursive)"
+    status: confirmed
+  - id: OC-5
+    statement: "Group dividers are subtle lines only — no headers, no directory names"
+    status: confirmed
+  - id: OC-6
+    statement: "Entries show full file paths (~/path/to/file.ext)"
+    status: confirmed
+  - id: OC-7
+    statement: "Path truncation: ...at 1/3 point, preserving head + tail"
+    status: confirmed
+  - id: OC-8
+    statement: "Files vanish when depth increases past them"
+    status: confirmed
+  - id: OC-9
+    statement: "Wall-hit: orange flash, right edge for l, left edge for h"
+    status: confirmed
+  - id: OC-10
+    statement: "Zone mapping on depth change (proportional cursor placement at anchor)"
+    status: confirmed
+  - id: OC-11
+    statement: "Anchor = 1/3 from top of viewport"
+    status: confirmed
+  - id: OC-12
+    statement: "Auto-open by default; RET toggles pin/unpin"
+    status: confirmed
+  - id: OC-13
+    statement: "Display pane sticky on directory entries"
+    status: confirmed
+  - id: OC-14
+    statement: "Initial view shows neighborhood (parent's children as band)"
+    status: confirmed
+  - id: OC-15
+    statement: "Exit (q) keeps last file open, no window restore"
+    status: confirmed
+  - id: OC-16
+    statement: "All groups rendered unconditionally (no culling)"
+    status: confirmed
+  - id: OC-17
+    statement: "Async progressive rendering with spinner"
+    status: confirmed
+  - id: OC-18
+    statement: "Copy prefix c with subkeys d/f/n (yazi convention)"
+    status: provisional
+  - id: OC-19
+    statement: "History back/forward via H/L"
+    status: provisional
+  - id: OC-20
+    statement: "Hidden files shown by default"
+    status: provisional
+
+open_questions:
+  - id: Q-1
+    text: "Sort method per directory"
+    status: RESOLVED — three-tier system with . menu and scoped resets

@@ -136,7 +136,7 @@
 (define-key bw/leader-h-map (kbd "t") 'help-with-tutorial)
 (define-key bw/leader-h-map (kbd "w") 'where-is)
 (define-key bw/leader-h-map (kbd "x") 'describe-command)
-(define-key bw/leader-hr-map (kbd "R") 'reload-init)
+(define-key bw/leader-hr-map (kbd "R") 'bw/reload-init)
 (define-key bw/leader-hr-map (kbd "t") 'bw/reload-theme)
 ;; Spec 05: explorer
 (define-key bw/leader-h-map (kbd "~") (lambda () (interactive) (bw/which-key-explore-prefix "SPC h")))
@@ -194,7 +194,7 @@
 (define-key bw/leader-o-map (kbd "F") 'neotree-find)
 (define-key bw/leader-o-map (kbd "w") 'eww)
 (define-key bw/leader-o-map (kbd ".") 'bw/edit-init)
-(define-key bw/leader-o-map (kbd "D") 'docs-home)
+(define-key bw/leader-o-map (kbd "D") 'bw/docs-home)
 ;; SPC o h - reference pages
 (define-key bw/leader-oh-map (kbd "c") 'bw/open-cheatsheet)
 (define-key bw/leader-oh-map (kbd "d") 'devdocs-peruse)

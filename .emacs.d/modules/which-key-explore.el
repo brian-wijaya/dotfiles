@@ -12,29 +12,29 @@
 ;; State variables
 ;; ---------------------------------------------------------------------------
 
-(defvar bw/wke--active nil
+(defvar bw/which-key-explore--active nil
   "Non-nil when which-key explorer is active.")
 
-(defvar bw/wke--prefix nil
+(defvar bw/which-key-explore--prefix nil
   "Current prefix string being explored (e.g., \"SPC\" or \"SPC b\").")
 
-(defvar bw/wke--history nil
+(defvar bw/which-key-explore--history nil
   "Navigation history stack of prefix strings for back.")
 
-(defvar bw/wke--forward-history nil
+(defvar bw/which-key-explore--forward-history nil
   "Forward navigation stack (for M-right after M-left).")
 
-(defvar bw/wke--info-timer nil
+(defvar bw/which-key-explore--info-timer nil
   "Idle timer for showing info posframe.")
 
-(defvar bw/wke--buffer-name "*which-key-explore*"
+(defvar bw/which-key-explore--buffer-name "*which-key-explore*"
   "Buffer name for the explorer.")
 
 ;; ---------------------------------------------------------------------------
 ;; Prefix string to keymap
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--prefix-to-keymap (prefix)
+(defun bw/which-key-explore--prefix-to-keymap (prefix)
   "Convert PREFIX string to its keymap.
 E.g., \"SPC\" -> bw/leader-map, \"SPC b\" -> bw/leader-b-map."
   (let ((parts (split-string prefix " ")))
@@ -67,7 +67,7 @@ E.g., \"SPC\" -> bw/leader-map, \"SPC b\" -> bw/leader-b-map."
 ;; Which-key label helpers
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--get-which-key-label (prefix key-str)
+(defun bw/which-key-explore--get-which-key-label (prefix key-str)
   "Get which-key replacement label for KEY-STR under PREFIX.
 Returns the label string or nil."
   (when (boundp 'which-key-replacement-alist)
@@ -87,7 +87,7 @@ Returns the label string or nil."
                   (throw 'found rep-str))))))
         nil))))
 
-(defun bw/wke--get-which-key-label-for-cmd (cmd)
+(defun bw/which-key-explore--get-which-key-label-for-cmd (cmd)
   "Get which-key label associated with CMD, if any."
   (when (and cmd (boundp 'which-key-replacement-alist))
     (let ((cmd-name (symbol-name cmd)))
@@ -107,9 +107,9 @@ Returns the label string or nil."
 ;; Get bindings for a prefix
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--get-bindings (prefix)
+(defun bw/which-key-explore--get-bindings (prefix)
   "Return list of (KEY COMMAND LABEL IS-PREFIX) for PREFIX."
-  (let* ((keymap (bw/wke--prefix-to-keymap prefix))
+  (let* ((keymap (bw/which-key-explore--prefix-to-keymap prefix))
          (result '()))
     (when (keymapp keymap)
       (map-keymap
@@ -129,7 +129,7 @@ Returns the label string or nil."
                        (cdr real-binding))
                       (t nil)))
                 (label (or wk-label
-                           (bw/wke--get-which-key-label prefix key-str))))
+                           (bw/which-key-explore--get-which-key-label prefix key-str))))
            (when (and (not (eq real-binding 'undefined))
                       (not (string-match-p "^<" key-str)))
              (push (list key-str cmd label is-prefix)
@@ -141,14 +141,14 @@ Returns the label string or nil."
 ;; Render
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--render ()
+(defun bw/which-key-explore--render ()
   "Render the explorer buffer for current prefix."
-  (let* ((buf (get-buffer-create bw/wke--buffer-name))
-         (bindings (bw/wke--get-bindings bw/wke--prefix))
+  (let* ((buf (get-buffer-create bw/which-key-explore--buffer-name))
+         (bindings (bw/which-key-explore--get-bindings bw/which-key-explore--prefix))
          (inhibit-read-only t))
     (with-current-buffer buf
       (erase-buffer)
-      (insert (propertize (format " %s\n" bw/wke--prefix)
+      (insert (propertize (format " %s\n" bw/which-key-explore--prefix)
                           'face '(:height 1.2 :weight bold :foreground "#51afef")))
       (insert (propertize (make-string 60 ?-) 'face '(:foreground "#5B6268")))
       (insert "\n")
@@ -175,7 +175,7 @@ Returns the label string or nil."
       (goto-char (point-min))
       (forward-line 2) ; skip header
       (setq buffer-read-only t)
-      (bw/wke-mode 1)
+      (bw/which-key-explore-mode 1)
       (when (fboundp 'evil-emacs-state)
         (evil-emacs-state)))
     (display-buffer buf
@@ -190,18 +190,18 @@ Returns the label string or nil."
 ;; Parsing current line
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--command-at-point ()
+(defun bw/which-key-explore--command-at-point ()
   "Get command symbol from current explorer line."
   (save-excursion
     (beginning-of-line)
     (when (looking-at " *\\S-+ +\\(\\S-+\\)")
       (intern-soft (match-string 1)))))
 
-(defun bw/wke--binding-at-point ()
+(defun bw/which-key-explore--binding-at-point ()
   "Get full binding data from current explorer line.
 Returns (KEY CMD LABEL IS-PREFIX) or nil."
   (let* ((line-num (- (line-number-at-pos) 3)) ; skip header lines
-         (bindings (bw/wke--get-bindings bw/wke--prefix)))
+         (bindings (bw/which-key-explore--get-bindings bw/which-key-explore--prefix)))
     (when (and (>= line-num 0) (< line-num (length bindings)))
       (nth line-num bindings))))
 
@@ -209,7 +209,7 @@ Returns (KEY CMD LABEL IS-PREFIX) or nil."
 ;; Source and config helpers
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--find-source (cmd)
+(defun bw/which-key-explore--find-source (cmd)
   "Find source file:line for CMD."
   (condition-case nil
       (let ((loc (find-function-noselect cmd)))
@@ -219,7 +219,7 @@ Returns (KEY CMD LABEL IS-PREFIX) or nil."
             (format "%s:%d" (buffer-file-name) (line-number-at-pos)))))
     (error nil)))
 
-(defun bw/wke--find-config-location (cmd)
+(defun bw/which-key-explore--find-config-location (cmd)
   "Find where CMD is bound in config files.  Returns \"file:line\" or nil."
   (let ((symbol-str (regexp-quote (symbol-name cmd)))
         (dirs (list (expand-file-name "modules/" user-emacs-directory)
@@ -236,7 +236,7 @@ Returns (KEY CMD LABEL IS-PREFIX) or nil."
                        (format "%s:%d" file (line-number-at-pos))))))))
       nil)))
 
-(defun bw/wke--grep-for-symbol (cmd)
+(defun bw/which-key-explore--grep-for-symbol (cmd)
   "Grep for CMD symbol across config files.  Returns list of file:line strings."
   (let ((symbol-str (symbol-name cmd))
         (dirs (list (expand-file-name "modules/" user-emacs-directory)
@@ -260,32 +260,32 @@ Returns (KEY CMD LABEL IS-PREFIX) or nil."
 ;; Info posframe
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--start-info-timer ()
+(defun bw/which-key-explore--start-info-timer ()
   "Start idle timer for info posframe."
-  (bw/wke--cancel-info-timer)
-  (setq bw/wke--info-timer
-        (run-with-idle-timer 0.3 t #'bw/wke--show-info)))
+  (bw/which-key-explore--cancel-info-timer)
+  (setq bw/which-key-explore--info-timer
+        (run-with-idle-timer 0.3 t #'bw/which-key-explore--show-info)))
 
-(defun bw/wke--cancel-info-timer ()
+(defun bw/which-key-explore--cancel-info-timer ()
   "Cancel info timer."
-  (when bw/wke--info-timer
-    (cancel-timer bw/wke--info-timer)
-    (setq bw/wke--info-timer nil)))
+  (when bw/which-key-explore--info-timer
+    (cancel-timer bw/which-key-explore--info-timer)
+    (setq bw/which-key-explore--info-timer nil)))
 
-(defun bw/wke--show-info ()
+(defun bw/which-key-explore--show-info ()
   "Show info posframe for command on current line."
-  (when (and bw/wke--active
-             (eq (current-buffer) (get-buffer bw/wke--buffer-name)))
-    (let* ((cmd (bw/wke--command-at-point))
+  (when (and bw/which-key-explore--active
+             (eq (current-buffer) (get-buffer bw/which-key-explore--buffer-name)))
+    (let* ((cmd (bw/which-key-explore--command-at-point))
            (doc (when (and cmd (fboundp cmd))
                   (car (split-string (or (documentation cmd t) "No documentation") "\n"))))
            (src (when (and cmd (fboundp cmd))
-                  (bw/wke--find-source cmd)))
+                  (bw/which-key-explore--find-source cmd)))
            (config-loc (when cmd
-                         (bw/wke--find-config-location cmd)))
-           (label (when cmd (bw/wke--get-which-key-label-for-cmd cmd))))
+                         (bw/which-key-explore--find-config-location cmd)))
+           (label (when cmd (bw/which-key-explore--get-which-key-label-for-cmd cmd))))
       (when cmd
-        (posframe-show "*wke-info*"
+        (posframe-show "*which-key-explore-info*"
                        :string (concat
                                 (propertize (symbol-name cmd) 'face '(:weight bold :foreground "#51afef"))
                                 "\n"
@@ -307,63 +307,63 @@ Returns (KEY CMD LABEL IS-PREFIX) or nil."
 ;; Navigation
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--drill ()
+(defun bw/which-key-explore--drill ()
   "Drill into prefix key on current line."
   (interactive)
-  (let* ((binding (bw/wke--binding-at-point))
+  (let* ((binding (bw/which-key-explore--binding-at-point))
          (key (nth 0 binding))
          (is-prefix (nth 3 binding)))
     (when is-prefix
-      (push bw/wke--prefix bw/wke--history)
-      (setq bw/wke--forward-history nil)
-      (setq bw/wke--prefix (concat bw/wke--prefix " " key))
-      (bw/wke--render))))
+      (push bw/which-key-explore--prefix bw/which-key-explore--history)
+      (setq bw/which-key-explore--forward-history nil)
+      (setq bw/which-key-explore--prefix (concat bw/which-key-explore--prefix " " key))
+      (bw/which-key-explore--render))))
 
-(defun bw/wke--go-up ()
+(defun bw/which-key-explore--go-up ()
   "Go up one prefix level."
   (interactive)
-  (let ((parts (split-string bw/wke--prefix " ")))
+  (let ((parts (split-string bw/which-key-explore--prefix " ")))
     (when (> (length parts) 1)
-      (push bw/wke--prefix bw/wke--history)
-      (setq bw/wke--forward-history nil)
-      (setq bw/wke--prefix (string-join (butlast parts) " "))
-      (bw/wke--render))))
+      (push bw/which-key-explore--prefix bw/which-key-explore--history)
+      (setq bw/which-key-explore--forward-history nil)
+      (setq bw/which-key-explore--prefix (string-join (butlast parts) " "))
+      (bw/which-key-explore--render))))
 
-(defun bw/wke--history-back ()
+(defun bw/which-key-explore--history-back ()
   "Go back in navigation history."
   (interactive)
-  (when bw/wke--history
-    (push bw/wke--prefix bw/wke--forward-history)
-    (setq bw/wke--prefix (pop bw/wke--history))
-    (bw/wke--render)))
+  (when bw/which-key-explore--history
+    (push bw/which-key-explore--prefix bw/which-key-explore--forward-history)
+    (setq bw/which-key-explore--prefix (pop bw/which-key-explore--history))
+    (bw/which-key-explore--render)))
 
-(defun bw/wke--history-forward ()
+(defun bw/which-key-explore--history-forward ()
   "Go forward in navigation history."
   (interactive)
-  (when bw/wke--forward-history
-    (push bw/wke--prefix bw/wke--history)
-    (setq bw/wke--prefix (pop bw/wke--forward-history))
-    (bw/wke--render)))
+  (when bw/which-key-explore--forward-history
+    (push bw/which-key-explore--prefix bw/which-key-explore--history)
+    (setq bw/which-key-explore--prefix (pop bw/which-key-explore--forward-history))
+    (bw/which-key-explore--render)))
 
 ;; ---------------------------------------------------------------------------
 ;; Meta-commands
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--goto-source ()
+(defun bw/which-key-explore--goto-source ()
   "Open source file at definition of command on current line."
   (interactive)
-  (let ((cmd (bw/wke--command-at-point)))
+  (let ((cmd (bw/which-key-explore--command-at-point)))
     (when cmd
-      (bw/wke--exit)
+      (bw/which-key-explore--exit)
       (find-function cmd))))
 
-(defun bw/wke--goto-config ()
+(defun bw/which-key-explore--goto-config ()
   "Open config file at binding definition for command on current line."
   (interactive)
-  (let* ((cmd (bw/wke--command-at-point))
-         (loc (when cmd (bw/wke--find-config-location cmd))))
+  (let* ((cmd (bw/which-key-explore--command-at-point))
+         (loc (when cmd (bw/which-key-explore--find-config-location cmd))))
     (when loc
-      (bw/wke--exit)
+      (bw/which-key-explore--exit)
       (let* ((parts (split-string loc ":"))
              (file (car parts))
              (line (string-to-number (cadr parts))))
@@ -371,47 +371,47 @@ Returns (KEY CMD LABEL IS-PREFIX) or nil."
         (goto-char (point-min))
         (forward-line (1- line))))))
 
-(defun bw/wke--copy-command-name ()
+(defun bw/which-key-explore--copy-command-name ()
   "Copy command name to kill-ring."
   (interactive)
-  (let ((cmd (bw/wke--command-at-point)))
+  (let ((cmd (bw/which-key-explore--command-at-point)))
     (when cmd
       (kill-new (symbol-name cmd))
       (message "Copied: %s" (symbol-name cmd)))))
 
-(defun bw/wke--copy-source-location ()
+(defun bw/which-key-explore--copy-source-location ()
   "Copy file:line of command source to kill-ring."
   (interactive)
-  (let* ((cmd (bw/wke--command-at-point))
-         (src (when cmd (bw/wke--find-source cmd))))
+  (let* ((cmd (bw/which-key-explore--command-at-point))
+         (src (when cmd (bw/which-key-explore--find-source cmd))))
     (when src
       (kill-new src)
       (message "Copied: %s" src))))
 
-(defun bw/wke--copy-which-key-label ()
+(defun bw/which-key-explore--copy-which-key-label ()
   "Copy which-key label to kill-ring."
   (interactive)
-  (let* ((cmd (bw/wke--command-at-point))
-         (label (when cmd (bw/wke--get-which-key-label-for-cmd cmd))))
+  (let* ((cmd (bw/which-key-explore--command-at-point))
+         (label (when cmd (bw/which-key-explore--get-which-key-label-for-cmd cmd))))
     (when label
       (kill-new label)
       (message "Copied: %s" label))))
 
-(defun bw/wke--describe-function ()
+(defun bw/which-key-explore--describe-function ()
   "Run describe-function for command on current line."
   (interactive)
-  (let ((cmd (bw/wke--command-at-point)))
+  (let ((cmd (bw/which-key-explore--command-at-point)))
     (when cmd
       (describe-function cmd))))
 
-(defun bw/wke--show-callers ()
+(defun bw/which-key-explore--show-callers ()
   "Show other files/keymaps that reference command on current line."
   (interactive)
-  (let* ((cmd (bw/wke--command-at-point))
-         (results (when cmd (bw/wke--grep-for-symbol cmd))))
+  (let* ((cmd (bw/which-key-explore--command-at-point))
+         (results (when cmd (bw/which-key-explore--grep-for-symbol cmd))))
     (if results
         (progn
-          (with-current-buffer (get-buffer-create "*wke-callers*")
+          (with-current-buffer (get-buffer-create "*which-key-explore-callers*")
             (let ((inhibit-read-only t))
               (erase-buffer)
               (insert (format "References to %s:\n\n" cmd))
@@ -425,24 +425,24 @@ Returns (KEY CMD LABEL IS-PREFIX) or nil."
 ;; Exit
 ;; ---------------------------------------------------------------------------
 
-(defun bw/wke--exit ()
+(defun bw/which-key-explore--exit ()
   "Exit which-key explorer."
   (interactive)
-  (bw/wke--cancel-info-timer)
-  (posframe-delete "*wke-info*")
-  (setq bw/wke--active nil)
-  (let ((win (get-buffer-window bw/wke--buffer-name)))
+  (bw/which-key-explore--cancel-info-timer)
+  (posframe-delete "*which-key-explore-info*")
+  (setq bw/which-key-explore--active nil)
+  (let ((win (get-buffer-window bw/which-key-explore--buffer-name)))
     (when win (delete-window win)))
-  (when (get-buffer bw/wke--buffer-name)
-    (kill-buffer bw/wke--buffer-name)))
+  (when (get-buffer bw/which-key-explore--buffer-name)
+    (kill-buffer bw/which-key-explore--buffer-name)))
 
 ;; ---------------------------------------------------------------------------
 ;; Minor mode
 ;; ---------------------------------------------------------------------------
 
-(define-minor-mode bw/wke-mode
+(define-minor-mode bw/which-key-explore-mode
   "Which-key explorer navigation mode."
-  :lighter " WKE"
+  :lighter " WK-Explore"
   :keymap (let ((map (make-sparse-keymap)))
             ;; Navigation
             (define-key map (kbd "j") #'next-line)
@@ -450,25 +450,25 @@ Returns (KEY CMD LABEL IS-PREFIX) or nil."
             (define-key map (kbd "<down>") #'next-line)
             (define-key map (kbd "<up>") #'previous-line)
             ;; Drill into prefix
-            (define-key map (kbd "RET") #'bw/wke--drill)
-            (define-key map (kbd "<right>") #'bw/wke--drill)
+            (define-key map (kbd "RET") #'bw/which-key-explore--drill)
+            (define-key map (kbd "<right>") #'bw/which-key-explore--drill)
             ;; Go up
-            (define-key map (kbd "DEL") #'bw/wke--go-up)
-            (define-key map (kbd "h") #'bw/wke--go-up)
+            (define-key map (kbd "DEL") #'bw/which-key-explore--go-up)
+            (define-key map (kbd "h") #'bw/which-key-explore--go-up)
             ;; History navigation
-            (define-key map (kbd "M-<left>") #'bw/wke--history-back)
-            (define-key map (kbd "M-<right>") #'bw/wke--history-forward)
+            (define-key map (kbd "M-<left>") #'bw/which-key-explore--history-back)
+            (define-key map (kbd "M-<right>") #'bw/which-key-explore--history-forward)
             ;; Toggle/exit
-            (define-key map (kbd "~") #'bw/wke--exit)
-            (define-key map (kbd "q") #'bw/wke--exit)
+            (define-key map (kbd "~") #'bw/which-key-explore--exit)
+            (define-key map (kbd "q") #'bw/which-key-explore--exit)
             ;; Meta-commands
-            (define-key map (kbd "e") #'bw/wke--goto-source)
-            (define-key map (kbd "E") #'bw/wke--goto-config)
-            (define-key map (kbd "y") #'bw/wke--copy-command-name)
-            (define-key map (kbd "Y") #'bw/wke--copy-source-location)
-            (define-key map (kbd "d") #'bw/wke--describe-function)
-            (define-key map (kbd "w") #'bw/wke--copy-which-key-label)
-            (define-key map (kbd "c") #'bw/wke--show-callers)
+            (define-key map (kbd "e") #'bw/which-key-explore--goto-source)
+            (define-key map (kbd "E") #'bw/which-key-explore--goto-config)
+            (define-key map (kbd "y") #'bw/which-key-explore--copy-command-name)
+            (define-key map (kbd "Y") #'bw/which-key-explore--copy-source-location)
+            (define-key map (kbd "d") #'bw/which-key-explore--describe-function)
+            (define-key map (kbd "w") #'bw/which-key-explore--copy-which-key-label)
+            (define-key map (kbd "c") #'bw/which-key-explore--show-callers)
             map))
 
 ;; ---------------------------------------------------------------------------
@@ -478,25 +478,25 @@ Returns (KEY CMD LABEL IS-PREFIX) or nil."
 (defun bw/which-key-explore-toggle ()
   "Toggle which-key explorer for top-level SPC menu."
   (interactive)
-  (if bw/wke--active
-      (bw/wke--exit)
-    (bw/wke--enter "SPC")))
+  (if bw/which-key-explore--active
+      (bw/which-key-explore--exit)
+    (bw/which-key-explore--enter "SPC")))
 
 (defun bw/which-key-explore-prefix (prefix)
   "Open which-key explorer at PREFIX level (e.g., \"SPC b\")."
   (interactive "sPrefix: ")
-  (if bw/wke--active
-      (bw/wke--exit)
-    (bw/wke--enter prefix)))
+  (if bw/which-key-explore--active
+      (bw/which-key-explore--exit)
+    (bw/which-key-explore--enter prefix)))
 
-(defun bw/wke--enter (prefix)
+(defun bw/which-key-explore--enter (prefix)
   "Enter explorer mode for PREFIX."
-  (setq bw/wke--active t
-        bw/wke--prefix prefix
-        bw/wke--history nil
-        bw/wke--forward-history nil)
-  (bw/wke--render)
-  (bw/wke--start-info-timer))
+  (setq bw/which-key-explore--active t
+        bw/which-key-explore--prefix prefix
+        bw/which-key-explore--history nil
+        bw/which-key-explore--forward-history nil)
+  (bw/which-key-explore--render)
+  (bw/which-key-explore--start-info-timer))
 
 (provide 'which-key-explore)
 ;;; which-key-explore.el ends here

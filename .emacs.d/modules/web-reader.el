@@ -1,17 +1,17 @@
 ;;; web-reader.el --- Reader mode for web content via browser automation -*- lexical-binding: t; -*-
 
-(defvar web-reader-history nil
+(defvar bw/web-reader-history nil
   "History of URLs fetched via web-reader.")
 
-(defun web-reader-fetch (url)
+(defun bw/web-reader-fetch (url)
   "Fetch URL via real browser, extract readable content, display in Emacs buffer."
   (interactive
    (list (read-string "URL: "
                       (or (thing-at-point 'url)
                           (when (derived-mode-p 'eww-mode)
                             (eww-current-url))
-                          (car web-reader-history))
-                      'web-reader-history)))
+                          (car bw/web-reader-history))
+                      'bw/web-reader-history)))
 
   (unless (string-match-p "^https?://" url)
     (setq url (concat "https://" url)))
@@ -39,11 +39,11 @@
     ;; Signal to Claude that we need content fetched
     (message "Request sent to Claude Code. Check the buffer for extracted content.")))
 
-(defun web-reader-from-eww ()
+(defun bw/web-reader-from-eww ()
   "Fetch current eww page via web-reader."
   (interactive)
   (if (derived-mode-p 'eww-mode)
-      (web-reader-fetch (eww-current-url))
+      (bw/web-reader-fetch (eww-current-url))
     (user-error "Not in an eww buffer")))
 
 (provide 'web-reader)

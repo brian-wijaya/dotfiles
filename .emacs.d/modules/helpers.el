@@ -1,6 +1,6 @@
 ;;; helpers.el --- utility functions -*- lexical-binding: t; -*-
 
-(defun reload-init ()
+(defun bw/reload-init ()
   "Eval init.el to reload config."
   (interactive)
   (load-file "~/.emacs.d/init.el")
