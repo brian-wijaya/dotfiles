@@ -1,6 +1,6 @@
 title: "code-explorer: sibling-continuous depth-zoom file browser"
-version: 8
-status: extracting — topology + sort stable, approaching completeness
+version: 11
+status: COMPLETE — authored specification. cosmetic details deferred to implementation
 
 # Vocabulary
 #
@@ -37,12 +37,16 @@ concept: |
   S-PgUp/S-PgDn = jump cursor to next/prev group.
   ESC = recenter view (cursor at anchor).
   / = fuzzy search current dir + all subdirs.
-  H/L = history back/forward through zoom path.
+  M-left/M-right = history back/forward through zoom path.
+  R = rename entry at cursor. D = delete (trash). C = copy file. + = mkdir.
   c,d = copy directory path. c,f = copy filename. c,n = copy name no ext.
-  . = sort mode menu (global default / directory sort / group sort)
-  . ! = reset all sort overrides to default
-  . ~ = reset sort at current depth and deeper
-  . _ = reset sort for current dir tree (recursive)
+  , = sort mode menu (global default / directory sort / group sort)
+  , ! = reset all sort overrides to default
+  , ~ = reset sort at current depth and deeper
+  , _ = reset sort for current dir tree (recursive)
+  . = toggle hidden files (dotfiles). Shown by default.
+  m = mark entry. u = unmark. U = unmark all.
+  File ops (D/C/R) operate on marked entries if any, else cursor entry.
 
   FILE DISPLAY (right pane, min 60% of frame):
   Real editor buffer. Editable. Scrollable via scroll-other-window.
@@ -167,10 +171,86 @@ user_stories:
     then: "Navigator pane closes. Last file in display pane becomes active buffer."
 
   - id: US-13
-    title: "History back/forward (H/L)"
-    given: "User has multiple zoom steps in history"
-    when: "User presses H (back) or L (forward)"
-    then: "View returns to a previous/next zoom state (depth + cursor position)."
+    title: "Rename (R)"
+    given: "Cursor is on a file or directory entry"
+    when: "User presses R"
+    then: |
+      Prompt for new name (minibuffer, prefilled with current name).
+      On confirm: file renamed on disk, entry updated in navigator.
+      If renamed file was displayed in display pane, buffer is updated
+      (Emacs rename-buffer tracks this via file-notify or manual refresh).
+
+  - id: US-13b
+    title: "Delete (D)"
+    given: "Cursor is on a file or directory entry"
+    when: "User presses D"
+    then: |
+      Confirmation prompt. On confirm: entry moved to trash
+      (uses trash-put per file protection system, NOT permanent delete).
+      Entry removed from navigator.
+      If deleted file was displayed in display pane: pane shows
+      "File deleted" placeholder, then auto-opens next file on cursor move.
+
+  - id: US-13c
+    title: "Copy file (C)"
+    given: "Cursor is on a file or directory entry"
+    when: "User presses C"
+    then: |
+      Prompt for destination path (minibuffer, with completion).
+      On confirm: file copied to destination.
+      Navigator refreshes if destination is within a visible group.
+
+  - id: US-13d
+    title: "Create directory (+)"
+    given: "Cursor is in a group"
+    when: "User presses +"
+    then: |
+      Prompt for directory name.
+      Created in the focus group's directory.
+      Navigator refreshes to show new entry.
+
+  - id: US-13e
+    title: "Mark entries (m/u/U)"
+    given: "Cursor is on an entry"
+    when: "User presses m"
+    then: |
+      Entry is marked (visual indicator). Cursor advances to next entry.
+      Marks are GLOBAL — persist across depth changes (l/h).
+      u = unmark entry under cursor.
+      U = unmark ALL entries across ALL depths.
+      Counter displayed: "N marked / M here" (global vs current band).
+      When marks exist: D/C/R operate on ALL marked entries (including
+      off-screen entries at other depths).
+      When no marks: D/C/R operate on entry under cursor.
+
+  - id: US-13e2
+    title: "Batch file ops with global marks"
+    given: "5 entries marked at depth 1, 3 at depth 2, user is at depth 2"
+    when: "User presses D (delete)"
+    then: |
+      Confirmation shows: "Delete 8 marked entries? (5 at other depths)"
+      The confirmation explicitly warns about off-screen marks.
+      On confirm: all 8 entries deleted (trashed).
+      Both bands refresh. Counter resets to 0.
+
+  - id: US-13f
+    title: "Toggle hidden files (.)"
+    when: "User presses ."
+    then: |
+      Toggles visibility of dotfiles (files/dirs starting with .).
+      Default: shown (unhidden). Press . to hide, . again to show.
+      Groups are re-rendered with hidden entries removed/added.
+      Cursor position preserved as closely as possible.
+
+  - id: US-13g
+    title: "Focus switching between panes"
+    given: "Explorer is active, focus in navigator"
+    when: "User presses C-w l (or equivalent window-switch)"
+    then: |
+      Focus moves to display pane. User can edit the file.
+      Navigator remains visible. Explorer keybindings inactive.
+      C-w h returns focus to navigator, explorer keybindings reactivate.
+      Explorer state fully preserved across focus switches.
 
   - id: US-14
     title: "Fuzzy search (/)"
@@ -200,7 +280,13 @@ user_stories:
       That entry is placed at the anchor (1/3 from top).
       This creates spatial continuity: "middle of the view stays middle."
 
-  - id: US-17b
+  - id: US-17b-history
+    title: "History back/forward (M-left / M-right)"
+    given: "User has performed zoom steps"
+    when: "User presses M-left (back) or M-right (forward)"
+    then: "View returns to a previous/next zoom state (depth + cursor position)."
+
+  - id: US-17c
     title: "Band ordering across parent boundaries"
     given: |
       Depth 2. Parents at depth 1 were sra/, src/, src2/ (children of ~).
@@ -216,8 +302,8 @@ user_stories:
       The band reads top-to-bottom as a depth-first walk of the ancestor tree.
 
   - id: US-18
-    title: "Sort mode menu (.)"
-    when: "User presses ."
+    title: "Sort mode menu (,)"
+    when: "User presses ,"
     then: |
       Opens a sort mode menu with three scopes:
       1. Global default mode — changes the fallback sort for all directories
@@ -231,23 +317,23 @@ user_stories:
       All choices persist across sessions by default (stored in cache).
 
   - id: US-19
-    title: "Sort reset: all to default (. !)"
-    when: "User presses . then !"
+    title: "Sort reset: all to default (, !)"
+    when: "User presses , then !"
     then: |
       Nuclear reset. ALL per-directory sort overrides cleared.
       Every directory reverts to the global default sort.
 
   - id: US-20
-    title: "Sort reset: current depth and deeper (. ~)"
-    when: "User presses . then ~"
+    title: "Sort reset: current depth and deeper (, ~)"
+    when: "User presses , then ~"
     then: |
       Resets sort overrides for all directories at the current depth
       level and all deeper levels. Shallower levels keep their overrides.
       Scope: horizontal (depth-based).
 
   - id: US-21
-    title: "Sort reset: recursive from current dir (. _)"
-    when: "User presses . then _"
+    title: "Sort reset: recursive from current dir (, _)"
+    when: "User presses , then _"
     then: |
       Resets sort overrides for the focus group's directory and ALL
       its child directories recursively (traditional tree-scoped reset).
@@ -287,6 +373,19 @@ collective_lifetime_stories:
       h zooms through entire hierarchy until /. At /, wall-hit (orange left).
 
   - id: CL-5
+    title: "Global marks and accidental batch operations"
+    scenario: |
+      User marks 20 files across 3 depth levels over a long browsing session.
+      Forgets about marks at depth 0. Presses D at depth 2 intending to
+      delete one file.
+    behavior: |
+      Counter always visible: "20 marked / 0 here" makes it obvious.
+      D confirmation explicitly shows: "Delete 20 marked entries?
+      (20 at other depths, 0 at current depth)".
+      User must confirm. Trash-based delete (recoverable).
+      U clears all marks globally as an escape hatch.
+
+  - id: CL-6
     title: "Auto-open buffer accumulation"
     behavior: |
       Temp buffer ring (max 5-10). Explorer-opened unmodified buffers
@@ -335,7 +434,10 @@ opinionated_constraints:
     statement: "Sort overrides persist across sessions (cache file)"
     status: confirmed
   - id: OC-4e
-    statement: "Three reset scopes: . ! (all), . ~ (depth+deeper), . _ (tree-recursive)"
+    statement: "Three reset scopes: , ! (all), , ~ (depth+deeper), , _ (tree-recursive)"
+    status: confirmed
+  - id: OC-4f
+    statement: "Sort menu triggered by , (comma). . (dot) is hidden file toggle."
     status: confirmed
   - id: OC-5
     statement: "Group dividers are subtle lines only — no headers, no directory names"
@@ -370,6 +472,12 @@ opinionated_constraints:
   - id: OC-15
     statement: "Exit (q) keeps last file open, no window restore"
     status: confirmed
+  - id: OC-15b
+    statement: "Free focus switching between navigator and display pane (C-w l/h). Explorer persists."
+    status: confirmed
+  - id: OC-15c
+    statement: "Full file operations in scope (rename, delete, move, copy, create)"
+    status: confirmed
   - id: OC-16
     statement: "All groups rendered unconditionally (no culling)"
     status: confirmed
@@ -380,13 +488,32 @@ opinionated_constraints:
     statement: "Copy prefix c with subkeys d/f/n (yazi convention)"
     status: provisional
   - id: OC-19
-    statement: "History back/forward via H/L"
-    status: provisional
+    statement: "History back/forward via M-left / M-right"
+    status: confirmed
+  - id: OC-19b
+    statement: "File ops dired-style: R=rename, D=delete(trash), C=copy-file, +=mkdir"
+    status: confirmed
   - id: OC-20
-    statement: "Hidden files shown by default"
-    status: provisional
+    statement: "Hidden files shown by default, toggled with . key"
+    status: confirmed
+  - id: OC-21
+    statement: |
+      Dired-style marks: m/u/U. Global across all depths.
+      Counter shows "N global / M current" (e.g., "12 marked / 3 here").
+      File ops (D/C/R) apply to ALL marked entries (including off-screen).
+      U = unmark all globally.
+    status: confirmed
+  - id: OC-22
+    statement: "Entry visuals: nerd-icons + suffix (/ for dirs, -> target for symlinks, * for executables)"
+    status: confirmed
 
 open_questions:
   - id: Q-1
     text: "Sort method per directory"
     status: RESOLVED — three-tier system with . menu and scoped resets
+  - id: Q-2
+    text: "File operation keybindings"
+    status: RESOLVED — dired-style R/D/C/+, history via M-left/M-right
+  - id: Q-3
+    text: "Display pane after delete/rename"
+    status: RESOLVED — see US-13 and US-13b
