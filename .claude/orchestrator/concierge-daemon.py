@@ -173,14 +173,12 @@ def main():
                 result = orchestrator_call("pause_all_sessions")
                 paused = result.get("paused", 0)
                 print(f"[concierge] User active (idle {idle_ms}ms) — paused {paused} sessions")
-                play_sound("concierge-pause")
 
             elif not user_active_short and session_state == STATE_ACTIVE:
                 session_state = STATE_IDLE
                 result = orchestrator_call("resume_all_sessions")
                 resumed = result.get("resumed", 0)
                 print(f"[concierge] User idle ({idle_ms}ms) — resumed {resumed} sessions")
-                play_sound("concierge-resume")
 
             # State machine 2: Vault-RAG resource limits (6h threshold)
             # Check if manual mode is active (user ran 'vault-rag index')
