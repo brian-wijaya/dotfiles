@@ -176,6 +176,7 @@
 (define-key bw/leader-o-map (kbd "c") 'calendar)
 (define-key bw/leader-o-map (kbd "C") 'bw/calendar)
 (define-key bw/leader-o-map (kbd "d") 'dirvish)
+(define-key bw/leader-o-map (kbd "E") 'bw/code-explorer)
 (define-key bw/leader-o-map (kbd "e") 'eshell)
 (define-key bw/leader-o-map (kbd "f") 'consult-recent-file)
 (define-key bw/leader-o-map (kbd "g") 'gptel)
@@ -509,6 +510,7 @@
     "c" "📆 calendar"
     "C" "📆 bw-calendar"
     "d" "📁 dirvish-open"
+    "E" "🔭 code-explore"
     "D" "🏠 docs-home"
     "e" "🐚 eshell"
     "f" "🕐 recent"

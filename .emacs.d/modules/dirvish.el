@@ -15,7 +15,7 @@
 
   ;; Preview settings
   (setq dirvish-preview-dispatchers
-        '(image gif video audio epub archive pdf))
+        '(image gif video audio epub archive pdf fallback))
 
   ;; Use built-in mode line instead of custom dirvish mode line
   (setq dirvish-mode-line-format nil)

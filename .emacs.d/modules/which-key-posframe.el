@@ -122,7 +122,7 @@
     bw/which-key-section-definitions)
 
   (puthash 'bw/leader-o-map
-    '(("📁 Files"    . ("-" "d" :gap "F" "T" "." "D"))
+    '(("📁 Files"    . ("-" "d" "E" :gap "F" "T" "." "D"))
       ("📅 Plan"     . ("a" "A" :gap "c" "C" "n"))
       ("🐚 Shell"    . ("e" "s" "t"))
       :break
@@ -218,7 +218,8 @@
                                bw/leader-h-map bw/leader-hr-map bw/leader-i-map
                                bw/leader-n-map bw/leader-o-map bw/leader-oh-map
                                bw/leader-p-map bw/leader-q-map bw/leader-s-map
-                               bw/leader-t-map bw/leader-v-map))
+                               bw/leader-t-map bw/leader-v-map
+                               bw/ce-copy-map bw/ce-sort-map))
         (when (and (boundp keymap-symbol) (eq (symbol-value keymap-symbol) keymap))
           (throw 'found keymap-symbol)))
       nil))

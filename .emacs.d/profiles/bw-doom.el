@@ -47,6 +47,7 @@
   (load (expand-file-name "imenu" mod))
   (load (expand-file-name "dirvish" mod))
   (load (expand-file-name "vsnake" mod))
+  (load (expand-file-name "code-explorer" mod))
   (load (expand-file-name "which-key-explore" mod))
   (load (expand-file-name "eldoc-box" mod))
   (load (expand-file-name "doc-panel" mod))
