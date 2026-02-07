@@ -12,6 +12,10 @@
                                         extended-command-history))
   (savehist-mode 1))
 
+;; Track recently opened files (needed by consult-recent-file, consult-buffer)
+(recentf-mode 1)
+(setq recentf-max-saved-items 200)
+
 (use-package consult-dir
   :demand t
   :bind (("C-x C-d" . consult-dir)

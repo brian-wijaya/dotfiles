@@ -122,9 +122,9 @@
     bw/which-key-section-definitions)
 
   (puthash 'bw/leader-o-map
-    '(("📁 Files"    . ("-" "d" "E" :gap "F" "T" "." "D"))
+    '(("📁 Files"    . ("E" "-" "d" :gap "F" "T" "." "D"))
       ("📅 Plan"     . ("a" "A" :gap "c" "C" "n"))
-      ("🐚 Shell"    . ("e" "s" "t"))
+      ("📝 Open"     . ("e" "s" "t"))
       :break
       ("🔍 Find"     . ("b" "B" :gap "f" "i" "r" "P"))
       ("🤖 Apps"     . ("g" "o" "m" "w" "S"))
