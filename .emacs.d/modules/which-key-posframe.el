@@ -848,6 +848,11 @@ Points `which-key-custom-show-popup-function' here instead of the
 C subr `which-key-posframe--show-buffer' to ensure our override runs."
     (bw/which-key-posframe--show-buffer act-popup-dim))
 
+  ;; Activate posframe mode FIRST, then override its show/hide functions.
+  ;; which-key-posframe-mode sets which-key-custom-show-popup-function to the
+  ;; C subr which-key-posframe--show-buffer, so our wrapper must come AFTER.
+  (unless which-key-posframe-mode (which-key-posframe-mode 1))
+
   (setq which-key-custom-show-popup-function #'bw/which-key-show-wrapper)
 
   ;; Wrap the hide function to suppress hiding during nav mode.
@@ -856,6 +861,4 @@ C subr `which-key-posframe--show-buffer' to ensure our override runs."
   (setq which-key-custom-hide-popup-function
         (lambda ()
           (unless bw/which-key--in-nav-loop
-            (which-key-posframe--hide))))
-
-  (unless which-key-posframe-mode (which-key-posframe-mode 1)))
+            (which-key-posframe--hide)))))
