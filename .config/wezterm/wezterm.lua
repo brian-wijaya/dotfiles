@@ -5,7 +5,7 @@ local config = wezterm.config_builder and wezterm.config_builder() or {}
 
 -- Font
 config.font = wezterm.font("JetBrainsMono Nerd Font")
-config.font_size = 10
+config.font_size = 14
 
 -- Window
 config.window_padding = { left = 14, right = 14, top = 14, bottom = 14 }

@@ -31,7 +31,7 @@
 
 (set-face-attribute 'default nil
                     :family "JetBrainsMono Nerd Font"
-                    :height 100)
+                    :height 140)
 (set-face-attribute 'fixed-pitch nil
                     :family "JetBrainsMono Nerd Font")
 (set-face-attribute 'variable-pitch nil

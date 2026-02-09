@@ -13,7 +13,8 @@
         (kotlin "https://github.com/fwcd/tree-sitter-kotlin")
         (cpp "https://github.com/tree-sitter/tree-sitter-cpp")
         (c "https://github.com/tree-sitter/tree-sitter-c")
-        (bash "https://github.com/tree-sitter/tree-sitter-bash")))
+        (bash "https://github.com/tree-sitter/tree-sitter-bash")
+        (yaml "https://github.com/ikatyang/tree-sitter-yaml")))
 
 (when (treesit-available-p)
   (add-to-list 'auto-mode-alist '("\\.rs\\'" . rust-ts-mode))
@@ -36,6 +37,7 @@
   (add-to-list 'auto-mode-alist '("\\.c\\'" . c-ts-mode))
   (add-to-list 'auto-mode-alist '("\\.sh\\'" . bash-ts-mode))
   (add-to-list 'auto-mode-alist '("\\.bash\\'" . bash-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.ya?ml\\'" . yaml-ts-mode))
   ;; Spec 06: markdown tree-sitter support
   (add-to-list 'auto-mode-alist '("\\.md\\'" . markdown-ts-mode))
   (add-to-list 'auto-mode-alist '("\\.markdown\\'" . markdown-ts-mode)))
