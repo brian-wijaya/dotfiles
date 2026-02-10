@@ -8,3 +8,9 @@
 (setq org-capture-templates
       '(("t" "Todo" entry (file "~/vault/org/todo.org")
          "* TODO %?\n  %U")))
+
+;; CDLaTeX in org-mode for fast math input
+(add-hook 'org-mode-hook #'org-cdlatex-mode)
+
+;; LaTeX preview configuration — prefer SVG for crisp scaling
+(setq org-preview-latex-default-process 'dvisvgm)

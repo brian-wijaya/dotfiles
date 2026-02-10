@@ -1,0 +1,50 @@
+title: "Keyboard Handoff Protocol"
+description: "Coordination protocol for when Claude needs exclusive keyboard access for X11-based testing"
+preconditions:
+  - "Somatic MCP server running (is_typing, post_message)"
+  - "X11 MCP server running (x11_key, notify)"
+  - "User may be actively using keyboard at any time"
+
+stories:
+
+  - id: KH01-detect-typing
+    title: "Detect user keyboard activity before seizing keys"
+    given: "Claude needs to send X11 keystrokes for testing"
+    when: "Claude checks is_typing before sending keys"
+    then:
+      - "If user is typing, Claude waits and retries"
+      - "If user is idle, Claude proceeds with notification"
+    constraint: "NEVER send X11 keys while user is actively typing"
+
+  - id: KH02-notify-before-seize
+    title: "Notify user before taking keyboard control"
+    given: "User is not actively typing"
+    when: "Claude is about to send a sequence of X11 keystrokes"
+    then:
+      - "Desktop notification appears: 'Keyboard needed for ~Ns'"
+      - "Somatic overlay shows keyboard-seized state"
+      - "Brief pause (1-2s) allows user to stop typing"
+
+  - id: KH03-release-after-done
+    title: "Notify user when keyboard control is released"
+    given: "Claude has finished sending X11 keystrokes"
+    when: "The keystroke sequence completes"
+    then:
+      - "Somatic overlay shows keyboard-released state"
+      - "User can resume typing immediately"
+
+  - id: KH04-batch-sequences
+    title: "Batch multiple keystroke sequences to minimize interruptions"
+    given: "Claude needs to run multiple X11 keystroke tests"
+    when: "Tests can be grouped into a single keyboard-seized window"
+    then:
+      - "One seize/release cycle covers all tests"
+      - "Notification includes estimated total duration"
+    constraint: "Prefer elisp-only testing when possible; only use X11 keys when insert-mode typing is required"
+
+  - id: KH05-prefer-elisp
+    title: "Prefer elisp evaluation over X11 keystrokes"
+    given: "A test can be verified via emacs_elisp"
+    when: "Claude chooses a testing approach"
+    then: "emacs_elisp is used instead of X11 keystrokes"
+    constraint: "X11 keystrokes are last resort for testing insertion behavior"

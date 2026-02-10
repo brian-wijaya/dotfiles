@@ -157,6 +157,16 @@
 (define-key bw/leader-i-map (kbd "~") (lambda () (interactive) (bw/which-key-explore-prefix "SPC i")))
 
 ;; =========================================================================
+;; SPC l - latex/math
+;; =========================================================================
+(define-key bw/leader-l-map (kbd "p") 'org-latex-preview)
+(define-key bw/leader-l-map (kbd "e") 'bw/latex-math-from-calc)
+(define-key bw/leader-l-map (kbd "c") 'calc)
+(define-key bw/leader-l-map (kbd "C") 'calc-embedded)
+;; Spec 05: explorer
+(define-key bw/leader-l-map (kbd "~") (lambda () (interactive) (bw/which-key-explore-prefix "SPC l")))
+
+;; =========================================================================
 ;; SPC n - notes
 ;; =========================================================================
 (define-key bw/leader-n-map (kbd "a") 'org-agenda)
@@ -352,6 +362,7 @@
     "q" "🚪+quit"
     "s" "🔍+search"
     "t" "🔀+toggle"
+    "l" "∑+latex"
     "w" "🪟+windows"
     ;; Top-level commands
     "SPC" "🚀 M-x"
@@ -479,6 +490,14 @@
     "r" "🔄 reload"
     "R" "🔄 reload-init"
     "t" "🎨 theme")
+
+  ;; --- LaTeX ---
+  (which-key-add-keymap-based-replacements bw/leader-l-map
+    "p" "📐 preview"
+    "e" "🧮 calc→latex"
+    "c" "🔢 calc"
+    "C" "🔢 calc-embedded"
+    "~" "🔭 explore")
 
   ;; --- Insert ---
   (which-key-add-keymap-based-replacements bw/leader-i-map

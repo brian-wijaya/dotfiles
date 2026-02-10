@@ -162,7 +162,7 @@
       ("🔧 Utility"   . ("'" "u" "~"))
       :break
       ("📂 Files"     . ("f" "p" "g"))
-      ("💻 Code"      . ("c" "s" "i"))
+      ("💻 Code"      . ("c" "s" "i" "l"))
       ("🪟 Interface" . ("w" "b" "t"))
       ("📖 Open"      . ("o" "a" :gap "n" "h" :gap "q" "v")))
     bw/which-key-section-definitions)
@@ -193,6 +193,12 @@
     '(("📦 Vault" . ("i" "a" "s")))
     bw/which-key-section-definitions)
 
+  (puthash 'bw/leader-l-map
+    '(("📐 Preview" . ("p" "P"))
+      ("🧮 Calc"    . ("e" :gap "c" "C"))
+      ("🔧 Tools"   . ("~")))
+    bw/which-key-section-definitions)
+
   ;; Map prefix key descriptions to keymap symbols (setq for reload safety)
   (setq bw/which-key-prefix-to-keymap-alist
     '(("SPC" . bw/leader-map)
@@ -203,7 +209,7 @@
       ("SPC h" . bw/leader-h-map) ("SPC p" . bw/leader-p-map)
       ("SPC q" . bw/leader-q-map) ("SPC a" . bw/leader-a-map)
       ("SPC i" . bw/leader-i-map) ("SPC n" . bw/leader-n-map)
-      ("SPC v" . bw/leader-v-map)
+      ("SPC v" . bw/leader-v-map) ("SPC l" . bw/leader-l-map)
       ("SPC h r" . bw/leader-hr-map) ("SPC o h" . bw/leader-oh-map)))
 
   ;; ═══════════════════════════════════════════════════════════════════

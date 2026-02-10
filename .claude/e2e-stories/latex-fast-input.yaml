@@ -1,0 +1,216 @@
+title: "Karthinks Fast LaTeX Input System"
+description: "End-to-end stories for the layered math input system"
+preconditions:
+  - "Emacs 30.2 running with bw-doom profile"
+  - "AUCTeX, CDLaTeX, YASnippet installed and loaded"
+  - "Karthinks snippet library (141 snippets) in ~/.emacs.d/snippets/"
+  - "texlive installed with pdflatex and dvisvgm"
+
+stories:
+
+  # ── Layer 0: AUCTeX Foundation ──
+
+  - id: S01-auctex-mode-activation
+    title: "AUCTeX activates LaTeX-mode with correct minor modes"
+    given: "A .tex file is opened"
+    when: "The buffer loads"
+    then:
+      - "Major mode is LaTeX-mode"
+      - "cdlatex-mode is active"
+      - "yas-minor-mode is active"
+      - "prettify-symbols-mode is active"
+    layer: 0-auctex
+
+  - id: S02-texmathp-context
+    title: "texmathp correctly identifies math vs text context"
+    given: "A LaTeX buffer with \\( x^2 \\) and surrounding text"
+    when: "Point is inside \\( ... \\)"
+    then: "texmathp returns t"
+    and_when: "Point is outside math delimiters"
+    and_then: "texmathp returns nil"
+    layer: 0-auctex
+
+  # ── Layer 1: CDLaTeX Symbol Entry ──
+
+  - id: S03-cdlatex-backtick-greek
+    title: "Backtick + letter inserts Greek symbol"
+    given: "Point is inside a math environment in a LaTeX buffer"
+    when: "User types backtick then 'a'"
+    then: "\\alpha is inserted at point"
+    layer: 1-cdlatex
+
+  - id: S04-cdlatex-backtick-arrow
+    title: "Backtick + symbol inserts arrow"
+    given: "Point is inside a math environment"
+    when: "User types backtick then '>'"
+    then: "\\rightarrow is inserted at point"
+    layer: 1-cdlatex
+
+  - id: S05-cdlatex-quote-modifier
+    title: "Quote + letter applies math accent"
+    given: "Point is after a symbol inside a math environment"
+    when: "User types quote then 'h'"
+    then: "The preceding symbol is wrapped in \\hat{}"
+    layer: 1-cdlatex
+
+  - id: S06-cdlatex-tab-environment
+    title: "Keyword + TAB expands to LaTeX environment"
+    given: "Point is in a LaTeX buffer outside math"
+    when: "User types 'equ' then presses TAB"
+    then: "\\begin{equation} ... \\end{equation} is inserted"
+    layer: 1-cdlatex
+
+  - id: S07-cdlatex-sub-superscript
+    title: "^ and _ auto-insert braces"
+    given: "Point is inside a math environment"
+    when: "User types 'x' then '^'"
+    then: "x^{} is inserted with point between braces"
+    layer: 1-cdlatex
+
+  # ── Layer 2: Auto-Expanding Snippets ──
+
+  - id: S08-auto-snippet-inline-math
+    title: "mk auto-expands to inline math delimiters"
+    given: "Point is outside any math environment in a LaTeX buffer"
+    when: "User types 'mk'"
+    then: "\\( \\) is inserted with point between delimiters"
+    constraint: "Must NOT fire when already inside math"
+    layer: 2-yasnippet-auto
+
+  - id: S09-auto-snippet-display-math
+    title: "dm auto-expands to display math delimiters"
+    given: "Point is outside any math environment"
+    when: "User types 'dm'"
+    then: "\\[ \\] is inserted with point between delimiters"
+    layer: 2-yasnippet-auto
+
+  - id: S10-auto-snippet-squared
+    title: "sr auto-expands to ^2 inside math"
+    given: "Point is inside a math environment after a symbol (e.g. 'x')"
+    when: "User types 'sr'"
+    then: "^2 appears after the symbol (xsr → x^2)"
+    constraint: "Must NOT fire outside math"
+    layer: 2-yasnippet-auto
+
+  - id: S11-auto-snippet-cubed
+    title: "cb auto-expands to ^3 inside math"
+    given: "Point is inside a math environment after 'y'"
+    when: "User types 'cb'"
+    then: "^3 appears after y (ycb → y^3)"
+    layer: 2-yasnippet-auto
+
+  - id: S12-auto-snippet-fraction
+    title: "// auto-expands to \\frac{} with backward capture"
+    given: "Point is inside a math environment after 'x'"
+    when: "User types '//'"
+    then: "x is captured as numerator: \\frac{x}{} with point in denominator"
+    layer: 2-yasnippet-auto
+
+  - id: S13-auto-snippet-relations
+    title: "geq/leq/neq auto-expand to relation operators"
+    given: "Point is inside a math environment"
+    when: "User types 'geq'"
+    then: "\\ge is inserted"
+    also:
+      - "leq → \\le"
+      - "neq → \\ne"
+    layer: 2-yasnippet-auto
+
+  - id: S14-auto-snippet-trig
+    title: "sin/cos/tan auto-expand to LaTeX commands"
+    given: "Point is inside a math environment"
+    when: "User types 'sin'"
+    then: "\\sin is inserted"
+    layer: 2-yasnippet-auto
+
+  - id: S15-auto-snippet-set
+    title: "set auto-expands to set braces"
+    given: "Point is inside a math environment"
+    when: "User types 'set'"
+    then: "\\left\\{ \\right\\} is inserted with point between"
+    layer: 2-yasnippet-auto
+
+  - id: S16-auto-snippet-definite-integral
+    title: "dint auto-expands to definite integral with defaults"
+    given: "Point is inside a math environment"
+    when: "User types 'dint'"
+    then: "\\int_{-\\infty}^{\\infty} is inserted with tab stops"
+    layer: 2-yasnippet-auto
+
+  # ── Layer 3: TAB Dispatch Bridge ──
+
+  - id: S17-tab-cdlatex-in-yas-field
+    title: "CDLaTeX expands inside YASnippet fields"
+    given: "A YASnippet with fields is active (e.g. from sum snippet)"
+    when: "User types a CDLaTeX keyword inside a field and presses TAB"
+    then: "CDLaTeX expansion happens within the field"
+    layer: 3-tab-bridge
+
+  - id: S18-tab-yas-field-advance
+    title: "TAB advances YASnippet fields when no CDLaTeX match"
+    given: "A YASnippet with multiple fields is active"
+    when: "User presses TAB with no CDLaTeX keyword at point"
+    then: "Point moves to the next snippet field"
+    layer: 3-tab-bridge
+
+  # ── Layer 4: LazyTab Matrix Entry ──
+
+  - id: S19-lazytab-bmat
+    title: "bmat + TAB opens org-table for matrix entry"
+    given: "Point is inside a math environment in a LaTeX buffer"
+    when: "User types 'bmat' then TAB"
+    then:
+      - "A bmatrix environment skeleton appears"
+      - "orgtbl-mode activates"
+      - "A pipe | appears for table entry"
+    layer: 4-lazytab
+
+  # ── Layer 5: Calc → LaTeX ──
+
+  - id: S20-calc-to-latex-fraction
+    title: "Algebraic fraction converts to LaTeX \\frac"
+    given: "A line containing 'x/y + 1/(x+y)' is selected"
+    when: "User invokes bw/latex-math-from-calc (SPC l e)"
+    then: "Selection is replaced with \\frac{x}{y} + \\frac{1}{x + y}"
+    layer: 5-calc
+
+  - id: S21-calc-to-latex-power
+    title: "Algebraic expression with powers converts correctly"
+    given: "A line containing 'a^2 + b^2 = c^2'"
+    when: "User invokes bw/latex-math-from-calc"
+    then: "Output is a^2 + b^2 = c^2 (already valid LaTeX)"
+    layer: 5-calc
+
+  # ── Layer 6: Org Mode Integration ──
+
+  - id: S22-org-cdlatex-active
+    title: "org-cdlatex-mode activates in Org buffers"
+    given: "An .org file is opened"
+    when: "The buffer loads"
+    then:
+      - "org-cdlatex-mode is active"
+      - "yas-minor-mode is active"
+    layer: 6-org
+
+  - id: S23-org-snippet-inheritance
+    title: "LaTeX snippets work in Org mode"
+    given: "An Org buffer with point outside math"
+    when: "User types 'mk'"
+    then: "\\( \\) is inserted (inherited from latex-mode snippets)"
+    layer: 6-org
+
+  - id: S24-org-preview-config
+    title: "Org LaTeX preview uses dvisvgm backend"
+    given: "An Org buffer"
+    when: "org-preview-latex-default-process is checked"
+    then: "Value is dvisvgm"
+    layer: 6-org
+
+  # ── Leader Bindings ──
+
+  - id: S25-leader-latex-menu
+    title: "SPC l opens LaTeX menu with which-key"
+    given: "User is in normal mode"
+    when: "User presses SPC l"
+    then: "which-key shows LaTeX submenu with preview, calc, etc."
+    layer: bindings
