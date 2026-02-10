@@ -1,64 +1,66 @@
 vocabulary:
   somatic-daemon: C++ process hosting somatic/ and executive/ modules
-  cortex-jar: Kotlin/JVM process hosting cortex/ and memory/ modules
+  kinetic-jar: Java 25 JVM process hosting kinetic MCP gateway
   fail-stop: both processes restart together on any crash
   consistency-sweep: startup validation of cross-store invariants
+
+metadata:
+  feature: system
+  component: operational-lifecycle
+  tags: [system, lifecycle, crash-recovery, startup]
 
 stories:
   - name: process-crash-recovery
     description: When either process crashes, systemd restarts both within bounded time
+    tags: [critical, smoke]
+    estimated_duration_ms: 35000
     preconditions:
-      - somatic-daemon running as systemd user service
-      - cortex-jar running as systemd user service
+      - somatic running as systemd user service
+      - kinetic running as systemd user service
       - services configured with Restart=always
     steps:
-      - somatic-daemon crashes (SIGSEGV, OOM, panic)
-      - systemd detects exit within 1s
-      - systemd stops cortex-jar (PartOf= dependency)
-      - systemd restarts somatic-daemon
-      - systemd restarts cortex-jar
-      - both services reach ready state
+      - bash: "systemctl --user is-active somatic && echo 'active'"
+      # TODO(kinetic): uncomment when kinetic.service exists
+      # - bash: "systemctl --user is-active kinetic && echo 'active'"
+      - bash: "kill -9 $(pidof somatic) 2>/dev/null; sleep 5; systemctl --user is-active somatic && echo 'recovered'"
+      # TODO(kinetic): test kinetic crash recovery
+      # - bash: "kill -9 $(pgrep -f kinetic.jar) 2>/dev/null; sleep 5; systemctl --user is-active kinetic && echo 'recovered'"
     verify:
-      - total recovery time < 30s
-      - no zombie processes remain
-      - ring buffers reinitialized empty
-      - consistency sweep completes before accepting MCP calls
+      - Equals: "recovered"
 
   - name: cold-boot-initialization
-    description: System becomes operational within 30s of boot
+    description: System becomes operational within 30s of user session start
+    tags: [smoke]
+    estimated_duration_ms: 30000
     preconditions:
       - systemd user session starts
-      - no prior state in /dev/shm
     steps:
-      - systemd starts somatic-daemon
-      - somatic-daemon initializes X11 connection
-      - somatic-daemon loads TensorRT engines (Moondream, SigLIP)
-      - somatic-daemon creates ring buffers in /dev/shm
-      - systemd starts cortex-jar (After= somatic)
-      - cortex-jar initializes JVM, loads ONNX embedder
-      - cortex-jar connects to Qdrant
-      - cortex-jar runs consistency sweep (background, non-blocking)
-      - both processes signal ready to systemd (Type=notify)
+      - bash: "systemctl --user start somatic && sleep 2 && systemctl --user is-active somatic"
+      # TODO(kinetic): uncomment when kinetic.service exists
+      # - bash: "systemctl --user start kinetic && sleep 5 && systemctl --user is-active kinetic"
+      # TODO(kinetic): verify MCP tools/list responds
+      # - bash: "kinetic-mcp tools/list | jq '.tools | length'"
     verify:
-      - mcp__somatic__get_snapshot responds within 30s of boot
-      - mcp__memory__search_hybrid responds within 30s of boot
-      - TensorRT engines loaded and warm
+      - Equals: "active"
+      # TODO(kinetic): verify tool count
+      # - Equals: "35"
 
   - name: ring-buffer-overflow-handling
     description: When ring buffer fills, data spills to disk without loss
+    tags: [stress]
+    estimated_duration_ms: 10000
     preconditions:
-      - ring buffer configured for 60s window (~2GB)
-      - consumer (cortex-jar) falls behind producer (somatic-daemon)
+      - somatic running
+      - ring buffer configured for 60s window
     steps:
-      - ring buffer reaches 80% capacity
-      - somatic-daemon begins spilling oldest entries to /tmp/somatic-spill/
-      - somatic-daemon signals via eventfd
-      - cortex-jar reads spill files via mmap
-      - cortex-jar catches up, spill files deleted
+      # Generate rapid events to fill ring buffer
+      - bash: "for i in $(seq 1 10000); do xdotool key a; done"
+      - bash: "sleep 2"
+      # TODO(somatic): verify spill files created and consumed
+      # - bash: "ls /tmp/somatic-spill/ 2>/dev/null | wc -l"
+      - bash: "somatic get_stats | jq -r '.events_dropped // 0'"
     verify:
-      - no data loss during spill
-      - spill files cleaned up within 60s of consumption
-      - ring buffer never blocks producer
+      - Equals: "0"
 
 enforced_constraints:
   - name: startup-time-budget

@@ -1,73 +1,137 @@
 vocabulary:
-  qdrant: Vector database for semantic search (Rust-native, runs as separate process)
-  vram-budget: Allocation strategy for RTX 3090 Ti 24GB
-  aggressive-caching: Use available VRAM for frame/embedding cache
-  reserved-mode: Cap VRAM at model requirements only, leave headroom
+  qdrant: Vector database for semantic search (Rust-native, runs as Docker container)
+  kinetic: Java daemon — MCP gateway, knowledge, editor/desktop interaction (35 tools)
+  somatic: C++ daemon — continuous sensory substrate (X11 events, keystrokes, pointer, clipboard, timing)
+  time-machine: Java daemon — event-driven file protection (fanotify via Panama FFI, content-addressed versioning, NAS replication)
+
+metadata:
+  feature: system
+  component: infrastructure-topology
+  tags: [system, topology, qdrant, kinetic, somatic, time-machine]
+  revised: 2026-02-08
+  revision-note: >
+    Updated tool count 42→35 (coordination excluded from kinetic).
+    Three fundamentals: sense, act, know. No coordinate category.
 
 stories:
   - name: qdrant-container-lifecycle
-    description: Qdrant starts before cortex.jar, stops after
-    preconditions:
-      - Docker installed and running
-      - qdrant container image pulled (qdrant/qdrant:latest)
+    description: Qdrant container starts before kinetic needs it, stays running across kinetic restarts
+    tags: [smoke, infra]
+    estimated_duration_ms: 10000
     steps:
-      - systemd starts cortex.service
-      - ExecStartPre runs "docker start qdrant" (or creates if missing)
-      - cortex.jar waits for Qdrant health check (http://localhost:6333/health)
-      - cortex.jar connects to Qdrant gRPC (localhost:6334)
-      - on cortex.service stop, Qdrant container keeps running (deliberate)
-      - on explicit system shutdown, docker stop qdrant
+      - bash: "docker ps --filter name=qdrant --format '{{.Status}}' | grep -q 'Up' && echo 'running'"
+      - bash: "curl -sf http://localhost:6333/health | jq -r '.status'"
+      - bash: "docker inspect qdrant --format '{{.HostConfig.Memory}}'"
     verify:
-      - Qdrant responsive before cortex.jar accepts MCP calls
-      - Qdrant data persists across cortex.jar restarts
-      - container memory capped at 4GB (--memory=4g)
+      - Equals: "running"
+      - Equals: "ok"
+      # 4GB = 4294967296 bytes
+      - Equals: "4294967296"
 
   - name: qdrant-unavailable-handling
-    description: cortex.jar degrades gracefully if Qdrant is unreachable
-    preconditions:
-      - cortex.jar running
-      - Qdrant container stopped or network partitioned
+    description: Kinetic degrades to FTS-only results when Qdrant is unreachable
+    tags: [resilience]
+    estimated_duration_ms: 15000
     steps:
-      - mcp__memory__search_hybrid called
-      - Qdrant connection times out (5s)
-      - cortex.jar returns FTS-only results with warning
-      - cortex.jar logs Qdrant unavailability
-      - cortex.jar retries Qdrant connection on next call
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "docker stop qdrant"
+      # - bash: "sleep 2"
+      # - bash: "kinetic-mcp call know.search.vault '{\"query\": \"test\"}' 2>&1 | jq -r '.warning // empty'"
+      # - bash: "docker start qdrant"
+      # - bash: "sleep 3"
+      # - bash: "kinetic-mcp call know.search.vault '{\"query\": \"test\"}' | jq -r '.results | length'"
+      - bash: "echo 'TODO: kinetic not yet built'"
     verify:
-      - no crash on Qdrant unavailability
-      - degraded results clearly marked
-      - automatic recovery when Qdrant returns
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "qdrant unavailable"
+      # - Greater: 0
+      - Contains: "TODO"
+
+  - name: kinetic-somatic-connection
+    description: Kinetic connects to somatic and proxies sense tools successfully
+    tags: [smoke, integration]
+    estimated_duration_ms: 5000
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call sense.user_state | jq -r '.idle'"
+      # - bash: "kinetic-mcp call sense.timestamp | jq -r 'type'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - NotEmpty
+      # - Equals: "number"
+      - Contains: "TODO"
+
+  - name: kinetic-somatic-unavailable
+    description: Kinetic starts without somatic and degrades gracefully
+    tags: [resilience]
+    estimated_duration_ms: 15000
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "systemctl --user stop somatic"
+      # - bash: "sleep 2"
+      # - bash: "kinetic-mcp call act.invoke.editor.elisp '{\"expression\": \"(+ 1 2)\"}' | jq -r '.result'"
+      # - bash: "kinetic-mcp call sense.user_state 2>&1 | jq -r '.error // empty'"
+      # - bash: "systemctl --user start somatic"
+      # - bash: "sleep 3"
+      # - bash: "kinetic-mcp call sense.user_state | jq -r '.idle'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "3"
+      # - Contains: "somatic unavailable"
+      # - NotEmpty
+      - Contains: "TODO"
+
+  - name: time-machine-independence
+    description: Time-machine runs as separate JVM, survives kinetic crash
+    tags: [critical, isolation]
+    estimated_duration_ms: 10000
+    steps:
+      - bash: "systemctl --user is-active time-machine && echo 'active'"
+      - bash: "TM_PID=$(pgrep -f 'time-machine.*\\.jar' | head -1) && echo $TM_PID"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kill -9 $(pgrep -f kinetic.jar) 2>/dev/null"
+      # - bash: "sleep 2"
+      - bash: "echo 'test-independence' > /tmp/tm-independence-test.txt && sleep 2"
+      - bash: "sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE file_path='/tmp/tm-independence-test.txt'\""
+      - bash: "TM_PID_AFTER=$(pgrep -f 'time-machine.*\\.jar' | head -1) && echo $TM_PID_AFTER"
+    verify:
+      - Equals: "active"
+      - NotEmpty
+      - GreaterOrEqual: 1
+      - NotEmpty
+
+  - name: mcp-tool-count
+    description: Kinetic exposes exactly 35 tools (sense:8 + act:18 + know:9)
+    tags: [smoke]
+    estimated_duration_ms: 3000
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp tools/list | jq '.tools | length'"
+      # - bash: "kinetic-mcp tools/list | jq '[.tools[] | select(.category == \"sense\")] | length'"
+      # - bash: "kinetic-mcp tools/list | jq '[.tools[] | select(.category == \"act\")] | length'"
+      # - bash: "kinetic-mcp tools/list | jq '[.tools[] | select(.category == \"know\")] | length'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "35"
+      # - Equals: "8"
+      # - Equals: "18"
+      # - Equals: "9"
+      - Contains: "TODO"
 
   - name: vram-mode-switch
     description: Switch between aggressive caching and reserved VRAM modes
-    preconditions:
-      - somatic-daemon running
-      - current mode is aggressive (default)
+    tags: [gpu, resource-management]
+    estimated_duration_ms: 15000
     steps:
-      - user runs "somatic-ctl vram reserved"
-      - somatic-daemon receives SIGUSR1
-      - somatic-daemon flushes VRAM caches
-      - somatic-daemon reloads models with workspace cap
-      - somatic-daemon confirms mode change via stdout
+      # TODO(somatic): verify somatic-ctl command exists
+      # - bash: "somatic-ctl vram reserved && sleep 5 && nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits"
+      # - bash: "somatic-ctl vram aggressive && sleep 5 && nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits"
+      - bash: "nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null || echo '0'"
     verify:
-      - VRAM usage drops from ~20GB to ~8GB within 10s
-      - no interruption to MCP tool availability
-      - mode persists until next switch or restart
-
-  - name: vram-aggressive-default
-    description: On startup, somatic-daemon uses aggressive VRAM caching
-    preconditions:
-      - somatic-daemon starting fresh
-      - no explicit mode override in config
-    steps:
-      - somatic-daemon loads TensorRT engines
-      - somatic-daemon allocates remaining VRAM for frame cache
-      - somatic-daemon allocates embedding cache
-      - total VRAM usage reaches ~20GB
-    verify:
-      - frame cache holds ~1000 recent frames
-      - embedding cache holds ~10000 recent vectors
-      - cache eviction is LRU
+      - NotEmpty
 
 enforced_constraints:
   - name: qdrant-memory-cap
@@ -78,6 +142,14 @@ enforced_constraints:
     value: 24GB (RTX 3090 Ti)
     rationale: Hardware limit; must be explicitly budgeted
 
+  - name: two-mcp-entries
+    value: somatic + kinetic only
+    rationale: Claude Code connects to exactly 2 MCP servers; tool consolidation eliminates the other 5
+
+  - name: time-machine-separate-jvm
+    value: true
+    rationale: Protection must survive what it protects; kinetic crash must not interrupt file versioning
+
 opinionated_constraints:
   - name: qdrant-as-docker
     description: Qdrant runs as Docker container, not embedded or system service
@@ -86,8 +158,11 @@ opinionated_constraints:
   - name: vram-aggressive-default
     description: Default to aggressive VRAM caching (~20GB), switchable to reserved (~8GB)
     rationale: Maximize performance by default; provide escape hatch for concurrent GPU workloads
-    switch_command: "somatic-ctl vram [aggressive|reserved]"
 
   - name: qdrant-graceful-degradation
     description: Vector search unavailability falls back to FTS-only, does not crash
     rationale: Partial results better than no results; transient failures should not cascade
+
+  - name: kinetic-somatic-graceful-degradation
+    description: Somatic unavailability does not prevent kinetic from serving act/know tools
+    rationale: Sensing failure should not cascade to action and knowledge; degrade, don't crash

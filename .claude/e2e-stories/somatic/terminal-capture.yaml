@@ -1,0 +1,203 @@
+# Somatic Terminal Capture — Stories and Constraints
+# Always-on terminal output capture as a somatic sensor channel
+
+vocabulary:
+  terminal-capture: Somatic sensor channel that captures raw terminal output from all PTYs with microsecond timestamps
+  ring-buffer-per-channel: Each sensor channel (terminal, X11 events, keystrokes, pointer, clipboard) gets its own dedicated ring buffer in shared memory
+  hot-catalog: Kinetic's indexed, full-text-searchable store of recent terminal output (7-day retention)
+  cold-catalog: Kinetic's batch-compressed archive of terminal output (90-day retention)
+  unified-timeline: Single chronological table in kinetic with typed entries (source_type discriminator) covering terminal, visual, keystroke, clipboard events
+
+metadata:
+  feature: somatic
+  component: terminal-capture
+  tags: [somatic, terminal, capture, sensor, kinetic]
+
+stories:
+  # === CAPTURE ===
+
+  - name: always-on-pty-capture
+    description: >
+      Somatic captures raw byte streams from all active PTYs (tmux panes) with microsecond
+      timestamps. Capture is always on — not pipe-stage, not on-demand. Terminal output is
+      a sensor channel like X11 events or keystrokes.
+    preconditions:
+      - somatic daemon running
+      - at least one tmux session with active panes
+    steps:
+      - bash: "echo 'hello capture test' in any tmux pane"
+      - somatic: read terminal ring buffer
+    verify:
+      - terminal ring buffer contains timestamped 'hello capture test'
+      - source attribution identifies the correct tmux pane (session:window.pane)
+      - timestamp precision is microsecond
+
+  - name: per-pty-source-attribution
+    description: >
+      Every captured line is attributed to its source PTY, identified by tmux
+      session:window.pane (e.g., main:2.1). This is the natural granularity —
+      one command runs in one pane, build output stays in one pane.
+    preconditions:
+      - two or more active tmux panes producing output
+    steps:
+      - bash: "echo 'pane-A' in pane 1; echo 'pane-B' in pane 2"
+      - somatic: read terminal ring buffer
+    verify:
+      - 'pane-A' attributed to correct pane identity
+      - 'pane-B' attributed to different pane identity
+      - no cross-contamination between panes
+
+  - name: dedicated-ring-buffer
+    description: >
+      Terminal capture has its own dedicated ring buffer (64MB), separate from X11 events,
+      keystrokes, pointer, and clipboard channels. A burst of terminal output cannot evict
+      recent keystrokes or X11 events.
+    preconditions:
+      - somatic running with multiple sensor channels active
+    steps:
+      - bash: "generate 50MB of terminal output rapidly"
+      - somatic: read keystroke ring buffer
+    verify:
+      - keystroke ring buffer retains recent entries despite terminal burst
+      - terminal ring buffer contains most recent output (oldest overwritten)
+
+  # === CATALOGING ===
+
+  - name: kinetic-catalogs-from-ring-buffer
+    description: >
+      Kinetic reads from somatic's terminal ring buffer and catalogs entries into
+      persistent SQLite storage with full-text indexing. No truncation at any tier.
+    preconditions:
+      - somatic running with terminal capture
+      - kinetic running and connected to somatic
+    steps:
+      - bash: "echo 'catalog-test-STRING_7742' in a tmux pane"
+      - wait for kinetic to catalog
+      - kinetic: search "STRING_7742"
+    verify:
+      - full line appears in catalog with timestamp, source, and content
+      - full-text search returns the entry
+
+  - name: unified-timeline-query
+    description: >
+      A time-range query against kinetic's unified timeline returns terminal output,
+      visual capture, keystrokes, and clipboard events interleaved in chronological order.
+    preconditions:
+      - kinetic running with multiple sensor channels producing data
+    steps:
+      - kinetic: query timeline from T-5min to now
+    verify:
+      - results contain entries with source_type 'terminal', 'visual', 'keystroke', etc.
+      - entries are chronologically ordered regardless of source_type
+      - composite index on (source_type, timestamp) enables efficient filtered queries
+
+  - name: ansi-raw-and-stripped
+    description: >
+      Kinetic stores raw terminal bytes (including ANSI escape codes) AND generates
+      a stripped-text column for full-text search. Raw bytes preserve exact terminal
+      state for replay. Stripped text is what the search index operates on.
+    preconditions:
+      - terminal output containing ANSI color codes
+    steps:
+      - bash: "printf '\\033[31mERROR\\033[0m: something failed'"
+      - kinetic: search "ERROR: something failed"
+    verify:
+      - full-text search finds the entry via stripped text
+      - raw column contains the original ANSI escape sequences
+      - both columns stored, no truncation
+
+  # === RETENTION ===
+
+  - name: hot-catalog-7day-retention
+    description: >
+      The hot catalog retains full terminal output for 7 days with full-text search.
+      Entries older than 7 days are migrated to cold catalog.
+    steps:
+      - kinetic: query entries from 6 days ago
+    verify:
+      - entries present and full-text searchable
+      - no truncation of content
+
+  - name: cold-catalog-90day-retention
+    description: >
+      The cold catalog retains batch-compressed terminal output for 90 days.
+      Entries older than 90 days are permanently deleted.
+    steps:
+      - kinetic: query entries from 60 days ago
+    verify:
+      - entries present (decompressed on read)
+      - full content preserved, no truncation
+
+  - name: external-queryability
+    description: >
+      The terminal catalog is queryable by external tools: CLI for humans,
+      MCP for Claude, and vault-rag for indexing the terminal archive.
+    steps:
+      - bash: "kinetic search 'error' --last 1h"
+      - kinetic MCP: search terminal entries
+    verify:
+      - CLI returns matching entries with timestamps and source attribution
+      - MCP returns same data in structured format
+      - vault-rag can index the terminal archive
+
+enforced_constraints:
+  - name: no-truncation
+    description: Full content at every tier — ring buffer, hot catalog, cold catalog. No truncation, no excerpting.
+    rationale: >
+      Truncating destroys the only value terminal output has. If you truncate a build error
+      to 80 characters, you've thrown away the stack trace. The whole point of capture is
+      reconstruction. Disk is cheap. Text compresses well.
+
+  - name: ring-buffer-isolation
+    description: Each sensor channel gets its own dedicated ring buffer. Terminal bursts cannot evict data from other channels.
+    rationale: >
+      128GB RAM available. Dedicated 64MB ring buffer per channel is negligible.
+      Cross-channel eviction would create unpredictable data loss during exactly
+      the high-activity moments when all channels are most valuable.
+
+  - name: unified-timeline-typed-entries
+    description: >
+      All sensor data (terminal, visual, keystroke, clipboard) stored in one chronological
+      table with source_type discriminator. Not separate tables per channel.
+    rationale: >
+      Incident reconstruction requires interleaved data: "what happened between 14:32 and 14:35"
+      returns terminal output, screenshots, and keystrokes in order. Separate stores would
+      require cross-joining on timestamp ranges — slower and more error-prone.
+
+opinionated_constraints:
+  - name: 64mb-terminal-ring-buffer
+    description: Terminal ring buffer is 64MB, providing hours of runway at typical terminal output rates
+    rationale: >
+      Typical developer terminal output: 1-10 KB/s during active use, 0 during idle.
+      64MB covers hours of active output. This is the window kinetic has to catalog
+      before data is overwritten. Hours of runway is sufficient — kinetic restarts
+      take seconds, not hours.
+
+  - name: 7day-hot-90day-cold
+    description: Hot catalog retains 7 days (~100MB compressed), cold catalog retains 90 days (~500MB compressed), then gone
+    rationale: >
+      90-day horizon matches file versioning retention. Beyond that, if terminal output
+      was important, it should have been promoted to a document, commit message, or
+      session summary. Terminal exhaust older than 90 days has no investigative value.
+      A heavy day produces ~50MB raw, ~5-10MB compressed. Monthly budget: ~150-300MB.
+
+  - name: per-pty-not-per-process
+    description: Source attribution granularity is per-PTY (tmux pane), not per-process or per-window
+    rationale: >
+      Per-PTY is the natural boundary — one command runs in one pane. Per-process is too
+      fine (a pipeline is one logical stream). Per-window is too coarse (tmux window has
+      multiple panes). PTY identity maps to tmux session:window.pane (e.g., main:2.1).
+
+  - name: store-raw-index-stripped
+    description: Store raw bytes (with ANSI codes), index stripped text for search
+    rationale: >
+      ANSI codes are 5-15% of terminal output by byte count, compress to nearly nothing.
+      Raw bytes enable exact terminal state replay. Stripped text is what you actually
+      search. Dual representation cost is negligible.
+
+  - name: full-text-search-all-tiers
+    description: Full-text search across hot and cold catalog tiers
+    rationale: >
+      Sequential scan of compressed archives is seconds, not milliseconds. For a 90-day
+      archive, that's unacceptable for interactive queries. Full-text indexing roughly
+      doubles storage but makes the archive queryable in milliseconds. Worth it.

@@ -12,9 +12,9 @@
                 hl-todo hotfuzz imenu-list imenus kotlin-mode magit
                 marginalia markdown-mode moe-theme neotree nerd-icons
                 nerd-icons-dired nov orderless org-journal org-noter
-                org-visibility popper posframe shackle simple-httpd
-                solaire-mode symbols-outline use-package vertico
-                vscode-dark-plus-theme vterm which-key
+                org-visibility popper posframe preview shackle
+                simple-httpd solaire-mode symbols-outline use-package
+                vertico vscode-dark-plus-theme vterm which-key
                 which-key-posframe)))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.

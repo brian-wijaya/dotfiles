@@ -1,0 +1,918 @@
+vocabulary:
+  kinetic: "Claude-in-X11" — Java 25 MCP gateway that gives Claude a body on the Linux desktop. Absorbs 5 MCP servers, full somatic proxy, over stdio. The X11 analog of claude-in-chrome.
+  claude-in-x11: The design frame — kinetic is to the X11 desktop what claude-in-chrome is to the browser. Same pattern (perceive, act, record), different substrate (X11/i3 vs DOM/Chrome).
+  somatic-proxy: Kinetic connects to somatic C++ daemon internally and re-exposes ALL 52 somatic capabilities as unified kinetic tools (single MCP entry)
+  somatic: The sensory nervous system — collects raw environmental data (X11 events, pointer, typing, clipboard, geometry) via lock-free ring buffers. Never interprets. Kinetic interprets.
+  absorption: Replacing a standalone MCP server by reimplementing its tool logic inside kinetic's JVM process
+  three-fundamentals: sense, act, recall — the exhaustive tool ontology after coordination exclusion. "recall" replaces "know" (which bled into "sense" semantically)
+  dispatch-table: Auto-generated CLAUDE.md block mapping intents to kinetic MCP tools (see tool-dispatch.yaml)
+  ralph: Official Claude Code plugin using Stop Hooks for persistent iteration loops; replaces all custom coordination infrastructure
+  three-tier-awareness: Ground Truth (0 tokens, internal), Ambient (~30 tokens, piggybacked on every response), Alert (~200 tokens, event-driven transitions)
+  ambient-header: Compact state header appended to every kinetic tool response — format "[env: typing=X dwell=Xs focus=Y clip=Z age=Ns]"
+  ground-truth: Kinetic-internal cached somatic state vector (14 dims, 100Hz) — never enters LLM context, drives ambient and alert tiers
+  alert-tier: Prepended block in tool response when state transition crosses threshold — fires on activity transitions, focus changes, clipboard events, anomalies
+  workstation-hook: Claude Code PostToolUse hook that reads somatic shm directly — the spinal reflex arc that guarantees per-turn awareness even on non-kinetic tool calls
+
+metadata:
+  feature: kinetic
+  component: core
+  tags: [kinetic, mcp, java, consolidation, gateway]
+
+stories:
+  # === STARTUP AND DISCOVERY ===
+
+  - name: cold-start-tool-listing
+    description: Claude Code launches kinetic and discovers all 35 tools within startup budget
+    preconditions:
+      - kinetic.jar built
+      - Java 25 installed
+      - ~/.claude.json has kinetic mcpServers entry
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call tools/list | jq '.tools | length'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "35"
+      - Contains: "TODO"
+
+  - name: cold-start-tool-names-match-dispatch
+    description: Every tool name from kinetic matches the dispatch table
+    preconditions:
+      - kinetic.jar built
+      - Java 25 installed
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call tools/list | jq -r '.tools[].name' | sort"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions — diff against tool-dispatch.yaml
+      # - NotEmpty
+      - Contains: "TODO"
+
+  - name: cold-start-latency
+    description: Kinetic startup and tool listing completes within 3 seconds
+    preconditions:
+      - kinetic.jar built
+      - Java 25 installed
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "timeout 3 kinetic-mcp call tools/list > /dev/null 2>&1 && echo 'PASS' || echo 'FAIL: startup exceeded 3s'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "PASS"
+      - Contains: "TODO"
+
+  - name: cold-start-no-errors
+    description: Zero errors in kinetic stderr during startup
+    preconditions:
+      - kinetic.jar built
+      - Java 25 installed
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call tools/list 2>/tmp/kinetic-stderr.log > /dev/null; wc -l < /tmp/kinetic-stderr.log"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "0"
+      - Contains: "TODO"
+
+  # === CRASH RECOVERY ===
+
+  - name: crash-recovery-session-count-preserved
+    description: Session count is unchanged after kinetic crash and restart
+    preconditions:
+      - kinetic running, has saved at least one session
+    steps:
+      - bash: "sqlite3 ~/.local/share/vault-rag/sessions.db \"SELECT count(*) FROM sessions\""
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kill -9 $(pgrep -f kinetic.jar); sleep 2"
+      # - bash: "kinetic-mcp call tools/list > /dev/null"
+      # - bash: "sqlite3 ~/.local/share/vault-rag/sessions.db \"SELECT count(*) FROM sessions\""
+      - bash: "echo 'TODO: kinetic crash-recovery not yet testable'"
+    verify:
+      # TODO(kinetic): replace — compare pre/post counts
+      # - NotEmpty
+      - Contains: "TODO"
+
+  - name: crash-recovery-search-still-works
+    description: Knowledge search returns results after kinetic crash and restart
+    preconditions:
+      - kinetic running, has indexed at least one document
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kill -9 $(pgrep -f kinetic.jar); sleep 2"
+      # - bash: "kinetic-mcp call search_knowledge --query 'test' | jq '.results | length'"
+      - bash: "echo 'TODO: kinetic crash-recovery not yet testable'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Greater: 0
+      - Contains: "TODO"
+
+  - name: crash-recovery-sqlite-integrity
+    description: SQLite database passes integrity check after kinetic crash
+    preconditions:
+      - kinetic running
+    steps:
+      - bash: "sqlite3 ~/.local/share/vault-rag/sessions.db 'PRAGMA integrity_check'"
+    verify:
+      - Equals: "ok"
+
+  - name: crash-recovery-all-tools-functional
+    description: All 35 tools are functional after kinetic crash and restart
+    preconditions:
+      - kinetic running
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kill -9 $(pgrep -f kinetic.jar); sleep 2"
+      # - bash: "kinetic-mcp call tools/list | jq '.tools | length'"
+      - bash: "echo 'TODO: kinetic crash-recovery not yet testable'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "35"
+      - Contains: "TODO"
+
+  # === SOMATIC PROXY ===
+
+  - name: somatic-proxy-read-user-state
+    description: Kinetic's sense.user_state proxies somatic and returns idle/typing/focus fields
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      - bash: "systemctl --user status somatic | head -3 | grep -o 'active (running)'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call sense.user_state | jq -r 'keys[]' | sort | tr '\\n' ','"
+      - bash: "echo 'TODO: kinetic somatic proxy not yet built'"
+    verify:
+      - Equals: "active (running)"
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "focus"
+      - Contains: "TODO"
+
+  - name: somatic-proxy-read-timestamp
+    description: Kinetic's sense.timestamp proxies somatic and returns current time
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      - bash: "systemctl --user status somatic | head -3 | grep -o 'active (running)'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call sense.timestamp | jq -r '.epoch_ms'"
+      - bash: "echo 'TODO: kinetic somatic proxy not yet built'"
+    verify:
+      - Equals: "active (running)"
+      # TODO(kinetic): replace with actual assertions
+      # - NotEmpty
+      - Contains: "TODO"
+
+  - name: somatic-proxy-check-permission
+    description: Kinetic's sense.check_permission proxies somatic and returns boolean with reason
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      - bash: "systemctl --user status somatic | head -3 | grep -o 'active (running)'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call sense.check_permission --action test-harmless | jq -r '.allowed'"
+      - bash: "echo 'TODO: kinetic somatic proxy not yet built'"
+    verify:
+      - Equals: "active (running)"
+      # TODO(kinetic): replace with actual assertions
+      # - NotEmpty
+      - Contains: "TODO"
+
+  - name: somatic-proxy-latency
+    description: Kinetic somatic proxy adds less than 45ms overhead per call
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call --timing sense.user_state | jq -r '.elapsed_ms'"
+      - bash: "echo 'TODO: kinetic somatic proxy not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Greater: 0
+      # - GreaterOrEqual: 0
+      - Contains: "TODO"
+
+  - name: somatic-crash-graceful-degradation-non-somatic-tools
+    description: Kinetic tools that don't depend on somatic keep working if somatic crashes
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      - bash: "systemctl --user stop somatic"
+      - bash: "emacsclient --eval '(+ 1 2)'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.evaluate_elisp --expression '(+ 1 2)'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+      - bash: "systemctl --user start somatic"
+    verify:
+      - Equals: "3"
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "3"
+      - Contains: "TODO"
+
+  - name: somatic-crash-graceful-degradation-somatic-tools
+    description: Kinetic returns error (not crash/hang) for somatic-dependent tools when somatic is down
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      - bash: "systemctl --user stop somatic"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "timeout 5 kinetic-mcp call sense.user_state 2>&1; echo \"exit:$?\""
+      - bash: "echo 'TODO: kinetic not yet built'"
+      - bash: "systemctl --user start somatic"
+    verify:
+      # TODO(kinetic): replace with actual assertions — must be error message, not crash
+      # - Contains: "error"
+      - Contains: "TODO"
+
+  - name: somatic-crash-graceful-degradation-recovery
+    description: After somatic restart, kinetic somatic proxy returns valid data again
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      - bash: "systemctl --user stop somatic && sleep 1 && systemctl --user start somatic && sleep 1"
+      - bash: "systemctl --user status somatic | head -3 | grep -o 'active (running)'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call sense.user_state | jq -r '.idle'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - Equals: "active (running)"
+      # TODO(kinetic): replace with actual assertions
+      # - NotEmpty
+      - Contains: "TODO"
+
+  # === X11 TOOL ABSORPTION ===
+
+  - name: screenshot-matches-screen
+    description: Kinetic's capture_screenshot returns a faithful image of the current display
+    preconditions:
+      - kinetic running
+      - X11 desktop visible with at least one window
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.capture_screenshot --target screen | jq -r '.data' | base64 -d | file -"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "PNG image data"
+      - Contains: "TODO"
+
+  - name: screenshot-latency
+    description: Kinetic screenshot completes within 500ms
+    preconditions:
+      - kinetic running
+      - X11 desktop visible
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call --timing act.capture_screenshot --target screen | jq -r '.elapsed_ms'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Greater: 0
+      - Contains: "TODO"
+
+  - name: keystroke-delivery
+    description: Kinetic's send_keys delivers keystrokes to the focused X11 window
+    preconditions:
+      - kinetic running
+      - Emacs running
+    steps:
+      - bash: "emacsclient --eval '(with-current-buffer (get-buffer-create \"*kinetic-key-test*\") (erase-buffer) (switch-to-buffer (current-buffer)) (buffer-string))'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.send_keys --keys 'hello world'"
+      # - bash: "emacsclient --eval '(with-current-buffer \"*kinetic-key-test*\" (buffer-string))'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - Equals: "\"\""
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "hello world"
+      - Contains: "TODO"
+
+  - name: i3-window-query
+    description: Kinetic's read_window_layout queries i3 window tree
+    preconditions:
+      - kinetic running
+      - i3 window manager running
+      - at least 2 windows open
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.read_window_layout | jq '.windows | length'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Greater: 1
+      - Contains: "TODO"
+
+  - name: i3-window-focus
+    description: Kinetic's focus_window changes focused window in i3
+    preconditions:
+      - kinetic running
+      - i3 window manager running
+      - at least 2 windows open
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.read_window_layout | jq -r '.windows[0].id'"
+      # - bash: "kinetic-mcp call act.focus_window --criteria '[con_id=WINDOW_ID]'"
+      # - bash: "kinetic-mcp call act.read_window_layout | jq -r '.focused'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - NotEmpty
+      - Contains: "TODO"
+
+  # === EMACS TOOL ABSORPTION ===
+
+  - name: elisp-eval-arithmetic
+    description: Kinetic's eval_elisp sends arithmetic expression to Emacs and returns result
+    preconditions:
+      - kinetic running
+      - Emacs running with server socket
+    steps:
+      - bash: "emacsclient --eval '(+ 1 2)'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.evaluate_elisp --expression '(+ 1 2)'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - Equals: "3"
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "3"
+      - Contains: "TODO"
+
+  - name: elisp-eval-buffer-name
+    description: Kinetic's eval_elisp returns current buffer name
+    preconditions:
+      - kinetic running
+      - Emacs running with server socket
+    steps:
+      - bash: "emacsclient --eval '(buffer-name)'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.evaluate_elisp --expression '(buffer-name)'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - NotEmpty
+      # TODO(kinetic): replace with actual assertions
+      # - NotEmpty
+      - Contains: "TODO"
+
+  - name: elisp-eval-error-handling
+    description: Kinetic's eval_elisp returns error message for erroring expression, does not crash
+    preconditions:
+      - kinetic running
+      - Emacs running with server socket
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "timeout 5 kinetic-mcp call act.evaluate_elisp --expression '(error \"test error\")' 2>&1; echo \"exit:$?\""
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions — must return error, not crash
+      # - Contains: "error"
+      - Contains: "TODO"
+
+  - name: emacs-navigation
+    description: Kinetic's navigate_emacs opens files at specific positions in Emacs
+    preconditions:
+      - kinetic running
+      - Emacs running
+    steps:
+      - bash: "seq 1 100 > /tmp/kinetic-nav-test.txt"
+      - bash: "emacsclient --eval '(progn (find-file \"/tmp/kinetic-nav-test.txt\") (goto-line 50) (format \"%s:%d\" (buffer-file-name) (line-number-at-pos)))'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.navigate_emacs --file /tmp/kinetic-nav-test.txt --line 50"
+      # - bash: "emacsclient --eval '(format \"%s:%d\" (buffer-file-name) (line-number-at-pos))'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - Contains: "/tmp/kinetic-nav-test.txt:50"
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "/tmp/kinetic-nav-test.txt:50"
+      - Contains: "TODO"
+
+  # === PRIVILEGED EXECUTION ===
+
+  - name: sudo-command-id
+    description: Kinetic's run_privileged executes 'id' via sudo and returns uid=0
+    preconditions:
+      - kinetic running
+      - user bw has sudo access
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.run_privileged --command 'id'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "uid=0"
+      - Contains: "TODO"
+
+  - name: sudo-command-reads-protected-file
+    description: Kinetic's run_privileged can read /etc/shadow via sudo
+    preconditions:
+      - kinetic running
+      - user bw has sudo access
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.run_privileged --command 'cat /etc/shadow' | head -1"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "root:"
+      - Contains: "TODO"
+
+  - name: sudo-command-timeout-enforcement
+    description: Kinetic's run_privileged kills long-running commands before timeout
+    preconditions:
+      - kinetic running
+      - user bw has sudo access
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "start=$(date +%s); kinetic-mcp call act.run_privileged --command 'sleep 300' 2>&1; end=$(date +%s); echo $((end - start))"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions — elapsed must be much less than 300
+      # - Greater: 0
+      - Contains: "TODO"
+
+  # === KNOWLEDGE TOOLS ===
+
+  - name: search-and-retrieve-index
+    description: Index a test document with unique content via kinetic
+    preconditions:
+      - kinetic running
+      - Qdrant running
+    steps:
+      - bash: "curl -sf http://localhost:6333/health | jq -r '.title'"
+      - bash: "echo 'quantum_flux_capacitor_test_42' > /tmp/kinetic-test-doc.md"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call recall.index_documents --file /tmp/kinetic-test-doc.md"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - Equals: "qdrant - vectorass database"
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "indexed"
+      - Contains: "TODO"
+
+  - name: search-and-retrieve-search
+    description: Search for indexed test document via kinetic and find it
+    preconditions:
+      - kinetic running
+      - Qdrant running
+      - test document indexed from search-and-retrieve-index
+    steps:
+      - bash: "curl -sf http://localhost:6333/health | jq -r '.title'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call recall.search_hybrid --query 'quantum flux capacitor' | jq -r '.results[0].score'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - Equals: "qdrant - vector ass database"
+      # TODO(kinetic): replace with actual assertions
+      # - Greater: 0.7
+      - Contains: "TODO"
+
+  - name: search-and-retrieve-context
+    description: Retrieve context around a search hit via kinetic
+    preconditions:
+      - kinetic running
+      - Qdrant running
+      - test document indexed
+    steps:
+      - bash: "curl -sf http://localhost:6333/health | jq -r '.title'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call recall.search_hybrid --query 'quantum flux capacitor' | jq -r '.results[0].chunk_id'"
+      # - bash: "kinetic-mcp call recall.retrieve_document --chunk_id CHUNK_ID | jq -r '.text'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - Equals: "qdrant - vector ass database"
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "quantum_flux_capacitor_test_42"
+      - Contains: "TODO"
+
+  - name: session-save
+    description: Save a session summary via kinetic and get a numeric session ID
+    preconditions:
+      - kinetic running
+    steps:
+      - bash: "sqlite3 ~/.local/share/vault-rag/sessions.db \"SELECT count(*) FROM sessions\""
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call recall.save_session --summary 'kinetic e2e test session' --topics '[\"kinetic\",\"e2e\"]' | jq -r '.session_id'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - GreaterOrEqual: 0
+      # TODO(kinetic): replace with actual assertions
+      # - NotEmpty
+      - Contains: "TODO"
+
+  - name: session-search
+    description: Search for a saved session via kinetic and find it
+    preconditions:
+      - kinetic running
+      - session saved from session-save
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call recall.search_sessions --query 'kinetic e2e test' --recency_bias 0.7 | jq -r '.results[0].summary'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "kinetic e2e test session"
+      - Contains: "TODO"
+
+  # === THREE-TIER AWARENESS ===
+
+  - name: ambient-header-present-on-every-response
+    description: Every kinetic tool response includes the ambient state header, regardless of which tool was called
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.evaluate_elisp --expression '(+ 1 2)' | grep -o '\\[env:.*\\]'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "[env:"
+      # - Contains: "typing="
+      # - Contains: "focus="
+      - Contains: "TODO"
+
+  - name: ambient-header-token-budget
+    description: Ambient state header is under 40 tokens when serialized
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.evaluate_elisp --expression '(+ 1 2)' | grep -o '\\[env:.*\\]' | wc -c"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): header should be under ~160 chars (~40 tokens)
+      # - Greater: 10
+      # - Less: 160
+      - Contains: "TODO"
+
+  - name: alert-fires-on-focus-change
+    description: Kinetic prepends alert block when user focus changes between tool calls
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+      - Emacs and Firefox both open
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # Simulate focus change via i3, then call any kinetic tool
+      # - bash: "i3-msg '[class=firefox] focus'"
+      # - bash: "sleep 0.5"
+      # - bash: "kinetic-mcp call sense.get_snapshot | grep -o '\\[ALERT:.*\\]'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "[ALERT: user-state-change]"
+      # - Contains: "focus:"
+      - Contains: "TODO"
+
+  - name: alert-fires-on-typing-transition
+    description: Kinetic prepends alert block when user transitions from typing to idle
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "xdotool type --clearmodifiers 'test typing detection'"
+      # - bash: "sleep 3"
+      # - bash: "kinetic-mcp call sense.get_snapshot | grep 'ALERT'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "typing:"
+      - Contains: "TODO"
+
+  - name: alert-dedup-within-5-seconds
+    description: Same alert does not fire twice within 5 seconds
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # Trigger focus change, get alert, immediately call again — no second alert
+      # - bash: "i3-msg '[class=firefox] focus' && sleep 0.5"
+      # - bash: "kinetic-mcp call sense.get_snapshot > /tmp/alert1.txt"
+      # - bash: "kinetic-mcp call sense.get_snapshot > /tmp/alert2.txt"
+      # - bash: "grep -c 'ALERT' /tmp/alert1.txt; grep -c 'ALERT' /tmp/alert2.txt"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): first call has alert (1), second call does not (0)
+      # - Equals: "1\n0"
+      - Contains: "TODO"
+
+  - name: ground-truth-state-vector-cached
+    description: Kinetic maintains cached somatic state vector internally, refreshed at fusion cycle rate
+    preconditions:
+      - kinetic running
+      - somatic daemon running
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call --internal-metrics | jq -r '.somatic_cache_age_ms'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): cache age should be under 100ms (10Hz refresh minimum)
+      # - Less: 100
+      - Contains: "TODO"
+
+  - name: ambient-header-with-somatic-down
+    description: Ambient header shows degraded state when somatic is unavailable
+    preconditions:
+      - kinetic running
+      - somatic daemon stopped
+    steps:
+      - bash: "systemctl --user stop somatic"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call act.evaluate_elisp --expression '(+ 1 2)' | grep -o '\\[env:.*\\]'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+      - bash: "systemctl --user start somatic"
+    verify:
+      # TODO(kinetic): header should indicate somatic is disconnected, not crash
+      # - Contains: "[env:"
+      # - Contains: "somatic=disconnected"
+      - Contains: "TODO"
+
+  - name: mcp-instructions-field-at-init
+    description: Kinetic's InitializeResult includes instructions field with topology and awareness format docs
+    preconditions:
+      - kinetic.jar built
+      - Java 25 installed
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1.0\"}}}' | kinetic-mcp | jq -r '.result.instructions'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): instructions should document the ambient header format
+      # - Contains: "[env:"
+      # - Contains: "typing="
+      - Contains: "TODO"
+
+  # === RESOURCE GOVERNANCE ===
+
+  - name: indexing-backs-off-on-activity
+    description: Background indexing reduces resource usage when user becomes active
+    preconditions:
+      - kinetic running
+      - somatic reporting idle state
+      - kinetic in aggressive indexing mode
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call recall.index_documents --file /tmp/large-corpus/ --background true"
+      # - bash: "sleep 2 && kinetic-mcp call --metrics sense.user_state | jq -r '.cpu_percent'"
+      # - bash: "# simulate user activity via somatic, then re-check cpu"
+      # - bash: "kinetic-mcp call --metrics sense.user_state | jq -r '.cpu_percent'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions — CPU must drop after activity
+      # - NotEmpty
+      - Contains: "TODO"
+
+  # === COLLECTIVE LIFETIME ===
+
+  - name: 24-hour-stability-memory
+    description: Kinetic RSS memory does not grow monotonically over extended run
+    preconditions:
+      - kinetic deployed as systemd user service
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call --metrics sense.user_state | jq -r '.rss_mb'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions — compare hourly snapshots
+      # - NotEmpty
+      - Contains: "TODO"
+
+  - name: 24-hour-stability-fd-leak
+    description: Kinetic open file descriptors are stable over extended run
+    preconditions:
+      - kinetic deployed as systemd user service
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "ls /proc/$(pgrep -f kinetic.jar)/fd | wc -l"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - NotEmpty
+      - Contains: "TODO"
+
+  - name: 24-hour-stability-wal-bounded
+    description: SQLite WAL file does not grow unbounded (checkpointing works)
+    preconditions:
+      - kinetic deployed as systemd user service
+    steps:
+      - bash: "stat -c%s ~/.local/share/vault-rag/sessions.db-wal 2>/dev/null || echo '0'"
+    verify:
+      # WAL should exist and not be gigabytes — just verify it's queryable
+      - NotEmpty
+
+  - name: 24-hour-stability-no-unhandled-exceptions
+    description: Zero unhandled exceptions in journalctl for kinetic
+    preconditions:
+      - kinetic deployed as systemd user service
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "journalctl --user -u kinetic --since '24 hours ago' --grep 'Exception|FATAL|panic' --no-pager | wc -l"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "0"
+      - Contains: "TODO"
+
+  - name: concurrent-claude-sessions-no-corruption
+    description: Multiple Claude Code sessions sharing one kinetic instance don't corrupt state
+    preconditions:
+      - kinetic running
+      - two Claude Code terminals open
+    steps:
+      - bash: "sqlite3 ~/.local/share/vault-rag/sessions.db 'PRAGMA integrity_check'"
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "kinetic-mcp call recall.save_session --summary 'concurrent test A' --topics '[\"test\"]' &"
+      # - bash: "kinetic-mcp call recall.save_session --summary 'concurrent test B' --topics '[\"test\"]' &"
+      # - bash: "wait; kinetic-mcp call recall.search_sessions --query 'concurrent test A' | jq -r '.results[0].summary'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      - Equals: "ok"
+      # TODO(kinetic): replace with actual assertions
+      # - Contains: "concurrent test A"
+      - Contains: "TODO"
+
+  - name: concurrent-sessions-no-locking-errors
+    description: No SQLite locking errors under concurrent kinetic access
+    preconditions:
+      - kinetic running
+    steps:
+      # TODO(kinetic): uncomment when kinetic is operational
+      # - bash: "for i in $(seq 1 10); do kinetic-mcp call recall.save_session --summary \"concurrency test $i\" --topics '[\"test\"]' & done; wait; echo 'done'"
+      - bash: "echo 'TODO: kinetic not yet built'"
+    verify:
+      # TODO(kinetic): replace with actual assertions
+      # - Equals: "done"
+      - Contains: "TODO"
+
+enforced_constraints:
+  - name: java-25-lts
+    value: Java 25 LTS, no Spring Boot, no reactive frameworks
+    rationale: See ADR-009. Virtual threads, forensic debuggability, semantic transparency, LLM code generation quality.
+
+  - name: mcp-sdk-core-only
+    value: Java MCP SDK v0.17.2 core module, no Spring integration
+    rationale: See ADR-010. Stdio transport works standalone. Spring adds container lifecycle overhead for zero benefit.
+
+  - name: no-coordination
+    value: Kinetic does NOT include coordination/orchestration tools
+    rationale: >
+      Locked 2026-02-08. Three failed coordination implementations (Python, Go, Kotlin) shared root cause:
+      wrong layer for orchestration. Claude Code has native Agent Teams (TaskCreate, TaskList, SendMessage).
+      Ralph Wiggum plugin handles persistent iteration loops via Stop Hooks + git checkpoints.
+      Custom coordination infrastructure is redundant and harmful.
+      e2e-test-debug-loop skill uses Ralph, not Kinetic.
+
+  - name: somatic-stays-separate
+    value: Somatic C++ daemon remains its own process; kinetic proxies ALL 52 tools, does not absorb its code
+    rationale: >
+      Somatic has real-time sensing requirements (<1ms event latency) that JVM GC pauses would violate.
+      C++ daemon is stable, tested, and has no JVM equivalent for X11 event monitoring at that granularity.
+      Kinetic proxies ALL 52 somatic tools (not a subset) to present a unified dispatch table and enable
+      the ambient state header on every tool response. Single MCP entry. See ADR-017.
+
+  - name: claude-in-x11-frame
+    value: Kinetic is "claude-in-x11" — the desktop analog of claude-in-chrome. Same perceive/act/record pattern, X11 substrate.
+    rationale: >
+      Locked 2026-02-08. claude-in-chrome gives Claude a body in the browser: screenshot, click, type, read_page
+      (accessibility tree), find (natural language element search), gif recording (burst capture), console/network
+      monitoring. Kinetic gives Claude a body on the X11 desktop: screenshot (maim), click/type (xdotool),
+      read layout (i3-msg/AT-SPI), somatic sensing (ring buffers), burst capture (future). The framing determines
+      capability parity targets: anything chrome-Claude can do in a tab, x11-Claude should be able to do on the
+      desktop. Research required before implementation — survey best-in-class GUI agent repos, visual grounding
+      tools, and accessibility tree extraction for X11/Linux before building custom. See ADR-017.
+
+  - name: three-tier-awareness
+    value: Environmental awareness delivered at three cost tiers — Ground Truth (0 tokens), Ambient (~30 tokens), Alert (~200 tokens)
+    rationale: >
+      Locked 2026-02-08. MCP has no push-to-context mechanism (resource subscriptions NOT supported by Claude Code,
+      GitHub #7252 closed NOT_PLANNED). Tool responses are the only injection point. Three tiers minimize token
+      cost while maximizing awareness: ground truth is free (internal), ambient piggybacks on existing tool calls,
+      alerts fire only on significant transitions. Literature validation: MemGPT tiered memory, PAACE plan-aware
+      compression (97% at 10x), robotics sensor-to-token patterns (1000-100,000x compression). See ADR-017.
+
+  - name: qdrant-stays-separate
+    value: Qdrant runs in Docker container; kinetic connects via gRPC client
+    rationale: >
+      Qdrant is a Rust binary with its own memory management and crash isolation.
+      Embedding it in JVM would sacrifice these properties.
+      gRPC client from Java is well-supported.
+
+  - name: time-machine-stays-separate
+    value: Time-machine is a separate JVM daemon; kinetic has no interface to it
+    rationale: >
+      Time-machine protects files. If kinetic crashes (or an LLM-directed action destroys it),
+      time-machine must survive independently. Coupling protection to the thing being protected
+      defeats defense-in-depth.
+
+opinionated_constraints:
+  - name: coordination-excluded
+    description: Coordination tools (register_session, heartbeat, submit_task, claim_task, complete_task, fail_task, read_coordination_status) are NOT part of kinetic
+    rationale: >
+      Claude Code Agent Teams provides native coordination (TaskCreate, TaskList, TaskUpdate, SendMessage).
+      Ralph provides persistent loop iteration (Stop Hook + git checkpoint).
+      No external coordination infrastructure is needed.
+      coordination-service (Kotlin) and claude-coordinator (Go) are deprecated, not absorbed.
+
+  - name: three-fundamentals-not-four
+    description: Tool ontology is sense/act/recall (3 categories), not sense/act/coordinate/recall (4)
+    rationale: >
+      Coordinate category removed because coordination is excluded.
+      35 tools across 3 fundamentals. Rule of 7 still satisfied at all levels.
+
+  - name: somatic-as-mcp-client
+    description: Kinetic connects to somatic as an MCP client (kinetic → somatic stdio), not via shared memory or Unix socket
+    rationale: >
+      MCP protocol is already implemented on both sides. Adding a custom IPC would be a second
+      protocol to maintain. Proxy overhead is <5ms per call, acceptable for all sense/act tools.
+      If latency becomes critical, can optimize to Unix domain socket later.
+
+  - name: ambient-always-on
+    description: Ambient state header is always-on — every kinetic tool response includes it, no opt-in mechanism
+    rationale: >
+      ~30 tokens per response is negligible (0.015% of 200K context). Opt-in adds protocol complexity
+      (Claude must remember to enable), wastes a tool call on the opt-in, and means ambient state is
+      unavailable during early turns. The literature unanimously favors compact state headers always present.
+      See ADR-017.
+
+  - name: single-mcp-entry-for-somatic
+    description: Kinetic proxies ALL 52 somatic tools — somatic does not appear as a separate MCP server in ~/.claude.json
+    rationale: >
+      Splitting somatic into "sense via kinetic" + "everything else via raw somatic" creates two MCP
+      connections to the same daemon, defeats the fusion model, and means chaos/HUD/attention tools
+      cannot benefit from the ambient state header. One MCP entry, one connection, full proxy. See ADR-017.
+
+  - name: alert-thresholds-configurable
+    description: Alert tier thresholds are in config.toml, not hardcoded — tuning requires operational experience
+    rationale: >
+      Initial thresholds (typing→idle at 2s, focus change on window class change, clipboard on new copy,
+      anomaly from somatic geometry detector) are conservative starting points. Real usage will reveal
+      which transitions are decision-relevant vs noisy. config.toml allows tuning without recompilation.
+
+  - name: awareness-is-system-level
+    description: >
+      Ambient awareness is a workstation-level property (kinetic + hook + somatic shm), not a kinetic-internal feature.
+      Kinetic piggybacking delivers awareness on kinetic tool calls. A Claude Code PostToolUse hook reading somatic
+      shm directly delivers awareness on ALL tool calls (Read, Edit, Bash, etc.). Both are required. See ADR-024.
+    rationale: >
+      Pure MCP piggybacking cannot guarantee per-turn delivery — MCP has no mechanism for a server to inject
+      content into turns where its tools aren't called. Hooks are the only way to reach every turn. The hook
+      reads /dev/shm/somatic_fusion directly (<100μs, no MCP round-trip). Kinetic enriches with full ambient
+      header when its tools are called. The two mechanisms are complementary, not redundant.
+      Somatic writes the fused StateVector as a text file to /dev/shm/somatic_fusion at 100Hz via atomic
+      rename(2). Format is a single key=value line matching ADR-017's ambient header. See ADR-024 for full spec.
+
+  - name: research-before-build-visual
+    description: >
+      Visual awareness (screen understanding, accessibility tree, semantic diffing, burst capture) requires
+      surveying best-in-class repos and tools before any custom implementation. Do not build from scratch
+      what research organizations have spent years on.
+    rationale: >
+      claude-in-chrome has read_page (DOM accessibility tree), find (natural language element search),
+      gif_creator (burst capture). X11 equivalents exist in the research/OSS ecosystem: AT-SPI for
+      accessibility trees, OmniParser for screen understanding, SoM prompting for visual grounding,
+      CogAgent/Qwen-VL for GUI-trained VLMs. Survey and integrate, then fill gaps.
+
+  - name: chrome-parity-as-capability-target
+    description: >
+      Capability parity with claude-in-chrome is the target for kinetic's perceive/act surface.
+      Chrome capabilities: screenshot, click, type, scroll, read_page (accessibility tree),
+      find (NL element search), gif recording, JS execution, console/network monitoring.
+      X11 gaps to close: accessibility tree extraction (AT-SPI?), natural language element finding,
+      burst capture/recording, structured page/window content reading.
+    rationale: >
+      claude-in-chrome is the existence proof that the perceive/act/record pattern works at production
+      quality. Kinetic should match its capability surface on the desktop, not invent a different one.
+      The chrome extension is maintained by a team; we adopt patterns, not reimplement from scratch.
+
+  - name: vault-rag-is-largest-absorption
+    description: vault-rag (Python, ~5,000 lines, 42 tools → 9 kinetic tools) is the largest and riskiest absorption
+    rationale: >
+      vault-rag handles embedding generation, Qdrant interaction, SQLite sessions, full-text search,
+      document indexing, and watcher integration. This is Stage 3 of the migration per ADR-013.
+      All other absorptions are smaller and can be done in parallel during Stage 2.
+
+  - name: ralph-for-persistent-loops
+    description: e2e-test-debug-loop skill uses Ralph Wiggum plugin, not custom coordination
+    rationale: >
+      Ralph is an official Claude Code plugin. Uses Stop Hooks to intercept exit attempts.
+      Git commits serve as checkpoints between iterations. The skill becomes a PROMPT.md
+      that Ralph feeds to Claude Code. User launches via /e2e-test-debug-loop which is a
+      Claude Code skill that invokes the Ralph loop.
+
+  - name: incremental-not-bigbang
+    description: Server absorption happens one server at a time with verification between each
+    rationale: >
+      5 servers absorbed incrementally. Each absorption is independently testable and rollback-able.
+      Rollback = re-add the old mcpServers entry in ~/.claude.json.
+      Order: sudo (simplest) → x11 → emacs → concierge → vault-rag (most complex, last).

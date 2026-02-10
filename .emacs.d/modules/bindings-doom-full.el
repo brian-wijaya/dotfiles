@@ -11,6 +11,13 @@
 (define-key bw/leader-map (kbd "&") 'async-shell-command)
 (define-key bw/leader-map (kbd "*") 'bw/search-symbol-at-point)
 (define-key bw/leader-map (kbd ".") 'find-file)
+(defun bw/find-file-blank ()
+  "Open find-file with an empty minibuffer (no pre-filled directory)."
+  (interactive)
+  (minibuffer-with-setup-hook
+      (lambda () (delete-minibuffer-contents))
+    (call-interactively #'find-file)))
+(define-key bw/leader-map (kbd ">") 'bw/find-file-blank)
 (define-key bw/leader-map (kbd ",") 'consult-buffer)
 (define-key bw/leader-map (kbd "/") 'consult-ripgrep)
 (define-key bw/leader-map (kbd ":") 'eval-expression)
@@ -370,6 +377,7 @@
     "&" "⚡ async-cmd"
     "*" "🔍 symbol"
     "." "📄 find-file"
+    ">" "📂 find-blank"
     "," "🔄 buffer"
     "/" "🔎 ripgrep"
     ":" "⚡ eval"

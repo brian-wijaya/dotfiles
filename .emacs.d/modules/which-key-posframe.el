@@ -156,7 +156,7 @@
     bw/which-key-section-definitions)
 
   (puthash 'bw/leader-map
-    '(("🚀 Launch"    . ("SPC" "." "," :gap "`" "x"))
+    '(("🚀 Launch"    . ("SPC" "." ">" "," :gap "`" "x"))
       ("⚡ Execute"   . ("!" "&" :gap ":" ";"))
       ("🔍 Search"    . ("/" "*"))
       ("🔧 Utility"   . ("'" "u" "~"))
@@ -357,10 +357,7 @@ Uses pixel-based :align-to for precise positioning."
     "Replace BUFFER content with sectioned rendering for KEYMAP-SYMBOL.
 Resolves entries dynamically via lookup-key, measures section widths,
 auto-packs sections into bands that fit the frame width.
-Skips re-render if same keymap is already displayed (preserves nav state)."
-    ;; Guard: skip re-render if same keymap (which-key timer fires repeatedly)
-    (unless (eq (buffer-local-value 'bw/which-key--rendered-keymap buffer)
-                keymap-symbol)
+Always re-renders because which-key's timer erases buffer content each tick."
     (let* ((section-defs (gethash keymap-symbol bw/which-key-section-definitions))
            (keymap (symbol-value keymap-symbol))
            (all-bindings (which-key--get-keymap-bindings keymap))
@@ -469,7 +466,7 @@ Skips re-render if same keymap is already displayed (preserves nav state)."
                     bw/which-key--scroll-line 0)
               (when bw/which-key--nav-overlay
                 (delete-overlay bw/which-key--nav-overlay)
-                (setq bw/which-key--nav-overlay nil)))))))))
+                (setq bw/which-key--nav-overlay nil))))))))
 
   ;; ═══════════════════════════════════════════════════════════════════
   ;; Navigation & Pagination
@@ -755,13 +752,6 @@ ACT-POPUP-DIM is the (height . width) from which-key's default rendering."
                                 (gethash keymap-symbol
                                          bw/which-key-section-definitions))))
         (when buffer
-          ;; Reset rendered-keymap when switching to a different keymap
-          (when (and has-sections
-                     (not (eq (buffer-local-value
-                               'bw/which-key--rendered-keymap buffer)
-                              keymap-symbol)))
-            (with-current-buffer buffer
-              (setq bw/which-key--rendered-keymap nil)))
           (when has-sections
             (bw/which-key--render-sectioned-layout buffer keymap-symbol))
           (if has-sections
