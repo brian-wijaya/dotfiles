@@ -1,12 +1,12 @@
 ---
-name: e2e-test-debug-loop
-description: Run end-to-end tests that emulate human input via X11 keystrokes, verify outcomes with somatic differential QA, retry failures via orchestrator, and produce structured test reports with screenshots. Use when the user wants to validate features, run acceptance tests, or verify a deployment.
+name: e2e-loop-demonstration
+description: Run end-to-end tests on your live display with human-emulated X11 input, keystroke visualization, cohabitation protocol, and pedagogical narration. The user watches in real time and learns efficient keybindings. Use for interactive test runs, feature demos, and acceptance testing.
 argument-hint: [story-file or feature-name]
 ---
 
-# E2E Test Debug Loop
+# E2E Loop — Demonstration
 
-Persistent end-to-end testing with human-emulated X11 input, somatic differential QA, orchestrator-driven retries, and structured reporting.
+Live-display end-to-end testing with human-emulated X11 input, somatic differential QA, cohabitation protocol, keystroke visualization, and structured reporting. Runs on the user's primary display — the user watches and learns.
 
 ## Arguments
 
@@ -111,9 +111,9 @@ DOCUMENT SETUP
 
 **Safety**: Never close windows with unsaved work. For Emacs, use `x11_key "space b s"` (save buffer) or similar before closing. State queries like `emacsclient -e '(buffer-modified-p)'` can check for unsaved changes.
 
-### 3.6. CONCIERGE PROTOCOL
+### 3.6. COHABITATION PROTOCOL
 
-The agent is a concierge — it serves in shared space, never owns it. The user is always the guest with priority. This protocol governs cohabitation of the desktop during test runs.
+The agent is a steward — it serves in shared space, never owns it. The user is always the guest with priority. This protocol governs cohabitation of the desktop during test runs.
 
 **Core principle**: The user can use their machine normally on other workspaces, and may interact with the test workspace at any time. The agent adapts; the user never waits.
 
@@ -376,20 +376,10 @@ BETWEEN STORIES:
   Brief pause (500ms-1s) to let observer register completion
 ```
 
-### 3.5. CONCIERGE EXEMPTION
+### 3.5. SESSION EXEMPTION
 
-Before running stories, exempt this session from concierge pausing:
-```
-IF orchestrator is running (daemon.sock exists):
-  Call set_session_state(session_id, "e2e_running") via orchestrator socket
-  This prevents the concierge daemon from pausing this session during e2e
-```
-
-After all stories complete (in GENERATE REPORT), restore state:
-```
-IF session was set to e2e_running:
-  Call set_session_state(session_id, "working") via orchestrator socket
-```
+No exemption needed — resource scaling is handled by kinetic's VaultResourceScaler
+based on X11 idle time, independent of e2e test execution.
 
 ### 4. RUN STORIES
 
@@ -504,10 +494,10 @@ vault-rag save_session(
     "e2e-run:{feature}:retries:{retry_count}",
     "e2e-run:{feature}:stagnated:{story-name}" (if any),
 
-    // Concierge protocol events
-    "e2e-concierge:pause:{duration_s}s:user-input" (if user input caused pause),
-    "e2e-concierge:mouse-fallback:{story-name}:{reason}" (if keyboard nav failed),
-    "e2e-concierge:window-moved:{story-name}" (if target geometry changed mid-run),
+    // Cohabitation protocol events
+    "e2e-cohabitation:pause:{duration_s}s:user-input" (if user input caused pause),
+    "e2e-cohabitation:mouse-fallback:{story-name}:{reason}" (if keyboard nav failed),
+    "e2e-cohabitation:window-moved:{story-name}" (if target geometry changed mid-run),
 
     // Regression detection: compare against previous run facts
     // If vault-rag search_sessions(query="e2e:{feature}") returns prior results,

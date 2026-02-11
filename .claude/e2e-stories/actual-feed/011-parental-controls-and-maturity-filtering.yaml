@@ -1,0 +1,374 @@
+title: "Parental Controls & Age-Appropriate Content Filtering"
+status: draft
+version: 1
+
+principle: >
+  Actual Feed controls what you consume. For a parent, "what you consume"
+  extends to what your children consume. If the system cannot successfully
+  filter age-inappropriate content, it has failed at its core job. Content
+  maturity filtering is a hard capability — not an add-on, not a premium
+  feature, not a V2 item. It ships in V1 or the product is incomplete.
+
+  The system does not define what is appropriate. The parent does, via a
+  maturity threshold per child profile. The LLM evaluates content maturity
+  as part of Stage 2 extraction. The profile system enforces the threshold
+  as a hard pre-filter — identical in mechanism to obliterate. Inappropriate
+  content for a child profile is not downranked. It does not exist.
+
+  False negatives (mature content slipping through) are the critical failure
+  mode. The system biases toward over-filtering. Parents can review and
+  whitelist over-filtered items. This asymmetry is deliberate: a parent
+  who sees a filtered-out cartoon is mildly inconvenienced; a child who
+  sees graphic content is harmed.
+
+profiles:
+  architecture: >
+    The app supports multiple profiles on a single installation. Each profile
+    has its own:
+    - feed configuration (sources, presets, custom feeds)
+    - interaction history (thumbs up/down, obliterated sources)
+    - neural taste model (trained on that profile's interactions)
+    - maturity threshold (0.0 = everything filtered, 1.0 = nothing filtered)
+    - maturity category overrides (per-category threshold adjustments)
+    - budget settings
+    - tripwire configuration
+
+    Profiles are stored in the same SQLite database. Profile switching
+    is PIN-protected. The parent profile is the owner — it can create,
+    edit, and delete child profiles. Child profiles cannot access parent
+    settings or other child profiles.
+
+  schema:
+    profiles_table:
+      columns:
+        - { name: id, type: "TEXT PRIMARY KEY", description: "UUIDv7" }
+        - { name: name, type: "TEXT NOT NULL", description: "Display name (e.g., 'Dad', 'Emma', 'Jake')" }
+        - { name: is_owner, type: "INTEGER DEFAULT 0", description: "Boolean. Owner profile can manage all profiles." }
+        - { name: pin_hash, type: "TEXT", description: "bcrypt hash of profile PIN. NULL = no PIN required to enter." }
+        - { name: maturity_threshold, type: "REAL DEFAULT 1.0", description: "Items with f_content_maturity > threshold are hard-filtered. 1.0 = unfiltered (adult default)." }
+        - { name: maturity_overrides_json, type: "TEXT", description: "JSON. Per-category threshold overrides: {violence: 0.3, sexual: 0.1, language: 0.7}" }
+        - { name: created_at, type: "INTEGER NOT NULL" }
+        - { name: active_preset_id, type: "TEXT", description: "Current tuning preset for this profile" }
+
+  maturity_categories:
+    - violence: "Physical harm, weapons, graphic injury, war, death"
+    - sexual: "Sexual content, nudity, suggestive material"
+    - language: "Profanity, slurs, strong language"
+    - substances: "Drug use, alcohol, tobacco, substance abuse"
+    - graphic: "Disturbing imagery, gore, body horror, self-harm"
+    - mature_themes: "Complex adult themes — abuse, trauma, exploitation, suicide"
+
+content_maturity_extraction:
+  description: >
+    The LLM extraction prompt (Stage 2) is extended to produce a maturity
+    assessment for every item, regardless of whether parental controls are
+    active. The maturity signal is always extracted and stored because:
+    (1) a user may enable parental controls later and needs retrospective
+    filtering, (2) adult users may want to downweight mature content as a
+    soft preference, (3) the signal is cheap to extract alongside existing
+    signals.
+
+  extraction_addition: >
+    Added to the Stage 2 prompt template after the existing signals block:
+
+    "maturity": {
+      "score": 0.0-1.0,  // Overall content maturity. 0.0 = suitable for young children. 1.0 = adult only.
+      "flags": ["violence", "sexual", "language", "substances", "graphic", "mature_themes"],  // Only include categories present.
+      "reason": "Brief explanation of maturity assessment"
+    }
+
+  schema_addition:
+    feed_items_new_columns:
+      - { name: f_content_maturity, type: "REAL", description: "Overall maturity score [0,1]. 0 = universally appropriate, 1 = adult only. Extracted by LLM." }
+      - { name: maturity_flags_json, type: "TEXT", description: "JSON array of triggered maturity categories with per-category scores: [{category, score, reason}]" }
+
+  calibration: >
+    The maturity signal must be biased toward caution. The LLM prompt
+    explicitly instructs: "When uncertain about maturity, score higher
+    (more mature) rather than lower. False positives (over-filtering)
+    are preferable to false negatives (under-filtering)."
+
+    Calibration across models: maturity scores from different LLMs will
+    vary. On model swap, maturity signals are re-extracted along with
+    all other features. The parent's threshold should be set relative to
+    the active model's calibration — the profile settings screen shows
+    example items at each threshold level so the parent can calibrate
+    visually.
+
+filtering_mechanism:
+  description: >
+    Content maturity filtering uses the same hard pre-filter mechanism
+    as obliterate (EC-020 from 003). For the active profile, items with
+    f_content_maturity > profile.maturity_threshold are excluded before
+    any scoring. They do not appear in any feed, search result, or
+    tripwire notification for that profile.
+
+    Category overrides allow fine-grained control. A parent might set:
+    - Global threshold: 0.5
+    - Violence override: 0.3 (stricter on violence)
+    - Language override: 0.8 (more permissive on language)
+
+    The effective filter for each item is: excluded if the item's overall
+    maturity score exceeds the global threshold, OR if any category-specific
+    score exceeds that category's override threshold.
+
+  filtered_items_review: >
+    The parent profile can access a "Filtered Content" view that shows
+    items filtered by maturity for any child profile. Each filtered item
+    shows: title, source, maturity score, triggered categories, and a
+    "Whitelist for [child name]" button. Whitelisted items bypass the
+    maturity filter for that specific profile only.
+
+  whitelist_table:
+    columns:
+      - { name: profile_id, type: "TEXT NOT NULL REFERENCES profiles(id)" }
+      - { name: item_id, type: "TEXT NOT NULL REFERENCES feed_items(id)" }
+      - { name: whitelisted_at, type: "INTEGER NOT NULL" }
+      - { name: whitelisted_by, type: "TEXT NOT NULL REFERENCES profiles(id)", description: "Must be an owner profile" }
+
+user_stories:
+  - id: US-100
+    as: "parent setting up Actual Feed for my family"
+    i_want: "to create child profiles with age-appropriate filtering"
+    so_that: "my children get a safe feed experience without a separate app"
+    acceptance:
+      - owner profile (parent) can create child profiles from settings
+      - each child profile has a name, optional avatar, and maturity threshold
+      - maturity threshold has a labeled slider: 'Young children' (0.2) → 'Teens' (0.5) → 'Mature teens' (0.7) → 'Unfiltered' (1.0)
+      - example items shown at each threshold level for calibration
+      - per-category overrides available under 'Advanced' section
+      - child profile gets its own feed, interaction history, and neural taste model
+      - child profile cannot access parent settings, other profiles, or filtered content list
+
+  - id: US-101
+    as: "parent switching between profiles"
+    i_want: "PIN-protected profile switching"
+    so_that: "my child cannot switch to my unfiltered profile"
+    acceptance:
+      - profile switcher accessible from main screen (avatar/name tap)
+      - switching TO the owner profile requires PIN
+      - switching FROM the owner profile to a child profile does not require PIN
+      - switching between child profiles requires the owner PIN
+      - incorrect PIN shows no hint, no retry count visible to child
+      - biometric (fingerprint/face) as PIN alternative on supported devices
+      - auto-lock to last child profile after configurable idle timeout
+
+  - id: US-102
+    as: "parent reviewing what was filtered for my child"
+    i_want: "to see exactly what content was blocked and why"
+    so_that: "I can adjust thresholds or whitelist specific items"
+    acceptance:
+      - 'Filtered Content' view accessible from parent profile → child profile settings
+      - shows all items filtered by maturity for that child, newest first
+      - each item shows: title, source, maturity score, triggered categories, reason
+      - 'Whitelist' button per item — adds to child's whitelist, appears in their feed
+      - 'Adjust threshold' shortcut — opens threshold slider with this item highlighted
+      - bulk actions: whitelist all from source, whitelist all in category
+
+  - id: US-103
+    as: "child using Actual Feed"
+    i_want: "a feed that looks and feels like the full app"
+    so_that: "I don't feel like I'm using a restricted 'kids mode'"
+    acceptance:
+      - child profile feed is visually identical to adult feed
+      - no 'kids mode' branding, no infantilized UI, no condescending language
+      - all standard features work: thumbs up/down, obliterate, custom feeds, presets, search
+      - maturity-filtered items simply don't exist in the child's view
+      - child can configure their own sources, weights, and presets within allowed content
+      - child's interactions train their own neural taste model
+
+  - id: US-104
+    as: "parent who wants different rules for different children"
+    i_want: "multiple child profiles with different maturity thresholds"
+    so_that: "my 8-year-old and 15-year-old have age-appropriate filtering"
+    acceptance:
+      - unlimited child profiles per installation
+      - each profile has independent maturity threshold and category overrides
+      - each profile has independent sources, presets, interaction history
+      - profiles are synced across devices (premium) — child's profile works on any family device
+      - parent can copy a profile as starting point for a new child profile
+
+  - id: US-105
+    as: "adult user who doesn't have children"
+    i_want: "parental controls to be invisible unless I enable them"
+    so_that: "the app doesn't feel like it's for families when I'm using it solo"
+    acceptance:
+      - single-user mode is default — no profile switcher, no maturity UI
+      - parental controls activated from settings → 'Family' section
+      - activating creates the first child profile and enables profile switching
+      - can be deactivated — returns to single-user mode
+      - maturity signal is still extracted (stored silently) even in single-user mode
+      - adult user can optionally use maturity as a soft ranking signal via weight slider
+
+  - id: US-106
+    as: "parent concerned about filtering accuracy"
+    i_want: "to see the system's confidence in its maturity assessment"
+    so_that: "I know when to trust the filter and when to review manually"
+    acceptance:
+      - filtered content view shows maturity score (0.0-1.0) per item
+      - items near the threshold boundary are flagged as 'borderline — review recommended'
+      - weekly digest (optional): 'N items filtered this week. M were borderline. Review?'
+      - parent can set a 'review zone' (e.g., items scoring 0.4-0.6) that are held for parent review instead of auto-filtered
+
+collective_lifetime_stories:
+  - id: CL-100
+    title: "LLM maturity assessment accuracy across content types"
+    description: >
+      Small local LLMs will misjudge content maturity. A 3B parameter model
+      will miss subtle mature themes, sarcasm-as-innuendo, and cultural
+      context. Video transcripts lose visual context entirely — a transcript
+      of a nature documentary and a violent film may read similarly. The
+      system compensates by biasing toward caution (over-filter) and giving
+      parents easy review/whitelist tools.
+    worst_case: >
+      LLM consistently under-flags a specific content category (e.g., misses
+      substance references in music commentary). A child sees inappropriate
+      content before the parent reviews. Mitigation: conservative default
+      thresholds, category-level overrides, parent review digest, and
+      clear communication that LLM filtering is not perfect.
+
+  - id: CL-101
+    title: "Maturity threshold calibration across LLM model swaps"
+    description: >
+      Different LLMs calibrate maturity scores differently. Qwen3-30B
+      might rate an article at 0.4 maturity while Phi-4 rates it 0.6.
+      A model swap can shift hundreds of items across a child's maturity
+      threshold boundary — suddenly filtering content that was previously
+      visible, or exposing content that was previously filtered. The
+      re-extraction comparison (US-042 from 005) must explicitly surface
+      maturity changes for child profiles.
+    worst_case: >
+      Model swap silently exposes previously-filtered content to a child
+      profile. Must surface: 'Model swap changed maturity scores. N items
+      newly visible in [child name]'s profile. Review?' Parent must confirm
+      before new model's maturity scores take effect for child profiles.
+
+  - id: CL-102
+    title: "Child circumvention attempts"
+    description: >
+      Children will try to bypass restrictions. Common vectors: guessing
+      PIN, shoulder-surfing PIN entry, finding the SQLite file and editing
+      it, sideloading a modified APK, using a different app/browser to
+      access the same content. The system's threat model is casual
+      circumvention by a child, not adversarial attack by a determined
+      teenager with technical skills.
+    worst_case: >
+      Technically skilled teenager extracts the SQLite file, modifies their
+      profile's maturity_threshold, and restores it. Mitigation: integrity
+      check on profile table (HMAC of threshold + owner PIN hash). This
+      makes casual SQLite editing detectable. A truly determined teenager
+      can always use a browser — that's outside the system's scope.
+
+enforced_constraints:
+  - id: EC-100
+    constraint: "Content maturity filtering is a hard pre-filter, not a scoring signal, for child profiles"
+    type: safety
+    rationale: >
+      Inappropriate content for a child must be completely invisible, not
+      merely downranked. A maturity-filtered item does not appear in feeds,
+      search results, tripwire notifications, or autoplay queues for that
+      child profile. Same mechanism as obliterate (EC-020).
+    testable: >
+      In a child profile with maturity_threshold=0.3, no item with
+      f_content_maturity > 0.3 appears in any view, search, or notification.
+
+  - id: EC-101
+    constraint: "Content maturity signal is always extracted, regardless of parental controls state"
+    type: preparedness
+    rationale: >
+      A user who enables parental controls 6 months into use needs
+      retrospective filtering of all existing items. Extracting the signal
+      always (it's ~20 tokens in the LLM prompt) avoids a costly
+      re-extraction of the entire database.
+    testable: >
+      Every enriched FeedItem has f_content_maturity populated, even
+      when no child profiles exist.
+
+  - id: EC-102
+    constraint: "Profile switching to the owner profile requires authentication"
+    type: safety
+    rationale: >
+      A child must not be able to switch to the unfiltered parent profile.
+      PIN or biometric authentication is mandatory for accessing the owner
+      profile when child profiles exist.
+    testable: >
+      With child profiles active, no UI path reaches the owner profile
+      without PIN/biometric entry.
+
+  - id: EC-103
+    constraint: "Model swap requires parent confirmation before maturity scores take effect for child profiles"
+    type: safety
+    rationale: >
+      A model swap can shift maturity scores, potentially exposing
+      previously-filtered content. The parent must review and confirm
+      before the new model's maturity assessments apply to child profiles.
+    testable: >
+      After model swap, child profiles continue using old maturity scores
+      until parent reviews and confirms the new scores.
+
+enforced_constraints_continued:
+  - id: EC-104
+    constraint: "Maturity assessment biases toward caution (over-filter)"
+    type: safety
+    rationale: >
+      The LLM prompt explicitly instructs conservative maturity scoring.
+      False positives (over-filtering safe content) are tolerable. False
+      negatives (exposing mature content to children) are not.
+    testable: >
+      Given ambiguous content, the LLM consistently scores maturity higher
+      rather than lower. Validated against a curated test set of borderline
+      content.
+
+opinionated_constraints:
+  - id: OC-100
+    constraint: "The system does not define 'appropriate' — the parent does"
+    rationale: >
+      No hardcoded content policy. No age-rating system (MPAA, ESRB, PEGI).
+      The parent sets a continuous threshold [0,1] and per-category overrides.
+      One parent's 0.5 is another parent's 0.3. The system provides the
+      maturity signal; the parent decides what to do with it. This is
+      consistent with the core principle: user-owned control, not platform
+      morality.
+    acceptable_loss: >
+      New parents must calibrate manually. Mitigation: labeled threshold
+      presets ('Young children', 'Teens', 'Mature teens') and example
+      items at each level.
+
+  - id: OC-101
+    constraint: "Single-user unfiltered mode is the default — parental controls are opt-in"
+    rationale: >
+      The product must not feel like a family/kids app by default. The
+      primary user is a professional adult. Parental controls are activated
+      explicitly from settings. Before activation, there is no profile
+      switcher, no maturity UI, no hint that the feature exists beyond a
+      'Family' section in settings.
+    acceptable_loss: >
+      A parent who buys the app specifically for their child must navigate
+      to settings to discover parental controls. Acceptable because the
+      target user is technically literate.
+
+  - id: OC-102
+    constraint: "Maturity is a continuous signal [0,1], not categorical ratings"
+    rationale: >
+      Categorical ratings (G, PG, PG-13, R) are culturally specific,
+      media-type specific, and too coarse for automated LLM assessment.
+      A continuous score lets the parent set their threshold anywhere.
+      The labeled presets ('Young children' = 0.2) provide the categorical
+      feel without the rigidity.
+    acceptable_loss: >
+      Users familiar with MPAA/ESRB ratings must map their expectations
+      to a slider. The threshold presets bridge this gap.
+
+  - id: OC-103
+    constraint: "Child profile UX is identical to adult — no 'kids mode' aesthetic"
+    rationale: >
+      A child using a visibly restricted app will resist using it. The
+      child's feed looks and feels like the full product — same layout,
+      same controls, same visual richness. Filtered items are invisible,
+      not grayed out or locked. The child doesn't know what they're not
+      seeing. This is intentional: effective parental controls are invisible
+      to the child.
+    acceptable_loss: >
+      A child may discover the app has parental controls (settings mention
+      'Family'). This is acceptable — the controls are PIN-protected, not
+      hidden by obscurity.

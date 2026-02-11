@@ -16,10 +16,18 @@ metadata:
   component: file-protection
   tags: [time-machine, file-protection, fanotify, rsync, nas, zfs, defense-in-depth]
 
+# DEPLOYMENT STATUS (2026-02-10):
+# Java daemon v2.0.0 code complete and tested, but deployment failed (jar filename
+# mismatch in systemd unit → 5,252 restart loop → service disabled).
+# NO FILE PROTECTION CURRENTLY ACTIVE. Needs redeployment.
+# Database: 272K versions from Python era, intact.
+# Blocking: fix jar path in service unit, re-enable, restart.
+
 stories:
   # === LAYER 1: Reactive versioning ===
 
   - name: fanotify-captures-every-write
+    status: NEEDS_REDEPLOYMENT
     description: Every file close-after-write in $HOME produces a versioned snapshot in the chunk store
     steps:
       - bash: "echo 'tm-e2e-capture-v1' > ~/tm-e2e-capture-test.txt && sleep 2 && echo 'tm-e2e-capture-v2' > ~/tm-e2e-capture-test.txt && sleep 2 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE file_path='/home/bw/tm-e2e-capture-test.txt';\""
@@ -27,6 +35,7 @@ stories:
       - GreaterOrEqual: 2
 
   - name: fanotify-content-hash-unique
+    status: NEEDS_REDEPLOYMENT
     description: Each distinct write produces a version with a unique content hash
     steps:
       - bash: "echo 'hash-test-alpha' > ~/tm-e2e-hash-test.txt && sleep 2 && echo 'hash-test-beta' > ~/tm-e2e-hash-test.txt && sleep 2 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(DISTINCT content_hash) FROM versions WHERE file_path='/home/bw/tm-e2e-hash-test.txt';\""
@@ -34,6 +43,7 @@ stories:
       - GreaterOrEqual: 2
 
   - name: fanotify-chunks-on-disk
+    status: NEEDS_REDEPLOYMENT
     description: Chunks referenced by a version actually exist on disk
     steps:
       - bash: "echo 'chunk-disk-check' > ~/tm-e2e-chunk-disk.txt && sleep 2 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT fc.chunk_hash FROM file_chunks fc JOIN versions v ON fc.version_id = v.id WHERE v.file_path='/home/bw/tm-e2e-chunk-disk.txt' ORDER BY v.id DESC LIMIT 1;\" | while read h; do p=\"${h:0:2}/${h:2:2}/$h\"; test -f ~/.local/share/time-machine/chunks/$p && echo 'exists' || echo 'missing'; done"
@@ -41,6 +51,7 @@ stories:
       - Contains: "exists"
 
   - name: fanotify-restore-round-trip
+    status: NEEDS_REDEPLOYMENT
     description: A file written and captured by the daemon can be reconstructed from chunks to match original content
     steps:
       - bash: "echo 'round-trip-content-12345' > ~/tm-e2e-roundtrip.txt && sleep 2 && VID=$(sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT id FROM versions WHERE file_path='/home/bw/tm-e2e-roundtrip.txt' ORDER BY id DESC LIMIT 1;\") && sudo /usr/lib/jvm/java-25-openjdk/bin/java -Duser.home=/home/bw --enable-native-access=ALL-UNNAMED -jar /home/bw/vault/programs/time-machine/build/libs/time-machine.jar restore /home/bw/tm-e2e-roundtrip.txt --version-id $VID --output /home/bw/tm-e2e-roundtrip-restored.txt 2>&1 && cat /home/bw/tm-e2e-roundtrip-restored.txt"
@@ -48,6 +59,7 @@ stories:
       - Contains: "round-trip-content-12345"
 
   - name: fastcdc-deduplication
+    status: NEEDS_REDEPLOYMENT
     description: Identical content across files produces shared chunks with ref_count > 1
     steps:
       - bash: "python3 -c \"import os; data = os.urandom(1024) * 1024; open(os.path.expanduser('~/tm-e2e-dedup-a.bin'), 'wb').write(data); open(os.path.expanduser('~/tm-e2e-dedup-b.bin'), 'wb').write(data)\" && sleep 3 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT max(c.ref_count) FROM chunks c JOIN file_chunks fc ON c.chunk_hash = fc.chunk_hash JOIN versions v ON fc.version_id = v.id WHERE v.file_path = '/home/bw/tm-e2e-dedup-a.bin';\""
@@ -55,6 +67,7 @@ stories:
       - GreaterOrEqual: 2
 
   - name: exclusion-patterns-enforced
+    status: NEEDS_REDEPLOYMENT
     description: Excluded paths never enter the chunk store
     steps:
       - bash: "mkdir -p ~/.cache/tm-e2e-excluded && echo 'should-not-version' > ~/.cache/tm-e2e-excluded/test.txt && sleep 2 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE file_path LIKE '/home/bw/.cache/tm-e2e-excluded%';\""
@@ -62,6 +75,7 @@ stories:
       - Equals: "0"
 
   - name: exclusion-node-modules
+    status: NEEDS_REDEPLOYMENT
     description: node_modules directories are excluded
     steps:
       - bash: "mkdir -p ~/tm-e2e-nm-test/node_modules && echo 'excluded' > ~/tm-e2e-nm-test/node_modules/test.txt && sleep 2 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE file_path LIKE '%tm-e2e-nm-test/node_modules%';\""
@@ -69,6 +83,7 @@ stories:
       - Equals: "0"
 
   - name: non-excluded-path-captured
+    status: NEEDS_REDEPLOYMENT
     description: Files in non-excluded home directories are captured
     steps:
       - bash: "echo 'included-file' > ~/tm-e2e-included.txt && sleep 2 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE file_path='/home/bw/tm-e2e-included.txt';\""
@@ -76,6 +91,7 @@ stories:
       - Greater: 0
 
   - name: large-file-rejection
+    status: NEEDS_REDEPLOYMENT
     description: Files exceeding MAX_FILE_SIZE (100MB) are not stored
     steps:
       - bash: "dd if=/dev/zero of=/home/bw/tm-e2e-largefile.bin bs=1M count=150 2>/dev/null && sleep 3 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE file_path='/home/bw/tm-e2e-largefile.bin';\" && rm -f /home/bw/tm-e2e-largefile.bin"
@@ -83,6 +99,7 @@ stories:
       - Equals: "0"
 
   - name: process-attribution-captured
+    status: NEEDS_REDEPLOYMENT
     description: Version records identify which process modified the file
     steps:
       - bash: "python3 -c \"open('/home/bw/tm-e2e-attribution.txt', 'w').write('from-python')\" && sleep 2 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT process_name FROM versions WHERE file_path='/home/bw/tm-e2e-attribution.txt' ORDER BY id DESC LIMIT 1;\""
@@ -90,6 +107,7 @@ stories:
       - Contains: "python"
 
   - name: process-attribution-pid
+    status: NEEDS_REDEPLOYMENT
     description: Process PID is recorded for each version
     steps:
       - bash: "sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE process_pid IS NOT NULL AND file_path LIKE '/home/bw/%' ORDER BY id DESC LIMIT 100;\""
@@ -97,6 +115,7 @@ stories:
       - Greater: 0
 
   - name: process-attribution-cmdline
+    status: NEEDS_REDEPLOYMENT
     description: Process command line is recorded for each version
     steps:
       - bash: "sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT process_cmdline FROM versions WHERE process_cmdline IS NOT NULL ORDER BY id DESC LIMIT 1;\""
@@ -104,6 +123,7 @@ stories:
       - NotEmpty
 
   - name: debounce-coalesces-rapid-writes
+    status: NEEDS_REDEPLOYMENT
     description: Multiple rapid writes to same file produce fewer versions than writes
     steps:
       - bash: "for i in $(seq 1 20); do echo \"rapid-write-$i\" > /home/bw/tm-e2e-debounce.txt; done && sleep 3 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE file_path='/home/bw/tm-e2e-debounce.txt';\""
@@ -112,6 +132,7 @@ stories:
       - GreaterOrEqual: 1
 
   - name: debounce-captures-final-state
+    status: NEEDS_REDEPLOYMENT
     description: After debounce fires, the captured version contains the final write content
     steps:
       - bash: "for i in $(seq 1 10); do echo \"debounce-state-$i\" > /home/bw/tm-e2e-debounce-final.txt; done && sleep 3 && VID=$(sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT id FROM versions WHERE file_path='/home/bw/tm-e2e-debounce-final.txt' ORDER BY id DESC LIMIT 1;\") && sudo /usr/lib/jvm/java-25-openjdk/bin/java -Duser.home=/home/bw --enable-native-access=ALL-UNNAMED -jar /home/bw/vault/programs/time-machine/build/libs/time-machine.jar restore /home/bw/tm-e2e-debounce-final.txt --version-id $VID --output /home/bw/tm-e2e-debounce-final-restored.txt 2>&1 && cat /home/bw/tm-e2e-debounce-final-restored.txt"
@@ -119,6 +140,7 @@ stories:
       - Contains: "debounce-state-10"
 
   - name: rename-preserves-history
+    status: NOT_IMPLEMENTED
     description: File rename creates path alias; queries follow rename chain
     steps:
       # TODO(rename-tracking): fanotify MOVED_FROM/MOVED_TO events not yet wired to path_aliases
@@ -129,6 +151,7 @@ stories:
       - Contains: "TODO"
 
   - name: delete-marks-timeline
+    status: NOT_IMPLEMENTED
     description: File deletion records a delete marker without losing previous versions
     steps:
       # TODO(delete-markers): FAN_DELETE events not yet generating operation='delete' versions
@@ -139,6 +162,7 @@ stories:
       - Contains: "TODO"
 
   - name: atomic-write-crash-recovery
+    status: DATA_INTACT
     description: Kill daemon mid-write; restart verifies no corruption
     steps:
       - bash: "sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions v LEFT JOIN file_chunks fc ON v.id = fc.version_id LEFT JOIN chunks c ON fc.chunk_hash = c.chunk_hash WHERE fc.chunk_hash IS NULL AND v.chunk_count > 0;\""
@@ -147,6 +171,7 @@ stories:
       - Equals: "0"
 
   - name: sqlite-wal-integrity
+    status: DATA_INTACT
     description: SQLite database passes integrity check
     steps:
       - bash: "sqlite3 ~/.local/share/time-machine/metadata.db 'PRAGMA integrity_check;'"
@@ -154,6 +179,7 @@ stories:
       - Equals: "ok"
 
   - name: daemon-service-running
+    status: NEEDS_REDEPLOYMENT
     description: time-machine.service is active and running
     steps:
       - bash: "systemctl is-active time-machine.service"
@@ -161,6 +187,7 @@ stories:
       - Equals: "active"
 
   - name: daemon-memory-bounded
+    status: NEEDS_REDEPLOYMENT
     description: Daemon memory stays within configured limit
     steps:
       - bash: "systemctl show time-machine.service --property=MemoryPeak --value | awk '{printf \"%.0f\", $1/1048576}'"
@@ -169,6 +196,7 @@ stories:
       - GreaterOrEqual: 0
 
   - name: fanotify-burst-throughput
+    status: NEEDS_REDEPLOYMENT
     description: Daemon keeps up with rapid file creation without event loss
     steps:
       - bash: "mkdir -p ~/tm-e2e-burst && for i in $(seq 1 100); do echo \"burst-$i\" > ~/tm-e2e-burst/file-$i.txt; done && sleep 10 && sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE file_path LIKE '/home/bw/tm-e2e-burst/file-%';\""
@@ -177,6 +205,7 @@ stories:
       - GreaterOrEqual: 90
 
   - name: migration-from-python-daemon
+    status: DATA_INTACT
     description: Import from Python file-version-daemon-v3 was completed successfully
     steps:
       - bash: "sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions;\""
@@ -185,6 +214,7 @@ stories:
       - Greater: 255000
 
   - name: cross-implementation-chunk-identity
+    status: DATA_INTACT
     description: Python cdc.py and Java FastCDC produce identical chunks for same input
     steps:
       # Migration is complete and dedup works across boundary, verifiable by checking
@@ -196,6 +226,7 @@ stories:
   # === LAYER 2: Periodic hardlink snapshots ===
 
   - name: snapshot-timer-active
+    status: NEEDS_REDEPLOYMENT
     description: Snapshot timer is enabled and running
     steps:
       - bash: "systemctl is-active time-machine-snapshot.timer"
@@ -203,6 +234,7 @@ stories:
       - Contains: "active"
 
   - name: hardlink-snapshot-creates-tree
+    status: NEEDS_REDEPLOYMENT
     description: Timer creates timestamped hardlink snapshot directories
     steps:
       - bash: "ls -d ~/.local/share/time-machine/snapshots/????-??-??_??-?? 2>/dev/null | wc -l"
@@ -210,6 +242,7 @@ stories:
       - Greater: 0
 
   - name: hardlink-snapshot-contains-files
+    status: NEEDS_REDEPLOYMENT
     description: Snapshot directories contain files from $HOME as hardlinks
     steps:
       - bash: "LATEST=$(ls -d ~/.local/share/time-machine/snapshots/????-??-??_??-?? 2>/dev/null | tail -1) && test -f \"$LATEST/.bashrc\" && stat -c '%h' \"$LATEST/.bashrc\""
@@ -218,6 +251,7 @@ stories:
       - Greater: 1
 
   - name: hardlink-snapshot-excludes-cache
+    status: NEEDS_REDEPLOYMENT
     description: Excluded directories (.cache) are absent from snapshots
     steps:
       - bash: "LATEST=$(ls -d ~/.local/share/time-machine/snapshots/????-??-??_??-?? 2>/dev/null | tail -1) && test -d \"$LATEST/.cache\" && echo 'present' || echo 'absent'"
@@ -225,6 +259,7 @@ stories:
       - Equals: "absent"
 
   - name: hardlink-snapshot-independent-of-daemon
+    status: NEEDS_REDEPLOYMENT
     description: Snapshot timer does not depend on time-machine.service
     steps:
       - bash: "systemctl show time-machine-snapshot.service --property=After --value | grep -c 'time-machine.service' || echo '0'"
@@ -232,6 +267,7 @@ stories:
       - Equals: "0"
 
   - name: hardlink-snapshot-24h-retention
+    status: NEEDS_REDEPLOYMENT
     description: No snapshots older than 24 hours exist
     steps:
       - bash: "find ~/.local/share/time-machine/snapshots -maxdepth 1 -type d -name '????-??-??_??-??' -mmin +1445 2>/dev/null | wc -l"
@@ -239,6 +275,7 @@ stories:
       - Equals: "0"
 
   - name: snapshot-script-exists
+    status: NEEDS_REDEPLOYMENT
     description: The bash snapshot script exists and is executable
     steps:
       - bash: "test -x ~/vault/programs/time-machine/bin/snapshot.sh && echo 'executable'"
@@ -246,6 +283,7 @@ stories:
       - Equals: "executable"
 
   - name: snapshot-uses-rsync-link-dest
+    status: NEEDS_REDEPLOYMENT
     description: Snapshot script uses rsync --link-dest for hardlink dedup
     steps:
       - bash: "grep -c 'link-dest\\|link_dest' ~/vault/programs/time-machine/bin/snapshot.sh"
@@ -255,6 +293,7 @@ stories:
   # === LAYER 3: Off-site archive (NAS) ===
 
   - name: archive-timer-active
+    status: NOT_IMPLEMENTED
     description: Archive timer is enabled and scheduled
     steps:
       - bash: "systemctl is-active time-machine-archive.timer"
@@ -262,6 +301,7 @@ stories:
       - Contains: "active"
 
   - name: archive-script-exists
+    status: NOT_IMPLEMENTED
     description: The bash archive script exists and is executable
     steps:
       - bash: "test -x ~/vault/programs/time-machine/bin/archive.sh && echo 'executable'"
@@ -269,6 +309,7 @@ stories:
       - Equals: "executable"
 
   - name: archive-script-uses-rsync
+    status: NOT_IMPLEMENTED
     description: Archive script uses rsync over SSH for chunk transfer to NAS
     steps:
       - bash: "grep -c 'rsync' ~/vault/programs/time-machine/bin/archive.sh"
@@ -276,6 +317,7 @@ stories:
       - Greater: 0
 
   - name: archive-script-excludes-cache
+    status: NOT_IMPLEMENTED
     description: Archive script excludes .cache from backup
     steps:
       - bash: "grep -c '\\.cache' ~/vault/programs/time-machine/bin/archive.sh"
@@ -283,6 +325,7 @@ stories:
       - Greater: 0
 
   - name: archive-config-target
+    status: NOT_IMPLEMENTED
     description: Archive target is configured in config.toml
     steps:
       - bash: "grep 'target' ~/.config/time-machine/config.toml"
@@ -290,6 +333,7 @@ stories:
       - Contains: "nas:"
 
   - name: archive-config-retention
+    status: NOT_IMPLEMENTED
     description: 600-day retention policy is configured
     steps:
       - bash: "grep 'layer3_days' ~/.config/time-machine/config.toml"
@@ -297,6 +341,7 @@ stories:
       - Contains: "600"
 
   - name: rsync-daily-backup-to-nas
+    status: NOT_IMPLEMENTED
     description: Daily timer pushes chunk store and metadata to NAS via rsync over SSH
     steps:
       # TODO(layer3-nas): NAS not yet connected
@@ -305,6 +350,7 @@ stories:
       - Contains: "TODO"
 
   - name: rsync-survives-local-destruction
+    status: NOT_IMPLEMENTED
     description: After sudo rm -rf /home, full recovery possible from NAS
     steps:
       # TODO(layer3-nas): NAS not yet connected; cannot test restore from NAS
@@ -313,6 +359,7 @@ stories:
       - Contains: "TODO"
 
   - name: zfs-encryption-at-rest
+    status: NOT_IMPLEMENTED
     description: Data on NAS is encrypted via ZFS native encryption (AES-256-GCM)
     steps:
       # TODO(layer3-nas): NAS not yet connected; cannot verify encryption
@@ -322,6 +369,7 @@ stories:
       - Contains: "TODO"
 
   - name: zfs-scrub-integrity
+    status: NOT_IMPLEMENTED
     description: Weekly ZFS scrub verifies integrity of all data on NAS
     steps:
       # TODO(layer3-nas): NAS not yet connected; cannot verify scrub
@@ -331,6 +379,7 @@ stories:
       - Contains: "TODO"
 
   - name: rsync-on-demand-push
+    status: NOT_IMPLEMENTED
     description: User can force immediate backup outside daily schedule via push CLI
     steps:
       # TODO(layer3-nas): NAS not yet connected; push command configured but untestable
@@ -341,6 +390,7 @@ stories:
   # === RECOVERY ===
 
   - name: cli-list-shows-versions
+    status: IMPLEMENTED
     description: time-machine list command shows Layer 1 versions for a tracked file
     steps:
       - bash: "sudo /usr/lib/jvm/java-25-openjdk/bin/java -Duser.home=/home/bw --enable-native-access=ALL-UNNAMED -jar /home/bw/vault/programs/time-machine/build/libs/time-machine.jar list /home/bw/.bashrc 2>&1"
@@ -348,6 +398,7 @@ stories:
       - Contains: "modify"
 
   - name: cli-restore-by-version-id
+    status: IMPLEMENTED
     description: time-machine restore recovers a specific version by ID
     steps:
       - bash: "echo 'restore-test-content' > ~/tm-e2e-cli-restore.txt && sleep 2 && VID=$(sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT id FROM versions WHERE file_path='/home/bw/tm-e2e-cli-restore.txt' ORDER BY id DESC LIMIT 1;\") && sudo /usr/lib/jvm/java-25-openjdk/bin/java -Duser.home=/home/bw --enable-native-access=ALL-UNNAMED -jar /home/bw/vault/programs/time-machine/build/libs/time-machine.jar restore /home/bw/tm-e2e-cli-restore.txt --version-id $VID --output /home/bw/tm-e2e-cli-restored.txt 2>&1 && cat /home/bw/tm-e2e-cli-restored.txt"
@@ -355,6 +406,7 @@ stories:
       - Contains: "restore-test-content"
 
   - name: cli-restore-output-path
+    status: IMPLEMENTED
     description: Restore --output writes to specified path instead of overwriting original
     steps:
       - bash: "echo 'output-path-test' > ~/tm-e2e-output-path.txt && sleep 2 && VID=$(sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT id FROM versions WHERE file_path='/home/bw/tm-e2e-output-path.txt' ORDER BY id DESC LIMIT 1;\") && sudo /usr/lib/jvm/java-25-openjdk/bin/java -Duser.home=/home/bw --enable-native-access=ALL-UNNAMED -jar /home/bw/vault/programs/time-machine/build/libs/time-machine.jar restore /home/bw/tm-e2e-output-path.txt --version-id $VID --output /home/bw/tm-e2e-output-alt.txt 2>&1 && test -f /home/bw/tm-e2e-output-alt.txt && echo 'output-file-exists'"
@@ -362,6 +414,7 @@ stories:
       - Contains: "output-file-exists"
 
   - name: cli-stats-shows-layers
+    status: IMPLEMENTED
     description: time-machine stats shows storage info for all layers
     steps:
       - bash: "sudo /usr/lib/jvm/java-25-openjdk/bin/java -Duser.home=/home/bw --enable-native-access=ALL-UNNAMED -jar /home/bw/vault/programs/time-machine/build/libs/time-machine.jar stats 2>&1"
@@ -371,6 +424,7 @@ stories:
       - Contains: "Dedup ratio"
 
   - name: cli-stats-version-count
+    status: IMPLEMENTED
     description: Stats shows correct version count
     steps:
       - bash: "sudo /usr/lib/jvm/java-25-openjdk/bin/java -Duser.home=/home/bw --enable-native-access=ALL-UNNAMED -jar /home/bw/vault/programs/time-machine/build/libs/time-machine.jar stats 2>&1 | grep 'Versions stored'"
@@ -378,6 +432,7 @@ stories:
       - NotEmpty
 
   - name: unified-recovery-search
+    status: NOT_IMPLEMENTED
     description: Single command searches all three layers for file versions
     steps:
       # TODO(unified-search): list command currently only queries Layer 1 (SQLite)
@@ -388,6 +443,7 @@ stories:
       - Contains: "TODO"
 
   - name: recovery-from-layer-2
+    status: IMPLEMENTED
     description: Restore file from hardlink snapshot when Layer 1 unavailable
     steps:
       - bash: "LATEST=$(ls -d ~/.local/share/time-machine/snapshots/????-??-??_??-?? 2>/dev/null | tail -1) && test -f \"$LATEST/.bashrc\" && cat \"$LATEST/.bashrc\" | head -1"
@@ -395,6 +451,7 @@ stories:
       - NotEmpty
 
   - name: recovery-from-layer-3
+    status: NOT_IMPLEMENTED
     description: Restore file from NAS when all local data destroyed
     steps:
       # TODO(layer3-nas): NAS not yet connected; cannot test NAS restore
@@ -403,6 +460,7 @@ stories:
       - Contains: "TODO"
 
   - name: recovery-directory-tree
+    status: NOT_IMPLEMENTED
     description: Restore entire directory recursively from any layer
     steps:
       # TODO(recursive-restore): recursive restore not yet implemented in CLI
@@ -413,6 +471,7 @@ stories:
   # === OPERATIONAL ===
 
   - name: config-file-valid
+    status: IMPLEMENTED
     description: config.toml exists and contains all required sections
     steps:
       - bash: "grep -c '\\[daemon\\]\\|\\[exclusions\\]\\|\\[retention\\]\\|\\[snapshot\\]\\|\\[archive\\]\\|\\[resources\\]' ~/.config/time-machine/config.toml"
@@ -420,6 +479,7 @@ stories:
       - GreaterOrEqual: 6
 
   - name: config-debounce-values
+    status: IMPLEMENTED
     description: Debounce is configured with 100ms quiet period and 1s max delay
     steps:
       - bash: "grep 'quiet_ms' ~/.config/time-machine/config.toml | grep -o '[0-9]*'"
@@ -427,6 +487,7 @@ stories:
       - Equals: "100"
 
   - name: config-debounce-max-delay
+    status: IMPLEMENTED
     description: Max delay is 1000ms
     steps:
       - bash: "grep 'max_delay_ms' ~/.config/time-machine/config.toml | grep -o '[0-9]*'"
@@ -434,6 +495,7 @@ stories:
       - Equals: "1000"
 
   - name: config-chunking-fastcdc
+    status: IMPLEMENTED
     description: Chunking algorithm is FastCDC
     steps:
       - bash: "grep 'algorithm' ~/.config/time-machine/config.toml"
@@ -441,6 +503,7 @@ stories:
       - Contains: "fastcdc"
 
   - name: config-chunking-sizes
+    status: IMPLEMENTED
     description: Chunk sizes are 8/16/32KB
     steps:
       - bash: "grep 'min_size\\|avg_size\\|max_size' ~/.config/time-machine/config.toml | tr '\\n' ' '"
@@ -450,6 +513,7 @@ stories:
       - Contains: "32768"
 
   - name: config-compression-zstd
+    status: IMPLEMENTED
     description: Compression is zstd level 3
     steps:
       - bash: "grep 'compression' ~/.config/time-machine/config.toml | head -1"
@@ -457,6 +521,7 @@ stories:
       - Contains: "zstd"
 
   - name: retention-layer1-90days
+    status: IMPLEMENTED
     description: Layer 1 retention is configured for 90 days
     steps:
       - bash: "grep 'layer1_days' ~/.config/time-machine/config.toml | grep -o '[0-9]*'"
@@ -464,6 +529,7 @@ stories:
       - Equals: "90"
 
   - name: retention-layer2-24hours
+    status: IMPLEMENTED
     description: Layer 2 retention is 24 hours (1440 minutes)
     steps:
       - bash: "grep 'layer2_minutes' ~/.config/time-machine/config.toml | grep -o '[0-9]*'"
@@ -471,6 +537,7 @@ stories:
       - Equals: "1440"
 
   - name: retention-layer3-600days
+    status: IMPLEMENTED
     description: Layer 3 retention is 600 days
     steps:
       - bash: "grep 'layer3_days' ~/.config/time-machine/config.toml | grep -o '[0-9]*'"
@@ -478,6 +545,7 @@ stories:
       - Equals: "600"
 
   - name: resource-limits-memory
+    status: IMPLEMENTED
     description: Daemon memory limit is set to 1G
     steps:
       - bash: "grep 'daemon_memory_max' ~/.config/time-machine/config.toml"
@@ -485,6 +553,7 @@ stories:
       - Contains: "1G"
 
   - name: resource-limits-cpu
+    status: IMPLEMENTED
     description: Resource CPU quotas are configured per layer
     steps:
       - bash: "grep 'cpu_quota' ~/.config/time-machine/config.toml | tr '\\n' ' '"
@@ -494,6 +563,7 @@ stories:
       - Contains: "50%"
 
   - name: storage-dedup-effective
+    status: IMPLEMENTED
     description: Dedup ratio demonstrates significant storage savings
     steps:
       - bash: "sudo /usr/lib/jvm/java-25-openjdk/bin/java -Duser.home=/home/bw --enable-native-access=ALL-UNNAMED -jar /home/bw/vault/programs/time-machine/build/libs/time-machine.jar stats 2>&1 | grep 'Dedup ratio' | grep -oP '[0-9]+\\.?[0-9]*'"
@@ -502,6 +572,7 @@ stories:
       - Greater: 1
 
   - name: database-indices-exist
+    status: IMPLEMENTED
     description: Required indices exist for query performance
     steps:
       - bash: "sqlite3 ~/.local/share/time-machine/metadata.db \".indices\" | wc -l"
@@ -509,6 +580,7 @@ stories:
       - GreaterOrEqual: 5
 
   - name: fanotify-mount-point
+    status: IMPLEMENTED
     description: Fanotify monitors root filesystem for full coverage
     steps:
       - bash: "grep 'mount_point' ~/.config/time-machine/config.toml"
@@ -516,6 +588,7 @@ stories:
       - Contains: "\"/\""
 
   - name: staging-dir-configured
+    status: IMPLEMENTED
     description: Staging directory is configured for atomic writes
     steps:
       - bash: "grep 'staging_dir' ~/.config/time-machine/config.toml"
@@ -523,6 +596,7 @@ stories:
       - Contains: ".staging"
 
   - name: schema-version-tracked
+    status: IMPLEMENTED
     description: Database schema version is tracked
     steps:
       - bash: "sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT value FROM schema_info WHERE key='version';\""
@@ -530,6 +604,7 @@ stories:
       - NotEmpty
 
   - name: retention-cleanup
+    status: DATA_INTACT
     description: Each layer enforces its retention policy automatically
     steps:
       # Layer 1 has 90-day retention; verify no ancient versions exist
@@ -538,6 +613,7 @@ stories:
       - Equals: "0"
 
   - name: storage-monitoring
+    status: IMPLEMENTED
     description: Stats command reports storage usage for each layer
     steps:
       - bash: "sudo /usr/lib/jvm/java-25-openjdk/bin/java -Duser.home=/home/bw --enable-native-access=ALL-UNNAMED -jar /home/bw/vault/programs/time-machine/build/libs/time-machine.jar stats 2>&1 | grep -c 'GB\\|MB'"

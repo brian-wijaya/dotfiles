@@ -137,7 +137,7 @@ cross_context:
 <vault_resource_management>
 Background indexing: vault-rag-watcher.service (file watcher, still Python)
 Resource modes: Conservative (8GB/50% CPU, user active) ↔ Aggressive (32GB/100% CPU, 6hr idle)
-Services: vault-rag-watcher.service, concierge.service
+Services: vault-rag-watcher.service (resource scaling managed by kinetic VaultResourceScaler)
 MCP recall tools: via kinetic (RECALL_search_hybrid, RECALL_index_documents, etc.)
 </vault_resource_management>
 
