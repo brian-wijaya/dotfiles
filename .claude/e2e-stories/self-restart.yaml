@@ -1,0 +1,98 @@
+title: "Claude Code Self-Restart"
+description: "Claude autonomously restarts itself using kinetic MCP tools when a restart is needed, preserving session context across the restart boundary"
+preconditions:
+  - "Kinetic MCP server running (act_execute_command, act_send_text_input, act_send_keystroke, sense_capture_screen_region, sense_read_process_list)"
+  - "Somatic MCP server running (somatic_post_message, somatic_get_focus)"
+  - "Recall MCP available (recall_save_session)"
+  - "X11 display available (xdotool)"
+  - "Claude Code running with --dangerously-skip-permissions (cld alias)"
+
+stories:
+
+  - id: SR01-tmux-restart
+    title: "Restart via tmux split-pane when inside tmux"
+    given: "Claude is running inside a tmux pane and needs to restart (e.g., MCP config changed)"
+    when: "Claude invokes the self-restart skill"
+    then:
+      - "Session context is saved via recall_save_session"
+      - "Current session UUID is extracted from JSONL files"
+      - "Current tmux pane ID is captured"
+      - "User is notified via somatic overlay"
+      - "Tmux pane splits horizontally; new pane receives focus"
+      - "Restart command is visibly typed into new pane via X11 input"
+      - "New Claude Code process starts and loads conversation history"
+      - "Old pane is killed after verification"
+    constraint: "Old pane must NOT be killed until new Claude process is confirmed running"
+
+  - id: SR02-xdotool-restart
+    title: "Restart via xdotool watchdog when not in tmux"
+    given: "Claude is running in a bare terminal (no tmux) and needs to restart"
+    when: "Claude invokes the self-restart skill"
+    then:
+      - "Session context is saved via recall_save_session"
+      - "Current session UUID is extracted"
+      - "Terminal X11 window ID is captured via somatic_get_focus"
+      - "Claude PID is identified"
+      - "A detached watchdog process is spawned (nohup/disown)"
+      - "Claude process receives SIGINT twice (simulating C-c C-c)"
+      - "Shell prompt returns in terminal"
+      - "Watchdog types restart command into terminal via xdotool --window"
+      - "New Claude Code process starts with resumed session"
+
+  - id: SR03-auto-detect-method
+    title: "Auto-detect tmux vs bare terminal"
+    given: "Claude needs to restart but doesn't know the terminal environment"
+    when: "The self-restart skill checks for $TMUX"
+    then:
+      - "If $TMUX is set, Method A (tmux split-pane) is used"
+      - "If $TMUX is empty, Method B (xdotool watchdog) is used"
+      - "If neither tmux nor X11 is available, Claude tells the user to restart manually"
+
+  - id: SR04-session-continuity
+    title: "Conversation history survives restart"
+    given: "Claude has an active conversation with tool calls and context"
+    when: "A self-restart completes and the new session loads"
+    then:
+      - "New Claude sees the full conversation history via --resume UUID"
+      - "The last messages show the restart was triggered by the skill"
+      - "MCP tools from the new/modified configuration are available"
+      - "Claude can continue working without re-explanation from user"
+
+  - id: SR05-verification-before-kill
+    title: "Verify new session before killing old one (tmux method)"
+    given: "Claude has split the pane and typed the restart command"
+    when: "The new Claude Code process is starting up"
+    then:
+      - "Old Claude takes a screenshot to visually verify new session"
+      - "Old Claude checks process list for new claude PID"
+      - "Only after both checks pass does old Claude kill its own pane"
+      - "If verification fails, old Claude reports the error instead of killing the pane"
+    constraint: "Screenshot and process check must both succeed before kill-pane"
+
+  - id: SR06-session-save-before-restart
+    title: "Persist session context before dying"
+    given: "Claude is about to restart"
+    when: "The self-restart procedure begins"
+    then:
+      - "recall_save_session is called with summary, topics, and key_facts"
+      - "key_facts includes restart reason and restart-pending flag"
+      - "Session JSONL on disk is complete up to the last tool call"
+
+  - id: SR07-restart-failure-recovery
+    title: "Recover when new Claude fails to start"
+    given: "The restart command was issued but new Claude didn't start"
+    when: "Tmux: screenshot shows error; xdotool: watchdog timeout (24s)"
+    then:
+      - "Tmux: old Claude reports error to user, does NOT kill old pane"
+      - "xdotool: watchdog types 'cld --continue' as fallback recovery"
+      - "User retains access to a working terminal in all failure modes"
+    constraint: "No failure mode should leave the user with a dead terminal"
+
+  - id: SR08-no-tmux-no-x11
+    title: "Graceful degradation without tmux or X11"
+    given: "Claude is running in an environment without tmux and without X11 (e.g., SSH without forwarding)"
+    when: "Claude determines a restart is needed"
+    then:
+      - "Claude tells the user to restart manually"
+      - "Claude provides the exact command: cld --resume <UUID>"
+      - "No automated restart is attempted"

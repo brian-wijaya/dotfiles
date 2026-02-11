@@ -1,0 +1,297 @@
+title: "Content Budget Lock & Platform Embedding"
+status: draft
+version: 1
+
+user_stories:
+  - id: US-030
+    as: "user setting content budgets"
+    i_want: "to set time limits per content type (video, audio, social, articles)"
+    so_that: "I enforce my own information diet without relying on willpower"
+    acceptance:
+      - per-type daily budgets: video hours, audio hours, social minutes, article count
+      - budgets are configurable per day-of-week (weekday vs weekend profiles)
+      - budget period configurable: daily, weekly, rolling window
+      - budgets apply across all feeds (main + custom)
+      - budget state persists across app sessions
+      - budget resets at user-configured time (default: midnight local)
+      - multiple budget profiles saveable (e.g., "workday", "weekend", "vacation")
+
+  - id: US-031
+    as: "user watching a video when budget expires"
+    i_want: "the video to pause in place and show my budget status"
+    so_that: "I'm stopped without losing my place"
+    acceptance:
+      - video is programmatically paused via platform API (not killed)
+      - YouTube IFrame player is collapsed/hidden (NOT overlaid — ToS compliance)
+      - budget UI appears in place of the collapsed player
+      - budget UI shows: simplified bar, current watch time, time until available
+      - budget UI is inline on the content block, not a modal
+      - user can scroll past the blocked item — feed browsing continues
+      - item is implicitly saved for later (resume position preserved)
+      - tapping the thumbnail while over budget shows curt acknowledgment + budget bar
+      - no lecture, no guilt, no "are you sure?" — just the numbers
+
+  - id: US-032
+    as: "user who taps a YouTube thumbnail"
+    i_want: "the video to play seamlessly inside Actual Feed"
+    so_that: "I get the full video experience without leaving my feed"
+    acceptance:
+      - YouTube video plays via official IFrame Player API in WebView
+      - YouTube's native controls are shown (required by YouTube ToS)
+      - YouTube branding is preserved (required by YouTube ToS)
+      - no overlay on top of YouTube player at any time (required by YouTube ToS)
+      - video plays inline in the feed (expand-in-place) or in a detail view
+      - Actual Feed tracks playback time for budget accounting
+      - on budget expiry: pause → collapse player → show budget UI
+      - on exit: return to feed at same scroll position
+      - YouTube ads may appear (YouTube controls this; we do not interfere)
+
+  - id: US-033
+    as: "user viewing tweets in my feed"
+    i_want: "rich tweet rendering that looks native"
+    so_that: "I see the tweet content without visiting Twitter"
+    acceptance:
+      - tweets rendered via X/Twitter oEmbed API
+      - rich rendering: text, images, quoted tweets, threads
+      - no engagement metrics (likes, retweets stripped by Actual Feed's layer)
+      - tap to open original in external browser
+      - no playback budget implications (tweets are not timed content)
+
+  - id: US-034
+    as: "user viewing Stack Overflow content"
+    i_want: "answers rendered natively with proper attribution"
+    so_that: "I read the answer without visiting the site"
+    acceptance:
+      - content rendered natively (not in WebView) from API data
+      - code blocks syntax-highlighted
+      - CC BY-SA attribution shown (required by license)
+      - tap to open original for full context / comments
+
+  - id: US-035
+    as: "user listening to audio feed"
+    i_want: "audio to pause when my audio budget expires"
+    so_that: "my listening time is managed like my video time"
+    acceptance:
+      - audio playback paused via standard media APIs
+      - budget UI appears on the audio player widget
+      - playback position preserved for resume
+      - background audio on mobile: pauses even when app is backgrounded
+      - notification shown: "Audio budget reached. Resumes in Xh Xm."
+
+  - id: US-036
+    as: "user who exceeded budget but wants to override"
+    i_want: "a parental lock PIN to extend or override budget"
+    so_that: "I can't casually override my own limits in a weak moment"
+    acceptance:
+      - optional PIN lock on budget override (user sets their own PIN)
+      - PIN entry required to: extend budget, disable budget temporarily, change limits
+      - PIN can be shared with accountability partner (spouse, friend, coach)
+      - without PIN: budget is hard-enforced, no override possible
+      - with PIN: override grants a configurable extension (e.g., +30min, +1hr)
+      - override events are logged (self-accountability audit trail)
+      - PIN is optional — user can choose soft budgets (dismissable) or hard (PIN-locked)
+
+platform_embedding:
+  principle: >
+    Actual Feed embeds platform content using each platform's OFFICIAL embed
+    mechanism. This is legally defensible because these APIs exist specifically
+    to allow third-party embedding. The key legal constraints are:
+    (1) YouTube: no overlays on the player, must show native controls/branding
+    (2) Twitter/X: oEmbed rendering must preserve tweet attribution
+    (3) Stack Overflow: CC BY-SA requires attribution
+    Budget enforcement works by programmatically controlling playback (pause)
+    and then replacing the embed with Actual Feed's own budget UI. No overlay
+    on any platform's player at any time.
+
+  platforms:
+    youtube:
+      method: "IFrame Player API in WebView"
+      legal_basis: "Official YouTube embed API, commercial use permitted"
+      constraints:
+        - "No overlays on player at any time"
+        - "Must show YouTube native controls and branding"
+        - "Must not interfere with YouTube ad delivery"
+        - "Minimum viewport 200×200px"
+        - "Must provide HTTP Referer header"
+      budget_enforcement: >
+        Programmatic pause via player.pauseVideo() → collapse/hide iframe →
+        show budget UI in place of collapsed player. No overlay violation.
+      resume: "player.seekTo(savedPosition) → player.playVideo()"
+
+    twitter_x:
+      method: "oEmbed API for rich tweet rendering"
+      legal_basis: "Official Twitter embed endpoint"
+      constraints:
+        - "Must preserve tweet attribution"
+        - "Commercial redistribution of content requires care"
+      budget_enforcement: "Tweets are static content, no playback timer"
+
+    reddit:
+      method: "Native rendering from Reddit API data"
+      legal_basis: "Reddit API terms (paid tier for commercial use)"
+      constraints:
+        - "Must comply with Reddit API terms of service"
+        - "Commercial use requires Reddit API paid tier"
+      budget_enforcement: "Text content, no playback timer applicable"
+
+    stack_overflow:
+      method: "Native rendering with attribution"
+      legal_basis: "CC BY-SA 4.0 license"
+      constraints:
+        - "Must display CC BY-SA attribution"
+        - "Must link to original"
+      budget_enforcement: "Text content, no playback timer applicable"
+
+    web_articles:
+      method: "WebView or native text rendering from extracted content"
+      legal_basis: "Standard web browsing / fair use for excerpts"
+      constraints:
+        - "Full article reproduction may violate copyright"
+        - "Excerpts with links to original are defensible"
+      budget_enforcement: "Article count budget, not time-based"
+
+    audio_podcasts:
+      method: "Direct audio playback via standard media APIs"
+      legal_basis: "Depends on source (RSS feeds are intended for distribution)"
+      constraints:
+        - "RSS-distributed podcasts: legal to play"
+        - "Must attribute source"
+      budget_enforcement: "Programmatic pause via MediaPlayer API"
+
+collective_lifetime_stories:
+  - id: CL-030
+    title: "YouTube ToS evolution and embed restrictions"
+    description: >
+      YouTube has historically tightened embed restrictions over time.
+      The deprecated Android Player API (2015, never updated) was replaced
+      by IFrame-in-WebView. Future changes may restrict programmatic pause,
+      require additional branding, or limit third-party embed contexts.
+      The system must monitor YouTube API changelog and adapter must be
+      independently updatable.
+    worst_case: >
+      YouTube prohibits third-party app embeds entirely. Fallback: deep link
+      to YouTube app (legal, but loses seamless experience). Budget enforcement
+      moves to OS-level (monitor YouTube app foreground time via accessibility
+      services — legally and technically complex).
+
+  - id: CL-031
+    title: "Budget gaming and self-deception"
+    description: >
+      Users will game their own budgets. They'll create new feeds without
+      budgets, change the clock, or find content that doesn't count toward
+      budget (e.g., articles when video budget is exhausted). This is
+      expected and acceptable — the budget is self-imposed, not adversarial.
+      The system should make gaming VISIBLE (audit trail) rather than
+      impossible. The PIN lock is for users who want harder enforcement.
+    worst_case: >
+      User sets up elaborate budget gaming system, defeats their own
+      discipline tool, blames the product. Mitigation: audit trail,
+      optional accountability partner who can see usage stats.
+
+  - id: CL-032
+    title: "Platform ad revenue and embed economics"
+    description: >
+      YouTube embeds may serve ads. This is YouTube's right and our compliance.
+      However, if YouTube changes ad behavior in embeds (e.g., more frequent
+      ads, unskippable pre-rolls), the user experience in Actual Feed degrades
+      without our control. The system must be transparent: "Video ads are
+      served by YouTube, not by Actual Feed." If ad experience becomes
+      intolerable, user can switch to "open in YouTube app" mode.
+    worst_case: >
+      YouTube makes embedded player ad experience significantly worse than
+      native app to discourage third-party embedding. This is an economic
+      pressure tool. Fallback: deep link to YouTube app.
+
+  - id: CL-033
+    title: "Reddit API pricing and commercial access"
+    description: >
+      Reddit's 2023 API pricing changes killed most third-party clients.
+      Commercial use of Reddit API requires paid access. This cost must be
+      passed through to users who enable Reddit as a source in their
+      premium subscription. If Reddit raises API prices again, the
+      per-source cost in the à la carte subscription must adjust.
+    worst_case: >
+      Reddit prices API access out of reach. Reddit source becomes unavailable.
+      Users notified, source auto-unticked, subscription price adjusted.
+      No silent degradation.
+
+enforced_constraints:
+  - id: EC-030
+    constraint: "No overlay on YouTube embedded player at any time"
+    type: legal
+    rationale: "YouTube API ToS Required Minimum Functionality explicitly prohibits this"
+    testable: >
+      During video playback, no DOM element from Actual Feed is positioned
+      above the YouTube iframe. Budget UI only appears after iframe is
+      collapsed/hidden.
+
+  - id: EC-031
+    constraint: "YouTube native controls and branding must be visible during playback"
+    type: legal
+    rationale: "YouTube API ToS requires native player UI elements"
+    testable: "YouTube IFrame player renders with default controls enabled"
+
+  - id: EC-032
+    constraint: "CC BY-SA attribution for Stack Overflow content"
+    type: legal
+    rationale: "Stack Overflow content is licensed CC BY-SA 4.0"
+    testable: "Every SO-sourced FeedItem displays attribution and link to original"
+
+  - id: EC-033
+    constraint: "Budget override requires PIN when PIN-lock is enabled"
+    type: user control
+    rationale: "The user asked for austere protection. Casual override defeats the purpose."
+    testable: "With PIN-lock on, no UI path allows budget extension without PIN entry"
+
+  - id: EC-034
+    constraint: "Budget enforcement works via pause-then-collapse, never overlay"
+    type: legal + design
+    rationale: >
+      The pattern for ALL platform embeds: programmatically pause/stop →
+      hide/collapse the platform embed → show Actual Feed's budget UI in
+      the vacated space. This satisfies YouTube ToS and creates a consistent
+      UX across all content types.
+    testable: >
+      For every platform embed type: verify that budget UI is never rendered
+      as a sibling/child positioned above the platform embed element.
+
+opinionated_constraints:
+  - id: OC-030
+    constraint: "Budget is per-content-type, not per-app or per-source"
+    rationale: >
+      OS-level screen time (Apple, Google) is per-app. That's too coarse —
+      it blocks the entire app. Per-source (YouTube vs Reddit) fragments
+      the diet concept. Per-content-type (video hours, audio hours, social
+      minutes, article count) maps to how humans actually think about
+      information consumption. 'I should watch less video' is a real
+      thought. 'I should use less Reddit' is less actionable.
+    acceptable_loss: >
+      A user watching YouTube AND Vimeo AND conference talks gets all video
+      pooled into one budget. They can't say 'YouTube bad, conference talks
+      unlimited.' If this becomes a demand, per-source budgets can layer
+      on top of per-type budgets in a future version.
+
+  - id: OC-031
+    constraint: "Soft budgets (dismissable) as default, hard budgets (PIN) as opt-in"
+    rationale: >
+      The product philosophy is user control, not parental control by default.
+      Soft budgets are a nudge. Hard budgets are for users who explicitly want
+      enforcement. Default to soft because the product must not feel preachy.
+      The PIN-lock is for users who have decided they need it.
+    acceptable_loss: >
+      Soft budgets are easy to dismiss. Users who need hard limits must
+      explicitly enable PIN-lock. This is intentional friction — the
+      decision to restrict yourself should be deliberate.
+
+  - id: OC-032
+    constraint: "Budget UI is inline, not modal — feed browsing continues"
+    rationale: >
+      When a video pauses for budget, the user should not be trapped. They
+      can scroll past, browse other content types, read articles. The budget
+      blocks the specific content type, not the entire app. This reinforces
+      'create your own diet' rather than 'stop using the app.'
+    acceptable_loss: >
+      User sees blocked video thumbnails interspersed with available content.
+      This is a constant visual reminder of their budget, which may feel
+      nagging. But it's honest — the blocked items exist, you just can't
+      play them yet. Better than hiding them entirely.

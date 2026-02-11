@@ -1,0 +1,408 @@
+title: "Emacs Client — First-Class Text Interface"
+status: draft
+version: 1
+
+principle: >
+  Emacs is not an afterthought or a novelty integration. It is a first-class
+  client with the same capabilities as mobile and desktop GUI clients. The
+  target user (senior engineers, researchers, terminal-centric professionals)
+  may live in Emacs 8+ hours per day. For them, a GUI app is the secondary
+  interface — Emacs is primary. The Emacs client must feel native: buffer-
+  based rendering, keyboard-first navigation, composable with org-mode and
+  other Emacs packages, configurable via Elisp. No Electron. No embedded
+  browser. No web view. Pure text, structured data, Emacs idioms.
+
+  The Emacs client is a thin presentation layer over the same JSON-RPC API
+  that powers the GUI clients. It does not run its own crawler, LLM, or
+  ranking engine. It connects to the local Actual Feed backend (Java process)
+  via JSON-RPC over HTTP or Unix domain socket. The backend is authoritative
+  for all data and logic. The Emacs client renders, navigates, and sends
+  user actions.
+
+architecture:
+  communication:
+    protocol: "JSON-RPC 2.0 over HTTP (localhost) or Unix domain socket"
+    description: >
+      The Actual Feed backend exposes a JSON-RPC API on localhost. The
+      Emacs client is a JSON-RPC client. Same API used by GUI clients.
+      Unix domain socket preferred on Linux (lower latency, no port
+      conflicts). HTTP fallback for macOS/Windows compatibility.
+    api_surface:
+      - { method: "feed.list", params: "{feed_id, offset, limit, preset_id}", returns: "List<FeedItemSummary>" }
+      - { method: "feed.getItem", params: "{item_id}", returns: "FeedItemFull (all fields + score breakdown)" }
+      - { method: "feed.refresh", params: "{feed_id}", returns: "RefreshStatus" }
+      - { method: "feed.search", params: "{query, filters}", returns: "List<SearchResult>" }
+      - { method: "interaction.record", params: "{item_id, type, context}", returns: "ack" }
+      - { method: "tripwire.list", params: "{}", returns: "List<Tripwire>" }
+      - { method: "tripwire.create", params: "{name, condition, severity}", returns: "Tripwire" }
+      - { method: "preset.list", params: "{}", returns: "List<Preset>" }
+      - { method: "preset.apply", params: "{feed_id, preset_id}", returns: "ack" }
+      - { method: "budget.status", params: "{}", returns: "BudgetSummary per content type" }
+      - { method: "config.get", params: "{key}", returns: "value" }
+      - { method: "config.set", params: "{key, value}", returns: "ack" }
+      - { method: "status.pipeline", params: "{}", returns: "PipelineStatus (items processed, queue depth, errors)" }
+
+  package_structure:
+    name: "actual-feed.el"
+    dependencies:
+      - "json.el (built-in Emacs 27+)"
+      - "url.el (built-in, for HTTP JSON-RPC)"
+      - "org.el (built-in, for org-mode integration)"
+      - "transient.el (for prefix key menus, ships with Emacs 29+)"
+    optional_dependencies:
+      - "evil (for Evil mode keybindings)"
+      - "mpv.el (for mpv integration)"
+      - "embark (for contextual actions)"
+      - "consult (for completing-read search)"
+
+  buffer_types:
+    feed_buffer:
+      name: "*actual-feed: {feed_name}*"
+      description: >
+        Main feed view. Each item is rendered as a structured text block
+        with properties. Items are separated by horizontal rules. The
+        buffer is read-only except for interactive elements (thumbs-up/down
+        buttons rendered as text buttons). Scrolling loads more items
+        (infinite scroll via scroll hooks or explicit 'load more').
+      rendering: >
+        Each FeedItem renders as:
+        ┌─────────────────────────────────────────┐
+        │ [source_icon] Author Name · 2h ago  [▲][▼]│
+        │ Title of the Item                        │
+        │ 2-4 line summary from LLM extraction     │
+        │ ⟨video 12:34⟩ ⟨credibility: 0.82⟩       │
+        │ [tripwire: Security Advisory] (if fired) │
+        │ Score: 0.74 [formula: 0.71 neural: +0.05 │
+        │              exploration: no]             │
+        └─────────────────────────────────────────┘
+        Text properties store item_id, source_url, modality, scores
+        on each block. Point-based navigation jumps between items.
+
+    item_detail_buffer:
+      name: "*actual-feed-item: {title}*"
+      description: >
+        Full item view. Shows all extracted data: full summary, entities,
+        claims with source links, topic labels, complete feature vector
+        with labeled bars, score breakdown across all three layers.
+        For articles: rendered extracted text (Readability output).
+        For tweets: full tweet text with quoted tweets.
+        For SO: question + answer with syntax-highlighted code blocks.
+      rendering: >
+        Org-mode compatible markup. Headers for sections (Summary,
+        Entities, Claims, Feature Vector, Score Breakdown). Code blocks
+        rendered with font-lock. Links are clickable (browse-url).
+
+    search_buffer:
+      name: "*actual-feed-search: {query}*"
+      description: >
+        Search results from FTS5 query. Each result shows: title,
+        highlighted snippet, source, date, relevance score. Navigate
+        results with n/p, open item with RET.
+
+    tripwire_buffer:
+      name: "*actual-feed-tripwires*"
+      description: >
+        Tripwire management. List of all tripwires with: name, severity,
+        enabled/disabled, last fired, fire count. CRUD operations via
+        keyboard shortcuts. Fire history accessible per tripwire.
+
+    budget_buffer:
+      name: "*actual-feed-budget*"
+      description: >
+        Budget dashboard. Per-content-type consumption bars rendered as
+        ASCII progress bars. Current period stats. Override history.
+        Budget profile selector.
+
+    pipeline_buffer:
+      name: "*actual-feed-pipeline*"
+      description: >
+        Pipeline status. Items in queue, items processing, items failed.
+        Compute budget bar rendered as ASCII segments. Model info.
+        Re-extraction trigger.
+
+  keybindings:
+    description: >
+      Keybindings follow Emacs conventions. Evil-compatible via
+      evil-define-key in actual-feed-mode-map. Transient prefix menus
+      for complex operations.
+    feed_buffer:
+      - { key: "n / j", action: "Next item" }
+      - { key: "p / k", action: "Previous item" }
+      - { key: "RET", action: "Open item detail" }
+      - { key: "o", action: "Open original source in browser (browse-url)" }
+      - { key: "+", action: "Thumbs up" }
+      - { key: "-", action: "Thumbs down" }
+      - { key: "D", action: "Obliterate (with confirmation)" }
+      - { key: "s", action: "Save for later" }
+      - { key: "/ or C-s", action: "Search feed" }
+      - { key: "g", action: "Refresh feed" }
+      - { key: "P", action: "Play audio/video (mpv)" }
+      - { key: "t", action: "Transient: tripwire actions" }
+      - { key: "b", action: "Budget dashboard" }
+      - { key: "c", action: "Transient: configuration" }
+      - { key: "?", action: "Score breakdown for item at point" }
+      - { key: "C-c C-l", action: "Org-capture item as link" }
+      - { key: "C-c C-a", action: "Annotate item (stored as org note)" }
+      - { key: "q", action: "Bury buffer" }
+
+  org_mode_integration:
+    description: >
+      Deep integration with org-mode for personal knowledge management.
+      Feed items can be captured, annotated, tagged, and linked into
+      the user's org files. This bridges consumption (Actual Feed) with
+      retention (org-mode).
+    features:
+      - capture: >
+          org-capture template for feed items. Captures: title, source URL,
+          summary, user annotation, timestamp. Template is customizable.
+          Default files to user's configured org-capture-templates location.
+      - links: >
+          Custom org-link type: [[actual-feed:item_id][Title]]. Clicking
+          the link opens the item in actual-feed item detail buffer.
+          Links resolve via JSON-RPC to the local backend.
+      - tags: >
+          Items captured to org inherit their topic labels as org tags.
+          User can add custom tags. Tags are stored in org, not synced
+          back to Actual Feed (org is the user's sovereign territory).
+      - agenda: >
+          Tripwire fires can be configured to create org-agenda TODOs:
+          'TODO Review: [tripwire_name] fired on [item_title]'. Agenda
+          integration is opt-in.
+      - export: >
+          Feed search results can be exported as an org buffer (org-table
+          format) for further processing, filtering, or archival.
+
+  media_playback:
+    description: >
+      Audio and video playback via external player integration. Emacs
+      does not render video. It delegates to mpv (preferred) or VLC.
+    mpv_integration:
+      - "P on a video item → mpv opens with the source URL (YouTube, etc.)"
+      - "mpv.el provides Emacs-side playback control (pause, seek, volume)"
+      - "Playback time tracked via mpv's IPC socket → reported to backend for budget"
+      - "Budget enforcement: backend sends pause command via mpv IPC when budget exceeded"
+      - "Audio items: mpv plays in background, Emacs shows playback status in mode-line"
+    fallback: >
+      If mpv is not installed, browse-url opens the source URL in the
+      default browser. Budget tracking is lost (no IPC). The system warns:
+      'Install mpv for integrated playback and budget tracking.'
+
+  notifications:
+    description: >
+      Tripwire notifications appear in a dedicated *actual-feed-alerts*
+      buffer. Desktop notifications via notifications.el or alert.el
+      (D-Bus on Linux, terminal-notifier on macOS). Mode-line indicator
+      shows unread alert count.
+    implementation:
+      - "*actual-feed-alerts* buffer: append-only log of tripwire fires"
+      - "Mode-line lighter: [AF:3] = 3 unread alerts"
+      - "Optional: alert.el integration for OS-level notifications"
+      - "Optional: sounds via play-sound-file for critical tripwires"
+
+  configuration:
+    description: >
+      All configuration is Elisp. Custom variables with defcustom for
+      Customize UI compatibility. Advanced users configure via init.el.
+    variables:
+      - { name: actual-feed-backend-url, default: "http://localhost:7890", description: "JSON-RPC endpoint" }
+      - { name: actual-feed-backend-socket, default: "/tmp/actual-feed.sock", description: "Unix socket (preferred on Linux)" }
+      - { name: actual-feed-default-feed, default: "main", description: "Feed shown on M-x actual-feed" }
+      - { name: actual-feed-items-per-page, default: 25, description: "Items loaded per scroll page" }
+      - { name: actual-feed-player-command, default: "mpv", description: "External media player" }
+      - { name: actual-feed-org-capture-key, default: "f", description: "Org-capture dispatch key for feed items" }
+      - { name: actual-feed-show-scores, default: true, description: "Show score breakdown in feed buffer" }
+      - { name: actual-feed-evil-bindings, default: true, description: "Enable Evil-compatible keybindings" }
+      - { name: actual-feed-modeline-alerts, default: true, description: "Show alert count in mode-line" }
+
+user_stories:
+  - id: US-070
+    as: "Emacs user"
+    i_want: "to browse my feed without leaving Emacs"
+    so_that: "my information consumption stays in my primary work environment"
+    acceptance:
+      - M-x actual-feed opens feed buffer with ranked items
+      - keyboard navigation between items (n/p or j/k)
+      - RET opens full item detail in a split window
+      - o opens original source in external browser
+      - feed refreshes with g (pulls from backend)
+      - all interaction (thumbs up/down, obliterate) works from keyboard
+      - no mouse required for any operation
+
+  - id: US-071
+    as: "Emacs user who found something worth keeping"
+    i_want: "to capture a feed item into my org files"
+    so_that: "my knowledge management system grows from my feed consumption"
+    acceptance:
+      - C-c C-l on a feed item creates an org-capture entry
+      - captured entry includes: title, URL, summary, date, user annotation
+      - org-link [[actual-feed:id]] resolves to item detail buffer
+      - custom org-capture template configurable via actual-feed-org-capture-template
+      - tags from feed item topics are carried into org entry
+
+  - id: US-072
+    as: "Emacs user who wants to listen while coding"
+    i_want: "to play audio/video from my feed via mpv"
+    so_that: "I absorb content without switching windows"
+    acceptance:
+      - P on audio/video item starts mpv with source URL
+      - playback controls available from Emacs (mpv.el IPC)
+      - mode-line shows: currently playing title, elapsed time
+      - budget tracking via mpv IPC → backend reports consumption
+      - budget exceeded → mpv paused programmatically, mode-line shows budget status
+      - next audio item in queue auto-plays (autoplay mode)
+
+  - id: US-073
+    as: "Emacs user who edits config as code"
+    i_want: "to configure Actual Feed entirely from Elisp"
+    so_that: "my feed setup is version-controlled alongside my init.el"
+    acceptance:
+      - all settings exposed as defcustom variables
+      - presets expressible as Elisp alists, settable via actual-feed-set-preset
+      - tripwires creatable programmatically: (actual-feed-create-tripwire ...)
+      - feed configuration exportable as Elisp s-expressions
+      - config changes take effect via actual-feed-apply-config (JSON-RPC to backend)
+
+  - id: US-074
+    as: "Emacs user who uses consult/embark"
+    i_want: "completing-read integration for feed search and actions"
+    so_that: "my feed integrates with my existing Emacs completion framework"
+    acceptance:
+      - actual-feed-search uses completing-read (works with vertico, ivy, helm)
+      - consult source for feed items (consult-actual-feed)
+      - embark actions on feed items: open, thumbs-up, thumbs-down, capture, play
+      - marginalia annotations show: source, modality, score
+
+  - id: US-075
+    as: "Emacs user reading a Stack Overflow answer"
+    i_want: "syntax-highlighted code blocks in the item detail buffer"
+    so_that: "code is readable without opening the browser"
+    acceptance:
+      - code blocks in item detail rendered with appropriate major-mode font-lock
+      - language detection from SO tags or LLM extraction
+      - code blocks are copyable (kill-ring integration)
+      - surrounding text rendered as org-mode compatible markup
+
+collective_lifetime_stories:
+  - id: CL-070
+    title: "Emacs version fragmentation and package compatibility"
+    description: >
+      Emacs users run versions from 27 to 30+. Package must support
+      Emacs 27.1+ as minimum (json.el, url.el available). Features
+      requiring newer Emacs (transient.el in 29+, native JSON in 28+)
+      must degrade gracefully. Evil mode integration must handle Evil
+      being absent (all keybindings have non-Evil equivalents).
+    worst_case: >
+      Emacs 27 user on ancient Debian stable. No transient.el, no
+      native-comp, slow JSON parsing. Package must work, just without
+      transient menus (fallback to simple key dispatch) and with slower
+      JSON-RPC round-trips.
+
+  - id: CL-071
+    title: "mpv availability and version differences"
+    description: >
+      mpv is the preferred media player but is not universally installed.
+      macOS users may have IINA (mpv fork). Windows users may have VLC.
+      The player integration must be pluggable: mpv.el for mpv, a VLC
+      shim, or bare browse-url as last resort. Budget tracking quality
+      degrades with each fallback level (mpv: precise IPC, VLC: less
+      precise, browser: no tracking).
+    worst_case: >
+      No media player installed. All playback falls back to browse-url.
+      Budget tracking for audio/video is lost on Emacs client. Budget
+      still enforced on GUI clients. Emacs user's consumption is
+      under-counted. Acceptable: the user chose not to install mpv.
+
+  - id: CL-072
+    title: "Backend process lifecycle management"
+    description: >
+      The Emacs client needs the Java backend running. Who starts it?
+      Options: (1) Emacs starts it (actual-feed-start-backend command),
+      (2) systemd/launchd manages it, (3) user starts manually. For
+      the target user, systemd service is natural on Linux. On macOS,
+      launchd plist. The Emacs package should detect if backend is
+      running and offer to start it if not.
+    worst_case: >
+      Backend crashes while Emacs client is open. All JSON-RPC calls
+      fail. Client must detect disconnection, show clear error in
+      mode-line, and offer restart. No silent failures — buffer shows
+      'Backend disconnected. M-x actual-feed-restart-backend to reconnect.'
+
+enforced_constraints:
+  - id: EC-070
+    constraint: "Emacs client uses the same JSON-RPC API as GUI clients"
+    type: architectural
+    rationale: >
+      One API, multiple clients. No Emacs-specific backend endpoints.
+      No special treatment. If a feature works on mobile, it works in
+      Emacs (with appropriate text-mode rendering). The Emacs client
+      is a thin presentation layer, not a parallel implementation.
+    testable: >
+      Every JSON-RPC method called by the Emacs client is also called
+      by at least one GUI client. No orphan endpoints.
+
+  - id: EC-071
+    constraint: "All operations work from keyboard only — no mouse required"
+    type: UX (Emacs idiom)
+    rationale: >
+      The target Emacs user navigates entirely by keyboard. Every
+      operation (browse, search, interact, configure, play media) must
+      be reachable without mouse. Mouse clicks may work (text button
+      properties) but are never the only path.
+    testable: >
+      Complete a full workflow (open feed, browse items, thumbs-up,
+      search, open source, capture to org) using only keyboard.
+
+  - id: EC-072
+    constraint: "No web view or embedded browser in Emacs"
+    type: design (Emacs idiom)
+    rationale: >
+      xwidget-webkit and eww exist but violate the Emacs-native principle.
+      Feed items are rendered as structured text with text properties.
+      Rich media (video, images) is handled by external players or
+      displayed as metadata (thumbnail URL, duration, dimensions).
+      The Emacs client is text-first by design, not by limitation.
+    testable: >
+      Package has zero dependency on xwidget, eww, or any browser
+      component. All rendering uses standard Emacs text insertion
+      with faces and text properties.
+
+opinionated_constraints:
+  - id: OC-070
+    constraint: "mpv is the recommended media player, not VLC or browser"
+    rationale: >
+      mpv has the best IPC interface for programmatic control (JSON IPC
+      over Unix socket). mpv.el is a mature Emacs package. mpv supports
+      YouTube URLs natively (via yt-dlp). Budget tracking requires
+      precise playback position reporting — mpv's IPC provides this.
+      VLC's HTTP interface is less reliable. Browser provides nothing.
+    acceptable_loss: >
+      Users without mpv get degraded media experience. This is stated
+      upfront: 'For best experience, install mpv.' The package does
+      not bundle mpv.
+
+  - id: OC-071
+    constraint: "Org-mode integration is deep, not superficial"
+    rationale: >
+      The target user likely uses org-mode for personal knowledge
+      management. Actual Feed items flowing into org files bridges
+      consumption and retention. Custom link types, capture templates,
+      agenda integration — these make Actual Feed a source for the
+      user's org-based workflow, not a separate silo. This is a
+      differentiator no GUI app can match.
+    acceptable_loss: >
+      Users who don't use org-mode get no benefit from this integration.
+      It's opt-in via actual-feed-org-capture-key. Non-org users still
+      have a fully functional feed client.
+
+  - id: OC-072
+    constraint: "Minimum Emacs version: 27.1"
+    rationale: >
+      Emacs 27.1 (2020) provides json.el, url.el, and sufficient text
+      property support. Supporting older versions is not worth the
+      maintenance burden. Emacs 27.1 is available in Debian Bullseye
+      (oldstable), Ubuntu 20.04 LTS, and all current rolling releases.
+      Transient.el (29+) is an optional dependency — fallback to basic
+      keymap for <29.
+    acceptable_loss: >
+      Emacs 26 users (Debian Buster, EOL) must upgrade. Acceptable
+      for the target user who maintains a modern Emacs setup.

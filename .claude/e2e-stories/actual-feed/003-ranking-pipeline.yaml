@@ -1,0 +1,389 @@
+title: "Ranking Pipeline — Three-Stage Architecture"
+status: draft
+version: 2
+
+architecture:
+  principle: >
+    The ranking system is a single-user content-based pipeline with three
+    scoring layers: hard (explicit formula), soft (learned neural reranker),
+    and probabilistic (exploration/serendipity). The user controls the blend.
+    Feature extraction (Stage 2) uses the LLM. Scoring (Stage 3) uses a
+    layered system where the user dials between deliberate control and
+    learned sophistication. The neural layer is open-source, local, trained
+    on the user's own feedback, optimizing for the user's own objective.
+    It is YOUR neural net. That's the difference from YouTube.
+
+  stages:
+    - name: "Stage 1: Candidate Generation (Crawl)"
+      description: >
+        Crawler fetches raw content from user-specified sources. No ML.
+        Normalizes everything into FeedItem schema.
+      compute_cost: "Proportional to sources × crawl_frequency"
+      budget_bar_segment: "Crawling"
+      output: "Raw FeedItem with source_url, raw_content, modality, author, timestamp"
+
+    - name: "Stage 2: Feature Extraction (LLM Processing)"
+      description: >
+        Local LLM (Qwen3-30B-A3B desktop, Phi-4 mini mobile) processes each
+        raw FeedItem and extracts structured feature vector. Whisper handles
+        audio/video transcription. This is where 80%+ of compute goes.
+      compute_cost: "Proportional to items × model_size × content_length"
+      budget_bar_segments: ["Transcription", "Summarization"]
+      output: "Enriched FeedItem with numeric feature vector (12+ signals)"
+
+    - name: "Stage 3: Scoring & Ordering (Three Layers)"
+      description: >
+        Three scoring layers, blended by user-controlled mix slider.
+        Hard limits are always enforced regardless of blend.
+      compute_cost: "Layer 1: negligible. Layer 2: ~1ms/item. Layer 3: negligible."
+      budget_bar_segment: "Ranking (minimal)"
+      output: "Ordered feed queue"
+
+      layers:
+        - name: "Layer 1: Explicit Formula (Hard)"
+          description: >
+            Weighted linear combination of extracted features. Fully visible,
+            fully editable. This is the floor — the deliberate, conscious
+            preferences. Hard safeguards live here: obliterate = pre-filter
+            (item never reaches scoring), minimum thresholds (if credibility
+            < user's minimum, item is excluded). The mature, intentional diet.
+          implementation: "Pure Java. ~200 lines. WeightedLinearScorer."
+          inspectable: true
+          editable: true
+          deterministic: true
+
+        - name: "Layer 2: Learned Taste (Soft)"
+          description: >
+            Small neural network (MLP or cross-encoder, ~1-10MB) trained
+            incrementally on user's thumbs-up/down/obliterate history.
+            Input: the same feature vector as Layer 1. Output: a learned
+            preference score that captures nonlinear taste patterns the
+            formula can't express. This is what enables 'surprise me with
+            something I didn't know I wanted' — it discovers that you enjoy
+            specific feature combinations you never explicitly weighted.
+            Open-source model architecture. Trained locally. Weights on
+            your device. YOUR neural net.
+          implementation: >
+            ONNX Runtime for Java (inference) + DJL or DL4J (training).
+            Online learning: model updates incrementally on each feedback
+            event, no batch retraining needed. Model size: thousands to
+            low millions of parameters — this is NOT an LLM, it's a tiny
+            supervised preference model.
+          inspectable: >
+            User can see: 'This item was boosted +5 positions by your learned
+            taste model because it matches patterns from items you liked.'
+            Power users can see feature importance weights from the neural net.
+          editable: >
+            User controls influence slider (0% = pure formula, 100% = pure
+            neural). User can reset learned model without affecting formula.
+          deterministic: false
+
+        - name: "Layer 3: Exploration / Serendipity (Probabilistic)"
+          description: >
+            Thompson sampling or epsilon-greedy mechanism that occasionally
+            surfaces items from outside the top-N. Prevents filter bubbles.
+            Enables discovery. The user controls the exploration rate via a
+            'serendipity' slider. At 0%: feed is purely ranked by Layers 1+2.
+            At 20%: roughly 1 in 5 items is a deliberate wildcard. The
+            instantly gratifying, impulsive, 'I didn't plan to watch this
+            but I'm glad I did' experience.
+          implementation: >
+            Thompson sampling with Beta distribution priors, updated on
+            feedback. ~50 lines of Java. Computationally free.
+          inspectable: >
+            Wildcard items are visually marked (subtle indicator) so the user
+            knows 'this is an exploration item, not a top-ranked item.'
+          editable: >
+            Serendipity slider: 0% to 50%. Default: 10%.
+          deterministic: false
+
+  blend_model: >
+    The final score for each item is:
+      final = (1 - serendipity_rate) × blend(formula_score, neural_score, taste_slider)
+            + serendipity_rate × exploration_score
+
+    Where blend() interpolates between Layer 1 and Layer 2 based on the
+    taste_slider (0.0 = pure formula, 1.0 = pure neural, 0.5 = equal weight).
+
+    And exploration_score is sampled from the item's Thompson sampling
+    posterior, seeded by the feature vector.
+
+    Hard limits (obliterate, minimum thresholds) are pre-filters that
+    execute BEFORE any scoring. They are not overridable by any layer.
+
+user_stories:
+  - id: US-020
+    as: "user viewing why an item ranks where it does"
+    i_want: "to see the score breakdown across all three layers"
+    so_that: "I understand what my algorithm is doing"
+    acceptance:
+      - tap/hover shows: formula score, neural adjustment, exploration flag
+      - formula score decomposes into weighted feature contributions
+      - neural adjustment shows: direction (+/-), magnitude, and pattern hint
+      - exploration items are marked as such
+      - total score = blend of all three layers
+
+  - id: US-021
+    as: "user tuning my ranking"
+    i_want: "sliders for each signal weight, plus meta-sliders for taste and serendipity"
+    so_that: "I control the full spectrum from deliberate to surprising"
+    acceptance:
+      - per-signal weight sliders (existing 12+ signals)
+      - taste slider: 0% (pure formula) to 100% (pure neural)
+      - serendipity slider: 0% (no exploration) to 50% (aggressive discovery)
+      - changes take effect immediately on next refresh
+      - all slider positions saveable as named tuning presets
+      - presets are portable: applicable to any feed (main or custom)
+      - default presets provided: "deliberate", "discovery", "balanced", "deep research"
+      - per-signal sliders, taste slider, and serendipity slider are all part of a preset
+
+  - id: US-022
+    as: "user creating custom feeds"
+    i_want: "each feed to have its own tuning preset"
+    so_that: "my 'deep research' feed and my 'casual browse' feed behave differently"
+    acceptance:
+      - each feed (main + custom) stores a tuning preset reference
+      - changing a feed's preset immediately re-ranks its content
+      - same preset can be shared across multiple feeds
+      - editing a preset updates all feeds that reference it
+      - user can clone a preset, modify it, and assign the clone to a specific feed
+      - presets are exportable/importable (JSON/YAML)
+
+  - id: US-023
+    as: "user who thumbs-up/down items"
+    i_want: "my feedback to train the neural taste model"
+    so_that: "the algorithm learns nonlinear patterns from my behavior"
+    acceptance:
+      - thumbs-up/down adds a training example to the local neural model
+      - model updates incrementally (online learning), no batch retraining
+      - user can see: "Your taste model has learned from N interactions"
+      - user can reset the taste model without affecting formula weights
+      - user can export/backup the taste model (it's their data)
+      - obliterate does NOT train the neural model — it's a hard pre-filter
+
+  - id: US-024
+    as: "user defining topic relevance"
+    i_want: "explicit topic tags and keywords"
+    so_that: "relevance scoring reflects my declared interests"
+    acceptance:
+      - topic tags: user-defined term list
+      - project names: user-defined context labels
+      - relevance = embedding similarity between item and user topics
+      - V1: explicit topics only, no passive surveillance
+      - V2 (future): opt-in local project directory scanning
+
+  - id: US-025
+    as: "user managing compute budget for ranking"
+    i_want: "to understand that ranking is cheap and feature extraction is expensive"
+    so_that: "I focus budget tuning on the right things"
+    acceptance:
+      - budget bar shows ranking segment as minimal sliver
+      - toggling taste model on/off barely affects budget (tiny model)
+      - real budget impact is Stage 2 (model size, crawl frequency, transcription)
+      - this is honestly communicated in the UI
+
+extracted_features:
+  positive_signals:
+    - { name: topic_relevance, range: "[0,1]", extraction: "Embedding cosine similarity to user topics" }
+    - { name: nominal_density, range: "[0,1]", extraction: "NLP: specific nouns and technical terms / total tokens" }
+    - { name: novelty, range: "[0,1]", extraction: "1 - max similarity to recently seen items" }
+    - { name: credibility, range: "[0,1]", extraction: "Composite: source citation + author track record + verifiability" }
+    - { name: freshness, range: "[0,1]", extraction: "Exponential decay from timestamp, configurable half-life" }
+    - { name: actionability, range: "[0,1]", extraction: "NLP: concrete steps, tools, code, decisions present?" }
+
+  negative_signals:
+    - { name: hype_score, range: "[0,1]", extraction: "NLP: emotional language, superlatives, clickbait patterns" }
+    - { name: vagueness, range: "[0,1]", extraction: "NLP: hedge words and qualifiers vs concrete claims" }
+    - { name: repetition, range: "[0,1]", extraction: "Semantic similarity to other items in batch/history" }
+    - { name: missing_sources, range: "[0,1]", extraction: "NLP: claims made without primary source citation" }
+
+  metadata_signals:
+    - { name: source_authority, range: "[0,1]", extraction: "User per-source weight + accumulated feedback" }
+    - { name: modality_preference, range: "[0,1]", extraction: "User per-modality weight" }
+
+presets:
+  deliberate:
+    description: "Maximum user control, minimal surprises"
+    taste_slider: 0.1
+    serendipity: 0.02
+    signal_overrides: { w_relevance: 0.30, w_density: 0.20, w_hype: 0.25 }
+
+  discovery:
+    description: "High serendipity, strong neural influence, explore freely"
+    taste_slider: 0.7
+    serendipity: 0.30
+    signal_overrides: { w_novelty: 0.25, w_freshness: 0.15 }
+
+  balanced:
+    description: "Default main feed — tasteful mix of deliberate and surprising"
+    taste_slider: 0.4
+    serendipity: 0.10
+    signal_overrides: {}  # all defaults
+
+  deep_research:
+    description: "Dense, credible, actionable — suppress hype, maximize substance"
+    taste_slider: 0.2
+    serendipity: 0.05
+    signal_overrides: { w_density: 0.30, w_credibility: 0.25, w_hype: 0.35, w_freshness: 0.02 }
+
+  breaking_news:
+    description: "Freshness dominates, tolerate noise, high discovery"
+    taste_slider: 0.5
+    serendipity: 0.20
+    signal_overrides: { w_freshness: 0.50, w_novelty: 0.20, w_repetition: 0.25 }
+
+  background_audio:
+    description: "Long-form, dense, no urgency — ideal for passive listening"
+    taste_slider: 0.3
+    serendipity: 0.08
+    signal_overrides: { w_density: 0.30, w_actionability: 0.20, w_freshness: 0.01, w_modality: 0.3 }
+
+collective_lifetime_stories:
+  - id: CL-020
+    title: "Neural taste model cold start"
+    description: >
+      On first use, the neural taste model has zero training data. Layer 2
+      contributes nothing. The user experiences pure formula (Layer 1) +
+      exploration (Layer 3). As feedback accumulates (50-100 interactions),
+      the neural model begins to contribute. The UI should surface this:
+      'Your taste model is learning. After ~50 interactions, it will start
+      suggesting items you might not expect.' This manages expectations and
+      motivates early engagement with thumbs-up/down.
+    worst_case: >
+      User never uses thumbs-up/down. Neural layer stays cold. Feed is
+      pure formula forever. This is acceptable — the formula alone is
+      already better than any platform's opaque algorithm because the
+      user controls it.
+
+  - id: CL-021
+    title: "Neural taste model preference drift"
+    description: >
+      User's interests change over time. The neural model trained on 6 months
+      of history may reflect stale preferences. Online learning partially
+      addresses this (recent feedback is weighted more) but old patterns
+      persist. The system should offer periodic 'taste refresh': review
+      items the neural model boosted, confirm or reject, re-weight.
+    worst_case: >
+      User's feed ossifies around old interests despite new topic tags.
+      Neural model overrides formula. Fix: taste slider lets user reduce
+      neural influence at any time. Reset button clears learned history.
+
+  - id: CL-022
+    title: "Serendipity exploration quality"
+    description: >
+      Exploration items are drawn from outside the top-N. At low serendipity
+      rates (5-10%), these should feel like pleasant surprises. At high rates
+      (30-50%), the feed feels chaotic. The exploration mechanism must balance
+      novelty with minimum quality — even wildcards should pass basic
+      credibility and non-spam thresholds.
+    worst_case: >
+      Exploration surfaces spam, low-quality, or offensive content because
+      it bypassed the normal ranking. Fix: hard pre-filters (credibility
+      minimum, spam detection) apply BEFORE exploration sampling.
+      Exploration reorders; it does not bypass safety.
+
+  - id: CL-023
+    title: "Feature extraction drift across model swaps"
+    description: >
+      When the user swaps the local LLM, extracted features shift. Same
+      article gets different hype_score or nominal_density. Both the formula
+      and the neural model are affected because their inputs changed. The
+      system must warn that a model swap recalibrates everything, offer
+      re-extraction of cached items, and show before/after feed comparison.
+    worst_case: >
+      User swaps model, feed changes dramatically, blames weights or neural
+      model when the issue is feature shift. Must surface clearly.
+
+  - id: CL-024
+    title: "Preset proliferation and management"
+    description: >
+      Power users will create dozens of presets. The management UI must
+      support: naming, description, search, sort by last-used, duplicate
+      detection, and cleanup suggestions. Presets shared across feeds must
+      show 'used by N feeds' to prevent accidental edits affecting many feeds.
+    worst_case: >
+      User edits a preset shared by 5 feeds, all feeds change. Must confirm:
+      'This preset is used by 5 feeds. Edit in place or clone?'
+
+enforced_constraints:
+  - id: EC-020
+    constraint: "Hard limits (obliterate, minimum thresholds) are pre-filters, not scoring signals"
+    type: user control
+    rationale: >
+      Obliterate means gone. Minimum credibility means excluded. These are
+      absolute. Neither the neural model nor the exploration layer can
+      override a hard limit. They execute before any scoring.
+    testable: >
+      An obliterated source's items never appear in any feed, regardless of
+      taste slider, serendipity, or neural score. Same for items below
+      minimum threshold.
+
+  - id: EC-021
+    constraint: "Exploration items must pass hard pre-filters"
+    type: safety
+    rationale: >
+      Serendipity reorders non-excluded items. It does not bypass credibility
+      minimums, spam filters, or obliterate. Exploration is not a loophole.
+    testable: "No exploration item has credibility below user's minimum threshold"
+
+  - id: EC-022
+    constraint: "Neural taste model is local-only, user-owned, resettable"
+    type: privacy
+    rationale: >
+      The model trains on the user's feedback, runs on the user's device,
+      and is never uploaded. The user can export, reset, or delete it.
+      This is not a cloud model learning from aggregated behavior.
+    testable: "No network request is made during neural model training or inference"
+
+  - id: EC-023
+    constraint: "Score breakdown is always available for every item"
+    type: transparency
+    rationale: >
+      Even with neural and probabilistic layers, the user can always see
+      why an item ranks where it does. Formula contribution, neural
+      adjustment, exploration flag — all visible on demand.
+    testable: "Tap any item → score breakdown shows all three layers' contributions"
+
+opinionated_constraints:
+  - id: OC-020
+    constraint: "Three-layer scoring: explicit + neural + probabilistic"
+    rationale: >
+      Deliberate control (formula) without learned taste produces a sterile
+      feed that only shows what you already know you want. Learned taste
+      (neural) without exploration produces a sophisticated filter bubble.
+      Exploration without deliberate control produces chaos. All three
+      layers are necessary. The user controls the blend. The product
+      promise is not 'we protect you from impulse' — it's 'we give you
+      the full cockpit to create your own diet.'
+    rejected_alternatives:
+      - "Formula only (v1 proposal)": Cannot discover latent preferences. Sterile.
+      - "Neural only (YouTube model)": Opaque unless signals are user-visible. Fixed.
+      - "Formula + exploration only": No learning. User must manually tune forever.
+    acceptable_loss: >
+      Three layers are harder to explain than one. The UI must make the
+      blend intuitive (two sliders: taste, serendipity) rather than
+      exposing the mathematical machinery. Power users get the full
+      breakdown; casual users get two sliders and good defaults.
+
+  - id: OC-021
+    constraint: "Build neural taste model in Java/JVM using ONNX Runtime + DJL"
+    rationale: >
+      ONNX Runtime has a mature Java binding. DJL (Deep Java Library, Amazon)
+      supports online MLP training on JVM. The taste model is tiny (thousands
+      of parameters, ~1MB). No Python dependency. No separate process. Pure
+      JVM stack. Training time per feedback event: <10ms.
+    acceptable_loss: >
+      DJL's online learning is less flexible than PyTorch. Acceptable because
+      the model is simple (MLP, 12 inputs, 2 hidden layers, 1 output).
+
+  - id: OC-022
+    constraint: "Presets are first-class objects: named, versioned, portable, shareable"
+    rationale: >
+      Presets encode the user's information diet philosophy. They should be
+      as important as the feeds themselves. Sharing presets between feeds,
+      exporting/importing them, and building a personal library of presets
+      is a core power-user feature. A preset is: signal weights + taste
+      slider + serendipity slider + hard limits.
+    acceptable_loss: >
+      Preset management adds UI complexity. Mitigation: good defaults,
+      clean preset picker, 'used by N feeds' indicator.

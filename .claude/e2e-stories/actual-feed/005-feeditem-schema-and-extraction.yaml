@@ -1,0 +1,623 @@
+title: "FeedItem Schema & Content Extraction Pipeline"
+status: draft
+version: 1
+
+principle: >
+  Every piece of content in Actual Feed, regardless of source platform or
+  modality, is normalized into a single FeedItem record. This record is the
+  sole input to ranking, rendering, budget accounting, and sync. The schema
+  is immutable at the identity layer, re-extractable at the feature layer,
+  and ephemeral at the score layer. Storage is SQLite — single-file,
+  zero-server, cross-platform, embeddable, battle-tested for local-first
+  single-user applications. Content is referenced, not stored: we hold
+  metadata, transcripts, summaries, and feature vectors. We do not cache
+  video files, audio streams, or full article HTML.
+
+schema:
+  storage_engine: "SQLite 3 with FTS5 for full-text search"
+  rationale: >
+    SQLite is the only storage engine that satisfies all constraints
+    simultaneously: local-first (no server process), cross-platform (every
+    OS, every mobile platform), embeddable in JVM via sqlite-jdbc, supports
+    FTS5 for transcript/summary search, supports JSON functions for
+    structured subfields, single-file for trivial backup/export/sync.
+    No Postgres. No H2. No room-level abstraction on mobile — raw SQLite
+    with platform-appropriate driver (sqlite-jdbc on desktop, Room/SQLite
+    on Android, GRDB/SQLite on iOS).
+
+  tables:
+    feed_items:
+      description: >
+        Core table. One row per unique piece of content. Identity fields are
+        immutable after insert. Enrichment fields are overwritten on
+        re-extraction (model swap). Feature columns are real-valued [0,1].
+      columns:
+        # === IDENTITY (immutable after insert) ===
+        - { name: id, type: "TEXT PRIMARY KEY", description: "UUIDv7 — time-sortable, globally unique, no coordination needed" }
+        - { name: source_url, type: "TEXT NOT NULL UNIQUE", description: "Canonical URL. Dedup key. If two crawl paths reach the same URL, it's one item." }
+        - { name: source_platform, type: "TEXT NOT NULL", description: "Enum: youtube, twitter, reddit, hackernews, stackoverflow, rss, github, web_article, podcast, quora" }
+        - { name: source_id, type: "TEXT", description: "Platform-native ID (YouTube video ID, tweet ID, Reddit post ID). Nullable for RSS/web." }
+
+        # === RAW METADATA (Stage 1 output, immutable after crawl) ===
+        - { name: title, type: "TEXT", description: "Content title. Nullable for tweets, comments." }
+        - { name: author_name, type: "TEXT", description: "Human-readable author name" }
+        - { name: author_id, type: "TEXT", description: "Platform-specific author identifier (channel ID, handle, username)" }
+        - { name: published_at, type: "INTEGER NOT NULL", description: "Unix epoch millis. Source's publication timestamp." }
+        - { name: crawled_at, type: "INTEGER NOT NULL", description: "Unix epoch millis. When our crawler fetched this." }
+        - { name: modality, type: "TEXT NOT NULL", description: "Enum: video, audio, text, image. Primary content type." }
+        - { name: duration_seconds, type: "INTEGER", description: "For video/audio. NULL for text/image. Used for budget accounting." }
+        - { name: thumbnail_url, type: "TEXT", description: "Thumbnail/preview image URL. Fetched and cached locally for offline." }
+        - { name: thumbnail_cached, type: "INTEGER DEFAULT 0", description: "Boolean. 1 = thumbnail stored in local media cache." }
+        - { name: embed_data, type: "TEXT", description: "JSON. Platform-specific embed payload. YouTube: {video_id, start_time}. Twitter: {oembed_html}. SO: {answer_body, question_title}." }
+        - { name: raw_content_hash, type: "TEXT", description: "SHA-256 of raw content. Change detection for re-crawl." }
+        - { name: content_length_tokens, type: "INTEGER", description: "Approximate token count of raw content. Used for compute budget estimation." }
+
+        # === ENRICHMENT (Stage 2 output, re-extractable) ===
+        - { name: extraction_model_id, type: "TEXT", description: "Model that produced current enrichment. e.g., 'qwen3-30b-a3b-q4'" }
+        - { name: extraction_version, type: "INTEGER DEFAULT 0", description: "Incremented on each re-extraction. Enables before/after comparison." }
+        - { name: extracted_at, type: "INTEGER", description: "Unix epoch millis. When enrichment was produced." }
+        - { name: summary, type: "TEXT", description: "LLM-generated summary. 2-4 sentences. Shown in feed card." }
+        - { name: transcript, type: "TEXT", description: "Full transcript for audio/video. Whisper output. Stored for FTS." }
+        - { name: entities_json, type: "TEXT", description: "JSON array of extracted named entities: [{name, type, salience}]" }
+        - { name: claims_json, type: "TEXT", description: "JSON array of detected claims: [{claim_text, has_source, source_url}]" }
+        - { name: primary_sources_json, type: "TEXT", description: "JSON array of cited/referenced sources: [{url, title, type}]" }
+        - { name: topics_json, type: "TEXT", description: "JSON array of topic labels: [{topic, confidence}]. LLM-assigned." }
+
+        # === FEATURE VECTOR (Stage 2 output, 12 signals, all [0,1]) ===
+        - { name: f_topic_relevance, type: "REAL", description: "Embedding cosine similarity to user's declared topics" }
+        - { name: f_nominal_density, type: "REAL", description: "Specific nouns and technical terms / total tokens" }
+        - { name: f_novelty, type: "REAL", description: "1 - max similarity to recently seen items" }
+        - { name: f_credibility, type: "REAL", description: "Composite: source citation quality + author track record + verifiability" }
+        - { name: f_freshness, type: "REAL", description: "Exponential decay from published_at, configurable half-life" }
+        - { name: f_actionability, type: "REAL", description: "Concrete steps, tools, code, decisions present" }
+        - { name: f_hype_score, type: "REAL", description: "Emotional language, superlatives, clickbait patterns" }
+        - { name: f_vagueness, type: "REAL", description: "Hedge words and qualifiers vs concrete claims" }
+        - { name: f_repetition, type: "REAL", description: "Semantic similarity to other items in recent history" }
+        - { name: f_missing_sources, type: "REAL", description: "Claims made without primary source citation" }
+        - { name: f_source_authority, type: "REAL", description: "User per-source weight + accumulated feedback" }
+        - { name: f_modality_preference, type: "REAL", description: "User per-modality weight" }
+
+        # === PIPELINE STATE ===
+        - { name: pipeline_state, type: "TEXT DEFAULT 'raw'", description: "Enum: raw, transcribing, extracting, enriched, failed" }
+        - { name: error_message, type: "TEXT", description: "If pipeline_state = failed, human-readable reason" }
+        - { name: retry_count, type: "INTEGER DEFAULT 0", description: "Number of extraction attempts. Capped at 3." }
+
+    user_interactions:
+      description: >
+        User feedback on items. Drives neural taste model training (Layer 2)
+        and source authority adjustments. Append-only log — never deleted,
+        never overwritten. The training data for your neural net.
+      columns:
+        - { name: id, type: "INTEGER PRIMARY KEY AUTOINCREMENT" }
+        - { name: item_id, type: "TEXT NOT NULL REFERENCES feed_items(id)" }
+        - { name: interaction_type, type: "TEXT NOT NULL", description: "Enum: thumbs_up, thumbs_down, obliterate, skip, click_through, play_start, play_pause, play_complete, save_for_later" }
+        - { name: created_at, type: "INTEGER NOT NULL", description: "Unix epoch millis" }
+        - { name: context_json, type: "TEXT", description: "JSON. Contextual metadata: {feed_id, scroll_position, time_spent_ms, was_exploration_item}" }
+
+    budget_ledger:
+      description: >
+        Time tracking for content budgets. One entry per playback session
+        (start/stop pair). Budget enforcement queries this table to compute
+        aggregate consumption per content type per budget period.
+      columns:
+        - { name: id, type: "INTEGER PRIMARY KEY AUTOINCREMENT" }
+        - { name: item_id, type: "TEXT NOT NULL REFERENCES feed_items(id)" }
+        - { name: content_type, type: "TEXT NOT NULL", description: "Budget category: video, audio, social, article" }
+        - { name: started_at, type: "INTEGER NOT NULL", description: "Unix epoch millis" }
+        - { name: ended_at, type: "INTEGER", description: "Unix epoch millis. NULL if still playing." }
+        - { name: duration_seconds, type: "INTEGER", description: "Computed: (ended_at - started_at) / 1000. Materialized for query speed." }
+        - { name: budget_profile, type: "TEXT NOT NULL", description: "Which budget profile was active (workday, weekend, etc.)" }
+        - { name: was_override, type: "INTEGER DEFAULT 0", description: "Boolean. 1 = budget was overridden via PIN for this session." }
+
+    obliterated_sources:
+      description: >
+        Hard pre-filter table. Sources rage-quit by the user. Items from
+        these sources are excluded before any scoring. Reversible from
+        settings. Lightweight: just the author/source identifiers.
+      columns:
+        - { name: id, type: "INTEGER PRIMARY KEY AUTOINCREMENT" }
+        - { name: source_platform, type: "TEXT NOT NULL" }
+        - { name: author_id, type: "TEXT", description: "Platform author ID. If set, blocks this specific author." }
+        - { name: source_domain, type: "TEXT", description: "Domain. If set, blocks entire domain. Mutually exclusive with author_id." }
+        - { name: obliterated_at, type: "INTEGER NOT NULL" }
+        - { name: restored_at, type: "INTEGER", description: "NULL if still obliterated. Set on restore." }
+
+    sync_state:
+      description: >
+        Tracks what has been synced to cloud (premium only). Each row is a
+        sync checkpoint. Local-only users never touch this table.
+      columns:
+        - { name: last_synced_at, type: "INTEGER" }
+        - { name: last_synced_item_id, type: "TEXT" }
+        - { name: sync_version, type: "INTEGER" }
+        - { name: conflict_resolution, type: "TEXT DEFAULT 'server_wins'", description: "Enum: server_wins, client_wins, manual" }
+
+  indexes:
+    - "CREATE INDEX idx_items_platform ON feed_items(source_platform)"
+    - "CREATE INDEX idx_items_modality ON feed_items(modality)"
+    - "CREATE INDEX idx_items_published ON feed_items(published_at DESC)"
+    - "CREATE INDEX idx_items_pipeline ON feed_items(pipeline_state)"
+    - "CREATE INDEX idx_items_freshness ON feed_items(f_freshness DESC) WHERE pipeline_state = 'enriched'"
+    - "CREATE INDEX idx_interactions_item ON user_interactions(item_id)"
+    - "CREATE INDEX idx_interactions_type ON user_interactions(interaction_type, created_at DESC)"
+    - "CREATE INDEX idx_budget_type_period ON budget_ledger(content_type, started_at DESC)"
+    - "CREATE INDEX idx_obliterated_active ON obliterated_sources(source_platform, author_id) WHERE restored_at IS NULL"
+
+  fts:
+    - "CREATE VIRTUAL TABLE feed_items_fts USING fts5(title, summary, transcript, content='feed_items', content_rowid='rowid')"
+    - description: >
+        Full-text search across titles, summaries, and transcripts. User can
+        search their feed history. Rebuild triggers on enrichment update.
+
+extraction_pipeline:
+  principle: >
+    Each source platform has a dedicated adapter that fetches raw content and
+    normalizes it into a raw FeedItem. Adapters are independently updatable —
+    when YouTube changes their page structure, only the YouTube adapter
+    needs updating. After normalization, all items enter the same LLM
+    enrichment pipeline regardless of source.
+
+  stage_1_adapters:
+    common_interface: >
+      Every adapter implements: fetch(query, since) → List<RawFeedItem>.
+      RawFeedItem contains only identity + raw metadata fields. No LLM
+      processing. No feature extraction. Pure I/O.
+
+    youtube:
+      crawler: "yt-dlp (metadata + transcript extraction, no video download)"
+      inputs: "User search terms, channel subscriptions, playlist URLs"
+      outputs:
+        - title, author_name, author_id (channel ID)
+        - published_at, duration_seconds
+        - thumbnail_url (multiple resolutions available)
+        - transcript (auto-generated or manual captions via yt-dlp)
+        - embed_data: '{"video_id": "dQw4w9WgXcQ", "start_time": 0}'
+      legal: "yt-dlp extracts publicly available metadata. No video download."
+      fragility: >
+        YouTube frequently patches yt-dlp extraction. yt-dlp community
+        responds within days. Adapter must pin yt-dlp version and test
+        on each update. Fallback: YouTube Data API v3 (quota-limited,
+        premium tier only).
+
+    twitter_x:
+      crawler: "X API v2 (Basic tier: $100/month, 10K tweets/month read)"
+      inputs: "User search terms, followed accounts, list memberships"
+      outputs:
+        - title (NULL for tweets), author_name, author_id (handle)
+        - published_at, modality (text or image)
+        - embed_data: '{"oembed_html": "<blockquote>..."}'
+        - raw text content for LLM processing
+      legal: "Official API. Basic tier permits read access."
+      fragility: >
+        X API pricing has changed 3 times since 2023. $100/month for
+        Basic tier is current as of Feb 2026. Must be passed through
+        to premium subscribers who enable Twitter source.
+
+    reddit:
+      crawler: "Reddit API (requires OAuth2 app registration)"
+      inputs: "Subreddit subscriptions, search terms, specific threads"
+      outputs:
+        - title, author_name, author_id
+        - published_at, modality (text)
+        - raw markdown content (post body + top comments)
+        - embed_data: '{"subreddit": "programming", "post_id": "abc123"}'
+      legal: "Reddit API terms. Commercial use requires paid tier."
+      fragility: "Reddit API pricing changed in 2023. Monitor annually."
+
+    hackernews:
+      crawler: "Algolia HN Search API (free, no auth required)"
+      inputs: "Search terms, front page monitoring, specific users"
+      outputs:
+        - title, author_name, author_id
+        - published_at, modality (text)
+        - linked URL + HN discussion URL
+        - raw text (HN comments are often more valuable than the link)
+      legal: "Public API, free tier, no restrictions on read access."
+      fragility: "Extremely stable. Algolia HN API unchanged since 2014."
+
+    stackoverflow:
+      crawler: "Stack Exchange API v2.3 (free tier: 10K requests/day with key)"
+      inputs: "Tag subscriptions, search terms"
+      outputs:
+        - title (question), author_name, author_id
+        - published_at, modality (text)
+        - question body + accepted answer + top 2 answers (markdown)
+        - embed_data: '{"question_id": 12345, "answer_id": 67890}'
+      legal: "CC BY-SA 4.0. Must attribute. Free API for read access."
+      fragility: "Stable API. SE has not broken v2.3 in years."
+
+    rss:
+      crawler: "Standard RSS/Atom parser (ROME library for JVM)"
+      inputs: "User-provided RSS feed URLs"
+      outputs:
+        - title, author_name (from feed metadata)
+        - published_at, modality (text)
+        - content snippet or full article (depends on feed)
+        - source_url (original article link)
+      legal: "RSS is designed for syndication. Unambiguously legal."
+      fragility: "RSS is a stable standard. Individual feeds may go offline."
+
+    web_articles:
+      crawler: "HTTP fetch + Readability extraction (Mozilla Readability port)"
+      inputs: "URLs from other sources' links, user-bookmarked sites"
+      outputs:
+        - title, author_name (extracted from meta tags)
+        - published_at (from meta tags, may be approximate)
+        - modality (text)
+        - extracted article text (Readability strips nav, ads, etc.)
+        - thumbnail_url (from og:image meta tag)
+      legal: >
+        Standard web browsing. Readability extraction is the same as what
+        Firefox Reader View does. Storing full article text locally for
+        personal use is defensible. Displaying excerpts with link to
+        original in the feed is safe.
+      fragility: "Site-specific. Readability works on ~85% of article sites."
+
+    podcasts:
+      crawler: "RSS feed parser (podcasts are RSS with enclosures)"
+      inputs: "Podcast RSS feed URLs"
+      outputs:
+        - title (episode), author_name (podcast name)
+        - published_at, duration_seconds, modality (audio)
+        - audio_url (direct link to mp3/m4a from RSS enclosure)
+        - thumbnail_url (podcast artwork)
+      legal: "RSS-distributed podcasts are intended for third-party playback."
+      fragility: "Some podcasts moving behind paywalls (Spotify exclusives)."
+
+  stage_2_enrichment:
+    description: >
+      After Stage 1 normalization, every FeedItem enters the enrichment
+      pipeline. This is a two-step process: (1) transcription for audio/video,
+      (2) LLM feature extraction for all items. This is where 80%+ of
+      compute goes. The pipeline is idempotent — re-running enrichment on
+      the same item with the same model produces the same output.
+
+    step_1_transcription:
+      description: >
+        Audio/video items get transcribed before LLM processing. Text items
+        skip this step. Transcription is the most compute-intensive operation
+        on mobile (hence Moonshine during charging only).
+      desktop: "Whisper Large-v3 Turbo via whisper.cpp (C++ with JNI bridge)"
+      mobile: "Moonshine (lightweight ASR) via ONNX Runtime Mobile"
+      output: "transcript field populated on the FeedItem"
+      scheduling: >
+        Desktop: inline during crawl (Whisper Turbo processes 60min audio in ~17s).
+        Mobile: deferred to charging + idle window. Items show 'transcription pending'
+        until processed. User can manually trigger transcription for specific items.
+
+    step_2_llm_feature_extraction:
+      description: >
+        The local LLM receives the item's text content (raw text for articles,
+        transcript for audio/video, tweet text for social) plus the user's
+        topic list, and produces: summary, entities, claims, primary sources,
+        topic labels, and the 12-signal feature vector. Single LLM call per
+        item. Structured output via JSON mode.
+      desktop: "Qwen3-30B-A3B (MoE, Q4) via llama.cpp with JNI bridge"
+      mobile: "Phi-4 mini or Qwen2.5-3B (Q4) via llama.cpp / ONNX Runtime"
+
+      prompt_template: >
+        System: You are a content analysis engine for a personal feed reader.
+        Extract structured signals from the following content. Be precise and
+        calibrated. Output valid JSON only.
+
+        User topics: {user_topics_json}
+        Content source: {source_platform}
+        Content type: {modality}
+        Content:
+        ---
+        {content_text}
+        ---
+
+        Output the following JSON:
+        {
+          "summary": "2-4 sentence summary. Dense, factual, no hype.",
+          "entities": [{"name": "...", "type": "person|org|tech|concept", "salience": 0.0-1.0}],
+          "claims": [{"text": "...", "has_source": true/false, "source_url": "..."}],
+          "primary_sources": [{"url": "...", "title": "...", "type": "paper|docs|repo|news"}],
+          "topics": [{"topic": "...", "confidence": 0.0-1.0}],
+          "signals": {
+            "topic_relevance": 0.0-1.0,
+            "nominal_density": 0.0-1.0,
+            "novelty_hint": 0.0-1.0,
+            "credibility": 0.0-1.0,
+            "actionability": 0.0-1.0,
+            "hype_score": 0.0-1.0,
+            "vagueness": 0.0-1.0,
+            "missing_sources": 0.0-1.0
+          }
+        }
+
+      post_processing: >
+        After LLM extraction, the pipeline computes 4 additional signals
+        that cannot be LLM-extracted:
+        - f_freshness: exponential decay from published_at (pure math)
+        - f_novelty: embedding similarity against recent item window (requires embedding model)
+        - f_repetition: semantic dedup against recent batch (requires embedding model)
+        - f_source_authority: looked up from user's source weight table
+        - f_modality_preference: looked up from user's modality weight table
+
+      embedding_model: >
+        For novelty and repetition signals, a small embedding model runs
+        alongside the LLM. Desktop: nomic-embed-text-v1.5 (137M params,
+        ~550MB, 8192 token context). Mobile: all-MiniLM-L6-v2 (22M params,
+        ~90MB). Both via ONNX Runtime. Embeddings stored per-item for
+        incremental novelty computation.
+
+      idempotency: >
+        Same content + same model + same user topics = same output.
+        extraction_version is bumped on each re-extraction. The pipeline
+        checks raw_content_hash — if content hasn't changed and model
+        hasn't changed, extraction is skipped (cache hit).
+
+  stage_1_to_stage_2_handoff:
+    description: >
+      Stage 1 inserts a row with pipeline_state='raw'. A background worker
+      picks up raw items in crawled_at order (FIFO). Transcription runs
+      first (if needed), then LLM extraction. On success: pipeline_state
+      transitions to 'enriched'. On failure: pipeline_state='failed',
+      error_message set, retry_count incremented. Max 3 retries with
+      exponential backoff. Failed items are surfaced to the user:
+      'N items could not be processed. Reason: ...'
+
+  deduplication:
+    strategy: >
+      Primary dedup: source_url UNIQUE constraint catches exact URL matches.
+      Secondary dedup: after enrichment, f_repetition signal catches near-
+      duplicates (same story from different sources). Near-duplicates are
+      not deleted — they're downranked by the formula unless the user
+      explicitly wants cross-source comparison.
+
+  garbage_collection:
+    strategy: >
+      Items older than user-configured retention period (default: 90 days)
+      are candidates for GC. GC runs during idle periods. Items with
+      save_for_later interaction are exempt. Items with obliterated sources
+      are GC'd immediately (no point keeping them). Transcript text is the
+      largest storage consumer — user can configure transcript retention
+      separately (e.g., keep summaries forever, GC transcripts after 30 days).
+
+  media_cache:
+    strategy: >
+      Thumbnails are fetched and cached locally in a flat directory
+      (~/.actual-feed/media/thumbnails/{item_id}.jpg). Cache is bounded
+      by disk quota (default: 500MB). LRU eviction. Thumbnails for items
+      in the current feed window are pinned. Offline mode serves cached
+      thumbnails; missing thumbnails show placeholder.
+
+user_stories:
+  - id: US-040
+    as: "user viewing my feed"
+    i_want: "every item to load instantly with rich preview"
+    so_that: "the feed feels native and responsive, not like a loading screen"
+    acceptance:
+      - feed items render from local SQLite — no network for metadata
+      - thumbnails load from local cache (cache-first, network-fallback)
+      - summary visible immediately (no 'processing...' for enriched items)
+      - items still in 'raw' state show: title, source, timestamp, 'analyzing...' badge
+      - items in 'failed' state show: title, source, error reason, retry button
+
+  - id: US-041
+    as: "user searching my feed history"
+    i_want: "full-text search across titles, summaries, and transcripts"
+    so_that: "I find that video I watched last week about database indexing"
+    acceptance:
+      - FTS5 search across feed_items_fts virtual table
+      - search returns ranked results with highlighted snippets
+      - search filters: date range, modality, source platform, content type
+      - search is local — no network, no cloud, instant
+
+  - id: US-042
+    as: "user who swapped their local LLM"
+    i_want: "to re-extract features for my existing items with the new model"
+    so_that: "my feed is consistent under the new model's judgment"
+    acceptance:
+      - model swap triggers: 'Re-extract N items with new model? This may take X hours.'
+      - re-extraction runs in background during idle periods
+      - extraction_version incremented for each re-extracted item
+      - user can compare: 'Feed changed N items after model swap. Review?'
+      - partial re-extraction supported (re-extract last 7 days only)
+
+  - id: US-043
+    as: "user on mobile with limited compute"
+    i_want: "items crawled on mobile to show useful previews even before enrichment"
+    so_that: "I'm not staring at skeletons waiting for the LLM"
+    acceptance:
+      - Stage 1 metadata (title, author, thumbnail, timestamp) renders immediately
+      - 'Analyzing...' badge indicates pending enrichment
+      - items are browsable in raw state — just not scored or searchable by content
+      - user can manually prioritize enrichment for specific items
+      - enrichment queue respects battery state and charging status
+
+  - id: US-044
+    as: "user who wants to back up my feed data"
+    i_want: "to export my entire feed database as a single file"
+    so_that: "my data is mine and I can move it or archive it"
+    acceptance:
+      - SQLite file is the export — copy ~/.actual-feed/feed.db
+      - user interactions, budget ledger, obliterated sources all in same DB
+      - media cache is separate (thumbnails) — exportable but not required
+      - import: drop a .db file and the app picks it up
+      - premium sync is just automated, conflict-resolved SQLite replication
+
+  - id: US-045
+    as: "user viewing an item's provenance"
+    i_want: "to see exactly what the LLM extracted and how it scored"
+    so_that: "I trust the system's judgment or override it"
+    acceptance:
+      - tap item → detail view shows: summary, entities, claims, sources
+      - each claim shows: has_source (yes/no), linked source if available
+      - feature vector shown as labeled bars (e.g., 'Credibility: 0.72')
+      - extraction model identified ('Analyzed by Qwen3-30B-A3B')
+      - one-tap to original source for verification (EC-010 from 002)
+
+collective_lifetime_stories:
+  - id: CL-040
+    title: "SQLite database growth over years of use"
+    description: >
+      A user processing 500 items/day accumulates ~180K items/year. Each
+      enriched item is approximately 2-5KB of metadata + 0-50KB of transcript.
+      At worst case (500 items/day, 50KB transcript each): ~9GB/year for
+      transcripts alone. Summaries and features: ~1GB/year. Total: ~10GB/year.
+      After 3 years: 30GB. SQLite handles databases up to 281TB but query
+      performance degrades without proper indexing and VACUUM.
+    worst_case: >
+      User never GCs transcripts, accumulates 100GB over 5 years. SQLite
+      file becomes slow to copy/sync. Fix: configurable transcript retention,
+      automatic VACUUM on schedule, WAL mode for concurrent read/write.
+      Premium sync must handle large DB deltas efficiently (row-level sync,
+      not full file copy).
+
+  - id: CL-041
+    title: "yt-dlp breakage frequency and update cadence"
+    description: >
+      yt-dlp breaks approximately once per month when YouTube changes their
+      page structure. The yt-dlp community typically patches within 24-72
+      hours. Actual Feed must ship yt-dlp updates independently of app
+      updates. This means yt-dlp is a bundled dependency that auto-updates
+      from a signed artifact repository, not compiled into the app binary.
+    worst_case: >
+      YouTube makes a change that takes yt-dlp 2+ weeks to fix. YouTube
+      source goes dark for that period. System surfaces: 'YouTube crawling
+      temporarily unavailable. Direct link: youtube.com.' No silent
+      degradation (EC-004 from 001).
+
+  - id: CL-042
+    title: "LLM feature extraction quality and calibration drift"
+    description: >
+      Small local LLMs produce noisier feature extractions than large cloud
+      models. A hype_score of 0.3 from Qwen3-30B-A3B may mean something
+      different from 0.3 from a future Qwen4 model. Feature calibration is
+      model-dependent. The ranking formula's weights are tuned to a specific
+      model's feature distribution. Model swaps shift the distribution,
+      potentially inverting the meaning of weights.
+    worst_case: >
+      User upgrades model. Same weights now produce a completely different
+      feed because the new model calibrates hype_score differently. The
+      before/after comparison (US-042) mitigates but doesn't prevent
+      confusion. Long-term fix: feature normalization layer that maps
+      raw LLM outputs to a model-independent [0,1] scale via percentile
+      ranking against the user's own item history.
+
+  - id: CL-043
+    title: "Embedding model storage and computation overhead"
+    description: >
+      The novelty and repetition signals require computing embeddings for
+      every item and comparing against recent history. On desktop, this is
+      cheap (nomic-embed: ~3ms per embedding). On mobile, it's significant
+      (MiniLM: ~20ms per embedding, plus storage for embedding vectors).
+      Each embedding is 384-768 floats = 1.5-3KB per item. At 500 items/day:
+      ~1.5MB/day of embedding storage. Manageable but not free.
+    worst_case: >
+      Mobile user with 50K items has 150MB of stored embeddings. Novelty
+      computation requires scanning recent window (last 1000 items) per
+      new item. Without approximate nearest neighbor index, this is O(n)
+      per item. Fix: HNSW index via hnswlib-java (JNI, ~200KB binary).
+      Or: reduce embedding window on mobile to last 200 items.
+
+enforced_constraints:
+  - id: EC-040
+    constraint: "FeedItem source_url is the canonical dedup key"
+    type: data integrity
+    rationale: >
+      Two crawl paths reaching the same URL must produce one item, not two.
+      The UNIQUE constraint on source_url is the single point of truth.
+      Platform-specific IDs (video ID, tweet ID) are secondary and may not
+      be unique across platforms.
+    testable: "INSERT OR IGNORE on source_url. No duplicate URLs in feed_items."
+
+  - id: EC-041
+    constraint: "Enrichment is idempotent: same input + same model = same output"
+    type: correctness
+    rationale: >
+      Re-extraction must be safe to run at any time. If enrichment has
+      side effects or non-determinism, the user cannot trust before/after
+      comparisons or model swap behavior.
+    testable: >
+      Run enrichment twice on the same item with the same model and topics.
+      All feature values, summary text, and entity lists are identical.
+
+  - id: EC-042
+    constraint: "Pipeline failures are surfaced, never silent"
+    type: trust (extends EC-004 from 001)
+    rationale: >
+      A failed extraction must show the user 'this item could not be
+      analyzed' with reason, not silently disappear from the feed.
+    testable: >
+      Items with pipeline_state='failed' appear in the feed with error
+      badge and retry option. They are never filtered out.
+
+  - id: EC-043
+    constraint: "User interaction log (user_interactions) is append-only"
+    type: data integrity
+    rationale: >
+      The neural taste model trains on this log. Deleting or modifying
+      interactions corrupts the training data. Users can reset the neural
+      model (which ignores the log) but cannot edit the log itself.
+    testable: "No UPDATE or DELETE queries against user_interactions table."
+
+  - id: EC-044
+    constraint: "SQLite database file is the user's data — portable, exportable, theirs"
+    type: ownership
+    rationale: >
+      No proprietary format. No server-only storage. The .db file IS the
+      user's feed. They can copy it, back it up, inspect it with any
+      SQLite client, import it into a new device.
+    testable: >
+      User can open feed.db with sqlite3 CLI and query all their data.
+      No encryption at rest (user's device, user's responsibility).
+
+opinionated_constraints:
+  - id: OC-040
+    constraint: "SQLite, not Postgres or embedded DB engine"
+    rationale: >
+      SQLite is the only database that runs identically on desktop JVM,
+      Android, and iOS without a server process. Room (Android) and GRDB
+      (iOS) are thin wrappers around SQLite. The desktop JVM uses sqlite-jdbc.
+      Same schema, same queries, same file format across all platforms.
+      Postgres would require a server process on desktop and is impossible
+      on mobile. H2 is JVM-only. Realm/ObjectBox are proprietary.
+    acceptable_loss: >
+      SQLite has no built-in replication. Cloud sync must be implemented
+      as application-level row diffing, not database-level replication.
+      This is more work but gives us precise control over conflict
+      resolution and bandwidth usage.
+
+  - id: OC-041
+    constraint: "Content is referenced, not stored — no video/audio binary caching"
+    rationale: >
+      Storing video files would consume 100s of GB. Storing audio would
+      consume 10s of GB. We store metadata, transcripts, summaries, and
+      feature vectors. Video/audio is played via platform embed (YouTube
+      IFrame) or direct URL (podcast RSS enclosure). The only binary
+      content we cache is thumbnails (bounded by disk quota).
+    acceptable_loss: >
+      Offline mode cannot play video or audio — only show cached metadata,
+      summaries, and thumbnails. Full offline media would require
+      downloading content, which raises legal and storage concerns.
+
+  - id: OC-042
+    constraint: "Single LLM call per item for feature extraction (not multi-pass)"
+    rationale: >
+      Multi-pass extraction (one call for summary, one for entities, one
+      for signals) would multiply compute cost by 3-5x. A single structured
+      output prompt produces all signals in one call. The prompt is larger
+      but the total token cost is lower because the content is read once.
+      At 500 items/day with Qwen3-30B-A3B: ~2.5 hours of continuous
+      inference on CPU. Acceptable for overnight scheduled processing.
+    acceptable_loss: >
+      Single-call extraction produces slightly lower quality on each
+      individual signal compared to dedicated passes. The signals are
+      good enough for ranking — they don't need to be publication-quality
+      NLP. The user verifies via punch-through to source (EC-010).
+
+  - id: OC-043
+    constraint: "UUIDv7 for item IDs — time-sortable, no coordination"
+    rationale: >
+      UUIDv7 encodes timestamp in the high bits, making ID-sorted queries
+      equivalent to time-sorted queries. No coordination needed between
+      devices (no auto-increment collision on sync). Globally unique
+      without a central authority. 128 bits, text representation in SQLite.
+    acceptable_loss: >
+      UUIDv7 is 36 chars as text in SQLite vs 4 bytes for INTEGER
+      autoincrement. Storage overhead: ~32 bytes per row per foreign key.
+      At 180K items/year: ~6MB/year of overhead. Negligible.

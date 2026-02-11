@@ -1,0 +1,366 @@
+title: "Tripwires & Event System"
+status: draft
+version: 1
+
+principle: >
+  Tripwires are condition-based monitors that run parallel to the feed.
+  The feed is a ranked queue of content. Tripwires are sentinels —
+  user-defined conditions that, when satisfied, produce an interrupt:
+  a notification, a highlighted injection into the feed, or both.
+  Tripwires answer: 'Tell me when X happens.' The feed answers: 'Show me
+  what's relevant.' These are orthogonal systems. A tripwire can fire on
+  content that would otherwise rank low — that's the point. The user said
+  'wake me up for this' regardless of how boring the surrounding content is.
+
+  Tripwires are cloud-only for always-on monitoring (premium tier). Local
+  tier users can define tripwires, but they only evaluate on manual refresh
+  or scheduled crawl — not continuously. This is the honest asymmetry:
+  local tripwires are delayed sentinels, cloud tripwires are real-time.
+
+architecture:
+  tripwire_definition:
+    description: >
+      A tripwire is a named, versioned, user-authored condition. The user
+      describes what they want to be alerted about in natural language. The
+      LLM evaluates each incoming item against the user's active tripwires
+      as part of Stage 2 enrichment. This is a single additional field in
+      the extraction prompt — not a separate LLM call per tripwire.
+    fields:
+      - { name: id, type: "TEXT PRIMARY KEY (UUIDv7)" }
+      - { name: name, type: "TEXT NOT NULL", description: "Human-readable label: 'Oracle acquires a Java framework'" }
+      - { name: condition_text, type: "TEXT NOT NULL", description: "Natural language condition: 'Any acquisition, merger, or partnership involving Oracle and a Java web framework'" }
+      - { name: severity, type: "TEXT DEFAULT 'info'", description: "Enum: info, important, critical. Controls notification urgency." }
+      - { name: enabled, type: "INTEGER DEFAULT 1", description: "Boolean. Disabled tripwires are not evaluated." }
+      - { name: cooldown_hours, type: "INTEGER DEFAULT 24", description: "After firing, suppress re-fire for this many hours on semantically similar items." }
+      - { name: created_at, type: "INTEGER NOT NULL" }
+      - { name: last_fired_at, type: "INTEGER", description: "NULL if never fired." }
+      - { name: fire_count, type: "INTEGER DEFAULT 0" }
+      - { name: feeds, type: "TEXT DEFAULT 'all'", description: "JSON array of feed IDs this tripwire applies to, or 'all'." }
+
+  evaluation:
+    description: >
+      Tripwire evaluation is folded into the Stage 2 LLM extraction call.
+      The extraction prompt already processes the item's content. We append
+      the user's active tripwire conditions to the prompt and ask the LLM
+      to evaluate each one. This adds ~100 tokens per tripwire to the prompt
+      and ~50 tokens per tripwire to the output. At 10 active tripwires:
+      ~1000 input tokens + ~500 output tokens overhead per item. Marginal
+      cost on top of the existing extraction call.
+
+    prompt_addition: >
+      Evaluate the following tripwire conditions against this content.
+      For each, respond with: {id, fired: true/false, confidence: 0.0-1.0,
+      reason: "brief explanation"}.
+      Only fire if the content DIRECTLY satisfies the condition — not
+      tangentially related, not speculative.
+
+      Tripwires:
+      {tripwires_json}
+
+    firing_logic: >
+      A tripwire fires when: (1) LLM reports fired=true with confidence
+      >= 0.7, (2) the tripwire is not in cooldown, and (3) the item is
+      not semantically similar to the last item that fired this tripwire
+      (embedding distance > 0.3). The confidence threshold of 0.7 is
+      deliberately high — false positives are worse than false negatives
+      for an interrupt system. Better to miss a marginal match than to
+      cry wolf.
+
+    compute_budget_impact: >
+      Tripwires add to the LLM extraction prompt but do NOT require a
+      separate LLM call. The compute budget bar shows tripwire overhead
+      as a thin segment within the 'Summarization' block. At 10 tripwires,
+      overhead is ~5-8% of extraction cost. At 50 tripwires (extreme
+      power user), overhead is ~25-40% — the system should warn at this
+      point.
+
+  notification:
+    description: >
+      When a tripwire fires, two things happen: (1) a notification is
+      emitted, (2) the triggering item is tagged and optionally injected
+      at the top of the relevant feed(s).
+    channels:
+      - platform_notification: >
+          Mobile: OS push notification with tripwire name, item title,
+          and confidence. Desktop: system notification (native).
+          Emacs: message in *actual-feed-alerts* buffer.
+      - feed_injection: >
+          The triggering item receives a 'tripwire_fired' flag and the
+          tripwire ID. Feed rendering shows a distinctive visual treatment
+          (accent border, tripwire icon, condition text shown). The item
+          is boosted to the top of the relevant feed regardless of its
+          normal score — the user asked to be woken up for this.
+      - audit_log: >
+          Every fire is logged in a tripwire_events table with: tripwire_id,
+          item_id, fired_at, confidence, reason, was_seen (boolean, set
+          when user views the notification).
+
+  cloud_vs_local:
+    cloud_premium:
+      - "Tripwires evaluate continuously as cloud crawler produces items"
+      - "Notification latency: seconds to minutes after content appears"
+      - "Always-on: evaluates even when all user devices are off"
+      - "Push notifications to all registered devices"
+    local_free:
+      - "Tripwires evaluate only during manual refresh or scheduled crawl"
+      - "Notification latency: hours (depends on crawl schedule)"
+      - "Only evaluates when app is running or scheduled task fires"
+      - "Local notification only on the device running the crawl"
+    honest_gap: >
+      The cloud tripwire is materially better for time-sensitive conditions
+      (security advisories, breaking API changes). The local tripwire is
+      adequate for slow-moving conditions (vendor strategic moves, industry
+      trends). This gap is communicated honestly, not hidden.
+
+  tripwire_events_table:
+    columns:
+      - { name: id, type: "INTEGER PRIMARY KEY AUTOINCREMENT" }
+      - { name: tripwire_id, type: "TEXT NOT NULL REFERENCES tripwires(id)" }
+      - { name: item_id, type: "TEXT NOT NULL REFERENCES feed_items(id)" }
+      - { name: fired_at, type: "INTEGER NOT NULL" }
+      - { name: confidence, type: "REAL NOT NULL" }
+      - { name: reason, type: "TEXT NOT NULL", description: "LLM's brief explanation of why this fired" }
+      - { name: was_seen, type: "INTEGER DEFAULT 0", description: "Boolean. Set when user views the notification." }
+      - { name: was_false_positive, type: "INTEGER", description: "NULL=not marked, 0=confirmed, 1=false positive. User feedback." }
+
+user_stories:
+  - id: US-050
+    as: "user who tracks industry events"
+    i_want: "to define tripwires in natural language"
+    so_that: "I'm alerted when specific things happen without manually scanning"
+    acceptance:
+      - tripwire creation: name + natural language condition + severity
+      - examples: 'Any CVE affecting Spring Framework', 'Stripe raises prices',
+        'New Java LTS release announced', 'Company I follow does layoffs'
+      - tripwire is tested on creation: LLM evaluates condition against
+        last 10 items to show 'this would have fired on N items' preview
+      - unlimited tripwires (compute budget impact is the natural limit)
+
+  - id: US-051
+    as: "user receiving a tripwire notification"
+    i_want: "the notification to tell me what fired and why"
+    so_that: "I decide whether to act without opening the app"
+    acceptance:
+      - notification shows: tripwire name, item title, confidence, 1-line reason
+      - tap notification → opens item in feed with tripwire context visible
+      - notification respects severity: info = silent badge, important = standard,
+        critical = persistent notification that requires dismissal
+      - user can configure per-severity notification behavior
+
+  - id: US-052
+    as: "user who gets too many false positives"
+    i_want: "to mark a tripwire fire as false positive"
+    so_that: "the system learns what I actually meant"
+    acceptance:
+      - swipe/tap to mark notification as false positive
+      - false positive feedback is stored in tripwire_events
+      - after 3+ false positives, system suggests: 'Refine this tripwire?'
+        and shows the false positive items as counter-examples
+      - user can edit the condition text with context from false positives
+      - V1: false positive feedback is informational only (user refines manually)
+      - V2 (future): LLM uses false positive history to auto-refine condition
+
+  - id: US-053
+    as: "user who defined a critical tripwire"
+    i_want: "the alert to override Do Not Disturb on my phone"
+    so_that: "truly critical events reach me immediately"
+    acceptance:
+      - 'critical' severity tripwires can be configured to override DND
+        (uses Android PRIORITY_MAX / iOS Critical Alert entitlement)
+      - this is opt-in per tripwire, not default
+      - iOS Critical Alert requires Apple approval (entitlement request)
+      - if platform doesn't support DND override, notification is standard
+        with a 'critical' badge and sound
+
+  - id: US-054
+    as: "user managing my tripwires"
+    i_want: "a dashboard showing all tripwires, their fire history, and health"
+    so_that: "I maintain my alert system without it becoming stale"
+    acceptance:
+      - list view: name, severity, enabled/disabled, last fired, fire count
+      - fire history per tripwire: items that triggered it, confidence, user feedback
+      - health indicators: 'never fired in 90 days — still relevant?',
+        'fired 50 times in 7 days — too broad?'
+      - bulk operations: enable/disable all, export/import tripwire set
+      - tripwires are part of sync (premium): same tripwires on all devices
+
+  - id: US-055
+    as: "user who wants curated tripwire templates"
+    i_want: "starter tripwire packs for common domains"
+    so_that: "I don't have to write every condition from scratch"
+    acceptance:
+      - shipped tripwire packs: 'Java Ecosystem', 'Security Advisories',
+        'AI/ML Releases', 'Startup Funding', 'Open Source Licensing'
+      - each pack contains 5-15 pre-written tripwire conditions
+      - user imports a pack, then customizes individual conditions
+      - packs are versioned and updateable (new conditions added over time)
+      - community tripwire sharing (V2, future): export/import JSON
+
+collective_lifetime_stories:
+  - id: CL-050
+    title: "Tripwire condition drift and semantic ambiguity"
+    description: >
+      Natural language conditions are inherently ambiguous. 'Oracle acquires
+      a Java framework' — does a partnership count? Does an investment count?
+      Does a rumor count? The LLM interprets the condition, and different
+      models may interpret it differently. A model swap may cause tripwires
+      to fire more or less aggressively. The 0.7 confidence threshold
+      provides a buffer, but edge cases are inevitable.
+    worst_case: >
+      User's critical tripwire fails to fire because the LLM interpreted
+      the condition too narrowly. User misses a time-sensitive event.
+      Mitigation: tripwire test mode (evaluate against historical items),
+      duplicate tripwires with varying specificity, and confidence threshold
+      is user-adjustable per tripwire (advanced setting).
+
+  - id: CL-051
+    title: "Tripwire fatigue and notification overload"
+    description: >
+      Users with 20+ active tripwires and broad conditions will receive
+      constant notifications. This degrades the signal value of the
+      interrupt system — if everything is an alert, nothing is. The
+      cooldown mechanism suppresses re-fires on similar content, but
+      genuinely distinct items matching a broad condition will still fire.
+    worst_case: >
+      User configures 'any news about AI' as a tripwire. Gets 50
+      notifications per day. Disables all notifications. Now their
+      critical security tripwire is also silenced. Fix: per-severity
+      notification channels. Critical bypasses suppression. Health
+      indicators flag overly broad tripwires.
+
+  - id: CL-052
+    title: "Cloud tripwire latency and real-time expectations"
+    description: >
+      Cloud crawl frequency determines tripwire latency. If the crawler
+      processes a source every 15 minutes, tripwire latency is 15 minutes
+      at best. Users expecting 'real-time' (seconds) will be disappointed.
+      True real-time would require websocket connections to platform APIs
+      (streaming endpoints) which are expensive and often rate-limited.
+    worst_case: >
+      Security advisory published. Cloud crawler picks it up 30 minutes
+      later. Tripwire fires. User gets notification 31 minutes after
+      publication. For most users this is fine. For users who need
+      sub-minute alerting: out of scope. They need dedicated security
+      monitoring services (PagerDuty, OpsGenie integration is a V2 feature).
+
+  - id: CL-053
+    title: "Tripwire evaluation cost scaling with count"
+    description: >
+      Each active tripwire adds ~150 tokens to every Stage 2 extraction
+      call. At 50 tripwires: 7500 extra tokens per item. At 500 items/day:
+      3.75M extra tokens/day. On Qwen3-30B-A3B at ~15 tok/s: additional
+      ~70 hours of compute per day. This is obviously impossible.
+      Practical limit is ~20-30 tripwires before compute overhead becomes
+      the dominant cost in Stage 2.
+    worst_case: >
+      Power user creates 100 tripwires. Extraction pipeline grinds to a
+      halt. Fix: hard cap at 30 tripwires (with explanation), or tiered
+      evaluation — only evaluate item-relevant tripwires based on topic
+      overlap (pre-filter tripwires by keyword match before LLM evaluation,
+      reducing to ~5-10 per item).
+
+enforced_constraints:
+  - id: EC-050
+    constraint: "Tripwire evaluation is folded into Stage 2 extraction, not a separate call"
+    type: compute efficiency
+    rationale: >
+      A separate LLM call per tripwire per item would make the system
+      O(items × tripwires) in LLM calls. Folding into the extraction
+      prompt makes it O(items) with linear token overhead per tripwire.
+    testable: >
+      Total LLM calls in Stage 2 equals total items processed, regardless
+      of tripwire count. No additional inference calls for tripwire evaluation.
+
+  - id: EC-051
+    constraint: "Tripwire fires require confidence >= 0.7 (user-adjustable)"
+    type: signal quality
+    rationale: >
+      An interrupt system that cries wolf is worse than no interrupt system.
+      High confidence threshold means missed edge cases but no noise.
+      Users who want lower thresholds can adjust per-tripwire.
+    testable: >
+      Default threshold is 0.7. Items with tripwire confidence below
+      threshold are logged but do not produce notifications or feed injection.
+
+  - id: EC-052
+    constraint: "Cloud vs local tripwire gap is honestly communicated"
+    type: trust (extends EC-004 from 001)
+    rationale: >
+      Local tripwires evaluate only on crawl. Cloud tripwires evaluate
+      continuously. The user must understand this gap when deciding
+      whether to subscribe. No marketing fluff — state the latency
+      difference in concrete terms.
+    testable: >
+      Tripwire creation UI shows: 'This tripwire will evaluate every
+      [crawl_interval] on local tier. Upgrade to premium for continuous
+      monitoring.'
+
+  - id: EC-053
+    constraint: "Tripwire evaluation does not affect item scoring"
+    type: separation of concerns
+    rationale: >
+      A tripwire firing boosts an item's visibility (feed injection) but
+      does NOT change its score from the ranking pipeline. The score
+      breakdown (EC-023) reflects only the three scoring layers. Tripwire
+      injection is a separate, visible mechanism: 'This item was surfaced
+      because it triggered your tripwire: [name].'
+    testable: >
+      Item's formula_score, neural_score, and exploration_score are
+      identical whether or not a tripwire fired on it.
+
+opinionated_constraints:
+  - id: OC-050
+    constraint: "Tripwires are natural language conditions, not structured rules"
+    rationale: >
+      Structured rule builders (if source=X AND contains=Y AND date>Z)
+      are powerful but inaccessible. Natural language lets the user express
+      nuanced conditions: 'Any time a FAANG company open-sources a database.'
+      The LLM interprets. This is strictly more expressive than rules, at
+      the cost of interpretation ambiguity. The ambiguity is managed by
+      confidence thresholds and false positive feedback.
+    acceptable_loss: >
+      Users cannot write precise boolean conditions. A user who wants
+      'exactly this AND exactly that' may find natural language imprecise.
+      V2 mitigation: structured rule mode as alternative to natural language
+      for users who want deterministic conditions.
+
+  - id: OC-051
+    constraint: "Tripwire packs are shipped, not crowdsourced (V1)"
+    rationale: >
+      Community-sourced tripwires raise moderation, quality, and trust
+      concerns. V1 ships curated packs authored by the product team.
+      Each pack is tested for false positive rate and maintained. Community
+      sharing (export/import JSON) is a V2 feature after the format
+      stabilizes.
+    acceptable_loss: >
+      Limited pack selection at launch. Users in niche domains must write
+      their own conditions. This is acceptable for the target user who
+      is technically literate and enjoys customization.
+
+  - id: OC-052
+    constraint: "Critical tripwires can override Do Not Disturb (opt-in)"
+    rationale: >
+      A security advisory for a production dependency is worth waking up
+      for. The user made a deliberate decision to classify this tripwire
+      as critical. Respecting that decision means the notification must
+      reach them. iOS Critical Alert entitlement requires Apple approval
+      (justified by security use case). Android PRIORITY_MAX is available.
+    acceptable_loss: >
+      Apple may reject the Critical Alert entitlement request. Fallback:
+      standard notification with 'critical' badge and distinctive sound.
+      The user can configure their device's DND exceptions manually.
+
+  - id: OC-053
+    constraint: "Pre-filter tripwires by keyword overlap before LLM evaluation"
+    rationale: >
+      At 30 tripwires, evaluating all 30 against every item is wasteful.
+      Most items match 0-3 tripwires topically. A cheap keyword pre-filter
+      (extract keywords from tripwire conditions, match against item title +
+      entities) reduces the average tripwires-per-item from 30 to ~5.
+      Only keyword-matched tripwires are included in the LLM prompt.
+      This keeps compute overhead bounded regardless of total tripwire count.
+    acceptable_loss: >
+      Keyword pre-filter may miss tripwires with implicit conditions
+      ('Any sign of economic recession' won't keyword-match an article
+      about 'unemployment rises to 7%'). Mitigation: critical-severity
+      tripwires bypass the keyword pre-filter and are always evaluated.

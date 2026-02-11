@@ -1,0 +1,182 @@
+title: "Architecture Tiers — Local vs Cloud"
+status: draft
+version: 2
+
+user_stories:
+  - id: US-001
+    as: "desktop user (one-time purchase)"
+    i_want: "to run the full pipeline locally — crawl, transcribe, summarize, rank"
+    so_that: "I get a complete feed experience without any subscription"
+    acceptance:
+      - local crawler runs web searches from user's device/IP
+      - search uses privacy-respecting engines (DuckDuckGo, SearXNG)
+      - Qwen3-30B-A3B (MoE, Q4) handles ranking, filtering, summarization
+      - Whisper Large-v3 Turbo handles audio/video transcription locally
+      - requires 32GB RAM (target user baseline)
+      - no API keys required from user
+      - works offline against cached content
+      - model updates shipped with app updates, curated by owner
+      - crawl schedule fully configurable, runs during inactive periods
+
+  - id: US-002
+    as: "mobile user (one-time purchase)"
+    i_want: "to run the app on my phone with ranking and light summarization"
+    so_that: "I get a useful feed on mobile without a subscription"
+    acceptance:
+      - local crawler runs web searches when app is active
+      - Phi-4 mini or Qwen2.5-3B (Q4, ~2GB) handles ranking and short summaries
+      - audio/video transcription scheduled during charging only (Moonshine)
+      - honest capability gap vs desktop — physics, not sabotage
+      - no API keys required
+
+  - id: US-003
+    as: "premium subscriber"
+    i_want: "to select sources via tick-boxes and get a calculated monthly price"
+    so_that: "I get always-on cloud crawling, transcription, and cross-device sync"
+    acceptance:
+      - source selection UI with per-source pricing transparency
+      - cloud crawler runs 24/7 on selected sources
+      - authenticated platform API access (YouTube, Reddit, X, etc.)
+      - server-grade transcription (98% accuracy, always-on)
+      - cross-device sync of feed state, preferences, queue position, read-state
+      - tripwire monitoring (always-on, cloud-only)
+
+  - id: US-004
+    as: "one-time purchaser"
+    i_want: "to activate the app via my account with minimal friction"
+    so_that: "I can use the app on my devices without invasive checks"
+    acceptance:
+      - account-based activation (sign in once, receive signed license token)
+      - 30-day offline grace period before re-authentication required
+      - concurrent session limit (not per-device-per-platform hard lock)
+      - no hardware fingerprinting (no MAC, serial, CPU ID, disk UUID)
+      - cloud sync moat makes piracy economically irrational
+
+collective_lifetime_stories:
+  - id: CL-001
+    title: "Local crawler viability over platform ToS evolution"
+    description: >
+      Search engines and content platforms will progressively restrict automated
+      access. DuckDuckGo may add CAPTCHAs. YouTube may block transcript extraction.
+      The local crawler's effectiveness will degrade over time as platforms tighten.
+      The system must degrade honestly (report what it cannot reach) and never
+      fabricate or hallucinate content to fill gaps.
+    worst_case: >
+      All major platforms block automated access from residential IPs within 2 years.
+      Local crawler can only process RSS feeds and open APIs. User must decide
+      whether degraded local experience justifies upgrade to premium.
+
+  - id: CL-002
+    title: "Subscription cost alignment over API price changes"
+    description: >
+      Platform API pricing is not stable. Reddit's 2023 API pricing crisis killed
+      third-party clients. YouTube Data API quotas tighten annually. X/Twitter API
+      went from free to $42k/month for enterprise. À la carte pricing must track
+      upstream cost changes or margin collapses.
+    worst_case: >
+      A major source (e.g., X) raises API prices 10x overnight. Users subscribed
+      to that source must be notified, price adjusted or source removed. No silent
+      degradation — user must know what changed and why.
+
+  - id: CL-003
+    title: "Open-source model obsolescence and update cadence"
+    description: >
+      The recommended local models (Qwen3-30B-A3B, Whisper Turbo, Phi-4 mini)
+      will be superseded within 6-12 months. The owner curates and approves model
+      updates periodically. Each update must be tested for ranking consistency —
+      a model swap that reorders the user's feed without explanation violates the
+      transparency principle. Model updates are app updates, not silent background
+      downloads.
+    worst_case: >
+      A model update significantly changes ranking behavior. Users perceive their
+      feed as "broken" despite improved quality. Must version ranking logic and
+      allow rollback to previous model.
+
+  - id: CL-004
+    title: "Concurrent session abuse and account sharing"
+    description: >
+      Account-based licensing with concurrent session limits will be tested by
+      credential sharing. One account used by 5 people in sequence (not concurrent)
+      is indistinguishable from one power user across devices. The cloud sync
+      subscription is the real enforcement — shared accounts produce a merged,
+      incoherent feed state that degrades the experience naturally. A pirated
+      binary is local-only with no sync, no cloud crawling, no cross-device
+      continuity.
+    worst_case: >
+      Organized piracy ring buys one license, distributes pre-activated builds.
+      The pirated build has no cloud sync, no continuous crawling, no cross-device
+      state. It's a degraded single-device experience. Acceptable loss if cloud
+      sync conversion rate is healthy.
+
+enforced_constraints:
+  - id: EC-001
+    constraint: "No API keys required from end users"
+    type: UX
+    rationale: "If they have to know what an API key is, the product has failed"
+    testable: "No setup flow, settings screen, or error message references API keys"
+
+  - id: EC-002
+    constraint: "No hardware fingerprinting"
+    type: privacy
+    rationale: "Invasive device identification is malware-adjacent behavior"
+    testable: "App collects zero hardware identifiers (MAC, serial, CPU ID, disk UUID)"
+
+  - id: EC-003
+    constraint: "Desktop minimum: 32GB RAM"
+    type: hardware
+    rationale: "Qwen3-30B-A3B Q4 requires ~18GB + Whisper Turbo + OS overhead"
+    testable: "App checks available memory on first launch, warns if below threshold"
+
+  - id: EC-004
+    constraint: "No silent degradation across any tier"
+    type: trust
+    rationale: "Core principle from PRD. Licensing state never affects correctness."
+    testable: >
+      When a source becomes unreachable, crawler cannot access a platform, or
+      model produces low-confidence output, the system surfaces this explicitly
+      to the user with reason codes. Never silently drops items or fills gaps.
+
+opinionated_constraints:
+  - id: OC-001
+    constraint: "Local crawler uses user's device and IP for web searches"
+    rationale: >
+      Legally defensible as user-agent tool. Economically sustainable because
+      crawl cost is borne by user's hardware/bandwidth, not by the business.
+      Philosophically aligned with local-sovereign model.
+    acceptable_loss: >
+      Local crawler coverage will always be inferior to cloud tier. This is
+      physics, not artificial degradation.
+
+  - id: OC-002
+    constraint: "Premium pricing is à la carte, calculated from source selection"
+    rationale: >
+      Maps user cost to real operational cost. Eliminates cross-subsidy.
+      User understands exactly what they pay for. Honest.
+    acceptable_loss: >
+      Complex pricing UI. Users may feel nickel-and-dimed. Must be offset by
+      transparency and per-source value demonstration.
+
+  - id: OC-003
+    constraint: "JetBrains licensing model — account activation, signed token, concurrent sessions, offline grace"
+    rationale: >
+      Proven over 20+ years in the Java ecosystem. No DRM arms race.
+      Enforcement is server-side concurrent session counting (cheap, simple,
+      impossible to circumvent without credential sharing). Cloud sync value
+      proposition is the real moat — piracy becomes economically irrational
+      when the service is
+      worth more than the binary.
+    acceptable_loss: >
+      Sequential account sharing is undetectable and unpunishable.
+      Acceptable if cloud sync conversion is the primary revenue metric.
+
+  - id: OC-004
+    constraint: "Model capabilities honestly asymmetric across platforms"
+    rationale: >
+      Desktop (32GB): full pipeline (Qwen3-30B-A3B + Whisper Turbo).
+      Mobile (8-12GB): ranking + light summary only (Phi-4 mini / Qwen2.5-3B).
+      Transcription on mobile only during charging (Moonshine).
+      Every capability gap maps to a real hardware constraint.
+    acceptable_loss: >
+      Mobile one-time-purchase experience is noticeably less rich than desktop.
+      This is honest and expected by the target user. Premium cloud tier
+      equalizes the experience across devices.

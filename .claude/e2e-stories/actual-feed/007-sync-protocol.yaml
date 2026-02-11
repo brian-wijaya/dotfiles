@@ -1,0 +1,519 @@
+title: "Cross-Device Sync Protocol (Premium)"
+status: draft
+version: 1
+
+principle: >
+  Sync is the premium moat. The one-time purchase gives you a capable
+  local app. The subscription gives you the same app on every device with
+  a unified feed state. Sync is not eventual-consistency middleware bolted
+  on after the fact — it's a first-class protocol designed alongside the
+  schema. The storage layer (SQLite) is local-first and always writable.
+  Sync merges changes from multiple devices through a central server that
+  acts as a timestamp-ordered relay, not an authority. The server stores
+  encrypted blobs — it cannot read user content or preferences.
+
+  The sync protocol must handle: intermittent connectivity, multi-device
+  concurrent edits, conflict resolution, bandwidth efficiency, and the
+  reality that users will go offline for weeks and then sync a large delta.
+
+architecture:
+  model: "Client-centric with server relay"
+  description: >
+    Each device maintains a complete local SQLite database. The server
+    maintains a per-user append-only changelog of row-level mutations.
+    Sync is pull-then-push: device pulls all server changes since its
+    last sync point, applies them locally (with conflict resolution),
+    then pushes its own local changes to the server. The server is a
+    dumb relay — it stores encrypted change events and serves them
+    back. It never decrypts, never queries, never inspects.
+
+  what_syncs:
+    - table: feed_items
+      strategy: >
+        Items sync by source_url uniqueness. If two devices crawl the
+        same URL, the first-synced version wins (server timestamp).
+        Enrichment fields sync by extraction_version — higher version
+        wins (later extraction is presumably better or from a newer model).
+        Feature vectors follow enrichment — they travel with the extraction.
+      conflict: "Higher extraction_version wins. Tie: server-first wins."
+      bandwidth: >
+        New items: full row. Re-enriched items: enrichment fields only
+        (summary, features, entities — not raw metadata which is immutable).
+
+    - table: user_interactions
+      strategy: >
+        Append-only. No conflicts possible. Every device pushes its
+        interactions. Server merges by created_at timestamp. Duplicates
+        (same item_id + interaction_type + created_at within 1s) are
+        deduplicated by the server.
+      conflict: "None. Append-only merge."
+      bandwidth: "~100-200 bytes per interaction. Negligible."
+
+    - table: budget_ledger
+      strategy: >
+        Append-only with device attribution. Each entry includes a
+        device_id field (not synced to other devices' ledger — the
+        budget query aggregates across all entries regardless of device).
+        This means: if you watch 30min of video on your phone and 30min
+        on your desktop, your total is 60min against the budget.
+      conflict: "None. Append-only with device_id."
+      bandwidth: "~150 bytes per entry. Negligible."
+
+    - table: obliterated_sources
+      strategy: >
+        Obliterate on any device → syncs to all devices immediately.
+        Restore on any device → syncs to all devices. Last-write-wins
+        by timestamp. If you obliterate on phone and restore on desktop
+        within the same second, the later timestamp wins.
+      conflict: "Last-write-wins by obliterated_at / restored_at."
+      bandwidth: "Tiny. Rare events."
+
+    - table: tripwires
+      strategy: >
+        Full row sync. Last-write-wins by a sync_version counter on
+        each row. Editing a tripwire on phone while editing the same
+        tripwire on desktop: higher sync_version wins. The loser's
+        edit is preserved in a conflict log for manual resolution.
+      conflict: "sync_version wins. Conflict logged for review."
+      bandwidth: "~500 bytes per tripwire. Negligible."
+
+    - entity: tuning_presets
+      strategy: >
+        Presets are JSON blobs stored in a presets table (not yet in 005
+        — this adds it). Same strategy as tripwires: sync_version counter,
+        last-write-wins, conflict log for same-version edits.
+      conflict: "sync_version wins. Conflict logged for review."
+      bandwidth: "~1KB per preset. Negligible."
+
+    - entity: feed_configurations
+      strategy: >
+        Feed definitions (name, filters, assigned preset, refresh mode)
+        are JSON blobs in a feeds table. Sync by feed name uniqueness.
+        Last-write-wins. Creating a feed with the same name on two
+        devices simultaneously: server-first wins, second device's
+        feed is renamed with '(2)' suffix.
+      conflict: "Last-write-wins. Name collision → auto-rename."
+      bandwidth: "~500 bytes per feed config. Negligible."
+
+  what_does_not_sync:
+    - entity: "Neural taste model weights"
+      reason: >
+        The neural model is trained on the unified interaction log (which
+        DOES sync). Each device retrains from the merged log. This means
+        the model converges to the same state across devices after sync,
+        but the weights file itself is not transferred. Retraining from
+        the full interaction log takes seconds (tiny model, thousands of
+        examples). This avoids shipping opaque binary blobs and ensures
+        each device's model matches its hardware (ONNX Runtime may
+        optimize differently per architecture).
+
+    - entity: "Embedding vectors"
+      reason: >
+        Embeddings are computed per-device from the item's text content.
+        Same content + same model = same embedding. Recomputing is cheaper
+        than transferring (384 floats × 180K items = ~260MB of embeddings).
+        New device computes embeddings lazily as items are accessed.
+
+    - entity: "Thumbnail media cache"
+      reason: >
+        Thumbnails are fetched from source URLs. Each device maintains
+        its own bounded cache. No point syncing binary image files when
+        they can be re-fetched.
+
+    - entity: "Pipeline state (raw/enriching/enriched/failed)"
+      reason: >
+        Pipeline state is device-local. An item may be 'enriched' on
+        desktop and 'raw' on mobile (mobile hasn't processed it yet).
+        Sync transfers the enrichment result, not the pipeline state.
+        The receiving device updates its own pipeline_state based on
+        whether it now has enrichment data.
+
+  server_architecture:
+    description: >
+      The sync server is a minimal stateless relay. It does not run
+      the Actual Feed application logic. It stores encrypted change
+      events and serves them back. It authenticates users, enforces
+      subscription status, and manages concurrent session counting.
+
+    components:
+      - name: "Auth service"
+        description: >
+          Account-based auth (JetBrains model from 001). Issues signed
+          JWT tokens. Validates subscription status. Counts concurrent
+          sessions. Revokes tokens on subscription lapse.
+
+      - name: "Change event store"
+        description: >
+          Append-only log per user. Each entry is: {sequence_number,
+          table, row_id, operation (insert/update/delete), encrypted_payload,
+          device_id, server_timestamp}. Entries are immutable once written.
+          Retention: 180 days. Devices that haven't synced in 180 days
+          must do a full resync (pull entire current state, not deltas).
+
+      - name: "Encryption"
+        description: >
+          All payloads are encrypted client-side before upload using a
+          key derived from the user's account password (PBKDF2 → AES-256-GCM).
+          The server stores ciphertext. The server cannot read feed items,
+          interactions, preferences, or tripwire conditions. Key rotation
+          is possible (re-encrypt all stored events) but expensive.
+        rationale: >
+          Zero-knowledge sync. The server operator (us) cannot mine user
+          data for advertising, analytics, or any other purpose. This is
+          a trust commitment, not a marketing claim. The encryption makes
+          the commitment technically enforceable.
+
+      - name: "Bandwidth optimization"
+        description: >
+          Change events are gzip-compressed before encryption. Typical
+          sync delta for a daily user: 500 items × 3KB = 1.5MB + interactions
+          + budget entries ≈ 2MB/day compressed. Monthly: ~60MB. Yearly: ~700MB.
+          Within typical mobile data plan tolerances.
+
+    hosting: >
+      Stateless relay nodes behind a load balancer. Change event store
+      in S3-compatible object storage (cheap, durable, scalable).
+      Auth service backed by PostgreSQL (small, relational, proven for
+      user accounts). No application logic on the server — all
+      intelligence is in the client.
+
+  sync_protocol_flow:
+    pull:
+      - "Client sends: {user_token, last_sync_sequence, device_id}"
+      - "Server returns: all change events with sequence > last_sync_sequence"
+      - "Client decrypts each event"
+      - "Client applies events to local SQLite in sequence order"
+      - "Conflict resolution applied per-table rules (above)"
+      - "Client updates its last_sync_sequence"
+
+    push:
+      - "Client collects all local changes since last push (tracked via local changelog table)"
+      - "Client encrypts each change event"
+      - "Client sends batch to server: [{table, row_id, operation, encrypted_payload}]"
+      - "Server assigns sequence numbers, stores events, returns acknowledgment"
+      - "Client clears local changelog for pushed items"
+
+    frequency:
+      - "On app open: pull then push"
+      - "On app backgrounding: push"
+      - "On significant local change (obliterate, new tripwire): push immediately"
+      - "Periodic background sync: configurable (default: every 15 minutes when online)"
+      - "Manual sync: pull-to-refresh gesture"
+
+  conflict_resolution_detail:
+    principle: >
+      Conflicts are rare in practice. Most sync operations are non-conflicting:
+      different items crawled on different devices, interactions on different
+      items, budget entries from different devices. True conflicts occur only
+      when the same row is modified on two devices between syncs. The default
+      resolution is deterministic (higher version or later timestamp wins).
+      Destructive conflicts (both devices edited a tripwire's condition text)
+      are logged for manual review.
+
+    conflict_log:
+      description: >
+        A local table that stores losing edits from conflict resolution.
+        User can review conflicts from settings: 'N sync conflicts resolved
+        automatically. Review?' Each conflict shows: what was changed on
+        each device, which version won, and option to apply the losing
+        version instead.
+      columns:
+        - { name: id, type: "INTEGER PRIMARY KEY AUTOINCREMENT" }
+        - { name: table_name, type: "TEXT NOT NULL" }
+        - { name: row_id, type: "TEXT NOT NULL" }
+        - { name: local_payload, type: "TEXT NOT NULL", description: "JSON of the losing local version" }
+        - { name: remote_payload, type: "TEXT NOT NULL", description: "JSON of the winning remote version" }
+        - { name: resolved_at, type: "INTEGER NOT NULL" }
+        - { name: resolution, type: "TEXT NOT NULL", description: "Enum: remote_won, local_won, manual" }
+        - { name: reviewed, type: "INTEGER DEFAULT 0" }
+
+  offline_behavior:
+    description: >
+      The app is always fully functional offline. Sync is additive — it
+      brings in new data from other devices — but the local database is
+      never dependent on sync. A device that has never synced works
+      identically to one that syncs hourly, except it only has its own
+      crawled items and interactions.
+
+    offline_grace: >
+      30-day offline grace period (from 001-architecture-tiers). After
+      30 days without any server contact, the app prompts for
+      re-authentication. It does NOT stop working — it continues in
+      local-only mode but disables sync and cloud crawling until
+      re-authenticated. No silent degradation. No data loss.
+
+    stale_sync: >
+      Device offline for 180+ days: change event store may have pruned
+      old entries. Device must do a full-state sync: server sends
+      compressed snapshot of current state (all tables), device replaces
+      local state and re-merges any local-only changes. This is expensive
+      but rare.
+
+user_stories:
+  - id: US-060
+    as: "premium user with phone and laptop"
+    i_want: "my feed, interactions, and preferences to be identical on both"
+    so_that: "I pick up where I left off on any device"
+    acceptance:
+      - items crawled on laptop appear on phone after sync
+      - thumbs-up on phone trains the neural model on laptop (after sync + retrain)
+      - obliterate on phone removes source on laptop
+      - tripwire fires on cloud → notification on both devices
+      - budget consumed on phone counts toward total on laptop
+      - feed scroll position synced (within configurable precision)
+
+  - id: US-061
+    as: "premium user who goes offline for a week"
+    i_want: "to keep using the app normally and merge when I'm back online"
+    so_that: "offline travel doesn't break my feed experience"
+    acceptance:
+      - app works fully offline (local crawl + local enrichment + local ranking)
+      - on reconnect: pull-then-push sync resolves all changes
+      - no data loss from either side
+      - conflicts (if any) are auto-resolved with conflict log
+      - 'N changes synced from your other devices' notification on reconnect
+
+  - id: US-062
+    as: "premium user concerned about privacy"
+    i_want: "my feed data encrypted before it leaves my device"
+    so_that: "even the sync server operator cannot read my preferences"
+    acceptance:
+      - all sync payloads encrypted client-side (AES-256-GCM)
+      - encryption key derived from user's password (PBKDF2)
+      - server stores only ciphertext — no plaintext feed data
+      - key rotation possible (re-encrypt all stored events)
+      - open-source encryption implementation (auditable)
+
+  - id: US-063
+    as: "premium user setting up a new device"
+    i_want: "to sign in and have my full feed state restored"
+    so_that: "device replacement is painless"
+    acceptance:
+      - sign in → full-state sync from server (all tables)
+      - neural model retrained from synced interaction log
+      - embeddings computed lazily as items are accessed
+      - thumbnails re-fetched from source URLs
+      - total restore time for 180K items: estimate provided during sync
+      - partial sync: 'Sync last 30 days first? (Rest syncs in background)'
+
+  - id: US-064
+    as: "user deciding whether to subscribe"
+    i_want: "to see exactly what sync adds over local-only"
+    so_that: "I make an informed decision"
+    acceptance:
+      - settings page shows: 'Local only' vs 'Synced' comparison
+      - concrete benefits listed: cross-device feed, merged budget tracking,
+        cloud tripwires, cloud crawling, device replacement recovery
+      - no dark patterns, no degraded experience to force upgrade
+      - 'Try sync free for 14 days' trial (if business model supports it)
+
+  - id: US-065
+    as: "premium user who cancels subscription"
+    i_want: "to keep all my data and continue using the app locally"
+    so_that: "cancellation doesn't punish me"
+    acceptance:
+      - subscription lapse → sync stops, cloud crawling stops
+      - all local data remains intact — nothing is deleted
+      - app continues working in local-only mode (one-time purchase tier)
+      - re-subscribing resumes sync from where it left off
+      - cloud-stored change events retained for 180 days after lapse
+      - after 180 days: cloud data purged, re-subscribe requires full-state push
+
+collective_lifetime_stories:
+  - id: CL-060
+    title: "Sync conflict frequency in practice"
+    description: >
+      True conflicts (same row edited on two devices between syncs) are
+      rare for most tables. Feed items are crawled independently —
+      same-URL dedup handles this cleanly. Interactions are append-only.
+      Budget entries are append-only with device_id. The only realistic
+      conflict sources are: tripwire edits (user edits condition on phone,
+      also edits on desktop) and preset edits (user tweaks weights on
+      both devices). With 15-minute sync intervals, the window for
+      conflicts is small. Expected conflict rate: <1 per month for
+      active multi-device user.
+    worst_case: >
+      User actively edits presets on both devices simultaneously during
+      an offline period. Reconnect produces 10+ preset conflicts. The
+      conflict log presents all of them for review. This is annoying but
+      not data-losing.
+
+  - id: CL-061
+    title: "Encryption key management and password changes"
+    description: >
+      The sync encryption key is derived from the user's account password.
+      If the user changes their password, all stored server-side events
+      are encrypted with the old key. Options: (1) re-encrypt all events
+      with new key (expensive, server must participate in rotation),
+      (2) store multiple key versions and decrypt with the correct one
+      (complex), (3) derive sync key from a separate passphrase that
+      doesn't change with password (simplest but adds a second credential).
+    worst_case: >
+      User forgets their password and resets via email. The password
+      reset breaks the encryption key derivation. All server-stored
+      events become undecryptable. The user's current device has the
+      full local database — it becomes the new source of truth. A
+      full-state push re-seeds the server with new-key encryption.
+      Data loss: zero (local DB is authoritative). Disruption: moderate
+      (full re-upload of state to server).
+
+  - id: CL-062
+    title: "Server-side storage cost scaling"
+    description: >
+      Per-user server storage: ~700MB/year of encrypted change events
+      (gzip compressed). At 10K users: 7TB/year. At 100K users: 70TB/year.
+      S3-compatible storage at ~$0.023/GB/month: 70TB = ~$1,600/month.
+      Retention pruning (180 days) caps growth. Steady-state per-user
+      storage: ~350MB (180 days × 2MB/day). At 100K users: ~35TB
+      steady-state = ~$800/month. This is sustainable at $25/month
+      subscription with even modest user counts.
+    worst_case: >
+      Power user with aggressive crawling produces 10x average data.
+      7GB/year per user. At 1K power users: 7TB additional. Manageable
+      but per-user storage quotas may be needed (e.g., 5GB included,
+      $1/GB/month additional). Or: more aggressive change event
+      compaction (merge sequential updates to same row).
+
+  - id: CL-063
+    title: "Neural model convergence across devices"
+    description: >
+      Each device retrains the neural taste model from the merged
+      interaction log after sync. Because the model is tiny and training
+      is deterministic (same log → same weights with fixed seed), all
+      devices converge to the same model after sync. However, between
+      syncs, each device's model diverges based on local-only interactions.
+      This means: immediately after interacting on phone but before sync,
+      the phone's model is slightly different from the laptop's. This is
+      acceptable — the divergence is proportional to un-synced interactions
+      and resolves on next sync.
+    worst_case: >
+      User goes offline for a month on both devices, interacts heavily
+      on both. Each device's neural model has diverged significantly.
+      On sync: interaction logs merge, both devices retrain. The merged
+      model reflects all interactions from both devices — neither device's
+      pre-sync model is preserved. If the user preferred their phone's
+      model, that specific state is gone. Mitigation: interaction log is
+      the source of truth, not the model weights. The model is always
+      a deterministic function of the log.
+
+enforced_constraints:
+  - id: EC-060
+    constraint: "Sync payloads are encrypted client-side — server stores only ciphertext"
+    type: privacy
+    rationale: >
+      Zero-knowledge sync is a trust commitment. The sync server cannot
+      read feed items, user preferences, interaction history, tripwire
+      conditions, or any other user data. This is verified by the
+      encryption being client-side with user-derived keys.
+    testable: >
+      Network capture of sync traffic shows only encrypted blobs. Server
+      database contains no plaintext user content. Server code has no
+      decryption capability.
+
+  - id: EC-061
+    constraint: "Subscription lapse retains all local data"
+    type: trust (extends EC-004 from 001)
+    rationale: >
+      Cancelling a subscription must never destroy user data. The local
+      SQLite database is the user's property. Sync stops, cloud features
+      stop, but the local app continues with all accumulated data intact.
+    testable: >
+      Simulate subscription lapse. Verify: all feed_items, interactions,
+      presets, tripwires, budget entries remain in local SQLite. App
+      launches and operates in local-only mode.
+
+  - id: EC-062
+    constraint: "Sync is pull-then-push, never destructive"
+    type: data safety
+    rationale: >
+      Sync must never delete local data unless the deletion was an
+      explicit user action on another device (e.g., obliterate). The
+      pull phase adds or updates; the push phase uploads. No sync
+      operation results in data that existed on a device before sync
+      being absent after sync, unless that deletion was an intentional
+      user action synced from another device.
+    testable: >
+      Count rows in all local tables before and after sync. No row count
+      decreases unless a delete event from another device was applied.
+      Delete events are logged in conflict_log for review.
+
+  - id: EC-063
+    constraint: "180-day server retention with full-state fallback"
+    type: operational
+    rationale: >
+      Change events older than 180 days are pruned to cap storage costs.
+      Devices that haven't synced in 180+ days cannot do incremental
+      sync — they must do a full-state sync. This is communicated
+      clearly: 'Your device hasn't synced in X days. A full sync is
+      required.'
+    testable: >
+      Device with last_sync_sequence older than 180 days receives
+      'full_sync_required' response from server. Client initiates
+      full-state pull.
+
+opinionated_constraints:
+  - id: OC-060
+    constraint: "Server is a dumb relay, not an application server"
+    rationale: >
+      All intelligence is in the client. The server stores encrypted
+      blobs, authenticates users, and counts concurrent sessions. It
+      does not run feed ranking, LLM processing, or any application
+      logic. This keeps server costs minimal (storage + bandwidth,
+      no compute), simplifies the server codebase (a few hundred lines
+      of API endpoints), and makes the server replaceable (user could
+      theoretically self-host the relay).
+    acceptable_loss: >
+      Cloud crawling (premium feature) requires server-side compute.
+      This is the ONE exception to the dumb-relay principle. The
+      cloud crawler runs as a separate service, not part of the sync
+      relay. Its output (crawled items) flows through the same sync
+      protocol — it pushes items into the user's change event stream
+      as if it were another device.
+
+  - id: OC-061
+    constraint: "Password-derived encryption key (PBKDF2 → AES-256-GCM)"
+    rationale: >
+      Simple key management: user's password is the only secret. No
+      separate encryption passphrase. No hardware key. No key server.
+      PBKDF2 with high iteration count (600K+ per OWASP 2024) makes
+      brute-force impractical. AES-256-GCM provides authenticated
+      encryption (confidentiality + integrity).
+    acceptable_loss: >
+      Password change or reset requires re-encryption or key migration.
+      This is complex but infrequent. The simplicity of single-password
+      key derivation outweighs the complexity of occasional key rotation.
+      Fallback: local device is always authoritative. Password reset
+      + full-state push from local = complete recovery.
+
+  - id: OC-062
+    constraint: "Neural model retrains from synced interaction log, not weight transfer"
+    rationale: >
+      Transferring model weights between devices assumes identical model
+      architecture and ONNX Runtime versions. Retraining from the log
+      is deterministic, portable, and architecture-independent. The model
+      is tiny (seconds to retrain) so the cost is negligible. The log
+      is the source of truth; the weights are a derived artifact.
+    acceptable_loss: >
+      Between syncs, devices have slightly different neural models (each
+      reflecting only local interactions since last sync). This divergence
+      is small and resolves on next sync. Users who interact exclusively
+      on one device see no divergence at all.
+
+  - id: OC-063
+    constraint: "Cloud crawler acts as a virtual device in the sync protocol"
+    rationale: >
+      The cloud crawler is architecturally just another sync participant.
+      It crawls, produces raw FeedItems, enriches them with server-grade
+      models, and pushes the results into the user's change event stream.
+      From the client's perspective, it's indistinguishable from another
+      device that happens to be always-on. This unifies the sync protocol
+      — there's no special 'cloud items' path. Everything flows through
+      the same encrypted change event pipeline.
+    acceptable_loss: >
+      The cloud crawler produces items enriched by server-grade models,
+      while local devices produce items enriched by local models. Same
+      item crawled by both may have different feature vectors. The
+      sync rule (higher extraction_version wins) handles this: the
+      cloud enrichment is likely newer and replaces the local one.
+      If the user prefers their local model's extraction, they can
+      re-extract locally (bumps extraction_version, wins on next sync).

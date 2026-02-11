@@ -1,0 +1,472 @@
+title: "Onboarding & First-Run Experience"
+status: draft
+version: 1
+
+principle: >
+  First impressions determine retention. The user just paid for (or trialed)
+  Actual Feed. They need to reach a satisfying, populated feed within
+  minutes, not hours. Every subsystem has a cold-start problem: no items,
+  no interactions, no neural model, no tripwires, no budget history. The
+  onboarding flow must collapse this cold state into a functional,
+  personalized feed as fast as the user's hardware allows.
+
+  The onboarding is NOT a tutorial wizard with 15 screens of explanation.
+  It is a sequence of high-impact choices, each producing immediate visible
+  results. The user sees their feed building in real-time as they make
+  choices. By the end of onboarding (5-10 minutes), they have: a populated
+  feed, a compute budget that makes sense, at least one preset, and
+  optionally a tripwire or two. The rest they discover through use.
+
+  The philosophy: respect the user's intelligence. They bought this product
+  because they're technically literate. Don't over-explain. Don't patronize.
+  Do provide 'Learn More' links everywhere for the curious. Do make defaults
+  excellent so the user can skip everything and still get value.
+
+onboarding_flow:
+  step_0_activation:
+    description: >
+      Account sign-in. One screen. Email + password, or OAuth (GitHub,
+      Google). Issues signed license token. No hardware fingerprinting.
+      Concurrent session count starts at 1. Takes 30 seconds.
+    cold_start_impact: "None. Activation is infrastructure."
+    skip_allowed: false
+
+  step_1_source_selection:
+    description: >
+      Grid of source platforms with checkboxes and icons. Free sources
+      (RSS, HN, GitHub, open publications) are pre-checked. Paid sources
+      (YouTube, Twitter, Reddit, SO, Quora) are visible but unchecked,
+      each showing per-source cost contribution. The compute budget bar
+      appears at the top, updating in real-time as the user ticks boxes.
+    cold_start_impact: >
+      Determines what the crawler will fetch. More sources = richer feed
+      but longer initial crawl. Minimum viable: at least one source checked.
+    defaults:
+      - "HN: checked (free, fast, relevant to target user)"
+      - "RSS: checked with 3 suggested feeds (Ars Technica, LWN, The Pragmatic Engineer)"
+      - "GitHub: checked (releases from popular repos)"
+      - "YouTube: unchecked (paid, shows +$X/month)"
+      - "Twitter: unchecked (paid, shows +$X/month)"
+      - "Reddit: unchecked (paid, shows +$X/month)"
+    user_action: "Check/uncheck sources. See budget bar update."
+    skip_behavior: "Defaults applied. Free sources only."
+    time_estimate: "30-60 seconds"
+
+  step_2_topic_declaration:
+    description: >
+      Text input for topic interests. Suggested topics based on source
+      selection (if HN checked: 'programming', 'startups', 'systems').
+      User types or selects topics. These seed the topic_relevance signal
+      in the ranking pipeline. Topics are editable later.
+    cold_start_impact: >
+      Without topics, topic_relevance is 0.5 for everything (neutral).
+      With topics, the feed immediately prioritizes relevant content.
+      This is the single highest-impact onboarding step for feed quality.
+    defaults:
+      - "Suggested based on source selection"
+      - "Pre-populated with 3-5 broad topics user can refine"
+    user_action: "Type topics, accept suggestions, or skip."
+    skip_behavior: "No topics set. Relevance signal neutral. Feed is unfiltered by topic."
+    time_estimate: "30-60 seconds"
+
+  step_3_model_selection:
+    description: >
+      For one-time purchase users: choose local model. Presented as
+      a simple picker, NOT a technical specification page. Three options:
+
+      Desktop:
+      - 'Recommended' (Qwen3-30B-A3B): best quality, requires 32GB RAM
+      - 'Balanced' (Qwen2.5-14B or similar): good quality, requires 16GB RAM
+      - 'Lightweight' (Qwen2.5-7B or similar): basic quality, requires 8GB RAM
+
+      Mobile:
+      - 'Recommended' (Phi-4 mini): best mobile quality
+      - 'Lightweight' (Qwen2.5-3B): basic quality, less battery
+
+      Each option shows: quality estimate (stars), RAM requirement,
+      processing speed estimate, impact on compute budget bar.
+    cold_start_impact: >
+      Model determines feature extraction quality. Larger model =
+      better summaries, more accurate signals, longer processing time.
+    defaults:
+      - "Auto-detected based on device RAM"
+      - "If 32GB+: Recommended pre-selected"
+      - "If 16GB: Balanced pre-selected"
+      - "If <16GB: Lightweight pre-selected"
+    user_action: "Select model. See budget bar update."
+    skip_behavior: "Auto-detected default applied."
+    time_estimate: "15-30 seconds"
+
+  step_4_initial_crawl:
+    description: >
+      The crawl starts immediately after source + model selection.
+      The user sees the feed building in real-time: items appear
+      as they're crawled (raw state: title, author, timestamp, thumbnail).
+      Enrichment runs in parallel — items transition from 'analyzing...'
+      to fully enriched with summaries and scores as the LLM processes
+      them. This is the 'wow' moment: watching your personalized feed
+      assemble itself.
+    cold_start_impact: >
+      First crawl fetches the most recent items from each source.
+      Target: 50-100 items within 2-3 minutes (depends on sources
+      and network speed). Enrichment: first items enriched within
+      1-2 minutes on desktop (Qwen3-30B-A3B processes ~200 tokens/s,
+      a 500-token article is enriched in ~2.5s). Mobile: slower,
+      5-10 minutes for first batch.
+    user_sees: >
+      A feed buffer (or feed screen) with items streaming in.
+      Progress indicator: 'Crawling... 23 items found. Analyzing... 8 enriched.'
+      The feed is browsable immediately — raw items are navigable,
+      just not scored. As items enrich, they reorder by score.
+      The user watches their algorithm take shape.
+    skip_behavior: "Cannot skip. This IS the product."
+    time_estimate: "2-5 minutes to first usable feed"
+
+  step_5_optional_customization:
+    description: >
+      After the initial feed is populated, an unobtrusive prompt:
+      'Your feed is ready. Want to customize further?' Options:
+      - Set content budgets (video hours, audio hours, etc.)
+      - Add tripwires (with suggested packs based on topics)
+      - Adjust ranking preset (sliders for taste and serendipity)
+      - Set up cloud sync (premium upsell)
+      Each is a single screen, accessible now or from settings later.
+    cold_start_impact: >
+      These are all optional. The feed works without any of them.
+      Budgets default to off. Tripwires default to none. Preset
+      defaults to 'balanced'. Sync defaults to off (requires premium).
+    defaults:
+      - "No budgets (soft, all unlimited)"
+      - "No tripwires"
+      - "Balanced preset"
+      - "Refresh: automatic on app open"
+    user_action: "Tap into any customization or dismiss."
+    skip_behavior: "All defaults. Full feed experience. Customize later from settings."
+    time_estimate: "0 seconds (skip) to 5 minutes (deep customize)"
+
+  step_6_crawl_scheduling:
+    description: >
+      After initial setup, the user configures when the crawler runs.
+      Presented as a simple choice:
+      - 'While I sleep' (overnight window, e.g., 1am-6am)
+      - 'When I'm not using my device' (idle detection)
+      - 'Continuously in background' (always-on, higher resource usage)
+      - 'Only when I ask' (manual refresh)
+      Compute budget bar updates to show impact.
+    cold_start_impact: >
+      Determines how quickly the feed accumulates content over days.
+      Overnight scheduling is recommended for desktop (heavy processing
+      during idle hours). Mobile: idle + charging recommended.
+    defaults:
+      - "Desktop: 'When I'm not using my device'"
+      - "Mobile: 'When charging and idle'"
+    user_action: "Select schedule."
+    skip_behavior: "Default applied."
+    time_estimate: "15 seconds"
+
+cold_start_subsystem_details:
+  ranking_cold_start:
+    description: >
+      From CL-020: neural taste model has zero training data on first use.
+      Layer 2 contributes nothing. The user sees pure formula (Layer 1) +
+      exploration (Layer 3). The balanced preset's weights are designed
+      to produce a good default ordering from formula alone. The UI
+      surfaces: 'Your taste model is learning. Interact with items to
+      teach it your preferences.'
+    resolution: >
+      First 50 interactions: neural model begins contributing.
+      First 200 interactions: neural model is meaningfully trained.
+      Progress is visible: 'Taste model: 23/50 interactions (learning).'
+
+  novelty_cold_start:
+    description: >
+      Novelty and repetition signals require a history window. On first
+      run, there is no history. All items have novelty = 1.0 (everything
+      is new) and repetition = 0.0 (nothing is repeated). This is
+      technically correct but means the novelty signal is useless for
+      the first few days.
+    resolution: >
+      After ~500 items (1-2 days), the history window is populated
+      enough for meaningful novelty/repetition scoring. No user
+      intervention needed. The system self-calibrates.
+
+  source_authority_cold_start:
+    description: >
+      Source authority starts at 0.5 (neutral) for all sources. It
+      adjusts based on user feedback: thumbs-up items from a source
+      increase its authority; thumbs-down decreases it. Obliterate
+      sets it to 0 permanently (pre-filter).
+    resolution: >
+      Authority differentiates after ~20-30 interactions with items
+      from varied sources. Until then, all sources are treated equally
+      by the authority signal (other signals still differentiate).
+
+  budget_cold_start:
+    description: >
+      No budget configured. All content types are unlimited. The budget
+      dashboard shows: 'No budgets set. All content available.' The user
+      can set budgets from the optional customization step or settings.
+    resolution: "User sets budgets when they feel the need. No defaults enforced."
+
+  tripwire_cold_start:
+    description: >
+      No tripwires defined. No alerts. The tripwire dashboard shows:
+      'No tripwires set. Add conditions to be alerted about events.'
+      Suggested tripwire packs are offered based on the user's topics.
+    resolution: >
+      User creates tripwires when they discover the need. The feature
+      is surfaced but not pushed. Tripwire packs reduce the effort of
+      first creation.
+
+user_stories:
+  - id: US-090
+    as: "new user who just purchased Actual Feed"
+    i_want: "a populated, personalized feed within 5 minutes"
+    so_that: "I immediately see the value of the product I just bought"
+    acceptance:
+      - onboarding flow: activation → sources → topics → model → crawl → done
+      - first items appear within 60 seconds of crawl start
+      - first enriched items (with summaries and scores) within 2-3 minutes
+      - feed is browsable during crawl (raw items visible immediately)
+      - total onboarding time: 5-10 minutes including first crawl
+      - 'skip' at any step applies sensible defaults
+
+  - id: US-091
+    as: "new user who wants to skip setup"
+    i_want: "to press 'use defaults' and get a working feed"
+    so_that: "I explore the product before investing in configuration"
+    acceptance:
+      - single 'Use Defaults' button after activation
+      - defaults: free sources checked, auto-detected model, balanced preset,
+        suggested topics from source selection, no budgets, no tripwires
+      - crawl starts immediately
+      - all customization accessible from settings later
+      - the default experience is good enough to retain the user
+
+  - id: US-092
+    as: "new user watching my feed build"
+    i_want: "to see items stream in and transition from raw to enriched"
+    so_that: "I understand what the system is doing and feel engaged"
+    acceptance:
+      - items appear in the feed as they're crawled (raw state)
+      - raw items show: title, author, source icon, timestamp, thumbnail
+      - 'analyzing...' badge on items being enriched
+      - badge transitions to summary + score when enrichment completes
+      - items reorder as scores are computed (feed re-ranks live)
+      - progress indicator: 'Crawled: 47 | Enriched: 23 | Queue: 24'
+
+  - id: US-093
+    as: "new user who selected premium sources"
+    i_want: "to see the cost impact immediately in the budget bar"
+    so_that: "I understand what I'm paying for before committing"
+    acceptance:
+      - ticking a paid source adds its cost to a running total
+      - budget bar updates in real-time as sources are toggled
+      - per-source cost shown next to each paid checkbox
+      - total monthly cost shown at bottom: '$X.XX/month for selected sources'
+      - no surprise charges — user confirms subscription before any billing
+
+  - id: US-094
+    as: "new mobile user with limited hardware"
+    i_want: "the model to be auto-detected and the experience to be honest about limitations"
+    so_that: "I'm not frustrated by slow processing or crashes"
+    acceptance:
+      - device RAM detected on first launch
+      - model auto-selected based on available RAM
+      - if RAM < recommended minimum: warning with explanation, not a block
+      - processing time estimates shown: 'With this model, enriching 100 items
+        takes approximately X minutes.'
+      - transcription deferred to charging: 'Audio/video transcription will
+        run while your device charges.'
+
+  - id: US-095
+    as: "new user who installed Actual Feed on a second device"
+    i_want: "to sign in and have my existing feed state synced"
+    so_that: "I skip onboarding and immediately have my personalized experience"
+    acceptance:
+      - sign-in on second device detects existing account with sync data
+      - 'Sync from your existing devices? (Skip onboarding)' prompt
+      - full-state sync pulls: items, interactions, presets, tripwires, budgets
+      - neural model retrains from synced interaction log
+      - device-specific choices only: model selection (based on this device's hardware)
+      - second device is ready in minutes, not from scratch
+
+collective_lifetime_stories:
+  - id: CL-090
+    title: "First-crawl quality and the 5-minute judgment window"
+    description: >
+      Users form a permanent impression within the first 5 minutes. If the
+      first crawl returns low-quality items (because the user's topics are
+      broad, sources are noisy, or the LLM misranks), the user concludes
+      'this doesn't work' and may never return. The default preset and
+      default sources must be tuned to produce a satisfying initial feed
+      for the target user (technically literate professional). HN and
+      curated RSS feeds are high-signal sources for this demographic.
+    worst_case: >
+      User selects Reddit as sole source. First crawl returns memes and
+      low-effort posts. User concludes product is useless. Mitigation:
+      source selection shows quality indicators ('Reddit: highly variable
+      quality. Recommended subreddits: r/programming, r/netsec, r/devops').
+      Guided subreddit selection for Reddit source.
+
+  - id: CL-091
+    title: "Model download time on first run"
+    description: >
+      The local LLM must be available before enrichment can start. If the
+      model is bundled with the app: app size is 5-15GB (unacceptable for
+      mobile app stores). If the model is downloaded on first run: the user
+      waits for a multi-GB download before seeing enriched content.
+      Compromise: app ships with a tiny model (Qwen2.5-0.5B, ~350MB) for
+      immediate basic enrichment. Recommended model downloads in background.
+      User sees basic summaries immediately, upgraded to full-quality
+      summaries when the recommended model is ready.
+    worst_case: >
+      Slow internet. 15GB model download takes hours. User is stuck with
+      basic model for a day. The basic model produces inferior summaries.
+      User judges the product by the inferior model. Mitigation: progress
+      bar for model download. 'Using quick model. Full model downloading:
+      45% (2.3 GB remaining).' Basic model summaries are labeled:
+      'Summary (basic). Full analysis available when model download completes.'
+
+  - id: CL-092
+    title: "Source selection paralysis and option overload"
+    description: >
+      The source selection grid may overwhelm new users. 8+ platforms,
+      each with configuration options (subreddits, channels, tags). The
+      risk is that the user spends 20 minutes configuring sources before
+      seeing any content, gets bored, and leaves. The flow must get to
+      a visible feed as fast as possible. Detailed source configuration
+      is for later.
+    worst_case: >
+      User tries to configure Reddit subreddits, YouTube channels, and
+      SO tags during onboarding. Takes 30 minutes. Crawler hasn't started.
+      Feed is empty. Fix: source selection is broad (platform level only).
+      Detailed per-source configuration (subreddits, channels) is post-
+      onboarding. First crawl uses sensible defaults per source.
+
+  - id: CL-093
+    title: "Onboarding on Emacs client"
+    description: >
+      The Emacs client connects to the same backend. If the backend has
+      already been onboarded (via GUI or another Emacs session), the Emacs
+      client just connects and renders the existing feed. If the Emacs
+      client is the FIRST client (user installs only Emacs package):
+      onboarding must work entirely in text mode. Source selection via
+      completing-read. Topic input via minibuffer. Model selection via
+      completing-read. Progress shown in echo area or dedicated buffer.
+    worst_case: >
+      Emacs-only user hits a bug in the JSON-RPC onboarding flow.
+      No GUI fallback. Must work perfectly in text mode. Testing
+      priority: Emacs-only onboarding path must be a first-class
+      test scenario, not an afterthought.
+
+enforced_constraints:
+  - id: EC-090
+    constraint: "Onboarding produces a browsable feed within 5 minutes"
+    type: UX / retention
+    rationale: >
+      If the user doesn't see value within 5 minutes, they may never
+      return. The initial crawl + basic enrichment must produce a
+      browsable, scrollable feed within this window. On desktop: 2-3
+      minutes. On mobile: 4-5 minutes (slower enrichment, likely
+      faster crawl over mobile data).
+    testable: >
+      Time from 'activation complete' to 'first 10 enriched items
+      visible in feed': < 5 minutes on 100 Mbps connection with
+      recommended desktop model.
+
+  - id: EC-091
+    constraint: "Every onboarding step is skippable (except activation)"
+    type: UX
+    rationale: >
+      Users who want to explore before configuring must be able to.
+      Defaults must be good enough for a satisfying first experience.
+      Forced configuration before value delivery kills retention.
+    testable: >
+      Complete onboarding by pressing 'skip' or 'use defaults' at
+      every step. Resulting feed is populated and ranked. All features
+      work with defaults.
+
+  - id: EC-092
+    constraint: "Second-device setup skips onboarding via sync"
+    type: UX
+    rationale: >
+      A user setting up their second device should not re-do onboarding.
+      Sign-in → sync → done. Only device-specific choices (model
+      selection) are required. Everything else comes from sync.
+    testable: >
+      Second device: sign in → sync → feed is populated with items
+      from first device within minutes. No source selection, no topic
+      declaration, no preset configuration needed.
+
+  - id: EC-093
+    constraint: "App ships with a basic fallback model for immediate enrichment"
+    type: cold start
+    rationale: >
+      Waiting for a multi-GB model download before showing any enriched
+      content is unacceptable. A tiny bundled model (~350MB) provides
+      basic summaries immediately. The recommended model downloads in
+      background and takes over seamlessly when ready.
+    testable: >
+      On first launch without network: app starts, crawl runs (from
+      cached/local sources), basic model enriches items. No crash,
+      no 'model not found' error.
+
+opinionated_constraints:
+  - id: OC-090
+    constraint: "Onboarding is 4-6 screens, not 15"
+    rationale: >
+      Each screen must produce visible progress: sources → topics →
+      model → crawl starts → feed appears → optional customize.
+      Anything that can be deferred to settings MUST be deferred.
+      The user's patience is finite. Spend it on high-impact choices
+      (sources, topics) not low-impact ones (refresh schedule, budget
+      thresholds).
+    acceptable_loss: >
+      User misses features that exist but weren't shown during onboarding
+      (tripwires, budgets, presets). These are discovered organically
+      or via 'Learn More' prompts in the feed UI. Discovery is part
+      of the product experience.
+
+  - id: OC-091
+    constraint: "Feed builds visibly during onboarding — no 'please wait' screen"
+    rationale: >
+      Watching the feed assemble is more engaging than a progress bar.
+      Items streaming in, transitioning from raw to enriched, reordering
+      as scores compute — this is a demonstration of the product's value
+      in real-time. It answers 'what does this product do?' better than
+      any marketing copy. The user sees their algorithm working.
+    acceptable_loss: >
+      The feed during initial crawl is unstable — items reorder as
+      scores arrive. This could feel jarring. Mitigation: items fade
+      in gently, reordering is animated (GUI) or signaled (Emacs:
+      'Feed reranked. Press g to refresh view.').
+
+  - id: OC-092
+    constraint: "No tutorial overlays, tooltips, or coach marks on first run"
+    rationale: >
+      The target user is technically literate. Tutorial overlays are
+      patronizing. The UI should be self-explanatory through good design.
+      'Learn More' links are available everywhere for the curious but
+      never forced. If the UI needs a tutorial to be usable, the UI
+      is wrong.
+    acceptable_loss: >
+      Some features are non-discoverable without exploration (tripwires,
+      presets, budget lock). Power features can afford slower discovery.
+      The core loop (browse feed, interact, search) must be obvious
+      from the UI itself.
+
+  - id: OC-093
+    constraint: "Default sources biased toward high-signal, free content for target user"
+    rationale: >
+      HN, curated RSS (Ars Technica, LWN, The Pragmatic Engineer), and
+      GitHub releases are high-signal for the target demographic (senior
+      engineers, researchers). These are free sources — no subscription
+      required for the first experience to be good. Paid sources (YouTube,
+      Reddit) are visible but unchecked, positioned as 'add more when
+      you're ready.' The free default must be excellent on its own.
+    acceptable_loss: >
+      Users outside the target demographic (non-technical) get a feed
+      that skews toward tech content by default. They must manually
+      configure different sources. The product is opinionated about
+      its target user.
