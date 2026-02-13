@@ -17,10 +17,23 @@
         completion-category-overrides '((file (styles hotfuzz basic)))))
 
 ;; M-DEL in file prompts: clear to home directory
-(define-key minibuffer-local-filename-completion-map (kbd "M-DEL")
-  (lambda () (interactive)
-    (delete-minibuffer-contents)
-    (insert "~/")))
+(defun bw/file-minibuffer-clear-to-home ()
+  "Clear minibuffer and insert ~/."
+  (interactive)
+  (delete-minibuffer-contents)
+  (insert "~/"))
+
+(defun bw/file-minibuffer-bind-keys ()
+  "Bind M-DEL in file completion minibuffers (works with vertico)."
+  (when (and minibuffer-completion-table
+             (eq (completion-metadata-get
+                  (completion-metadata "" minibuffer-completion-table
+                                      minibuffer-completion-predicate)
+                  'category)
+                 'file))
+    (local-set-key (kbd "M-DEL") #'bw/file-minibuffer-clear-to-home)))
+
+(add-hook 'minibuffer-setup-hook #'bw/file-minibuffer-bind-keys)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Green min-prefix overlays in file completion minibuffer

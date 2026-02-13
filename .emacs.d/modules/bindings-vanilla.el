@@ -20,7 +20,7 @@
 (global-set-key (kbd "C-c n") 'org-capture)
 (global-set-key (kbd "C-c e e") 'bw/edit-init)
 (global-set-key (kbd "C-c e d") 'bw/dired-init)
-(global-set-key (kbd "C-c t w") 'visual-line-mode)
+(global-set-key (kbd "C-c t w") 'bw/toggle-word-wrap)
 (global-set-key (kbd "C-c c c") 'bw/khal-calendar)
 (global-set-key (kbd "C-c c a") 'bw/khal-agenda)
 (global-set-key (kbd "C-c c s") 'bw/calendar-sync)

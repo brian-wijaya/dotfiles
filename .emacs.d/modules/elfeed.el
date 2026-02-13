@@ -4,6 +4,14 @@
   :ensure t
   :commands elfeed
   :config
+  (defun bw/elfeed-mark-all-read ()
+    (interactive)
+    (mark-whole-buffer)
+    (elfeed-search-untag-all-unread))
+
+  (with-eval-after-load 'elfeed-search
+    (define-key elfeed-search-mode-map (kbd "R") #'bw/elfeed-mark-all-read))
+
   (setq elfeed-feeds
         '(;; Tech news (high signal)
           ("https://hnrss.org/frontpage?points=100" tech hn)
@@ -20,12 +28,6 @@
   (setq elfeed-search-filter "@2-weeks-ago +unread")
 
   ;; Auto-fetch on open
-  (add-hook 'elfeed-search-mode-hook 'elfeed-update)
-
-  ;; Mark all as read with 'R'
-  (define-key elfeed-search-mode-map (kbd "R")
-    (lambda () (interactive)
-      (mark-whole-buffer)
-      (elfeed-search-untag-all-unread))))
+  (add-hook 'elfeed-search-mode-hook 'elfeed-update))
 
 (provide 'elfeed)

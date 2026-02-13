@@ -24,6 +24,7 @@
 
 ;; Larger previews (1.25× default)
 (use-package preview
+  :ensure nil
   :after latex
   :hook ((LaTeX-mode . bw/preview-larger-previews))
   :config

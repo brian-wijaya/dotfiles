@@ -323,6 +323,7 @@ bindsym $mod+Ctrl+a exec ~/bin/tui pulsemixer
 bindsym $mod+Ctrl+b exec ~/bin/tui bluetui
 bindsym $mod+Ctrl+w exec ~/bin/tui impala
 bindsym $mod+Ctrl+s exec ~/bin/share-menu
+bindsym $mod+Shift+s exec ~/bin/tui vault-dashboard
 
 # ============================================
 # WINDOW RULES
@@ -359,6 +360,13 @@ for_window [class="clipboard-panel"] floating enable, border none, move position
 for_window [class="somatic-attention"] floating enable, border none, sticky enable
 no_focus [class="somatic-attention"]
 
+# Agent display viewer (xpra) — always on workspace 9, tiled, no focus steal
+assign [title="^Agent Display"] workspace 9
+for_window [title="^Agent Display"] floating disable, border none
+no_focus [title="^Agent Display"]
+workspace 9 gaps inner 0
+workspace 9 gaps outer 0
+
 # Signal
 for_window [class="Signal"] floating enable
 
@@ -373,6 +381,9 @@ bar {
 # ============================================
 # AUTOSTART
 # ============================================
+
+# Disable SHM logging and clean stale i3 SHM logs (25MB each, accumulate across restarts)
+exec_always --no-startup-id bash -c 'i3-msg shmlog off; for f in /dev/shm/i3-log-*; do pid="${f##*-}"; comm=$(cat /proc/$pid/comm 2>/dev/null); [[ "$comm" == i3* ]] || /usr/bin/rm -f "$f"; done'
 
 # Blank root window (fixes SDDM background persistence)
 exec_always --no-startup-id xsetroot -solid "#1a1b26"

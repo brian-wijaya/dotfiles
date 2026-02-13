@@ -8,6 +8,8 @@ argument-hint: [story-file or feature-name] [--spectate]
 
 Isolated end-to-end testing in a dedicated Xvfb display. Creates a headless X11 environment, runs stories with full somatic instrumentation, and tears it down when done. The user's desktop is never touched.
 
+**Display isolation is the default.** With `display.enabled = true` in `~/.config/kinetic/kinetic.toml`, kinetic auto-creates display :99 on startup and auto-attaches an xpra viewer window (tiled on a separate workspace, read-only). All display-routed tools (X11 input, screenshots, somatic sensors) automatically target :99. The user can observe the agent's display via the xpra viewer. The polybar agent module (robot icon) shows activity state: cyan=idle, orange=active, green=done.
+
 ## Arguments
 
 `$ARGUMENTS` = story file path, feature name, or empty. Append `--spectate` to auto-attach an xpra viewer window.
@@ -57,6 +59,10 @@ Show to user:
 
 ### 4. CREATE ISOLATED DISPLAY
 
+With `display.enabled = true` (the default in `~/.config/kinetic/kinetic.toml`), kinetic has already created display :99 on startup and auto-attached an xpra viewer. In this case, **skip display creation** — the display already exists and all tools are already routing to :99.
+
+If display isolation was not enabled at startup, create one manually:
+
 ```
 ACT_create_display(width=1920, height=1080, depth=24)
   → Returns display_id (e.g., "d99")
@@ -72,6 +78,10 @@ This starts:
 All subsequent X11 tool calls MUST pass `display_id` parameter to target the isolated display, not the user's real display.
 
 ### 4.1. SPECTATE MODE (if --spectate or user requested)
+
+When display isolation is enabled at startup, the xpra viewer is already attached automatically — no need to call `ACT_attach_viewer`. The user sees the agent's display :99 in a read-only xpra window tiled on a separate workspace.
+
+For manually created displays, attach the viewer explicitly:
 
 ```
 ACT_attach_viewer(display_id)
@@ -92,8 +102,10 @@ Since the Xvfb display starts empty (just i3), launch whatever the stories need.
 FOR EACH required application (from story preconditions):
 
   IF application is Emacs:
+    Launch a SEPARATE Emacs daemon on display :99. Do NOT connect to the user's
+    live Emacs at localhost:8585 — that is on the user's display (:0).
     ACT_execute_command(
-      command="DISPLAY=:{display_number} emacs --daemon=e2e-{display_id} && DISPLAY=:{display_number} emacsclient -c -s e2e-{display_id}",
+      command="DISPLAY=:99 emacs --daemon=claude-test && DISPLAY=:99 emacsclient -c -s claude-test",
       timeout=30
     )
     Wait for window to appear: poll SENSE_read_window_layout(display_id=display_id) until Emacs window present
@@ -127,8 +139,8 @@ ANNOUNCE
 
 BASELINE
   ACT_now → start_ns
-  SENSE_get_snapshot → baseline_state
-  SENSE_get_events → baseline_events
+  SENSE_read_snapshot → baseline_state
+  SENSE_read_events → baseline_events
   SENSE_capture_screen_region(display_id=display_id) → "baseline-{story-name}"
 
 PRECONDITIONS
@@ -156,8 +168,8 @@ INPUT SPEED
 VERIFY
   For each expect:
     Check condition → pass/fail with actual value
-  SENSE_get_anomalies(display_id=display_id) → diff against baseline
-  SENSE_get_events(display_id=display_id) → diff against baseline
+  SENSE_read_anomalies(display_id=display_id) → diff against baseline
+  SENSE_read_events(display_id=display_id) → diff against baseline
   SENSE_capture_screen_region(display_id=display_id) → "result-{story-name}"
 
 RESULT
@@ -272,8 +284,8 @@ RECALL_save_session(
 
 | Aspect | Demonstration (`/e2e-loop-demonstration`) | Headless (`/e2e-loop-headless`) |
 |--------|--------------------------------------------|---------------------------------|
-| Display | User's live display | Isolated Xvfb |
-| User interaction | Cohabitation protocol, shared desktop | None (spectate is read-only) |
+| Display | Agent's own display :99 (user watches via xpra viewer) | Isolated Xvfb (same :99, auto-created) |
+| User interaction | User observes via xpra viewer on separate workspace | None (spectate is read-only) |
 | Input speed | Human-paced (50 WPM, thinking tax) | Fast (20ms between keys) |
 | Keystroke display | screenkey / somatic-attention | Not needed (spectate optional) |
 | Process launch | Human keybindings only (no magic) | Direct launch allowed |
@@ -292,7 +304,7 @@ RECALL_save_session(
 | `file` | path | stat |
 | `bash` | cmd, expect | Run command, match output |
 | `window_count` | class, title, min/max | SENSE_read_window_layout query (with display_id) |
-| `focused` | class or title | SENSE_get_focus (with display_id) |
+| `focused` | class or title | SENSE_read_focus (with display_id) |
 
 ### Steps
 

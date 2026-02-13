@@ -6,6 +6,12 @@
   (load-theme 'doom-tokyo-night t)
   (doom-themes-org-config))
 
+;; Remove the $ and \ glyphs at line edges for truncated/wrapped lines
+(unless standard-display-table
+  (setq standard-display-table (make-display-table)))
+(set-display-table-slot standard-display-table 'truncation ?\s)
+(set-display-table-slot standard-display-table 'wrap ?\s)
+
 (use-package doom-modeline
   :demand t
   :config

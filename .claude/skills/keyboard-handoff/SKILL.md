@@ -9,10 +9,12 @@ allowed-tools: mcp__somatic__is_typing, mcp__somatic__post_message, mcp__x11__no
 
 ## When to Use
 
-BEFORE sending any `x11_key` calls during interactive E2E testing. The user may be actively using their keyboard — sending keys blindly will:
+BEFORE sending any `x11_key` calls **that target the user's live display (:0)** during interactive testing. The user may be actively using their keyboard — sending keys blindly will:
 1. Corrupt the test (keys go to wrong place)
 2. Interrupt the user's work
 3. Cause confusing state that's hard to debug
+
+**When NOT needed**: Keyboard handoff is NOT required when sending keystrokes to the agent's own isolated display (:99). Since kinetic auto-creates display :99 on startup (`display.enabled = true` in `~/.config/kinetic/kinetic.toml`), and all display-routed tools automatically target :99, handoff is unnecessary for the vast majority of agent operations. The user cannot be typing on :99 — it is the agent's exclusive display. Only invoke this protocol when explicitly targeting the user's display (:0).
 
 ## Protocol Steps
 

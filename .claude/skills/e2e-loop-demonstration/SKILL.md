@@ -6,7 +6,9 @@ argument-hint: [story-file or feature-name]
 
 # E2E Loop — Demonstration
 
-Live-display end-to-end testing with human-emulated X11 input, somatic differential QA, cohabitation protocol, keystroke visualization, and structured reporting. Runs on the user's primary display — the user watches and learns.
+Live-display end-to-end testing with human-emulated X11 input, somatic differential QA, cohabitation protocol, keystroke visualization, and structured reporting.
+
+**Display isolation note**: Demonstrations run on the agent's own isolated display (:99), NOT on the user's live display (:0). The user observes the demonstration through the xpra viewer window, which is auto-attached by kinetic on startup and tiled on a separate workspace (read-only). The polybar agent module (robot icon) shows activity state: cyan=idle, orange=active, green=done. For Emacs testing, launch a separate daemon on :99 (e.g., `DISPLAY=:99 emacs --daemon=claude-test`) — do NOT connect to the user's Emacs at localhost:8585.
 
 ## Arguments
 
@@ -107,7 +109,7 @@ DOCUMENT SETUP
   Include the keystrokes used — this teaches the user
 ```
 
-**Workspace ownership principle**: The e2e runner takes temporary ownership of the test workspace using the same keybindings the user would use. Other workspaces serve as holding areas. The user watching can learn efficient window management by observing.
+**Workspace ownership principle**: The e2e runner owns the agent's display :99 workspace entirely. The user watches via the xpra viewer on their own display. There is no shared-space contention — the agent has full control of :99 while the user observes read-only.
 
 **Safety**: Never close windows with unsaved work. For Emacs, use `x11_key "space b s"` (save buffer) or similar before closing. State queries like `emacsclient -e '(buffer-modified-p)'` can check for unsaved changes.
 
@@ -391,8 +393,8 @@ ANNOUNCE
 
 BASELINE
   somatic-temporal now → start_ns
-  somatic-fusion get_snapshot
-  somatic-x11-bus get_events(100)
+  somatic-fusion read_snapshot
+  somatic-x11-bus read_events(100)
   x11_screenshot → "baseline-{story-name}"
 
 PRECONDITIONS
@@ -414,8 +416,8 @@ EXECUTE
 VERIFY
   For each expect:
     Check condition → pass/fail with actual value
-  somatic-geometry get_anomalies → diff against baseline
-  somatic-x11-bus get_events → diff against baseline
+  somatic-geometry read_anomalies → diff against baseline
+  somatic-x11-bus read_events → diff against baseline
   x11_screenshot → "result-{story-name}"
 
 RESULT

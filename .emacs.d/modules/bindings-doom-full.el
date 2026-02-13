@@ -289,7 +289,19 @@
 (define-key bw/leader-t-map (kbd "s") 'flyspell-mode)
 (define-key bw/leader-t-map (kbd "t") 'consult-theme)
 (define-key bw/leader-t-map (kbd "v") 'visible-mode)
-(define-key bw/leader-t-map (kbd "w") 'visual-line-mode)
+(defun bw/toggle-word-wrap ()
+  "Toggle word wrap like a normal editor.
+ON: lines wrap at word boundaries.
+OFF: lines extend past the window edge (no wrapping)."
+  (interactive)
+  (if truncate-lines
+      (progn (setq truncate-lines nil)
+             (setq word-wrap t)
+             (message "Word wrap ON"))
+    (setq truncate-lines t)
+    (setq word-wrap nil)
+    (message "Word wrap OFF")))
+(define-key bw/leader-t-map (kbd "w") 'bw/toggle-word-wrap)
 (define-key bw/leader-t-map (kbd "z") 'bw/zen-mode)
 ;; Spec 05: explorer
 (define-key bw/leader-t-map (kbd "~") (lambda () (interactive) (bw/which-key-explore-prefix "SPC t")))
@@ -627,7 +639,7 @@
     "s" "📝 spell"
     "t" "🎨 theme"
     "v" "👁️ visible"
-    "w" "↩️ word-wrap"
+    "w" "↩️ toggle-word-wrap"
     "z" "🧘 zen"
     "~" "🔭 explore")
 
