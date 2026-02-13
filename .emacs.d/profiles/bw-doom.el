@@ -59,6 +59,8 @@
   (load (expand-file-name "elfeed" mod))
   (load (expand-file-name "vault-rag" mod))
   (load (expand-file-name "nov" mod))
+  (load (expand-file-name "mermaid" mod))
+  (load (expand-file-name "markdown" mod))
 
   ;; --- Bindings (must come after all modules define their commands) ---
   (load (expand-file-name "bindings-doom-full" mod))

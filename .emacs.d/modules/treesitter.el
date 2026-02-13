@@ -14,7 +14,9 @@
         (cpp "https://github.com/tree-sitter/tree-sitter-cpp")
         (c "https://github.com/tree-sitter/tree-sitter-c")
         (bash "https://github.com/tree-sitter/tree-sitter-bash")
-        (yaml "https://github.com/ikatyang/tree-sitter-yaml")))
+        (yaml "https://github.com/ikatyang/tree-sitter-yaml")
+        (markdown "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "split_parser" "tree-sitter-markdown/src")
+        (markdown-inline "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "split_parser" "tree-sitter-markdown-inline/src")))
 
 (when (treesit-available-p)
   (add-to-list 'auto-mode-alist '("\\.rs\\'" . rust-ts-mode))
@@ -38,6 +40,6 @@
   (add-to-list 'auto-mode-alist '("\\.sh\\'" . bash-ts-mode))
   (add-to-list 'auto-mode-alist '("\\.bash\\'" . bash-ts-mode))
   (add-to-list 'auto-mode-alist '("\\.ya?ml\\'" . yaml-ts-mode))
-  ;; Spec 06: markdown tree-sitter support
-  (add-to-list 'auto-mode-alist '("\\.md\\'" . markdown-ts-mode))
-  (add-to-list 'auto-mode-alist '("\\.markdown\\'" . markdown-ts-mode)))
+  ;; Spec 06: markdown — use MELPA markdown-mode (markdown-ts-mode is Emacs 31+)
+  (add-to-list 'auto-mode-alist '("\\.md\\'" . markdown-mode))
+  (add-to-list 'auto-mode-alist '("\\.markdown\\'" . markdown-mode)))
