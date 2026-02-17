@@ -106,3 +106,98 @@
               #'bw/minibuffer-green-prefix--propertize nil t)))
 
 (add-hook 'minibuffer-setup-hook #'bw/minibuffer-green-prefix--setup)
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Live file preview during find-file (Vertico)
+;; ═══════════════════════════════════════════════════════════════════
+
+(defvar bw/file-preview--original-buffer nil)
+(defvar bw/file-preview--original-window nil)
+(defvar bw/file-preview--preview-buffers nil)
+(defvar bw/file-preview--active nil)
+(defvar bw/file-preview--last-candidate nil)
+(defvar bw/file-preview--confirmed nil)
+
+(defun bw/file-preview--get-candidate ()
+  (when (and (bound-and-true-p vertico--index)
+             (>= vertico--index 0)
+             (fboundp 'vertico--candidate))
+    (vertico--candidate)))
+
+(defun bw/file-preview--show ()
+  (condition-case nil
+      (when bw/file-preview--active
+        (let* ((cand (bw/file-preview--get-candidate))
+               (path (when cand (expand-file-name cand))))
+          (when (and path
+                     (not (equal path bw/file-preview--last-candidate))
+                     (file-regular-p path)
+                     (< (or (file-attribute-size (file-attributes path)) most-positive-fixnum) 1048576)
+                     (window-live-p bw/file-preview--original-window))
+            (setq bw/file-preview--last-candidate path)
+            (let* ((existing (get-file-buffer path))
+                   (buf (or existing (find-file-noselect path t))))
+              (unless existing
+                (cl-pushnew buf bw/file-preview--preview-buffers))
+              (set-window-buffer bw/file-preview--original-window buf)))))
+    (error nil)))
+
+(defvar bw/file-preview-minibuffer-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "<prior>") #'bw/file-preview--scroll-up)
+    (define-key map (kbd "<next>") #'bw/file-preview--scroll-down)
+    (define-key map (kbd "<escape>") #'abort-minibuffers)
+    map))
+
+(defun bw/file-preview--scroll-up ()
+  (interactive)
+  (when (window-live-p bw/file-preview--original-window)
+    (with-selected-window bw/file-preview--original-window
+      (scroll-down nil))))
+
+(defun bw/file-preview--scroll-down ()
+  (interactive)
+  (when (window-live-p bw/file-preview--original-window)
+    (with-selected-window bw/file-preview--original-window
+      (scroll-up nil))))
+
+(defun bw/file-preview--mark-confirmed (&rest _)
+  (when bw/file-preview--active
+    (setq bw/file-preview--confirmed t)))
+
+(defun bw/file-preview--setup ()
+  (when (and minibuffer-completion-table
+             (eq (completion-metadata-get
+                  (completion-metadata "" minibuffer-completion-table
+                                      minibuffer-completion-predicate)
+                  'category)
+                 'file))
+    (setq bw/file-preview--original-window (minibuffer-selected-window)
+          bw/file-preview--original-buffer (when (window-live-p (minibuffer-selected-window))
+                                             (window-buffer (minibuffer-selected-window)))
+          bw/file-preview--preview-buffers nil
+          bw/file-preview--active t
+          bw/file-preview--last-candidate nil
+          bw/file-preview--confirmed nil)
+    (set-keymap-parent bw/file-preview-minibuffer-map (current-local-map))
+    (use-local-map bw/file-preview-minibuffer-map)
+    (add-hook 'post-command-hook #'bw/file-preview--show nil t)))
+
+(defun bw/file-preview--cleanup ()
+  (when bw/file-preview--active
+    (let ((confirmed bw/file-preview--confirmed)
+          (selected-path bw/file-preview--last-candidate))
+      (setq bw/file-preview--active nil)
+      (when (and (not confirmed)
+                 (window-live-p bw/file-preview--original-window)
+                 (buffer-live-p bw/file-preview--original-buffer))
+        (set-window-buffer bw/file-preview--original-window bw/file-preview--original-buffer))
+      (dolist (buf bw/file-preview--preview-buffers)
+        (when (and (buffer-live-p buf)
+                   (or (not confirmed)
+                       (not (equal (buffer-file-name buf) selected-path))))
+          (kill-buffer buf))))))
+
+(advice-add 'exit-minibuffer :before #'bw/file-preview--mark-confirmed)
+(add-hook 'minibuffer-setup-hook #'bw/file-preview--setup)
+(add-hook 'minibuffer-exit-hook #'bw/file-preview--cleanup)
