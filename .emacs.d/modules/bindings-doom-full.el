@@ -53,6 +53,12 @@
 (define-key bw/leader-b-map (kbd "x") 'scratch-buffer)
 (define-key bw/leader-b-map (kbd "z") 'bury-buffer)
 (define-key bw/leader-b-map (kbd "e") 'bw/editor)
+(defun bw/kill-other-buffers ()
+  "Kill all buffers except the current one."
+  (interactive)
+  (mapc 'kill-buffer (delq (current-buffer) (buffer-list)))
+  (message "Killed all other buffers"))
+(define-key bw/leader-b-map (kbd "K") 'bw/kill-other-buffers)
 ;; Spec 05: explorer in buffer menu
 (define-key bw/leader-b-map (kbd "~") (lambda () (interactive) (bw/which-key-explore-prefix "SPC b")))
 
@@ -412,6 +418,7 @@ OFF: lines extend past the window edge (no wrapping)."
     "e" "📝 editor"
     "i" "📋 ibuffer"
     "k" "❌ kill"
+    "K" "❌ kill others"
     "l" "↩️ last"
     "n" "➡️ next"
     "N" "✨ new"

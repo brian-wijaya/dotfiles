@@ -46,6 +46,12 @@
 (define-key bw/leader-map (kbd "l") 'bw/leader-l-map)
 (define-key bw/leader-map (kbd "w") 'bw/leader-w-map)
 
+;; ibuffer local leader
+(define-prefix-command 'bw/ibuffer-leader-map)
+(define-prefix-command 'bw/ibuffer-mark-map)  ; * prefix
+(define-prefix-command 'bw/ibuffer-sort-map)  ; s prefix
+(define-prefix-command 'bw/ibuffer-filter-map) ; f prefix
+
 ;; Nested prefixes
 (define-key bw/leader-h-map (kbd "r") 'bw/leader-hr-map)
 (define-key bw/leader-o-map (kbd "h") 'bw/leader-oh-map)

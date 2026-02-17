@@ -89,7 +89,7 @@
     '(("🔄 Switch"  . ("b" "l" :gap "n" "p"))
       ("✨ Create"  . ("N" "x" "e"))
       ("💾 Save"    . ("s"))
-      ("📦 Manage"  . ("d" "k" :gap "r" "R" :gap "z"))
+      ("📦 Manage"  . ("d" "k" "K" :gap "r" "R" :gap "z"))
       ("📋 Info"    . ("i" "~")))
     bw/which-key-section-definitions)
 
@@ -199,6 +199,26 @@
       ("🔧 Tools"   . ("~")))
     bw/which-key-section-definitions)
 
+  (puthash 'bw/ibuffer-leader-map
+    '(("📍 Mark"     . ("m" "u" "U" "t" :gap "*"))
+      ("⚡ Actions"  . ("D" "S" "A" "R" "Q" "E"))
+      ("🔃 Sort"     . ("s"))
+      ("🔍 Filter"   . ("f"))
+      ("👁️ View"    . ("RET" "o" "g")))
+    bw/which-key-section-definitions)
+
+  (puthash 'bw/ibuffer-mark-map
+    '(("📍 Mark by" . ("m" "n" "f" :gap "s" "u" "r")))
+    bw/which-key-section-definitions)
+
+  (puthash 'bw/ibuffer-sort-map
+    '(("🔃 Sort by" . ("a" "s" "m" "v" "f")))
+    bw/which-key-section-definitions)
+
+  (puthash 'bw/ibuffer-filter-map
+    '(("🔍 Filter" . ("m" "n" "f" :gap "/")))
+    bw/which-key-section-definitions)
+
   ;; Map prefix key descriptions to keymap symbols (setq for reload safety)
   (setq bw/which-key-prefix-to-keymap-alist
     '(("SPC" . bw/leader-map)
@@ -212,6 +232,12 @@
       ("SPC v" . bw/leader-v-map) ("SPC l" . bw/leader-l-map)
       ("SPC h r" . bw/leader-hr-map) ("SPC o h" . bw/leader-oh-map)))
 
+  ;; Mode-local keymap overrides: when a major mode rebinds a prefix to a
+  ;; different keymap, this tells the sectioned renderer which symbol to use.
+  ;; Format: (MAJOR-MODE . ((GLOBAL-KEYMAP-SYM . MODE-LOCAL-SYM) ...))
+  (setq bw/which-key-mode-keymap-overrides
+    '((ibuffer-mode . ((bw/leader-map . bw/ibuffer-leader-map)))))
+
   ;; ═══════════════════════════════════════════════════════════════════
   ;; Rendering Helpers — pure functions, no side effects
   ;; ═══════════════════════════════════════════════════════════════════
@@ -224,8 +250,9 @@
                                bw/leader-h-map bw/leader-hr-map bw/leader-i-map
                                bw/leader-n-map bw/leader-o-map bw/leader-oh-map
                                bw/leader-p-map bw/leader-q-map bw/leader-s-map
-                               bw/leader-t-map bw/leader-v-map
-                               bw/ce-copy-map bw/ce-sort-map))
+                               bw/leader-t-map bw/leader-v-map bw/leader-l-map
+                               bw/ibuffer-leader-map bw/ibuffer-mark-map
+                               bw/ibuffer-sort-map bw/ibuffer-filter-map))
         (when (and (boundp keymap-symbol) (eq (symbol-value keymap-symbol) keymap))
           (throw 'found keymap-symbol)))
       nil))
@@ -728,18 +755,87 @@ On reload, strips any old nav-map parent before installing the new one."
               (set-keymap-parent actual-km bw/which-key--nav-map)))))))
   (bw/which-key--install-nav-parents)
 
+  ;; Install nav parents on mode-local leader maps (not reachable via global leader chain)
+  (dolist (km (list bw/ibuffer-leader-map bw/ibuffer-mark-map
+                    bw/ibuffer-sort-map bw/ibuffer-filter-map))
+    (when (keymapp km)
+      (let ((existing (keymap-parent km)))
+        (if existing
+            (set-keymap-parent km
+              (make-composed-keymap
+               (list bw/which-key--nav-map existing)))
+          (set-keymap-parent km bw/which-key--nav-map)))))
+
   ;; ═══════════════════════════════════════════════════════════════════
   ;; Activation — override posframe show function
   ;; ═══════════════════════════════════════════════════════════════════
 
+  ;; Track the user's window reliably across posframe/minibuffer focus changes.
+  ;; Updated on every command so it's always fresh when which-key's timer fires.
+  (defvar bw/which-key--last-user-window nil
+    "The last window the user interacted with (pre-command-hook).")
+
+  (defun bw/which-key--track-user-window ()
+    "Record the current window if it belongs to a real user buffer."
+    (let ((w (selected-window)))
+      (unless (or (minibufferp (window-buffer w))
+                  (string-prefix-p " " (buffer-name (window-buffer w))))
+        (setq bw/which-key--last-user-window w))))
+  (add-hook 'pre-command-hook #'bw/which-key--track-user-window)
+
+  (defun bw/which-key--resolve-user-major-mode ()
+    "Return the major-mode of the user's buffer robustly.
+Tries multiple strategies because the selected window during which-key's
+show callback may not be the user's window (posframe child frames,
+minibuffer focus, etc.)."
+    ;; 1. Best source: the tracked user window (set in pre-command-hook)
+    (let ((mode (when (and bw/which-key--last-user-window
+                           (window-live-p bw/which-key--last-user-window))
+                  (buffer-local-value 'major-mode
+                    (window-buffer bw/which-key--last-user-window)))))
+      ;; 2. Fallback: selected window
+      (unless mode
+        (setq mode (buffer-local-value 'major-mode (window-buffer))))
+      ;; 3. If that gave us a popup buffer, try minibuffer-selected-window
+      (when (eq mode 'fundamental-mode)
+        (let ((msw (minibuffer-selected-window)))
+          (when msw
+            (setq mode (buffer-local-value 'major-mode (window-buffer msw))))))
+      ;; 4. Last resort: scan visible non-popup windows
+      (when (eq mode 'fundamental-mode)
+        (catch 'found
+          (walk-windows
+           (lambda (w)
+             (let ((m (buffer-local-value 'major-mode (window-buffer w))))
+               (unless (or (eq m 'fundamental-mode)
+                           (minibufferp (window-buffer w))
+                           (string-prefix-p " " (buffer-name (window-buffer w))))
+                 (throw 'found (setq mode m)))))
+           nil 'visible)))
+      mode))
+
   (defun bw/which-key--resolve-current-keymap-symbol ()
-    "Determine the keymap symbol for the current which-key prefix, if any."
+    "Determine the keymap symbol for the current which-key prefix, if any.
+Looks up the prefix in `bw/which-key-prefix-to-keymap-alist' to find the
+default keymap symbol, then checks `bw/which-key-mode-keymap-overrides'
+for a mode-local replacement (e.g. ibuffer-mode rebinding SPC to its own
+leader map).  Returns the keymap symbol or nil."
     (let* ((prefix-keys (ignore-errors
                           (funcall which-key-this-command-keys-function)))
            (prefix-description (and prefix-keys (> (length prefix-keys) 0)
-                                    (key-description prefix-keys))))
-      (and prefix-description
-           (cdr (assoc prefix-description bw/which-key-prefix-to-keymap-alist)))))
+                                    (key-description prefix-keys)))
+           (alist-sym (and prefix-description
+                           (cdr (assoc prefix-description
+                                       bw/which-key-prefix-to-keymap-alist))))
+           ;; Check for mode-local override.  Robust major-mode detection
+           ;; handles posframe/minibuffer stealing selected-window focus.
+           (buf-mode (bw/which-key--resolve-user-major-mode))
+           (mode-overrides (and alist-sym
+                                (cdr (assq buf-mode
+                                           bw/which-key-mode-keymap-overrides))))
+           (override-sym (and mode-overrides
+                              (cdr (assq alist-sym mode-overrides)))))
+      (or override-sym alist-sym)))
 
   (defun bw/which-key-posframe--show-buffer (act-popup-dim)
     "Show which-key in a posframe, rendering sectioned layout when defined.

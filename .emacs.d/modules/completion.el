@@ -1,5 +1,11 @@
 ;;; completion.el --- vertico, marginalia, orderless, consult, corfu, hotfuzz -*- lexical-binding: t; -*-
-(use-package vertico :demand t :config (vertico-mode 1))
+(use-package vertico
+  :demand t
+  :config
+  (vertico-mode 1)
+  (vertico-multiform-mode 1)
+  (setq vertico-multiform-categories
+        '((file (vertico-sort-function . vertico-sort-alpha)))))
 (use-package marginalia :demand t :config (marginalia-mode 1))
 (use-package orderless :demand t :config (setq completion-styles '(orderless basic)))
 (use-package consult :demand t)
@@ -125,7 +131,7 @@
     (vertico--candidate)))
 
 (defun bw/file-preview--show ()
-  (condition-case nil
+  (condition-case-unless-debug _err
       (when bw/file-preview--active
         (let* ((cand (bw/file-preview--get-candidate))
                (path (when cand (expand-file-name cand))))
@@ -137,6 +143,12 @@
             (setq bw/file-preview--last-candidate path)
             (let* ((existing (get-file-buffer path))
                    (buf (or existing (find-file-noselect path t))))
+              ;; If buffer was already open but file changed on disk, revert silently
+              (when (and existing (not (verify-visited-file-modtime existing)))
+                (condition-case nil
+                    (with-current-buffer existing
+                      (revert-buffer t t t))
+                  (error nil)))
               (unless existing
                 (cl-pushnew buf bw/file-preview--preview-buffers))
               (set-window-buffer bw/file-preview--original-window buf)))))
@@ -146,6 +158,8 @@
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "<prior>") #'bw/file-preview--scroll-up)
     (define-key map (kbd "<next>") #'bw/file-preview--scroll-down)
+    (define-key map (kbd "<S-prior>") #'vertico-scroll-down)
+    (define-key map (kbd "<S-next>") #'vertico-scroll-up)
     (define-key map (kbd "<escape>") #'abort-minibuffers)
     map))
 
@@ -153,13 +167,13 @@
   (interactive)
   (when (window-live-p bw/file-preview--original-window)
     (with-selected-window bw/file-preview--original-window
-      (scroll-down nil))))
+      (ignore-errors (scroll-down nil)))))
 
 (defun bw/file-preview--scroll-down ()
   (interactive)
   (when (window-live-p bw/file-preview--original-window)
     (with-selected-window bw/file-preview--original-window
-      (scroll-up nil))))
+      (ignore-errors (scroll-up nil)))))
 
 (defun bw/file-preview--mark-confirmed (&rest _)
   (when bw/file-preview--active
