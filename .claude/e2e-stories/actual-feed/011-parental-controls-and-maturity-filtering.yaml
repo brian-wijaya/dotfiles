@@ -45,7 +45,7 @@ profiles:
         - { name: name, type: "TEXT NOT NULL", description: "Display name (e.g., 'Dad', 'Emma', 'Jake')" }
         - { name: is_owner, type: "INTEGER DEFAULT 0", description: "Boolean. Owner profile can manage all profiles." }
         - { name: pin_hash, type: "TEXT", description: "bcrypt hash of profile PIN. NULL = no PIN required to enter." }
-        - { name: maturity_threshold, type: "REAL DEFAULT 1.0", description: "Items with f_content_maturity > threshold are hard-filtered. 1.0 = unfiltered (adult default)." }
+        - { name: maturity_threshold, type: "REAL DEFAULT 1.0", description: "Items with content_maturity > threshold are hard-filtered. 1.0 = unfiltered (adult default)." }
         - { name: maturity_overrides_json, type: "TEXT", description: "JSON. Per-category threshold overrides: {violence: 0.3, sexual: 0.1, language: 0.7}" }
         - { name: created_at, type: "INTEGER NOT NULL" }
         - { name: active_preset_id, type: "TEXT", description: "Current tuning preset for this profile" }
@@ -79,7 +79,7 @@ content_maturity_extraction:
 
   schema_addition:
     feed_items_new_columns:
-      - { name: f_content_maturity, type: "REAL", description: "Overall maturity score [0,1]. 0 = universally appropriate, 1 = adult only. Extracted by LLM." }
+      - { name: content_maturity, type: "REAL", description: "Overall maturity score [0,1]. 0 = universally appropriate, 1 = adult only. Extracted by LLM." }
       - { name: maturity_flags_json, type: "TEXT", description: "JSON array of triggered maturity categories with per-category scores: [{category, score, reason}]" }
 
   calibration: >
@@ -99,7 +99,7 @@ filtering_mechanism:
   description: >
     Content maturity filtering uses the same hard pre-filter mechanism
     as obliterate (EC-020 from 003). For the active profile, items with
-    f_content_maturity > profile.maturity_threshold are excluded before
+    content_maturity > profile.maturity_threshold are excluded before
     any scoring. They do not appear in any feed, search result, or
     tripwire notification for that profile.
 
@@ -134,7 +134,7 @@ user_stories:
     acceptance:
       - owner profile (parent) can create child profiles from settings
       - each child profile has a name, optional avatar, and maturity threshold
-      - maturity threshold has a labeled slider: 'Young children' (0.2) → 'Teens' (0.5) → 'Mature teens' (0.7) → 'Unfiltered' (1.0)
+      - "maturity threshold has a labeled slider: 'Young children' (0.2) → 'Teens' (0.5) → 'Mature teens' (0.7) → 'Unfiltered' (1.0). Thresholds calibrated against MPAA/ESRB conventions: 0.2 filters ~80% of content (≈ G/E rating), 0.5 filters ~50% (≈ PG-13/T), 0.7 filters only explicitly adult material (≈ R/M). These are starting defaults — parents adjust per child."
       - example items shown at each threshold level for calibration
       - per-category overrides available under 'Advanced' section
       - child profile gets its own feed, interaction history, and neural taste model
@@ -158,12 +158,12 @@ user_stories:
     i_want: "to see exactly what content was blocked and why"
     so_that: "I can adjust thresholds or whitelist specific items"
     acceptance:
-      - 'Filtered Content' view accessible from parent profile → child profile settings
+      - "'Filtered Content' view accessible from parent profile → child profile settings"
       - shows all items filtered by maturity for that child, newest first
-      - each item shows: title, source, maturity score, triggered categories, reason
-      - 'Whitelist' button per item — adds to child's whitelist, appears in their feed
-      - 'Adjust threshold' shortcut — opens threshold slider with this item highlighted
-      - bulk actions: whitelist all from source, whitelist all in category
+      - "each item shows: title, source, maturity score, triggered categories, reason"
+      - "'Whitelist' button per item — adds to child's whitelist, appears in their feed"
+      - "'Adjust threshold' shortcut — opens threshold slider with this item highlighted"
+      - "bulk actions: whitelist all from source, whitelist all in category"
 
   - id: US-103
     as: "child using Actual Feed"
@@ -172,7 +172,7 @@ user_stories:
     acceptance:
       - child profile feed is visually identical to adult feed
       - no 'kids mode' branding, no infantilized UI, no condescending language
-      - all standard features work: thumbs up/down, obliterate, custom feeds, presets, search
+      - "all standard features work: thumbs up/down, obliterate, custom feeds, presets, search"
       - maturity-filtered items simply don't exist in the child's view
       - child can configure their own sources, weights, and presets within allowed content
       - child's interactions train their own neural taste model
@@ -207,7 +207,7 @@ user_stories:
     acceptance:
       - filtered content view shows maturity score (0.0-1.0) per item
       - items near the threshold boundary are flagged as 'borderline — review recommended'
-      - weekly digest (optional): 'N items filtered this week. M were borderline. Review?'
+      - "weekly digest (optional): 'N items filtered this week. M were borderline. Review?'"
       - parent can set a 'review zone' (e.g., items scoring 0.4-0.6) that are held for parent review instead of auto-filtered
 
 collective_lifetime_stories:
@@ -270,7 +270,7 @@ enforced_constraints:
       child profile. Same mechanism as obliterate (EC-020).
     testable: >
       In a child profile with maturity_threshold=0.3, no item with
-      f_content_maturity > 0.3 appears in any view, search, or notification.
+      content_maturity > 0.3 appears in any view, search, or notification.
 
   - id: EC-101
     constraint: "Content maturity signal is always extracted, regardless of parental controls state"
@@ -281,7 +281,7 @@ enforced_constraints:
       always (it's ~20 tokens in the LLM prompt) avoids a costly
       re-extraction of the entire database.
     testable: >
-      Every enriched FeedItem has f_content_maturity populated, even
+      Every enriched FeedItem has content_maturity populated, even
       when no child profiles exist.
 
   - id: EC-102

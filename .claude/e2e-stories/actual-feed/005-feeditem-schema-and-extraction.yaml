@@ -63,22 +63,22 @@ schema:
         - { name: primary_sources_json, type: "TEXT", description: "JSON array of cited/referenced sources: [{url, title, type}]" }
         - { name: topics_json, type: "TEXT", description: "JSON array of topic labels: [{topic, confidence}]. LLM-assigned." }
 
-        # === FEATURE VECTOR (Stage 2 output, 12 signals, all [0,1]) ===
-        - { name: f_topic_relevance, type: "REAL", description: "Embedding cosine similarity to user's declared topics" }
-        - { name: f_nominal_density, type: "REAL", description: "Specific nouns and technical terms / total tokens" }
-        - { name: f_novelty, type: "REAL", description: "1 - max similarity to recently seen items" }
-        - { name: f_credibility, type: "REAL", description: "Composite: source citation quality + author track record + verifiability" }
-        - { name: f_freshness, type: "REAL", description: "Exponential decay from published_at, configurable half-life" }
-        - { name: f_actionability, type: "REAL", description: "Concrete steps, tools, code, decisions present" }
-        - { name: f_hype_score, type: "REAL", description: "Emotional language, superlatives, clickbait patterns" }
-        - { name: f_vagueness, type: "REAL", description: "Hedge words and qualifiers vs concrete claims" }
-        - { name: f_repetition, type: "REAL", description: "Semantic similarity to other items in recent history" }
-        - { name: f_missing_sources, type: "REAL", description: "Claims made without primary source citation" }
-        - { name: f_source_authority, type: "REAL", description: "User per-source weight + accumulated feedback" }
-        - { name: f_modality_preference, type: "REAL", description: "User per-modality weight" }
+        # === FEATURE VECTOR (Stage 2 output, 13 signals including maturity, all [0,1]) ===
+        - { name: topic_relevance, type: "REAL", description: "Embedding cosine similarity to user's declared topics" }
+        - { name: nominal_density, type: "REAL", description: "Specific nouns and technical terms / total tokens" }
+        - { name: novelty, type: "REAL", description: "1 - max similarity to recently seen items" }
+        - { name: credibility, type: "REAL", description: "Composite: source citation quality + author track record + verifiability" }
+        - { name: freshness, type: "REAL", description: "Exponential decay from published_at, configurable half-life" }
+        - { name: actionability, type: "REAL", description: "Concrete steps, tools, code, decisions present" }
+        - { name: hype_score, type: "REAL", description: "Emotional language, superlatives, clickbait patterns" }
+        - { name: vagueness, type: "REAL", description: "Hedge words and qualifiers vs concrete claims" }
+        - { name: repetition, type: "REAL", description: "Semantic similarity to other items in recent history" }
+        - { name: missing_sources, type: "REAL", description: "Claims made without primary source citation" }
+        - { name: source_authority, type: "REAL", description: "User per-source weight + accumulated feedback" }
+        - { name: modality_preference, type: "REAL", description: "User per-modality weight" }
 
         # === CONTENT MATURITY (always extracted, used as hard pre-filter for child profiles) ===
-        - { name: f_content_maturity, type: "REAL", description: "Overall maturity score [0,1]. 0 = universally appropriate, 1 = adult only. LLM-extracted, biased toward caution." }
+        - { name: content_maturity, type: "REAL", description: "Overall maturity score [0,1]. 0 = universally appropriate, 1 = adult only. LLM-extracted, biased toward caution." }
         - { name: maturity_flags_json, type: "TEXT", description: "JSON array of triggered maturity categories: [{category, score, reason}]. Categories: violence, sexual, language, substances, graphic, mature_themes." }
 
         # === PIPELINE STATE ===
@@ -94,7 +94,7 @@ schema:
       columns:
         - { name: id, type: "INTEGER PRIMARY KEY AUTOINCREMENT" }
         - { name: item_id, type: "TEXT NOT NULL REFERENCES feed_items(id)" }
-        - { name: interaction_type, type: "TEXT NOT NULL", description: "Enum: thumbs_up, thumbs_down, obliterate, skip, click_through, play_start, play_pause, play_complete, save_for_later" }
+        - { name: interaction_type, type: "TEXT NOT NULL", description: "Enum: thumbs_up, thumbs_down, obliterate, exalt, skip, click_through, play_start, play_pause, play_complete, save_for_later, more_like_this, less_like_this, already_seen, often_revisit, not_relevant_anymore, misleading_spam" }
         - { name: created_at, type: "INTEGER NOT NULL", description: "Unix epoch millis" }
         - { name: context_json, type: "TEXT", description: "JSON. Contextual metadata: {feed_id, scroll_position, time_spent_ms, was_exploration_item}" }
 
@@ -126,6 +126,24 @@ schema:
         - { name: obliterated_at, type: "INTEGER NOT NULL" }
         - { name: restored_at, type: "INTEGER", description: "NULL if still obliterated. Set on restore." }
 
+    exalted_sources:
+      description: >
+        Positive terminal table. Sources devotion-boosted by the user. Items
+        from exalted sources get source_authority locked to 1.0. Distinctive
+        badge (star/crown) in feed. Purely for influencing the feed algorithm —
+        does NOT trigger notifications (that's tripwires) and does NOT exempt
+        from budget enforcement (budgets are budgets). Symmetry partner to
+        obliterated_sources. No cap — same philosophy as obliterate. Reversible
+        from settings.
+      columns:
+        - { name: id, type: "INTEGER PRIMARY KEY AUTOINCREMENT" }
+        - { name: profile_id, type: "TEXT NOT NULL", description: "Which profile exalted this source" }
+        - { name: source_platform, type: "TEXT NOT NULL" }
+        - { name: author_id, type: "TEXT", description: "Platform author ID. If set, exalts this specific author." }
+        - { name: source_domain, type: "TEXT", description: "Domain. If set, exalts entire domain. Mutually exclusive with author_id." }
+        - { name: exalted_at, type: "INTEGER NOT NULL" }
+        - { name: restored_at, type: "INTEGER", description: "NULL if still exalted. Set on un-exalt." }
+
     sync_state:
       description: >
         Tracks what has been synced to cloud (premium only). Each row is a
@@ -141,17 +159,20 @@ schema:
     - "CREATE INDEX idx_items_modality ON feed_items(modality)"
     - "CREATE INDEX idx_items_published ON feed_items(published_at DESC)"
     - "CREATE INDEX idx_items_pipeline ON feed_items(pipeline_state)"
-    - "CREATE INDEX idx_items_freshness ON feed_items(f_freshness DESC) WHERE pipeline_state = 'enriched'"
+    - "CREATE INDEX idx_items_freshness ON feed_items(freshness DESC) WHERE pipeline_state = 'enriched'"
     - "CREATE INDEX idx_interactions_item ON user_interactions(item_id)"
     - "CREATE INDEX idx_interactions_type ON user_interactions(interaction_type, created_at DESC)"
     - "CREATE INDEX idx_budget_type_period ON budget_ledger(content_type, started_at DESC)"
     - "CREATE INDEX idx_obliterated_active ON obliterated_sources(source_platform, author_id) WHERE restored_at IS NULL"
 
   fts:
-    - "CREATE VIRTUAL TABLE feed_items_fts USING fts5(title, summary, transcript, content='feed_items', content_rowid='rowid')"
+    - "CREATE VIRTUAL TABLE feed_items_fts USING fts5(title, summary, transcript, topics_text, entities_text, content='feed_items', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2', prefix='2,3')"
     - description: >
-        Full-text search across titles, summaries, and transcripts. User can
-        search their feed history. Rebuild triggers on enrichment update.
+        Full-text search across titles, summaries, transcripts, topics, and
+        entities (see story 013 for search details). topics_text and
+        entities_text are space-joined TEXT columns derived from the JSON
+        arrays. Porter stemming via FTS5 tokenizer. Rebuild triggers on
+        enrichment update.
 
 extraction_pipeline:
   principle: >
@@ -334,11 +355,11 @@ extraction_pipeline:
       post_processing: >
         After LLM extraction, the pipeline computes 4 additional signals
         that cannot be LLM-extracted:
-        - f_freshness: exponential decay from published_at (pure math)
-        - f_novelty: embedding similarity against recent item window (requires embedding model)
-        - f_repetition: semantic dedup against recent batch (requires embedding model)
-        - f_source_authority: looked up from user's source weight table
-        - f_modality_preference: looked up from user's modality weight table
+        - freshness: exponential decay from published_at (pure math)
+        - novelty: embedding similarity against recent item window (requires embedding model)
+        - repetition: semantic dedup against recent batch (requires embedding model)
+        - source_authority: looked up from user's source weight table
+        - modality_preference: looked up from user's modality weight table
 
       embedding_model: >
         For novelty and repetition signals, a small embedding model runs
@@ -366,7 +387,7 @@ extraction_pipeline:
   deduplication:
     strategy: >
       Primary dedup: source_url UNIQUE constraint catches exact URL matches.
-      Secondary dedup: after enrichment, f_repetition signal catches near-
+      Secondary dedup: after enrichment, repetition signal catches near-
       duplicates (same story from different sources). Near-duplicates are
       not deleted — they're downranked by the formula unless the user
       explicitly wants cross-source comparison.
@@ -397,28 +418,28 @@ user_stories:
       - feed items render from local SQLite — no network for metadata
       - thumbnails load from local cache (cache-first, network-fallback)
       - summary visible immediately (no 'processing...' for enriched items)
-      - items still in 'raw' state show: title, source, timestamp, 'analyzing...' badge
-      - items in 'failed' state show: title, source, error reason, retry button
+      - "items still in 'raw' state show: title, source, timestamp, 'analyzing...' badge"
+      - "items in 'failed' state show: title, source, error reason, retry button"
 
   - id: US-041
     as: "user searching my feed history"
-    i_want: "full-text search across titles, summaries, and transcripts"
+    i_want: "full-text search across titles, summaries, transcripts, topics, and entities"
     so_that: "I find that video I watched last week about database indexing"
     acceptance:
-      - FTS5 search across feed_items_fts virtual table
-      - search returns ranked results with highlighted snippets
-      - search filters: date range, modality, source platform, content type
-      - search is local — no network, no cloud, instant
+      - "FTS5 search across feed_items_fts virtual table (5 columns: title, summary, transcript, topics_text, entities_text)"
+      - search returns BM25-ranked results with highlighted snippets
+      - "search filters: date range, modality, source platform, content type"
+      - "search is local — no network, no cloud, <100ms for 500K items (see story 013)"
 
   - id: US-042
     as: "user who swapped their local LLM"
     i_want: "to re-extract features for my existing items with the new model"
     so_that: "my feed is consistent under the new model's judgment"
     acceptance:
-      - model swap triggers: 'Re-extract N items with new model? This may take X hours.'
+      - "model swap triggers: 'Re-extract N items with new model? This may take X hours.'"
       - re-extraction runs in background during idle periods
       - extraction_version incremented for each re-extracted item
-      - user can compare: 'Feed changed N items after model swap. Review?'
+      - "user can compare: 'Feed changed N items after model swap. Review?'"
       - partial re-extraction supported (re-extract last 7 days only)
 
   - id: US-043
@@ -427,7 +448,7 @@ user_stories:
     so_that: "I'm not staring at skeletons waiting for the LLM"
     acceptance:
       - Stage 1 metadata (title, author, thumbnail, timestamp) renders immediately
-      - 'Analyzing...' badge indicates pending enrichment
+      - "'Analyzing...' badge indicates pending enrichment"
       - items are browsable in raw state — just not scored or searchable by content
       - user can manually prioritize enrichment for specific items
       - enrichment queue respects battery state and charging status
@@ -440,7 +461,7 @@ user_stories:
       - SQLite file is the export — copy ~/.actual-feed/feed.db
       - user interactions, budget ledger, obliterated sources all in same DB
       - media cache is separate (thumbnails) — exportable but not required
-      - import: drop a .db file and the app picks it up
+      - "import: drop a .db file and the app picks it up"
       - premium sync is just automated, conflict-resolved SQLite replication
 
   - id: US-045
@@ -448,10 +469,10 @@ user_stories:
     i_want: "to see exactly what the LLM extracted and how it scored"
     so_that: "I trust the system's judgment or override it"
     acceptance:
-      - tap item → detail view shows: summary, entities, claims, sources
-      - each claim shows: has_source (yes/no), linked source if available
-      - feature vector shown as labeled bars (e.g., 'Credibility: 0.72')
-      - extraction model identified ('Analyzed by Qwen3-30B-A3B')
+      - "tap item → detail view shows: summary, entities, claims, sources"
+      - "each claim shows: has_source (yes/no), linked source if available"
+      - "feature vector shown as labeled bars (e.g., 'Credibility: 0.72')"
+      - "extraction model identified ('Analyzed by Qwen3-30B-A3B')"
       - one-tap to original source for verification (EC-010 from 002)
 
 collective_lifetime_stories:

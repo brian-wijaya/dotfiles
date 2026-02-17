@@ -1,0 +1,762 @@
+title: "Desktop Application Shell & Settings"
+status: draft
+version: 1
+
+principle: >
+  The application shell is the chassis. Users never think about a good chassis
+  — they think about the ride. The shell must be invisible when everything works
+  and helpful when something breaks. Tauri 2.x provides the native window, system
+  tray, and OS integration. SolidJS provides the reactive UI. The Kotlin/JVM
+  backend process is the engine — it runs the pipeline, manages the database,
+  and serves the frontend via JSON-RPC 2.0 over a Unix domain socket (Linux/macOS)
+  or localhost HTTP (Windows). The shell's job: start the engine, keep it running,
+  present controls, and get out of the way.
+
+  Settings are where the user exercises control. Every axis of the system —
+  sources, topics, models, schedules, budgets, tripwires, presets, profiles,
+  themes — is configurable from a single, well-organized settings surface.
+  Settings are not a dumping ground of toggles. Each section maps to a story
+  from the broader system (sources → 002, budgets → 004, tripwires → 006,
+  profiles → 011). The settings shell is integration, not invention.
+
+window_management:
+  description: >
+    Single-window application. No multi-window mode in V1. The window is
+    resizable with platform-standard minimum dimensions (800x600). Window
+    position, size, and maximized state persist to local storage and restore
+    on next launch. On multi-monitor setups, the window restores to the
+    monitor it was last on — if that monitor is disconnected, it falls back
+    to the primary display.
+
+  behavior:
+    - "Single instance enforced via Tauri's built-in single-instance plugin"
+    - "Launching a second instance focuses the existing window instead"
+    - "Window state persisted: x, y, width, height, is_maximized, display_id"
+    - "State saved on window move/resize (debounced 500ms) and on quit"
+    - "Minimum window size: 800x600 (enforced by Tauri config)"
+    - "Default window size on first launch: 1200x800, centered on primary display"
+    - "Close button minimizes to tray (configurable: close = quit or close = tray)"
+
+  title_bar:
+    description: >
+      Platform-native title bar on macOS (traffic lights). Custom title bar
+      on Linux and Windows to match the application theme. Title shows
+      'Actual Feed' plus the active profile name if parental controls are
+      enabled (e.g., 'Actual Feed — Emma'). No filename, no version number
+      in the title bar — that belongs in About.
+    linux_windows: >
+      Custom-drawn title bar with minimize, maximize, close buttons.
+      Drag-to-move, double-click-to-maximize, right-click for system menu.
+      Title bar respects the active theme (light/dark).
+    macos: >
+      Native title bar with system traffic lights. Title text set via
+      Tauri window API. Toolbar-style title bar (transparent, integrated)
+      matching modern macOS aesthetics.
+
+menu_bar:
+  description: >
+    Platform menu bar. On macOS: system menu bar at the top of the screen.
+    On Linux and Windows: menu bar inside the application window below the
+    title bar. Menu structure is consistent across platforms; accelerator
+    keys follow platform conventions (Cmd on macOS, Ctrl on Linux/Windows).
+
+  structure:
+    file:
+      - { label: "New Custom Feed...", accelerator: "CmdOrCtrl+N" }
+      - { label: "Import Preset...", accelerator: "CmdOrCtrl+I" }
+      - { label: "Export Preset...", accelerator: "CmdOrCtrl+E" }
+      - { type: separator }
+      - { label: "Settings", accelerator: "CmdOrCtrl+," }
+      - { type: separator }
+      - { label: "Quit Actual Feed", accelerator: "CmdOrCtrl+Q" }
+
+    edit:
+      - { label: "Undo", accelerator: "CmdOrCtrl+Z" }
+      - { label: "Redo", accelerator: "CmdOrCtrl+Shift+Z" }
+      - { type: separator }
+      - { label: "Cut", accelerator: "CmdOrCtrl+X" }
+      - { label: "Copy", accelerator: "CmdOrCtrl+C" }
+      - { label: "Paste", accelerator: "CmdOrCtrl+V" }
+      - { label: "Select All", accelerator: "CmdOrCtrl+A" }
+      - { type: separator }
+      - { label: "Find in Feed...", accelerator: "CmdOrCtrl+F" }
+
+    view:
+      - { label: "Zoom In", accelerator: "CmdOrCtrl+=" }
+      - { label: "Zoom Out", accelerator: "CmdOrCtrl+-" }
+      - { label: "Reset Zoom", accelerator: "CmdOrCtrl+0" }
+      - { type: separator }
+      - { label: "Toggle Sidebar", accelerator: "CmdOrCtrl+B" }
+      - { label: "Toggle Full Screen", accelerator: "F11 (macOS: Ctrl+Cmd+F)" }
+      - { type: separator }
+      - { label: "Light Theme" }
+      - { label: "Dark Theme" }
+      - { label: "System Theme" }
+
+    feed:
+      - { label: "Refresh Feed", accelerator: "CmdOrCtrl+R" }
+      - { label: "Refresh All Feeds", accelerator: "CmdOrCtrl+Shift+R" }
+      - { type: separator }
+      - { label: "Main Feed", accelerator: "CmdOrCtrl+1" }
+      - { label: "Next Feed", accelerator: "CmdOrCtrl+]" }
+      - { label: "Previous Feed", accelerator: "CmdOrCtrl+[" }
+      - { type: separator }
+      - { label: "Start Autoplay", accelerator: "CmdOrCtrl+Shift+P" }
+
+    tools:
+      - { label: "Command Palette...", accelerator: "CmdOrCtrl+K" }
+      - { type: separator }
+      - { label: "Tripwire Dashboard" }
+      - { label: "Budget Dashboard" }
+      - { label: "Compute Budget Bar" }
+      - { type: separator }
+      - { label: "View Pipeline Status" }
+      - { label: "View Backend Logs" }
+
+    help:
+      - { label: "Learn More..." }
+      - { label: "Keyboard Shortcuts", accelerator: "CmdOrCtrl+/" }
+      - { type: separator }
+      - { label: "Check for Updates..." }
+      - { label: "View License" }
+      - { label: "About Actual Feed" }
+
+command_palette:
+  description: >
+    Power-user command palette invoked via Cmd+K (macOS) or Ctrl+K
+    (Linux/Windows). Fuzzy-search over all application actions, feeds,
+    settings sections, tripwires, and presets. The palette is the keyboard
+    user's primary navigation — every action reachable from menus or
+    settings must also be reachable from the palette.
+
+  behavior:
+    - "Fuzzy matching on action names, descriptions, and aliases"
+    - "Most-recently-used actions promoted to top"
+    - "Results grouped by category: Feeds, Actions, Settings, Tripwires, Presets"
+    - "Enter executes the selected action"
+    - "Escape closes the palette"
+    - "Palette remembers last query within the session (cleared on close)"
+    - "Actions show their keyboard shortcut (if any) in the result row"
+
+  indexed_actions:
+    - "All menu bar actions"
+    - "Navigate to any feed (main, custom feeds by name)"
+    - "Navigate to any settings section"
+    - "Toggle any tripwire on/off"
+    - "Switch tuning preset"
+    - "Switch profile (with PIN prompt if needed)"
+    - "Open specific item by title search"
+    - "Toggle theme"
+    - "Open external links (documentation, license)"
+
+system_tray:
+  description: >
+    System tray icon provides persistent status indication and quick actions
+    without the main window being visible. The tray icon is always present
+    when the app is running. The icon itself changes to reflect system state.
+
+  icon_states:
+    idle: "Default icon. Feed is current. No active pipeline work."
+    active: "Animated or badged icon. Pipeline is running (crawl, enrichment)."
+    error: "Red-badged icon. Backend process crashed or a source is unreachable."
+    update_available: "Blue-badged icon. An update has been downloaded and is ready to apply."
+
+  context_menu:
+    - "Open Actual Feed (brings window to front)"
+    - "Refresh Now (triggers manual crawl)"
+    - "---"
+    - "Pipeline Status: [Idle / Crawling 23 items / Enriching 8 items]"
+    - "Last Refresh: [timestamp]"
+    - "---"
+    - "Pause Pipeline"
+    - "Settings..."
+    - "---"
+    - "Check for Updates..."
+    - "Quit Actual Feed"
+
+  notifications:
+    description: >
+      Desktop OS notifications are sent for tripwire fires only. The app
+      does NOT send notifications for new items, crawl completion, or
+      status changes — those are ambient information visible in the tray
+      icon. Tripwires are interrupts that the user explicitly asked for.
+    behavior:
+      - "Tripwire fire → OS notification with: tripwire name, item title, 1-line reason"
+      - "Notification click → opens main window, navigates to triggering item"
+      - "Severity 'critical' → persistent notification (requires dismissal)"
+      - "Severity 'important' → standard notification"
+      - "Severity 'info' → tray badge only, no OS notification popup"
+      - "Notification grouping: multiple fires within 60s collapse into a summary"
+      - "User can disable notifications entirely from settings"
+
+theme:
+  description: >
+    Three theme modes: light, dark, and system. System mode follows the OS
+    preference and switches dynamically when the OS setting changes (e.g.,
+    macOS auto dark mode at sunset). Theme affects the entire application
+    including the custom title bar on Linux/Windows.
+
+  implementation:
+    - "CSS custom properties for all theme-dependent values"
+    - "SolidJS reactive signal tracks current theme"
+    - "Tauri listens to OS theme change events and forwards to the frontend"
+    - "Theme preference persisted to local storage"
+    - "Default: 'system' (follow OS preference)"
+    - "Transition: 200ms fade between light and dark, no flash of wrong theme on startup"
+    - "Startup: theme resolved before first paint (SSR-style initial theme injection)"
+
+keyboard_shortcuts:
+  description: >
+    Two categories: global shortcuts (always active) and contextual shortcuts
+    (active only in specific views). Shortcuts follow platform conventions.
+    All shortcuts are discoverable via the command palette (Cmd+K) and the
+    keyboard shortcuts help screen (Cmd+/).
+
+  global:
+    - { keys: "CmdOrCtrl+K", action: "Open command palette" }
+    - { keys: "CmdOrCtrl+,", action: "Open settings" }
+    - { keys: "CmdOrCtrl+R", action: "Refresh current feed" }
+    - { keys: "CmdOrCtrl+F", action: "Find in feed" }
+    - { keys: "CmdOrCtrl+1", action: "Switch to main feed" }
+    - { keys: "CmdOrCtrl+2..9", action: "Switch to custom feed by position" }
+    - { keys: "CmdOrCtrl+B", action: "Toggle sidebar" }
+    - { keys: "CmdOrCtrl+/", action: "Show keyboard shortcuts" }
+
+  contextual_feed:
+    - { keys: "j / k", action: "Next / previous item (vim-style)" }
+    - { keys: "o / Enter", action: "Open item in external browser" }
+    - { keys: "s", action: "Toggle item summary expansion" }
+    - { keys: "t", action: "Thumbs up" }
+    - { keys: "d", action: "Thumbs down" }
+    - { keys: "x", action: "Begin obliterate sequence (rapid taps to confirm)" }
+    - { keys: "?", action: "Show score breakdown for focused item" }
+    - { keys: "Space", action: "Page down in feed" }
+    - { keys: "g g", action: "Jump to top of feed (vim-style)" }
+    - { keys: "G", action: "Jump to bottom of feed" }
+
+  contextual_settings:
+    - { keys: "Escape", action: "Close settings / go back one level" }
+    - { keys: "CmdOrCtrl+S", action: "Save changes (if applicable)" }
+
+backend_lifecycle:
+  description: >
+    The Kotlin/JVM backend is a separate OS process. Tauri starts it on app
+    launch and stops it on app quit. The backend is the pipeline engine —
+    it runs the crawler, manages the SQLite database, runs LLM inference,
+    and exposes all operations via JSON-RPC 2.0. The frontend never touches
+    the database or file system directly.
+
+  startup_sequence:
+    - step: "Tauri app launches"
+      detail: "Window created, splash screen shown (logo + 'Starting engine...')"
+    - step: "Tauri spawns Kotlin/JVM process"
+      detail: >
+        Process started via Command sidecar (Tauri's managed child process).
+        JVM bundled with the app (jlink custom runtime, ~50MB). Backend
+        binary located at resources/backend/actual-feed-engine.
+    - step: "Backend initializes"
+      detail: >
+        Opens/migrates SQLite database. Loads model runtime. Binds Unix
+        domain socket (Linux/macOS: /tmp/actual-feed-{user}.sock) or
+        localhost HTTP (Windows: 127.0.0.1:{random_port}). Writes port
+        file for frontend discovery.
+    - step: "Frontend connects via JSON-RPC 2.0"
+      detail: >
+        Frontend reads socket path / port from well-known location.
+        Sends 'system.ping' RPC. On success: splash screen dismissed,
+        feed view rendered. On timeout (10s): error screen with retry
+        and 'View Logs' button.
+    - step: "Backend ready — pipeline available"
+      detail: >
+        Frontend subscribes to backend notifications (tripwire fires,
+        pipeline progress, crawl status) via JSON-RPC notification
+        channel (server-initiated messages over the same socket).
+
+  shutdown_sequence:
+    - "User quits (Cmd+Q, tray → Quit, or window close if close=quit)"
+    - "Frontend sends 'system.shutdown' RPC to backend"
+    - "Backend finishes current pipeline step (bounded: max 30s grace)"
+    - "Backend flushes WAL, closes database, exits cleanly"
+    - "Tauri waits for backend process exit (timeout: 10s)"
+    - "If backend doesn't exit: Tauri sends SIGTERM, waits 5s, then SIGKILL"
+    - "Tauri window closes"
+
+  crash_recovery:
+    description: >
+      If the backend process exits unexpectedly (crash, OOM kill, JVM fatal
+      error), Tauri detects the child process exit and attempts recovery.
+    behavior:
+      - "Tauri detects backend process exit via child process monitor"
+      - "Tray icon switches to error state (red badge)"
+      - "Frontend shows inline error banner: 'Engine stopped unexpectedly. Restarting...'"
+      - "Tauri restarts the backend process after a 2-second delay"
+      - "Backend runs SQLite integrity check on startup after unclean shutdown"
+      - "If restart succeeds: banner clears, tray icon returns to idle"
+      - "If restart fails 3 times within 5 minutes: show error screen with diagnostic info and 'View Logs' button"
+      - "Crash count and last crash timestamp persisted for diagnostics"
+      - "Backend logs written to: ~/.local/share/actual-feed/logs/ (Linux), ~/Library/Logs/ActualFeed/ (macOS), %APPDATA%/ActualFeed/logs/ (Windows)"
+
+auto_update:
+  description: >
+    The app checks for updates on startup and periodically (every 24 hours
+    while running). Updates are downloaded in the background and applied on
+    the next launch. The user is never forced to update immediately — the
+    downloaded update waits. The tray icon shows an update badge. The user
+    chooses when to restart.
+
+  mechanism:
+    - "Tauri's built-in updater plugin (tauri-plugin-updater)"
+    - "Update manifest hosted at a stable URL (e.g., updates.actualfeed.com/desktop/latest.json)"
+    - "Check on startup (after backend is ready, not blocking the splash screen)"
+    - "Check every 24 hours while running"
+    - "Download in background — no UI interruption"
+    - "On download complete: tray icon shows update badge, menu shows 'Restart to Update'"
+    - "User clicks 'Restart to Update' → app quits, installer applies update, app relaunches"
+    - "No auto-restart. No forced updates. No nag screens."
+    - "Update includes: frontend bundle, backend JAR, and optionally new model files"
+    - "Model updates are large (multi-GB) — separate download with explicit user consent"
+    - "Release notes shown in-app before user confirms restart"
+
+  rollback: >
+    If the updated app fails to start (crash within 30s of launch 3 times),
+    the previous version is restored automatically. Tauri's updater supports
+    this via the backup mechanism. The user sees: 'Update failed. Reverted
+    to previous version. Please report this issue.'
+
+first_launch:
+  description: >
+    First launch is detected by the absence of the SQLite database file.
+    The app creates the database, runs initial migrations, and hands off
+    to the onboarding flow (story 010). The settings shell does not
+    interfere with onboarding — the full settings UI becomes available
+    after onboarding completes (or is skipped).
+
+  detection: "!exists(~/.local/share/actual-feed/actual-feed.db) on Linux, equivalent paths on macOS/Windows"
+  behavior:
+    - "No database → first launch → onboarding flow"
+    - "Database exists but no license token → activation screen"
+    - "Database exists and license valid → normal startup"
+    - "Database exists but schema version < current → migration, then normal startup"
+
+settings_ui:
+  description: >
+    Settings is a full-window view (not a modal, not a popover) accessible
+    via Cmd+, or the menu bar. Left sidebar navigation with sections.
+    Each section maps to a subsystem documented in other stories. Settings
+    changes are applied immediately where possible (theme, layout) or on
+    explicit save (sources, budgets, tripwires). Destructive changes
+    (delete profile, obliterate source) require confirmation.
+
+  sections:
+    sources:
+      description: "Source platform management from story 002"
+      content:
+        - "Grid of source platforms with checkboxes and icons (same as onboarding step 1)"
+        - "Per-source configuration: RSS feed URLs, subreddits, YouTube channels, SO tags"
+        - "Per-source cost indicator for paid sources"
+        - "Compute budget bar updates live as sources are toggled"
+        - "Source health indicators: last successful crawl, error count, average items/crawl"
+
+    topics:
+      description: "Topic declaration from story 010"
+      content:
+        - "Text input for topic interests with autocomplete suggestions"
+        - "Topic chips with remove button"
+        - "Suggested topics based on active sources"
+        - "Topics feed into topic_relevance signal (story 003)"
+
+    models:
+      description: "LLM model selection from story 001"
+      content:
+        - "Picker with 3 options: Recommended, Balanced, Lightweight"
+        - "Each shows: quality estimate, RAM requirement, processing speed"
+        - "Compute budget bar updates on model change"
+        - "Model download progress for models not yet local"
+        - "Active model shown with version and size"
+
+    schedule:
+      description: "Crawl scheduling from story 010"
+      content:
+        - "Schedule picker: While I sleep, When idle, Continuously, Only when I ask"
+        - "Per-source schedule override (advanced)"
+        - "Next scheduled crawl time shown"
+        - "Pipeline status: idle, crawling, enriching with item counts"
+
+    budgets:
+      description: "Content budget configuration from story 004"
+      content:
+        - "Per-content-type budgets: video hours, audio hours, article count"
+        - "Budget period: daily, weekly"
+        - "Hard lock toggle per budget (soft warning vs hard stop)"
+        - "Budget usage dashboard: current period consumption"
+        - "Budget reset time"
+
+    tripwires:
+      description: "Tripwire management from story 006"
+      content:
+        - "List of all tripwires with: name, severity, enabled toggle, last fired, fire count"
+        - "Create new tripwire: name + natural language condition + severity"
+        - "Edit existing tripwire"
+        - "Fire history per tripwire"
+        - "Health indicators: never fired, too broad, stale"
+        - "Import/export tripwire sets"
+        - "Tripwire packs browser"
+
+    presets:
+      description: "Tuning preset management from story 003"
+      content:
+        - "List of saved presets with active indicator"
+        - "Create new preset from current weights"
+        - "Edit preset: weight sliders for all ranking signals"
+        - "Import/export presets"
+        - "Built-in presets: Balanced, Serendipity, Deep Focus, Breaking News"
+
+    profiles:
+      description: "Profile management from story 011"
+      content:
+        - "Visible only when parental controls are active (Family section enables them)"
+        - "List of profiles: name, avatar, maturity threshold summary"
+        - "Create/edit child profile: name, PIN, maturity threshold slider, category overrides"
+        - "Filtered content review per child profile"
+        - "Profile switching requires PIN for owner profile"
+        - "Delete profile (with confirmation and PIN)"
+
+    family:
+      description: "Parental controls activation"
+      content:
+        - "Toggle: Enable parental controls"
+        - "When enabled: creates owner profile from current user state, shows profile management"
+        - "When disabled: confirms deletion of child profiles, returns to single-user mode"
+        - "PIN setup for owner profile"
+
+    appearance:
+      description: "Visual preferences"
+      content:
+        - "Theme: Light / Dark / System (radio buttons)"
+        - "Feed density: Comfortable / Compact"
+        - "Sidebar: Show / Hide by default"
+        - "Font size: slider or +/- buttons"
+
+    notifications:
+      description: "Desktop notification preferences"
+      content:
+        - "Master toggle: Enable/disable all notifications"
+        - "Per-severity configuration: critical, important, info"
+        - "Notification grouping window (seconds)"
+        - "Test notification button"
+
+    general:
+      description: "Application-level settings"
+      content:
+        - "Close button behavior: Minimize to tray / Quit application"
+        - "Launch on login: toggle (registers/unregisters OS autostart)"
+        - "Auto-check for updates: toggle"
+        - "Backend log level: Info / Debug / Trace (for troubleshooting)"
+        - "Data directory location (read-only, shown for reference)"
+        - "Clear cache (thumbnails, TTS cache)"
+
+    about:
+      description: "Application information"
+      content:
+        - "App version and build number"
+        - "Backend engine version"
+        - "Active model name and version"
+        - "License status: activated, expiry date, account email"
+        - "License key (masked, with copy button)"
+        - "Sign out / Deactivate this device"
+        - "Open source licenses (third-party attribution)"
+        - "Link to release notes"
+        - "Link to support / documentation"
+
+user_stories:
+  - id: US-130
+    as: "desktop user launching Actual Feed"
+    i_want: "the app to start quickly, restore my window position, and show my feed"
+    so_that: "the app feels native and doesn't waste my time on startup"
+    acceptance:
+      - window restores last position, size, and maximized state
+      - splash screen shows for no more than 5 seconds on warm start (backend already initialized once)
+      - if backend fails to start: error screen with 'View Logs' and 'Retry' within 10 seconds
+      - second instance launch focuses the existing window instead of opening a duplicate
+      - first launch detects no database and enters onboarding flow (story 010)
+      - theme is correct from first paint — no flash of wrong theme
+
+  - id: US-131
+    as: "power user who lives on the keyboard"
+    i_want: "a command palette and vim-style navigation"
+    so_that: "I never need the mouse to operate my feed"
+    acceptance:
+      - Cmd+K / Ctrl+K opens command palette from anywhere in the app
+      - palette fuzzy-matches all actions, feeds, settings sections, tripwires, presets
+      - j/k navigate items in the feed, o opens in browser, t/d for thumbs up/down
+      - all menu bar actions have keyboard shortcuts
+      - Cmd+/ shows a complete shortcut reference
+      - command palette shows keyboard shortcuts next to matching actions
+
+  - id: US-132
+    as: "user who wants to monitor pipeline status at a glance"
+    i_want: "the system tray icon to show me what the app is doing"
+    so_that: "I know if my feed is updating, idle, or broken without opening the window"
+    acceptance:
+      - tray icon visually distinguishes: idle, active (pipeline running), error, update available
+      - right-click tray icon shows: pipeline status, last refresh time, quick actions
+      - tray icon persists when window is closed (close = minimize to tray mode)
+      - clicking tray icon brings the main window to front
+      - tray context menu allows triggering a manual refresh
+
+  - id: US-133
+    as: "user configuring my feed experience"
+    i_want: "a single settings surface where I control every aspect of the system"
+    so_that: "I don't hunt through menus and dialogs to find a specific option"
+    acceptance:
+      - settings is a full-window view with sidebar navigation
+      - sections: Sources, Topics, Models, Schedule, Budgets, Tripwires, Presets, Appearance, Notifications, General, About
+      - Family section visible only when parental controls are relevant
+      - changes applied immediately where safe (theme, layout), or on explicit save (sources, budgets)
+      - destructive changes (delete profile, clear cache) require confirmation dialog
+      - Cmd+, opens settings from anywhere in the app
+
+  - id: US-134
+    as: "user who prefers dark mode"
+    i_want: "the app to follow my OS theme preference automatically"
+    so_that: "it matches the rest of my desktop without manual configuration"
+    acceptance:
+      - default theme mode is 'system' (follows OS preference)
+      - theme switches dynamically when OS preference changes (no restart required)
+      - manual override available: force light, force dark, or follow system
+      - theme applies to entire app including custom title bar on Linux/Windows
+      - no flash of wrong theme on startup — theme resolved before first paint
+
+  - id: US-135
+    as: "user who received a tripwire notification"
+    i_want: "a desktop OS notification that takes me directly to the triggering item"
+    so_that: "I can investigate time-sensitive events immediately"
+    acceptance:
+      - tripwire fire produces a native OS notification (not an in-app toast)
+      - notification shows: tripwire name, item title, 1-line reason
+      - clicking the notification opens the main window and navigates to the item
+      - critical severity: persistent notification that requires dismissal
+      - info severity: tray badge only, no popup
+      - notifications respect OS-level Do Not Disturb settings
+      - notifications disabled entirely via settings toggle
+
+  - id: US-136
+    as: "user who doesn't want to think about updates"
+    i_want: "updates to download silently and apply when I next restart"
+    so_that: "I'm always on the latest version without interruption"
+    acceptance:
+      - update check on startup (non-blocking) and every 24 hours
+      - download happens in background with no UI interruption
+      - tray icon shows update badge when ready
+      - menu shows 'Restart to Update' with release notes preview
+      - restart applies the update and relaunches the app
+      - no forced updates, no countdown timers, no nag dialogs
+      - failed update auto-rolls back to previous version
+      - large model updates require separate explicit consent
+
+  - id: US-137
+    as: "parent using parental controls on the desktop"
+    i_want: "profile switching with PIN protection in the title bar"
+    so_that: "my child can use the app safely on our shared desktop"
+    acceptance:
+      - active profile name shown in the title bar
+      - profile switcher accessible from title bar or command palette
+      - switching to owner profile requires PIN entry
+      - switching between child profiles requires owner PIN
+      - PIN entry dialog is modal, no hints, no visible retry counter
+      - auto-lock to last child profile after configurable idle timeout
+      - settings sections restricted in child profiles (no access to family, general, or about with license info)
+
+  - id: US-138
+    as: "user whose backend engine crashed"
+    i_want: "the app to recover automatically without losing my place"
+    so_that: "a crash feels like a brief hiccup, not a catastrophe"
+    acceptance:
+      - backend crash detected within 2 seconds
+      - inline error banner shown (not a blocking modal)
+      - automatic restart attempt after 2-second delay
+      - if restart succeeds: banner clears, feed resumes, tray icon returns to normal
+      - if restart fails 3 times in 5 minutes: error screen with diagnostics and 'View Logs'
+      - no data loss — SQLite WAL ensures database integrity
+      - frontend preserves scroll position and UI state across backend restarts
+
+collective_lifetime_stories:
+  - id: CL-130
+    title: "Backend crash recovery and data integrity over years of use"
+    description: >
+      The Kotlin/JVM backend will crash. JVM OOM kills on 16GB machines
+      running Qwen3-30B-A3B (18GB model + JVM heap + OS = tight). Segfaults
+      from native ONNX runtime. Unhandled exceptions in crawler adapters
+      when platforms change formats. The recovery must be robust: detect
+      crash, restart backend, verify database integrity via SQLite integrity
+      check, resume pipeline from last checkpoint. Over years of use, the
+      accumulated crash-restart cycles must not corrupt data. The WAL journal
+      mode and checkpoint-on-clean-shutdown pattern protect against this, but
+      edge cases (crash during WAL checkpoint, crash during migration) must
+      be tested with chaos injection.
+    worst_case: >
+      Backend crashes during a schema migration (app update). Database is in
+      an intermediate state. Restart detects partial migration and either
+      completes it (idempotent migrations) or rolls back to pre-migration
+      state. The user sees a brief delay, not data loss. If migration cannot
+      be recovered: error screen with 'Contact Support' and database backup
+      path. Never silently continue with a corrupted schema.
+
+  - id: CL-131
+    title: "Cross-platform window behavior and OS integration divergence"
+    description: >
+      macOS, Linux, and Windows have fundamentally different window management
+      conventions. macOS: traffic lights top-left, app stays running when
+      window closes, menu bar is global. Linux: varies by DE (GNOME title bar
+      vs KDE title bar vs i3 no title bar), no standard tray API (StatusNotifierItem
+      vs XEmbed vs nothing on Wayland without extensions), DBus for notifications.
+      Windows: title bar top-right, tray is standard, close = quit by default.
+      Tauri abstracts some of this, but edge cases leak: tray icon on Wayland
+      requires a GNOME extension or doesn't work. KDE notification grouping
+      differs from GNOME. Windows high-DPI scaling interacts with Tauri's
+      webview differently than macOS Retina.
+    worst_case: >
+      Linux user on Sway (Wayland compositor) has no tray icon because
+      StatusNotifierItem is not supported. Pipeline status is invisible.
+      Mitigation: pipeline status always visible in the app's sidebar or
+      status bar, so tray icon is nice-to-have, not the only source of
+      truth. Document supported DEs and known limitations.
+
+  - id: CL-132
+    title: "Settings migration on app update across schema versions"
+    description: >
+      Every app update may change the settings schema: new fields, renamed
+      fields, deprecated options, restructured sections. User settings must
+      survive updates without reset. The settings are stored in the SQLite
+      database alongside feed data, so database migrations handle schema
+      changes. But semantic migration is harder: if a 'crawl_schedule' enum
+      gains a new option, the old value is still valid. If a 'model' field
+      references a model that no longer ships: the migration must pick the
+      closest available model and inform the user. Settings migration is
+      tested as part of the update test matrix: for every supported version
+      pair (N-1 → N, N-2 → N), settings must migrate without data loss or
+      silent default resets.
+    worst_case: >
+      User on version 1.0 skips to version 3.0. Two migration steps must
+      chain correctly: 1.0 → 2.0 → 3.0. A bug in the 1.0 → 2.0 migration
+      corrupts a setting, then the 2.0 → 3.0 migration operates on
+      corrupted data. Mitigation: database backup before migration,
+      migration dry-run validation, rollback on failure. Each migration
+      step is independently tested and idempotent.
+
+enforced_constraints:
+  - id: EC-130
+    constraint: "Single backend process managed by Tauri — frontend never directly accesses the database"
+    type: architecture
+    rationale: >
+      The frontend (SolidJS in Tauri webview) communicates exclusively via
+      JSON-RPC 2.0 with the Kotlin/JVM backend. No direct SQLite access from
+      the renderer process. This boundary ensures: database migrations are
+      backend-only, concurrent access is impossible, and the API surface is
+      explicit and testable.
+    testable: >
+      Tauri's IPC configuration does not expose filesystem or database
+      access to the webview. All data operations go through JSON-RPC calls
+      to the backend process.
+
+  - id: EC-131
+    constraint: "Backend crash restarts automatically with database integrity verification"
+    type: reliability
+    rationale: >
+      A desktop app that requires manual restart after a backend crash is
+      unacceptable. The shell must detect, restart, verify, and resume
+      without user intervention. Three consecutive failures within 5 minutes
+      escalate to a user-facing error with diagnostics.
+    testable: >
+      Kill the backend process (SIGKILL). Frontend shows error banner within
+      2 seconds. Backend restarts within 4 seconds. SQLite integrity check
+      passes. Feed resumes without data loss or UI state reset.
+
+  - id: EC-132
+    constraint: "Window state persists across sessions — position, size, maximized state, and display"
+    type: UX
+    rationale: >
+      A window that forgets where it was is a daily annoyance. State is
+      saved on move/resize (debounced) and on quit. Restored on launch.
+      If the saved display is disconnected, the window falls back to the
+      primary display rather than appearing off-screen.
+    testable: >
+      Move window to a non-default position, resize, quit, relaunch.
+      Window appears at the saved position and size. Disconnect the
+      display the window was on, relaunch: window appears on primary
+      display.
+
+  - id: EC-133
+    constraint: "Updates never interrupt the user — download silently, apply on next launch"
+    type: UX
+    rationale: >
+      Forced updates, nag screens, and auto-restarts are hostile to users
+      in the middle of work. The update mechanism is fully passive: check,
+      download, badge the tray icon, wait for the user to restart on their
+      own schedule. Failed updates roll back automatically.
+    testable: >
+      An update is available. App downloads it in background. No dialogs
+      appear. Tray icon shows badge. User continues working uninterrupted.
+      User clicks 'Restart to Update' when ready. App restarts with new
+      version. If new version crashes 3 times in 30s: previous version
+      is restored automatically.
+
+opinionated_constraints:
+  - id: OC-130
+    constraint: "Command palette is the primary power-user interface — every action is palette-accessible"
+    rationale: >
+      Keyboard-driven users should never need the mouse. The command palette
+      (Cmd+K) is the universal entry point. If an action exists in a menu,
+      settings section, or context menu, it must also be discoverable and
+      executable from the palette. The palette is indexed, fuzzy-matched,
+      and shows recent actions at the top. This is how power users operate
+      VS Code, JetBrains IDEs, and Raycast — meet them where they are.
+    acceptable_loss: >
+      Mouse-first users may never discover the palette. That's fine — menus
+      and settings provide full coverage. The palette is additive, not
+      exclusive.
+
+  - id: OC-131
+    constraint: "Close button minimizes to tray by default — the app is always running"
+    rationale: >
+      Actual Feed is infrastructure, not a tool you open and close. The
+      pipeline runs in the background. The tray icon shows status. Closing
+      the window should not kill the pipeline. Users who want close=quit
+      can change this in General settings, but the default is tray-minimize.
+      This matches the behavior of Slack, Discord, Spotify, and other
+      always-on desktop apps. On macOS this aligns with the platform
+      convention (Cmd+Q to quit, close button hides).
+    acceptable_loss: >
+      Users unfamiliar with tray-minimize may think the app is "stuck open."
+      Mitigation: first time the user closes the window, a one-time tooltip
+      explains: 'Actual Feed is still running in your system tray. Right-click
+      the tray icon to quit.' The tooltip has 'Don't show again' and a link
+      to change the setting.
+
+  - id: OC-132
+    constraint: "Vim-style feed navigation (j/k/o/g) as first-class keyboard shortcuts"
+    rationale: >
+      The target user is a senior engineer. A significant fraction of senior
+      engineers use vim keybindings or at minimum recognize j/k as down/up.
+      Offering vim-style navigation in the feed signals that the product
+      respects their workflow. These shortcuts coexist with arrow keys —
+      they don't replace standard navigation, they augment it.
+    acceptable_loss: >
+      Users who don't know vim keybindings won't discover j/k naturally.
+      Arrow keys and mouse scrolling work identically. The shortcuts
+      reference (Cmd+/) documents both styles.
+
+  - id: OC-133
+    constraint: "Settings is a full-window view, not a modal dialog"
+    rationale: >
+      Settings in Actual Feed are substantial — source configuration,
+      budget sliders, tripwire management, preset editing, profile creation.
+      A modal dialog or popover cannot accommodate this complexity without
+      feeling cramped. A full-window view with sidebar navigation (similar
+      to VS Code settings, macOS System Settings, or JetBrains preferences)
+      gives each section the space it needs. The feed is one Cmd+Escape away.
+    acceptable_loss: >
+      Switching between feed and settings requires a view transition. Users
+      cannot see their feed while adjusting settings. Mitigation: the
+      compute budget bar appears in both the feed view and relevant settings
+      sections, so the impact of changes is visible without switching.

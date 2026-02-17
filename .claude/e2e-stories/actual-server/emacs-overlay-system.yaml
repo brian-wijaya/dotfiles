@@ -1,0 +1,929 @@
+vocabulary:
+  emacs-mcp-server: "HTTP server running inside Emacs (localhost:8585) that exposes /mcp/eval, /mcp/navigate, /mcp/type, and /mcp/buffer/{name} endpoints for programmatic editor control"
+  elisp: "Emacs Lisp — the programming language used to script and extend Emacs"
+  somatic-client: "HTTP client to the somatic HUD service, used for overlay messages, attention targeting, and dismissal"
+  display-router: "Routing layer that directs tool calls to either the host display (:0) or an isolated agent display, choosing the correct environment variables and somatic client"
+  host-display: "Sentinel display_id value 'host' that routes to the user's real X11 display (:0), bypassing display isolation"
+  display-isolation: "Feature that runs agent tools on a separate Xvfb display, preventing interference with the user's desktop"
+  response-enricher: "Wrapper around tool handlers that injects session state annotations into tool responses"
+  timeout-class-slow: "ToolRegistry.TimeoutClass.SLOW (120s) — used for command execution tools that may run long processes"
+  overlay-message: "Transient chat-style notification rendered on the desktop HUD via somatic post_message"
+  attention-target: "Somatic overlay that highlights a specific window and optional region (WxH+X+Y geometry) to guide the user's focus"
+  command-result: "Record containing exit_code, stdout, and stderr from a ProcessBuilder-captured shell command"
+
+metadata:
+  feature: actual-server
+  component: emacs-overlay-system
+  date: "2026-02-15"
+
+stories:
+  # ─── Emacs: Elisp Evaluation ───────────────────────────────────────
+
+  - name: elisp-eval-success-with-result
+    description: >
+      Evaluate an elisp expression that returns a value via the Emacs MCP server.
+      The response JSON contains a "result" key; the tool returns it as non-error TextContent.
+    preconditions:
+      - "Emacs is running with MCP server on localhost:8585"
+      - "EmacsClient is initialized with host=localhost, port=8585"
+      - "ToolRegistry has ACT_evaluate_elisp registered"
+    steps:
+      - "Call ACT_evaluate_elisp with code: '(+ 1 2)'"
+      - "EmacsClient.evaluateElisp POSTs to /mcp/eval with body {\"code\": \"(+ 1 2)\"}"
+      - "Emacs returns {\"result\": \"3\"}"
+    verify:
+      - "CallToolResult contains TextContent with text '3'"
+      - "CallToolResult.isError is false"
+
+  - name: elisp-eval-returns-error-field
+    description: >
+      When the Emacs MCP server returns a JSON body with an "error" key,
+      the tool reports it as an error result without throwing an exception.
+    preconditions:
+      - "Emacs MCP server is reachable"
+    steps:
+      - "Call ACT_evaluate_elisp with code: '(error \"deliberate\")'"
+      - "Emacs returns {\"error\": \"Lisp error: deliberate\"}"
+    verify:
+      - "CallToolResult contains TextContent with text 'Lisp error: deliberate'"
+      - "CallToolResult.isError is true"
+
+  - name: elisp-eval-returns-unknown-shape
+    description: >
+      When the Emacs response JSON has neither "result" nor "error" keys,
+      the tool returns the raw JSON toString() as a non-error result.
+    preconditions:
+      - "Emacs MCP server is reachable"
+    steps:
+      - "Call ACT_evaluate_elisp with code that makes Emacs return {\"status\": \"ok\"}"
+    verify:
+      - "CallToolResult contains TextContent with the full JSON string"
+      - "CallToolResult.isError is false"
+
+  - name: elisp-eval-emacs-unreachable
+    description: >
+      When Emacs is not running or the MCP server is down, the HTTP client
+      throws an IOException which is caught and reported as an error result.
+    preconditions:
+      - "Nothing is listening on localhost:8585"
+    steps:
+      - "Call ACT_evaluate_elisp with any code"
+      - "EmacsClient.evaluateElisp throws IOException with 'Cannot connect to Emacs at http://localhost:8585'"
+    verify:
+      - "CallToolResult contains TextContent starting with 'Emacs eval failed: Cannot connect to Emacs'"
+      - "CallToolResult.isError is true"
+
+  - name: elisp-eval-connection-timeout
+    description: >
+      When the Emacs MCP server does not respond within the 10-second request timeout
+      configured in EmacsClient, the POST times out and the tool reports an error.
+    preconditions:
+      - "Emacs MCP server is reachable but unresponsive (e.g., infinite loop in elisp)"
+    steps:
+      - "Call ACT_evaluate_elisp with code: '(while t)'"
+      - "HttpRequest.timeout(Duration.ofSeconds(10)) fires"
+    verify:
+      - "CallToolResult contains TextContent with 'Emacs eval failed:' and timeout message"
+      - "CallToolResult.isError is true"
+
+  # ─── Emacs: Text Insertion ─────────────────────────────────────────
+
+  - name: insert-text-success
+    description: >
+      Insert text at the cursor position in Emacs via the /mcp/type endpoint.
+      On success the tool reports the character count.
+    preconditions:
+      - "Emacs MCP server is running and a buffer is active"
+    steps:
+      - "Call ACT_insert_text with text: 'hello world'"
+      - "EmacsClient.typeText POSTs to /mcp/type with body {\"text\": \"hello world\"}"
+      - "Emacs returns a JSON body without an 'error' key"
+    verify:
+      - "CallToolResult contains TextContent 'Typed 11 characters'"
+      - "CallToolResult.isError is false"
+
+  - name: insert-text-emacs-returns-error
+    description: >
+      When the Emacs MCP server returns an error (e.g., read-only buffer),
+      the tool reports it as an error result.
+    preconditions:
+      - "Emacs is showing a read-only buffer"
+    steps:
+      - "Call ACT_insert_text with text: 'anything'"
+      - "Emacs returns {\"error\": \"Buffer is read-only\"}"
+    verify:
+      - "CallToolResult contains TextContent 'Buffer is read-only'"
+      - "CallToolResult.isError is true"
+
+  - name: insert-text-emacs-unreachable
+    description: >
+      When Emacs is not running, the HTTP POST throws an IOException
+      which is caught and reported as 'Insert failed:'.
+    preconditions:
+      - "Nothing listening on localhost:8585"
+    steps:
+      - "Call ACT_insert_text with text: 'test'"
+    verify:
+      - "CallToolResult contains TextContent starting with 'Insert failed: Cannot connect to Emacs'"
+      - "CallToolResult.isError is true"
+
+  # ─── Emacs: Buffer Navigation ──────────────────────────────────────
+
+  - name: navigate-by-file-and-line
+    description: >
+      Navigate to a specific file and line number in Emacs. All four optional
+      parameters (file, line, column, buffer) can be combined. The tool sends
+      a HashMap of provided params to EmacsClient.navigate.
+    preconditions:
+      - "Emacs MCP server is running"
+    steps:
+      - "Call ACT_navigate_buffer with file: '/tmp/test.py', line: 42"
+      - "EmacsClient.navigate POSTs to /mcp/navigate with {\"file\": \"/tmp/test.py\", \"line\": 42}"
+      - "Emacs returns {\"message\": \"Opened /tmp/test.py at line 42\"}"
+    verify:
+      - "CallToolResult contains TextContent 'Navigated successfully: Opened /tmp/test.py at line 42'"
+      - "CallToolResult.isError is false"
+
+  - name: navigate-by-buffer-name
+    description: >
+      Switch to an existing buffer by name (e.g., '*scratch*').
+    preconditions:
+      - "Emacs MCP server is running and *scratch* buffer exists"
+    steps:
+      - "Call ACT_navigate_buffer with buffer: '*scratch*'"
+      - "EmacsClient.navigate POSTs with {\"buffer\": \"*scratch*\"}"
+    verify:
+      - "CallToolResult contains 'Navigated successfully'"
+      - "CallToolResult.isError is false"
+
+  - name: navigate-with-column
+    description: >
+      Navigate to a specific file, line, and column. Column is 0-indexed.
+    preconditions:
+      - "Emacs MCP server is running"
+    steps:
+      - "Call ACT_navigate_buffer with file: '/tmp/main.rs', line: 10, column: 4"
+    verify:
+      - "EmacsClient receives params map with all three keys"
+      - "CallToolResult.isError is false"
+
+  - name: navigate-no-params-error
+    description: >
+      When no parameters are provided, the tool returns an error without
+      contacting Emacs, because the params map is empty.
+    preconditions:
+      - "ToolRegistry has ACT_navigate_buffer registered"
+    steps:
+      - "Call ACT_navigate_buffer with no arguments"
+    verify:
+      - "CallToolResult contains 'Error: Must provide at least one of: file, line, column, or buffer'"
+      - "CallToolResult.isError is true"
+      - "No HTTP request is sent to Emacs"
+
+  - name: navigate-emacs-returns-error
+    description: >
+      When Emacs returns an error (e.g., file not found), the tool reports it.
+    preconditions:
+      - "Emacs MCP server is running"
+    steps:
+      - "Call ACT_navigate_buffer with file: '/nonexistent/path.txt'"
+      - "Emacs returns {\"error\": \"File not found\"}"
+    verify:
+      - "CallToolResult contains TextContent 'File not found'"
+      - "CallToolResult.isError is true"
+
+  - name: navigate-response-without-message
+    description: >
+      When the Emacs response has no "message" key but also no "error" key,
+      the tool falls back to the string "Navigated".
+    preconditions:
+      - "Emacs MCP server returns {\"status\": \"ok\"}"
+    steps:
+      - "Call ACT_navigate_buffer with buffer: 'somebuffer'"
+    verify:
+      - "CallToolResult contains 'Navigated successfully: Navigated'"
+
+  - name: navigate-emacs-unreachable
+    description: >
+      When Emacs is not running, the tool catches the IOException
+      and reports 'Navigate failed:'.
+    preconditions:
+      - "Nothing listening on localhost:8585"
+    steps:
+      - "Call ACT_navigate_buffer with file: '/tmp/test.py'"
+    verify:
+      - "CallToolResult contains 'Navigate failed: Cannot connect to Emacs'"
+      - "CallToolResult.isError is true"
+
+  # ─── Emacs: Buffer Reading ─────────────────────────────────────────
+
+  - name: read-buffer-full-contents
+    description: >
+      Read the entire contents of a named buffer without line range.
+      EmacsClient builds GET /mcp/buffer/{URL-encoded name}.
+    preconditions:
+      - "Emacs MCP server is running and buffer 'main.py' exists"
+    steps:
+      - "Call SENSE_read_buffer with name: 'main.py'"
+      - "EmacsClient.readBuffer GETs /mcp/buffer/main.py (no query params)"
+      - "Emacs returns {\"content\": \"print('hello')\\n\"}"
+    verify:
+      - "CallToolResult contains TextContent with the buffer content"
+      - "CallToolResult.isError is false"
+
+  - name: read-buffer-with-line-range
+    description: >
+      Read a specific line range from a buffer using start_line and end_line
+      (both 1-indexed, inclusive). Query params ?start=N&end=M are appended.
+    preconditions:
+      - "Emacs MCP server is running and buffer has >20 lines"
+    steps:
+      - "Call SENSE_read_buffer with name: 'main.py', start_line: 10, end_line: 20"
+      - "EmacsClient.readBuffer GETs /mcp/buffer/main.py?start=10&end=20"
+    verify:
+      - "CallToolResult contains only lines 10-20 of the buffer"
+      - "CallToolResult.isError is false"
+
+  - name: read-buffer-start-line-only
+    description: >
+      When only start_line is provided (no end_line), the query string
+      includes ?start=N but no &end= parameter.
+    preconditions:
+      - "Emacs MCP server is running"
+    steps:
+      - "Call SENSE_read_buffer with name: 'main.py', start_line: 5"
+      - "EmacsClient.readBuffer GETs /mcp/buffer/main.py?start=5"
+    verify:
+      - "URL contains '?start=5' and no '&end='"
+
+  - name: read-buffer-special-name-url-encoding
+    description: >
+      Buffer names like '*scratch*' are URL-encoded before being placed
+      in the GET path. EmacsClient uses URLEncoder.encode with UTF-8.
+    preconditions:
+      - "Emacs MCP server is running and *scratch* buffer exists"
+    steps:
+      - "Call SENSE_read_buffer with name: '*scratch*'"
+      - "EmacsClient URL-encodes to /mcp/buffer/%2Ascratch%2A"
+    verify:
+      - "The GET request path correctly encodes the asterisks"
+      - "Buffer contents are returned"
+
+  - name: read-buffer-text-field-fallback
+    description: >
+      When the Emacs response uses "text" instead of "content" for the
+      buffer body, the tool falls back to reading the "text" field.
+    preconditions:
+      - "Emacs returns {\"text\": \"buffer data\"} instead of {\"content\": ...}"
+    steps:
+      - "Call SENSE_read_buffer with name: 'alt-buffer'"
+    verify:
+      - "CallToolResult contains 'buffer data'"
+      - "CallToolResult.isError is false"
+
+  - name: read-buffer-unknown-response-shape
+    description: >
+      When the response has neither "content", "text", nor "error" fields,
+      the raw JSON toString() is returned.
+    preconditions:
+      - "Emacs returns {\"lines\": [\"a\",\"b\"]}"
+    steps:
+      - "Call SENSE_read_buffer with name: 'unusual'"
+    verify:
+      - "CallToolResult contains the raw JSON string"
+      - "CallToolResult.isError is false"
+
+  - name: read-buffer-error-response
+    description: >
+      When Emacs returns an error (e.g., buffer doesn't exist), the tool
+      reports it as an error.
+    preconditions:
+      - "Emacs MCP server is running but buffer 'nonexistent' does not exist"
+    steps:
+      - "Call SENSE_read_buffer with name: 'nonexistent'"
+      - "Emacs returns {\"error\": \"Buffer not found: nonexistent\"}"
+    verify:
+      - "CallToolResult contains 'Buffer not found: nonexistent'"
+      - "CallToolResult.isError is true"
+
+  - name: read-buffer-emacs-unreachable
+    description: >
+      When Emacs is not running, the GET request throws IOException,
+      caught as 'Buffer read failed:'.
+    preconditions:
+      - "Nothing listening on localhost:8585"
+    steps:
+      - "Call SENSE_read_buffer with name: 'anything'"
+    verify:
+      - "CallToolResult contains 'Buffer read failed: Cannot connect to Emacs'"
+      - "CallToolResult.isError is true"
+
+  # ─── Overlay: Emit Message ─────────────────────────────────────────
+
+  - name: overlay-message-default-host-display
+    description: >
+      When no display_id is provided, EmitOverlayMessage defaults to HOST_DISPLAY
+      ("host"), routing the overlay to the user's real X11 display via the
+      fallback somatic client.
+    preconditions:
+      - "Somatic HUD service is running"
+      - "DisplayManager may or may not be enabled"
+    steps:
+      - "Call ACT_emit_overlay_message with message: 'Build complete', category: 'info'"
+      - "Tool injects display_id='host' into args"
+      - "DisplayRouter.chooseSomatic returns the fallback somatic client"
+      - "SomaticClient.callTool('post_message', {message, category}) is called"
+    verify:
+      - "Message appears on the user's desktop overlay"
+      - "CallToolResult.isError is false"
+
+  - name: overlay-message-with-category
+    description: >
+      The optional category parameter is forwarded to the somatic
+      post_message call as a badge label.
+    preconditions:
+      - "Somatic HUD service is running"
+    steps:
+      - "Call ACT_emit_overlay_message with message: 'Tests failed', category: 'warn'"
+    verify:
+      - "Somatic receives both message and category fields"
+      - "CallToolResult.isError is false"
+
+  - name: overlay-message-no-category
+    description: >
+      When category is omitted, only the message is sent to somatic.
+    preconditions:
+      - "Somatic HUD service is running"
+    steps:
+      - "Call ACT_emit_overlay_message with message: 'Status update'"
+    verify:
+      - "Somatic receives {message: 'Status update'} with no category key"
+
+  - name: overlay-message-explicit-display-id
+    description: >
+      When display_id is explicitly provided, DisplayRouter routes to
+      the corresponding display session's somatic client.
+    preconditions:
+      - "DisplayManager is enabled with an active display session"
+    steps:
+      - "Call ACT_emit_overlay_message with message: 'Agent update', display_id: 'display-abc'"
+      - "DisplayRouter.chooseSomatic locates displayManager.locateDisplay('display-abc')"
+    verify:
+      - "Message is routed to the display session's somatic instance, not the host"
+
+  - name: overlay-message-somatic-unavailable
+    description: >
+      When the somatic service is unreachable, the exception is caught
+      and reported as a failure.
+    preconditions:
+      - "Somatic HUD service is not running"
+    steps:
+      - "Call ACT_emit_overlay_message with message: 'test'"
+    verify:
+      - "CallToolResult contains 'Failed:' with connection error"
+      - "CallToolResult.isError is true"
+
+  # ─── Overlay: Dismiss ──────────────────────────────────────────────
+
+  - name: dismiss-overlay-default-host
+    description: >
+      DismissOverlay defaults to HOST_DISPLAY when no display_id is provided,
+      calling somatic 'dismiss' with empty args on the fallback client.
+    preconditions:
+      - "Somatic HUD service is running"
+      - "An overlay is currently displayed"
+    steps:
+      - "Call ACT_dismiss_overlay with no arguments"
+      - "Tool injects display_id='host'"
+      - "SomaticClient.callTool('dismiss', {}) is called"
+    verify:
+      - "All overlays are cleared from the host display"
+      - "CallToolResult.isError is false"
+
+  - name: dismiss-overlay-explicit-display
+    description: >
+      When display_id is provided, the dismiss is routed to that
+      display session's somatic instance.
+    preconditions:
+      - "DisplayManager is enabled with an active session showing overlays"
+    steps:
+      - "Call ACT_dismiss_overlay with display_id: 'display-xyz'"
+    verify:
+      - "Dismiss is sent to the correct display session's somatic"
+      - "Host display overlays are not affected"
+
+  - name: dismiss-overlay-somatic-error
+    description: >
+      When somatic is unreachable, the exception is caught and reported.
+    preconditions:
+      - "Somatic service is down"
+    steps:
+      - "Call ACT_dismiss_overlay"
+    verify:
+      - "CallToolResult contains 'Failed:'"
+      - "CallToolResult.isError is true"
+
+  # ─── Overlay: Set Attention Target ─────────────────────────────────
+
+  - name: set-attention-window-only
+    description: >
+      Set attention to a specific window ID without a sub-region.
+      Somatic receives {window_id: ...} and highlights the entire window.
+    preconditions:
+      - "Somatic HUD service is running"
+    steps:
+      - "Call ACT_set_attention_target with window_id: '0x2400007'"
+      - "DisplayRouter defaults display_id to 'host'"
+      - "SomaticClient.callTool('set_attention', {window_id: '0x2400007'})"
+    verify:
+      - "Attention overlay highlights the target window"
+      - "CallToolResult.isError is false"
+
+  - name: set-attention-window-with-region
+    description: >
+      Set attention to a specific region within a window using WxH+X+Y geometry.
+    preconditions:
+      - "Somatic HUD service is running"
+    steps:
+      - "Call ACT_set_attention_target with window_id: '0x2400007', region: '800x600+100+50'"
+    verify:
+      - "Somatic receives both window_id and region"
+      - "Attention overlay highlights the specified sub-region"
+
+  - name: set-attention-no-params
+    description: >
+      When neither window_id nor region is provided, somatic receives
+      an empty args map (behavior depends on somatic implementation).
+    preconditions:
+      - "Somatic HUD service is running"
+    steps:
+      - "Call ACT_set_attention_target with no arguments"
+    verify:
+      - "SomaticClient.callTool('set_attention', {}) is called"
+      - "CallToolResult.isError is false (somatic handles empty gracefully)"
+
+  - name: set-attention-explicit-display
+    description: >
+      Route attention overlay to an isolated agent display.
+    preconditions:
+      - "DisplayManager enabled with active display session"
+    steps:
+      - "Call ACT_set_attention_target with window_id: '0x1234', display_id: 'display-abc'"
+    verify:
+      - "Attention is set on the isolated display, not the host"
+
+  - name: set-attention-somatic-error
+    description: >
+      When somatic is unreachable, the error is caught and reported.
+    preconditions:
+      - "Somatic service is down"
+    steps:
+      - "Call ACT_set_attention_target with window_id: '0x1'"
+    verify:
+      - "CallToolResult contains 'Failed:'"
+      - "CallToolResult.isError is true"
+
+  # ─── System: Execute Command ───────────────────────────────────────
+
+  - name: execute-command-success
+    description: >
+      Run a shell command via ProcessBuilder with bash -c. Captures stdout
+      and stderr, returns JSON with exit_code and output.
+    preconditions:
+      - "Gateway is running"
+    steps:
+      - "Call ACT_execute_command with command: 'echo hello'"
+      - "ProcessBuilder starts [bash, -c, echo hello]"
+      - "Process exits with code 0, stdout='hello\\n'"
+    verify:
+      - "CallToolResult contains JSON: {\"exit_code\":0,\"output\":\"hello\\n\"}"
+      - "CallToolResult.isError is false (exit_code == 0)"
+
+  - name: execute-command-nonzero-exit
+    description: >
+      When a command exits with non-zero status, the tool sets isError=true
+      and includes the exit code and stderr in output.
+    preconditions:
+      - "Gateway is running"
+    steps:
+      - "Call ACT_execute_command with command: 'ls /nonexistent'"
+      - "Process exits with code 2, stderr includes 'No such file or directory'"
+    verify:
+      - "CallToolResult contains exit_code != 0"
+      - "CallToolResult.isError is true"
+
+  - name: execute-command-timeout
+    description: >
+      When a command exceeds the timeout, the process is destroyForcibly'd
+      and a timeout error is returned with exit_code -1.
+    preconditions:
+      - "Gateway is running"
+    steps:
+      - "Call ACT_execute_command with command: 'sleep 300', timeout: 2"
+      - "ProcessBuilder waits 2 seconds, then destroyForcibly()"
+    verify:
+      - "CommandResult has exit_code=-1 and stderr='Command timed out after 2s'"
+      - "CallToolResult.isError is true"
+
+  - name: execute-command-default-timeout
+    description: >
+      When no timeout parameter is provided, the default of 60 seconds applies.
+    preconditions:
+      - "Gateway is running"
+    steps:
+      - "Call ACT_execute_command with command: 'date' (no timeout arg)"
+    verify:
+      - "X11Client.runCapture is called with timeoutSeconds=60"
+
+  - name: execute-command-display-routing
+    description: >
+      The command's DISPLAY environment variable is set based on display_id
+      routing via DisplayRouter.chooseEnvironment.
+    preconditions:
+      - "DisplayManager is enabled with an active display"
+    steps:
+      - "Call ACT_execute_command with command: 'xdotool getactivewindow', display_id: 'host'"
+      - "DisplayRouter.chooseEnvironment returns {DISPLAY: ':0', XAUTHORITY: ...}"
+      - "ProcessBuilder.environment() includes the display vars"
+    verify:
+      - "Command runs against the host X11 display, not an isolated one"
+
+  - name: execute-command-special-chars-json-escaping
+    description: >
+      The jsonString helper properly escapes backslashes, quotes, newlines,
+      carriage returns, and tabs in command output.
+    preconditions:
+      - "Gateway is running"
+    steps:
+      - "Call ACT_execute_command with command: 'printf \"line1\\nline2\\t\\\"quoted\\\"\"'"
+    verify:
+      - "Output JSON has properly escaped \\n, \\t, and \\\" in the output field"
+      - "JSON is parseable by any standard JSON parser"
+
+  - name: execute-command-timeout-class-slow
+    description: >
+      ACT_execute_command is registered with TimeoutClass.SLOW (120s),
+      meaning the ToolRegistry wrapper allows up to 120 seconds for the
+      tool handler to complete (separate from the bash command timeout).
+    preconditions:
+      - "ToolRegistry has ACT_execute_command registered"
+    steps:
+      - "Inspect the registration call"
+    verify:
+      - "TimeoutClass.SLOW is passed, giving 120s tool-level timeout"
+
+  # ─── System: Execute Privileged Command ────────────────────────────
+
+  - name: execute-privileged-command-success
+    description: >
+      Run a command with sudo -n (non-interactive). ProcessBuilder
+      executes [sudo, -n, bash, -c, <command>].
+    preconditions:
+      - "Gateway is running"
+      - "User has passwordless sudo for the target command"
+    steps:
+      - "Call ACT_execute_privileged_command with command: 'systemctl status sshd'"
+      - "ProcessBuilder starts [sudo, -n, bash, -c, systemctl status sshd]"
+      - "Process exits with code 0"
+    verify:
+      - "CallToolResult contains JSON with exit_code=0 and service status"
+      - "CallToolResult.isError is false"
+
+  - name: execute-privileged-command-no-sudo-password
+    description: >
+      When sudo -n is used but the user does not have NOPASSWD configured,
+      sudo exits non-zero with 'a password is required'.
+    preconditions:
+      - "User does NOT have passwordless sudo"
+    steps:
+      - "Call ACT_execute_privileged_command with command: 'whoami'"
+      - "sudo -n fails with 'sudo: a password is required'"
+    verify:
+      - "CallToolResult contains exit_code != 0"
+      - "Output includes sudo error message"
+      - "CallToolResult.isError is true"
+
+  - name: execute-privileged-command-timeout
+    description: >
+      Privileged commands also respect the timeout parameter and
+      are destroyed on timeout.
+    preconditions:
+      - "Gateway is running with passwordless sudo"
+    steps:
+      - "Call ACT_execute_privileged_command with command: 'sleep 300', timeout: 3"
+    verify:
+      - "Process is destroyForcibly'd after 3 seconds"
+      - "CommandResult has exit_code=-1"
+
+  - name: execute-privileged-command-display-routing
+    description: >
+      Like unprivileged commands, privileged commands route environment
+      via DisplayRouter.chooseEnvironment based on display_id.
+    preconditions:
+      - "DisplayManager enabled"
+    steps:
+      - "Call ACT_execute_privileged_command with command: 'xrandr', display_id: 'host'"
+    verify:
+      - "DISPLAY=:0 is set in the process environment"
+
+  # ─── EmacsClient HTTP Communication ────────────────────────────────
+
+  - name: emacs-client-connect-timeout
+    description: >
+      EmacsClient uses a 5-second connect timeout on the HttpClient.
+      If the TCP connection to localhost:8585 is not established in 5s,
+      a connection timeout error is raised.
+    preconditions:
+      - "Emacs host:port is firewalled or black-holed"
+    steps:
+      - "Call any EmacsClient method"
+    verify:
+      - "IOException is thrown within ~5 seconds"
+      - "Message includes 'Cannot connect to Emacs at http://localhost:8585'"
+
+  - name: emacs-client-request-timeout
+    description: >
+      Each individual HTTP request (GET or POST) has a 10-second timeout.
+      If Emacs accepts the connection but doesn't respond, the request
+      times out at 10 seconds.
+    preconditions:
+      - "Emacs accepts TCP connection but doesn't send response"
+    steps:
+      - "Call EmacsClient.evaluateElisp with slow code"
+    verify:
+      - "IOException is thrown at ~10 seconds"
+
+  - name: emacs-client-interrupted-thread
+    description: >
+      When the calling thread is interrupted during an HTTP request,
+      EmacsClient catches InterruptedException, re-sets the interrupt
+      flag via Thread.currentThread().interrupt(), and wraps it in IOException.
+    preconditions:
+      - "Thread is interrupted during HTTP call"
+    steps:
+      - "Call EmacsClient.evaluateElisp from a thread that gets interrupted"
+    verify:
+      - "IOException('Interrupted', cause) is thrown"
+      - "Thread interrupt flag is re-set"
+
+  - name: emacs-client-post-content-type
+    description: >
+      All POST requests set Content-Type: application/json header.
+    preconditions:
+      - "Emacs MCP server is running"
+    steps:
+      - "Call EmacsClient.evaluateElisp or .navigate or .typeText"
+    verify:
+      - "HTTP request includes 'Content-Type: application/json' header"
+
+  - name: emacs-client-buffer-name-encoding
+    description: >
+      EmacsClient.readBuffer URL-encodes the buffer name using UTF-8
+      before placing it in the GET path. Special characters like *, spaces,
+      and Unicode are properly encoded.
+    preconditions:
+      - "Emacs MCP server is running"
+    steps:
+      - "Call readBuffer with name '*Messages*'"
+    verify:
+      - "GET path is /mcp/buffer/%2AMessages%2A"
+
+  # ─── Display Routing ───────────────────────────────────────────────
+
+  - name: display-router-host-sentinel
+    description: >
+      When display_id is 'host', DisplayRouter.chooseEnvironment returns
+      the host display environment (DISPLAY from detectUserDisplay,
+      XAUTHORITY from detectUserXauthority).
+    preconditions:
+      - "User is on X11 with DISPLAY=:0"
+    steps:
+      - "Call chooseEnvironment with display_id='host'"
+    verify:
+      - "Returned map contains DISPLAY=:0 (or detected value)"
+      - "XAUTHORITY is included if detectUserXauthority returns non-null"
+
+  - name: display-router-chooseSomatic-host
+    description: >
+      When display_id is 'host', chooseSomatic returns the fallback
+      somatic client directly, bypassing DisplayManager lookup.
+    preconditions:
+      - "DisplayManager may or may not be enabled"
+    steps:
+      - "Call chooseSomatic with display_id='host'"
+    verify:
+      - "fallbackSomatic is returned"
+      - "DisplayManager is not consulted"
+
+  - name: display-router-isolation-disabled
+    description: >
+      When DisplayManager is null or not enabled, chooseEnvironment
+      returns Map.of() and chooseSomatic returns fallbackSomatic.
+    preconditions:
+      - "DisplayManager is null or isEnabled() returns false"
+    steps:
+      - "Call chooseEnvironment with any display_id (not 'host')"
+      - "Call chooseSomatic with any display_id (not 'host')"
+    verify:
+      - "chooseEnvironment returns empty map"
+      - "chooseSomatic returns fallbackSomatic"
+
+  - name: display-router-specific-display-session
+    description: >
+      When display_id is a specific session ID and DisplayManager is enabled,
+      the router locates the display session and returns its environment
+      or somatic client.
+    preconditions:
+      - "DisplayManager is enabled"
+      - "Display session 'display-abc' exists"
+    steps:
+      - "Call chooseEnvironment with display_id='display-abc'"
+      - "DisplayManager.locateDisplay('display-abc') returns the session"
+      - "session.provideEnvironment() returns {DISPLAY=:99, ...}"
+    verify:
+      - "Returned environment targets the isolated display"
+
+  - name: display-router-no-display-found
+    description: >
+      When display_id doesn't match any session, chooseEnvironment
+      returns Map.of() and chooseSomatic returns fallbackSomatic.
+    preconditions:
+      - "DisplayManager is enabled but display_id 'nonexistent' has no session"
+    steps:
+      - "Call chooseEnvironment with display_id='nonexistent'"
+    verify:
+      - "Empty environment map is returned"
+
+  - name: display-router-default-display
+    description: >
+      When display_id is null (not provided), DisplayRouter falls through
+      to locateDefaultDisplay() which returns the default session if any.
+    preconditions:
+      - "DisplayManager is enabled with a default display"
+    steps:
+      - "Call chooseEnvironment with no display_id in args"
+    verify:
+      - "locateDefaultDisplay() is called"
+      - "Default session's environment is returned"
+
+  - name: overlay-tools-inject-host-display-id
+    description: >
+      All three overlay tools (EmitOverlayMessage, DismissOverlay,
+      SetAttentionTarget) inject display_id='host' when the caller
+      does not provide one, ensuring user-facing overlays always
+      appear on the real desktop.
+    preconditions:
+      - "Tools are registered"
+    steps:
+      - "Call any overlay tool without display_id"
+    verify:
+      - "args map is mutated to include display_id='host'"
+      - "DisplayRouter.chooseSomatic receives 'host' and returns fallbackSomatic"
+
+  # ─── ResponseEnricher Integration ──────────────────────────────────
+
+  - name: response-enricher-wraps-all-tools
+    description: >
+      All tools in this domain use enricher.wrap() which adds session state
+      annotations to tool responses. This ensures the intelligence layer
+      receives enriched context from every tool invocation.
+    preconditions:
+      - "ResponseEnricher is configured"
+    steps:
+      - "Call any tool (ACT_evaluate_elisp, SENSE_read_buffer, etc.)"
+    verify:
+      - "The handler is wrapped via enricher.wrap()"
+      - "Session state annotations are injected into the response"
+
+enforced_constraints:
+  - name: emacs-connect-timeout-5s
+    description: >
+      EmacsClient HttpClient uses connectTimeout(Duration.ofSeconds(5)).
+      TCP connections to the Emacs MCP server must be established within 5 seconds.
+    rationale: >
+      Prevents indefinite blocking when Emacs is not running or unreachable.
+      The gateway must remain responsive even when a downstream service is down.
+
+  - name: emacs-request-timeout-10s
+    description: >
+      Every HTTP request to Emacs (GET or POST) uses timeout(Duration.ofSeconds(10)).
+      Requests that exceed 10 seconds are terminated.
+    rationale: >
+      Prevents a hung Emacs (e.g., infinite loop in elisp) from blocking
+      the gateway indefinitely. 10 seconds is generous for local IPC.
+
+  - name: command-execution-via-bash-c
+    description: >
+      ACT_execute_command runs commands as [bash, -c, <command>], enabling
+      shell features (pipes, redirects, globs). ACT_execute_privileged_command
+      runs as [sudo, -n, bash, -c, <command>].
+    rationale: >
+      Shell interpretation via bash -c is necessary for the tool to accept
+      arbitrary shell commands. The -n flag on sudo prevents interactive
+      password prompts that would hang the process.
+
+  - name: command-timeout-default-60s
+    description: >
+      Command execution defaults to 60-second timeout if not specified.
+      The timeout is enforced via process.waitFor(timeout, TimeUnit.SECONDS),
+      and exceeded processes are destroyForcibly'd.
+    rationale: >
+      Prevents runaway commands from blocking the gateway. 60 seconds is
+      sufficient for most system commands while catching infinite loops.
+
+  - name: timeout-class-slow-for-execution
+    description: >
+      Both ExecuteCommand and ExecutePrivilegedCommand are registered with
+      TimeoutClass.SLOW (120s), giving the ToolRegistry wrapper a 2-minute
+      ceiling for the entire tool handler invocation.
+    rationale: >
+      Command execution can legitimately take longer than the STANDARD 25s
+      timeout class. The SLOW class prevents premature tool-level timeouts
+      while the per-command timeout handles runaway processes.
+
+  - name: overlay-defaults-to-host-display
+    description: >
+      EmitOverlayMessage, DismissOverlay, and SetAttentionTarget all inject
+      display_id='host' when the caller omits it, routing to the user's real
+      X11 display rather than an agent's isolated display.
+    rationale: >
+      These are user-facing tools. Overlays that appear on an invisible agent
+      display are useless. The host default ensures the user always sees them.
+
+  - name: navigate-requires-at-least-one-param
+    description: >
+      ACT_navigate_buffer validates that at least one of file, line, column,
+      or buffer is provided. Empty params are rejected before contacting Emacs.
+    rationale: >
+      A navigate call with no destination is meaningless. Early validation
+      avoids a useless round-trip to the Emacs MCP server.
+
+  - name: interrupted-thread-flag-preserved
+    description: >
+      EmacsClient catches InterruptedException during HTTP calls and re-sets
+      the thread interrupt flag via Thread.currentThread().interrupt() before
+      wrapping in IOException.
+    rationale: >
+      Java convention requires re-setting the interrupt flag so that callers
+      up the stack can detect the interruption. Swallowing it silently would
+      violate the cooperative cancellation contract.
+
+  - name: process-streams-read-in-virtual-threads
+    description: >
+      X11Client.runCapture reads stdout and stderr in separate virtual threads
+      to avoid deadlock when the process buffer fills up.
+    rationale: >
+      ProcessBuilder's stdout/stderr buffers are finite. If the parent thread
+      blocks on waitFor() while the child blocks on writing to a full buffer,
+      both deadlock. Virtual threads solve this cheaply.
+
+opinionated_constraints:
+  - name: emacs-http-over-emacsclient
+    description: >
+      Emacs integration uses an HTTP server inside Emacs (localhost:8585) rather
+      than the emacsclient CLI or Unix socket.
+    rationale: >
+      HTTP provides structured JSON request/response, is timeout-friendly,
+      and avoids emacsclient's lack of structured output. The tradeoff is
+      that Emacs must run the MCP HTTP server package.
+
+  - name: somatic-tool-name-mapping
+    description: >
+      Gateway tool names (ACT_emit_overlay_message, ACT_dismiss_overlay,
+      ACT_set_attention_target) map to somatic tool names (post_message,
+      dismiss, set_attention) via hardcoded strings rather than a registry.
+    rationale: >
+      The somatic tool API is small and stable. A dynamic mapping layer would
+      add complexity without proportional benefit. If somatic renames tools,
+      a single code change per tool is trivial.
+
+  - name: json-string-escaping-manual
+    description: >
+      ExecuteCommand and ExecutePrivilegedCommand use a manual jsonString()
+      helper to escape output for JSON embedding, rather than using Jackson
+      ObjectMapper.writeValueAsString.
+    rationale: >
+      The manual approach avoids the overhead of constructing a JsonNode tree
+      for a simple string-in-string scenario. It handles the five essential
+      escape sequences (backslash, quote, newline, carriage return, tab).
+      The tradeoff is that other Unicode escaping is not handled.
+
+  - name: no-required-params-on-navigate
+    description: >
+      ACT_navigate_buffer has no required parameters in its schema — all four
+      (file, line, column, buffer) are optional. The at-least-one validation
+      is done in the handler, not the schema.
+    rationale: >
+      MCP schema validation for "at least one of N" is not expressible in
+      simple JSON Schema required arrays. Runtime validation is the pragmatic
+      choice for OR-style parameter requirements.
+
+  - name: single-emacs-instance-assumption
+    description: >
+      EmacsClient connects to a single host:port (default localhost:8585).
+      There is no support for multiple Emacs instances or per-display Emacs
+      routing.
+    rationale: >
+      The current architecture assumes one primary Emacs instance. If display
+      isolation needs per-display Emacs, the EmacsClient would need to be
+      per-DisplaySession, which is a future extension.

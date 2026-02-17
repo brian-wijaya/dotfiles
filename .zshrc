@@ -156,7 +156,6 @@ fi
 if [[ $_in_ide -eq 0 ]] && [[ -z "$TMUX" ]] && [[ -z "$WEZTERM_NOTMUX" ]]; then
     tmux attach -t main 2>/dev/null || tmux new -s main -c ~
 fi
-export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
 export NODE_OPTIONS="--dns-result-order=ipv4first"
 
 # File protection layer

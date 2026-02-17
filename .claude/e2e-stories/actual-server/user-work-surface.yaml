@@ -1,0 +1,246 @@
+vocabulary:
+  user_work_surface: "Tauri desktop app (Rust + WebKitGTK). The human's primary interface for knowledge state navigation, decision triage, and intent expression."
+  knowledge_state: "16-state model. User and agent each have 4 levels (High/Medium/Low/Deferred). The pair (user_level, agent_level) defines the knowledge state of any item."
+  display_mode: "Three modes: User view (4-color), Agent view (4-color), Both view (16-state combined)."
+  data_models_tab: "Primary tab. Spatial visualization of knowledge items as domain boxes, colored by knowledge state, with semantic zoom."
+  processes_tab: "Agent activity tab. Temporal workflow status, Kafka consumers, executive session state."
+  decision_inbox_tab: "Triage tab. Items requiring user action: contradictions, open questions, ambient findings, flagged gaps."
+  thread_pulling: "Navigation metaphor. Select a Worldview item, pull on it to reveal the Chronicle thread that produced it."
+  companion_app: "Emacs (text editing) or Krita (image markup) opened from the UI via i3 IPC for side-by-side work."
+  triage_status: "untriaged → investigating → resolved/dismissed/deferred"
+  which_key_panel: "Context-sensitive popup showing available keyboard actions, grouped by context."
+
+metadata:
+  feature: user-work-surface
+  project: actual-server
+  date: "2026-02-15"
+  status: NOT_IMPLEMENTED
+
+stories:
+  - name: app_launches_and_connects
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1
+    description: "User Work Surface launches as a Tauri app, connects to gateway over HTTP, and displays the Data Models tab."
+    preconditions:
+      - "Gateway is running on 127.0.0.1:8372"
+      - "Tauri app is installed"
+    steps:
+      - "User launches Actual Server UI from i3 (keybinding or dmenu)"
+      - "Rust backend establishes HTTP connection to 127.0.0.1:8372/mcp"
+      - "App calls SENSE_worldview_load to get current beliefs"
+      - "App calls SENSE_sessions_search to get recent session context"
+      - "Data Models tab renders with domain boxes showing knowledge items"
+      - "Status bar shows connection status, session ID, last sync time"
+    verify:
+      - "App window appears on the Worldview workspace"
+      - "Gateway logs show new MCP session from UI client"
+      - "Data Models tab populated with items from Worldview"
+      - "Connection indicator shows 'connected'"
+
+  - name: view_knowledge_state_user_mode
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS2
+    description: "User switches to User view mode and sees items colored by their own knowledge level (4-color gradient)."
+    preconditions:
+      - "App is connected and Data Models tab is active"
+      - "Items exist with varying user knowledge levels"
+    steps:
+      - "User presses display mode key to cycle to 'User view'"
+      - "Status bar shows current mode: 'User view'"
+      - "Each item renders with single color: High=saturated, Medium=moderate, Low=desaturated, Deferred=outlined"
+      - "User presses mode key again to cycle to 'Agent view'"
+      - "Items re-render with agent's knowledge levels"
+      - "User presses mode key again to cycle to 'Both view'"
+      - "Items render with split-element encoding (user left, agent right)"
+    verify:
+      - "Colors change when display mode changes"
+      - "In Both view, off-diagonal items (divergent knowledge) show split colors"
+      - "In Both view, diagonal items (same level) show solid color"
+
+  - name: navigate_data_models_semantic_zoom
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "User navigates the Data Models tab with keyboard, zooming from overview to item detail."
+    preconditions:
+      - "Data Models tab active with multiple domain boxes"
+    steps:
+      - "At overview zoom: domain boxes visible with aggregate state, item count"
+      - "User presses j/k to move selection between domains"
+      - "User presses Enter to zoom into selected domain"
+      - "At domain zoom: individual items visible with titles, knowledge state colors"
+      - "User presses j/k to move between items within domain"
+      - "User presses Enter to zoom into selected item"
+      - "At item zoom: full deposit history, assumption list, provenance chain"
+      - "User presses q to zoom back out one level"
+    verify:
+      - "Selection highlight moves with j/k"
+      - "Zoom transitions smoothly between levels"
+      - "Item detail shows deposits, assumptions, and provenance"
+      - "q returns to previous zoom level"
+
+  - name: triage_decision_inbox_item
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "User triages an item in the Decision Inbox — reads it, investigates, and resolves with a deposit."
+    preconditions:
+      - "Decision Inbox tab has at least one untriaged item"
+      - "Item is an ambient contradiction detection"
+    steps:
+      - "User switches to Decision Inbox tab"
+      - "Inbox shows untriaged items sorted by priority"
+      - "User selects item with j/k, presses Enter to view detail"
+      - "Detail view shows: contradiction description, both sides, provenance"
+      - "User presses 'i' to mark as investigating"
+      - "User presses 'd' to compose a deposit (opens Emacs companion)"
+      - "User writes resolution rationale in Emacs buffer"
+      - "User submits deposit (saves buffer, closes companion)"
+      - "App records DECISION deposit via ACT_deposits_write"
+      - "Item moves to 'resolved' status"
+    verify:
+      - "Item status progressed: untriaged → investigating → resolved"
+      - "Deposit recorded in Chronicle with correct references"
+      - "Item no longer appears in active inbox"
+      - "Knowledge state updated for the resolved topic"
+
+  - name: view_processes_tab
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "User checks what agents are doing via the Processes tab."
+    preconditions:
+      - "At least one Temporal workflow is running"
+      - "Executive session is active (Claude Code connected)"
+    steps:
+      - "User switches to Processes tab"
+      - "Executive section shows: current session info, recent tool calls, deposit rate"
+      - "Analysts section shows: Temporal workflow list with status (running/queued/completed)"
+      - "Clerks section shows: Kafka consumer status, events processed, error rate"
+      - "Workflows section shows: active workflows with progress, retry state, duration"
+      - "User selects a workflow to see detail"
+    verify:
+      - "All sections populated with live data from gateway"
+      - "Workflow status reflects actual Temporal state"
+      - "No time-series graphs (that's Grafana's job)"
+
+  - name: thread_pulling_navigation
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS4
+    description: "User selects a Worldview belief and pulls on its Chronicle thread to trace provenance."
+    preconditions:
+      - "Data Models tab active with items that have Chronicle provenance"
+    steps:
+      - "User selects an item (a Worldview belief/model/heuristic)"
+      - "User presses 'p' (pull) to reveal the Chronicle thread"
+      - "First pull level: deposit timeline — shows deposits that contributed to this belief"
+      - "User selects a deposit and presses 'p' again"
+      - "Second pull level: raw content — session context, assumptions, agent reasoning"
+      - "User presses 'q' to collapse back one level"
+      - "User presses 'q' again to return to spatial overview"
+    verify:
+      - "Each pull level shows progressively deeper provenance"
+      - "Deposit timeline is chronologically ordered"
+      - "Raw content includes session ID, timestamp, agent identity"
+      - "q collapses levels in reverse order"
+
+  - name: unified_search_across_chronicle_worldview
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS4
+    description: "User searches and results span both Chronicle and Worldview."
+    preconditions:
+      - "App connected with indexed documents and Worldview materialized"
+    steps:
+      - "User presses '/' to open search"
+      - "User types query"
+      - "Results show Worldview items: 'This belief exists in Worldview (L2, project: X)'"
+      - "Results show Chronicle items: 'These N deposits contributed to it'"
+      - "FTS5 and semantic search run in parallel (hybrid search)"
+      - "User selects a result to navigate to it"
+    verify:
+      - "Search results include both Worldview beliefs and Chronicle deposits"
+      - "Results are ranked by relevance (hybrid FTS5 + semantic)"
+      - "Selecting a result navigates to the item in context"
+
+  - name: open_emacs_companion_for_deposit
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS6
+    description: "User composes a deposit by opening Emacs as a companion app alongside the UI."
+    preconditions:
+      - "Emacs daemon is running"
+      - "UI is on Worldview workspace"
+    steps:
+      - "User presses 'd' to compose a deposit for the selected item"
+      - "UI contracts to left 1/3 of screen via i3 IPC"
+      - "Emacs opens in right 2/3 with deposit template buffer"
+      - "Template includes: item reference, deposit type selector, content area, tags"
+      - "User writes deposit content in Emacs"
+      - "User saves buffer (C-x C-s)"
+      - "UI detects save, reads deposit content, submits via ACT_deposits_write"
+      - "Emacs companion closes, UI expands back to full width"
+    verify:
+      - "i3 layout changes to accommodate companion"
+      - "Emacs buffer has correct template with item context"
+      - "Deposit recorded in Chronicle after save"
+      - "UI reflects updated knowledge state"
+
+  - name: open_krita_for_image_markup
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS6
+    description: "User annotates an image attachment using Krita and the Cintiq display tablet."
+    preconditions:
+      - "Krita is installed"
+      - "Selected item has an image attachment (screenshot, diagram)"
+    steps:
+      - "User selects image attachment in item detail"
+      - "User presses 'a' (annotate) to open in Krita"
+      - "UI contracts to left 1/3, Krita opens in right 2/3 via i3 IPC"
+      - "User marks up image with Cintiq stylus"
+      - "User saves in Krita (Ctrl+S)"
+      - "File watcher detects change"
+      - "UI updates image preview with marked-up version"
+      - "When deposit is submitted, marked-up image is the attachment"
+    verify:
+      - "Krita opens with the correct image file"
+      - "File change detected within 2 seconds of save"
+      - "UI shows updated image after Krita save"
+      - "Deposit attachment contains the annotated image"
+
+  - name: chat_with_analyst_agent
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS7
+    description: "User directs an analyst agent via the chat surface in the UI."
+    preconditions:
+      - "Analyst agent available (Ollama with 32B model running)"
+      - "UI is on Worldview workspace"
+    steps:
+      - "User opens analyst chat panel (keyboard shortcut)"
+      - "Chat panel appears as a sidebar in the UI"
+      - "User types: 'Focus on the dependency changes in project X'"
+      - "Message sent to gateway, routed to analyst agent"
+      - "Analyst responds with investigation plan"
+      - "Analyst produces OBSERVATION deposit as it finds results"
+      - "User sees deposit appear in Data Models tab in real time"
+    verify:
+      - "Chat messages delivered to analyst via gateway"
+      - "Analyst response appears in chat panel"
+      - "OBSERVATION deposits from analyst visible in Data Models tab"
+      - "Executive agent (Claude Code TTY) is NOT affected"
+
+  - name: which_key_discovery_panels
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS4
+    description: "User discovers available actions through which-key panels that update based on context."
+    preconditions:
+      - "App is running with Data Models tab active"
+    steps:
+      - "User presses leader key (Space)"
+      - "Which-key panel appears showing available action groups"
+      - "Groups include: navigation (n), triage (t), view (v), zoom (z), search (/)"
+      - "User presses 'n' for navigation submenu"
+      - "Panel updates to show navigation keys: j/k (move), Enter (zoom in), q (zoom out)"
+      - "User presses Escape to dismiss panel"
+      - "When user switches to Decision Inbox tab, leader key shows different groups"
+      - "Triage group shows: r (resolve), d (defer), x (dismiss), i (investigate)"
+    verify:
+      - "Which-key panel appears within 200ms of leader key"
+      - "Panel content changes based on active tab and selection context"
+      - "All actions shown in panel are functional when pressed"
+      - "Escape dismisses the panel without action"

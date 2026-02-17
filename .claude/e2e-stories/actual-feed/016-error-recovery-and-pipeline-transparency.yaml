@@ -1,0 +1,726 @@
+title: "Error Recovery & Pipeline Transparency"
+status: draft
+version: 1
+
+principle: >
+  Every failure in the pipeline is a contract violation with the user. The user
+  asked for content; something broke. They deserve to know what broke, why it
+  broke, and what they can do about it. ADR-011 establishes "no silent
+  degradation" as a system-wide invariant. This story operationalizes that
+  invariant across every failure mode: network, LLM, transcription, embedding,
+  and storage. The pipeline is a machine with visible moving parts. When a part
+  jams, the user sees which part, why, and can either fix it, retry it, or
+  accept graceful degradation — their choice, not ours.
+
+error_taxonomy:
+  description: >
+    Five error categories, each with distinct reason codes, retry semantics,
+    and degradation behavior. Every error carries a structured reason_code
+    (machine-readable) and a human_message (user-facing, no jargon).
+
+  categories:
+    - category: network
+      description: "Source adapter failed to fetch content from the upstream platform."
+      reason_codes:
+        - { code: NET_TIMEOUT, message: "Source did not respond within timeout", retryable: true, backoff: exponential }
+        - { code: NET_RATE_LIMITED, message: "Source is rate-limiting requests", retryable: true, backoff: "respect Retry-After header, minimum 60s" }
+        - { code: NET_AUTH_EXPIRED, message: "API credentials have expired", retryable: false, user_action: "Re-authenticate in source settings" }
+        - { code: NET_DNS_FAILURE, message: "Cannot resolve source hostname", retryable: true, backoff: exponential }
+        - { code: NET_TLS_ERROR, message: "TLS handshake failed (certificate issue)", retryable: false, user_action: "Check source URL and network configuration" }
+        - { code: NET_HTTP_4XX, message: "Source returned client error (forbidden, not found)", retryable: false, user_action: "Source may have moved or blocked access" }
+        - { code: NET_HTTP_5XX, message: "Source returned server error", retryable: true, backoff: exponential }
+        - { code: NET_ADAPTER_BROKEN, message: "Source adapter cannot parse response (format changed)", retryable: false, user_action: "Adapter update required — check for app updates" }
+      degradation: >
+        Items that fail at crawl never enter the database. The source health
+        dashboard shows the failure. No phantom items, no placeholders.
+
+    - category: llm
+      description: "Local LLM inference failed during Stage 2 feature extraction."
+      reason_codes:
+        - { code: LLM_OOM, message: "Not enough memory to run the model", retryable: false, user_action: "Close other applications or switch to a smaller model" }
+        - { code: LLM_MALFORMED_OUTPUT, message: "Model produced invalid JSON", retryable: true, backoff: "immediate retry with temperature=0, max 2 retries" }
+        - { code: LLM_TIMEOUT, message: "Model inference exceeded time limit", retryable: true, backoff: exponential }
+        - { code: LLM_MODEL_NOT_LOADED, message: "Model file not found or failed to load", retryable: false, user_action: "Re-download model from settings" }
+        - { code: LLM_CONTEXT_OVERFLOW, message: "Content exceeds model's context window", retryable: false, user_action: "Item is too long for current model. Truncated extraction attempted." }
+        - { code: LLM_PROCESS_CRASHED, message: "llama.cpp process terminated unexpectedly", retryable: true, backoff: "30s delay, then restart inference server" }
+      degradation: >
+        Item remains in feed with pipeline_state='failed'. Title, author,
+        timestamp, thumbnail are visible (Stage 1 data). Summary, features,
+        and score are absent. Item is sorted by recency only (no ranking
+        signals). User sees "Analysis failed" badge with reason and retry button.
+
+    - category: transcription
+      description: "whisper.cpp or Moonshine failed to transcribe audio/video content."
+      reason_codes:
+        - { code: TX_CORRUPT_AUDIO, message: "Audio stream is corrupt or unreadable", retryable: false, user_action: "Original audio may be damaged" }
+        - { code: TX_UNSUPPORTED_FORMAT, message: "Audio format not supported by transcription engine", retryable: false, user_action: "Supported formats: mp3, m4a, wav, ogg, flac, webm" }
+        - { code: TX_TIMEOUT, message: "Transcription exceeded time limit", retryable: true, backoff: exponential }
+        - { code: TX_OOM, message: "Not enough memory for transcription model", retryable: false, user_action: "Close other applications or defer to charging window" }
+        - { code: TX_MODEL_NOT_LOADED, message: "Whisper model file not found or corrupt", retryable: false, user_action: "Re-download transcription model from settings" }
+        - { code: TX_EMPTY_OUTPUT, message: "Transcription produced no text (silent audio or music-only)", retryable: false, user_action: "Content may not contain speech" }
+      degradation: >
+        Item proceeds to LLM extraction without transcript. If the item has
+        a title and description from Stage 1 metadata, the LLM extracts features
+        from those fields only. Summary will note: "Transcript unavailable —
+        analysis based on metadata only." Item is still ranked, but
+        topic_relevance and nominal_density are computed from limited text.
+        User sees "Transcript failed" badge. Video/audio still playable.
+
+    - category: embedding
+      description: "ONNX Runtime embedding model failed to produce vector representation."
+      reason_codes:
+        - { code: EMB_MODEL_MISSING, message: "Embedding model file not found", retryable: false, user_action: "Re-download embedding model from settings" }
+        - { code: EMB_MODEL_CORRUPT, message: "Embedding model file failed integrity check", retryable: false, user_action: "Re-download embedding model — file may be corrupt" }
+        - { code: EMB_OOM, message: "Not enough memory for embedding inference", retryable: true, backoff: "defer to lower-memory window" }
+        - { code: EMB_INFERENCE_ERROR, message: "ONNX Runtime returned an error during inference", retryable: true, backoff: exponential }
+        - { code: EMB_DIMENSION_MISMATCH, message: "Embedding dimensions don't match stored index", retryable: false, user_action: "Embedding model was changed — rebuild index from settings" }
+      degradation: >
+        Item proceeds to enriched state without novelty or repetition signals.
+        novelty defaults to 0.5 (neutral). repetition defaults to 0.0
+        (assume not repetitive). Item is ranked using remaining 11 signals.
+        User sees no visible indicator — embedding failure is invisible because
+        the item still functions. Pipeline dashboard shows embedding error count.
+
+    - category: storage
+      description: "SQLite write failed during pipeline processing."
+      reason_codes:
+        - { code: STG_DISK_FULL, message: "No disk space remaining", retryable: false, user_action: "Free disk space. Current DB size shown." }
+        - { code: STG_DB_LOCKED, message: "Database is locked by another process", retryable: true, backoff: "100ms retry, max 10 attempts (SQLite busy_timeout)" }
+        - { code: STG_WRITE_ERROR, message: "Failed to write to database file", retryable: false, user_action: "Check file permissions and disk health" }
+        - { code: STG_INTEGRITY_ERROR, message: "Database integrity check failed", retryable: false, user_action: "Database may be corrupt. Export available data and rebuild." }
+        - { code: STG_MIGRATION_FAILED, message: "Schema migration failed during app update", retryable: false, user_action: "Restore from backup. Contact support." }
+      degradation: >
+        Storage failures are critical. If the database cannot be written,
+        the pipeline halts entirely. A prominent banner appears: "Feed database
+        is unavailable. Reason: [code]. Your data is safe — last backup at
+        [timestamp]." Read-only mode allows browsing cached/existing items
+        but no new crawling or enrichment proceeds.
+
+pipeline_states:
+  description: >
+    Every FeedItem transitions through a linear state machine. States are
+    persisted in the pipeline_state column. Failed items retain the stage
+    they failed at via reason_code prefix (NET_, LLM_, TX_, EMB_, STG_).
+  states:
+    - { state: raw, description: "Stage 1 complete. Crawled, normalized, awaiting enrichment." }
+    - { state: transcribing, description: "Audio/video item is being transcribed by whisper.cpp/Moonshine." }
+    - { state: extracting, description: "Item is being processed by local LLM for feature extraction." }
+    - { state: enriched, description: "All pipeline stages complete. Item is fully scored and ranked." }
+    - { state: failed, description: "Pipeline failed at some stage. error_code and error_message are set. retry_count tracks attempts." }
+  transitions:
+    - { from: raw, to: transcribing, trigger: "Audio/video item picked up by transcription worker" }
+    - { from: raw, to: extracting, trigger: "Text item picked up by LLM extraction worker" }
+    - { from: transcribing, to: extracting, trigger: "Transcription complete, item enters LLM queue" }
+    - { from: transcribing, to: failed, trigger: "Transcription error (TX_* code)" }
+    - { from: extracting, to: enriched, trigger: "LLM extraction + embedding complete" }
+    - { from: extracting, to: failed, trigger: "LLM error (LLM_* code) or embedding error (EMB_* code)" }
+    - { from: failed, to: transcribing, trigger: "User retries a failed transcription item" }
+    - { from: failed, to: extracting, trigger: "User retries a failed extraction item" }
+    - { from: failed, to: raw, trigger: "User retries a failed item from the beginning" }
+
+pipeline_dashboard:
+  description: >
+    A dedicated view showing the real-time state of the processing pipeline.
+    Accessible from the main feed via a persistent status chip that shows
+    current queue depth. Tapping the chip opens the full dashboard. The
+    dashboard is the "engine room" view for technically literate users who
+    want to understand what their machine is doing.
+
+  sections:
+    queue_overview:
+      description: "Items in each pipeline stage, updated every 2 seconds."
+      displays:
+        - { label: "Awaiting transcription", source: "COUNT(*) WHERE pipeline_state='raw' AND modality IN ('video','audio')" }
+        - { label: "Awaiting extraction", source: "COUNT(*) WHERE pipeline_state IN ('raw','transcribing') AND modality='text' OR pipeline_state='transcribing'" }
+        - { label: "Currently processing", source: "Items actively in transcribing or extracting state" }
+        - { label: "Failed", source: "COUNT(*) WHERE pipeline_state='failed'", action: "tap to view failed items" }
+        - { label: "Enriched today", source: "COUNT(*) WHERE pipeline_state='enriched' AND extracted_at > today_start" }
+
+    processing_rates:
+      description: "Throughput metrics computed from recent processing history."
+      metrics:
+        - { label: "Transcription rate", value: "items/hour", source: "Rolling 1-hour window of completed transcriptions" }
+        - { label: "Extraction rate", value: "items/hour", source: "Rolling 1-hour window of completed extractions" }
+        - { label: "Average transcription time", value: "seconds/item", source: "Mean duration of last 20 transcriptions" }
+        - { label: "Average extraction time", value: "seconds/item", source: "Mean duration of last 20 extractions" }
+        - { label: "Error rate", value: "percentage", source: "Failed / total processed in last 24 hours" }
+
+    error_breakdown:
+      description: "Error counts grouped by category and reason code for last 24 hours."
+      grouping: "category → reason_code → count, with most frequent first"
+      action: "Tap any error group to see affected items"
+
+    model_info:
+      description: "Currently loaded models and their health status."
+      models:
+        - { role: "Feature extraction", field: "extraction_model_id from config" }
+        - { role: "Transcription", field: "whisper model variant from config" }
+        - { role: "Embedding", field: "embedding model name from config" }
+        - { role: "Neural taste", field: "taste model version + interaction count" }
+
+compute_budget_bar:
+  description: >
+    The single horizontal bar from US-016 (002) with colored segments per
+    pipeline stage. This section specifies the exact segment breakdown,
+    coloring, percentage computation, and real-time update behavior.
+
+  segments:
+    - name: Crawling
+      color: "#4A9EFF"
+      description: "Time spent fetching content from sources (network I/O + adapter parsing)"
+      computation: "Sum of crawl durations in current budget period / total pipeline time"
+      typical_share: "5-15%"
+
+    - name: Transcription
+      color: "#FF8C42"
+      description: "Time spent in whisper.cpp / Moonshine transcribing audio/video"
+      computation: "Sum of transcription durations / total pipeline time"
+      typical_share: "20-40% (dominates on mobile, significant on desktop)"
+
+    - name: Summarization
+      color: "#7B68EE"
+      description: "Time spent in local LLM for feature extraction (includes tripwire eval)"
+      computation: "Sum of LLM inference durations / total pipeline time"
+      typical_share: "35-55% (the largest segment on desktop)"
+
+    - name: Ranking
+      color: "#50C878"
+      description: "Time spent in Stage 3 scoring (formula + neural + exploration)"
+      computation: "Sum of scoring durations / total pipeline time"
+      typical_share: "1-3% (negligible, but visible to show it's real)"
+
+    - name: Storage
+      color: "#A0A0A0"
+      description: "Time spent writing to SQLite (inserts, FTS index updates, embedding storage)"
+      computation: "Sum of write durations / total pipeline time"
+      typical_share: "2-5%"
+
+  behavior:
+    update_frequency: "Every 5 seconds during active processing, every 30 seconds when idle"
+    overflow: >
+      If projected pipeline time exceeds the user's configured processing
+      window (e.g., 8 hours overnight), the bar exceeds 100%. The overflow
+      region is rendered in red with a tooltip: "Pipeline will not complete
+      in configured window. Reduce sources, switch to lighter model, or
+      extend processing window."
+    empty_state: "Bar shows 0% with 'No items processing' label when pipeline is idle"
+    interaction: >
+      Tap any segment to see: items contributing to that segment, average
+      per-item time, and suggestions for reducing that segment's cost.
+      Example: tapping Transcription shows "42 audio items queued. Average
+      transcription time: 23s/item. Consider: reduce audio sources, or
+      switch to Moonshine (faster, lower quality)."
+
+retry_mechanisms:
+  per_item:
+    description: >
+      Every failed item shows a retry button in the feed. Tapping retry
+      resets pipeline_state to the appropriate stage (raw, transcribing, or
+      extracting depending on where the failure occurred), increments
+      retry_count, and re-queues the item. The retry button shows the
+      retry count: "Retry (attempt 2 of 3)".
+    max_retries: 3
+    after_max: >
+      After 3 failed attempts, the retry button is replaced with
+      "Permanently failed — show raw" which displays the item with Stage 1
+      metadata only. The item remains in the feed, browsable but unscored.
+      User can manually reset retry_count from the item's detail view
+      (power user escape hatch).
+
+  bulk_retry:
+    description: >
+      Pipeline dashboard includes "Retry all failed items" button. Filters
+      to retryable errors only (transient codes). Non-retryable errors
+      (auth expired, model missing, corrupt audio) are excluded from bulk
+      retry and listed separately with their required user actions.
+    confirmation: >
+      "Retry N items with transient errors? M items require manual action
+      and will not be retried."
+
+  automatic_retry:
+    description: >
+      Transient errors (NET_TIMEOUT, NET_HTTP_5XX, LLM_MALFORMED_OUTPUT,
+      LLM_TIMEOUT, STG_DB_LOCKED, EMB_OOM) are retried automatically with
+      exponential backoff. The user does not need to intervene for transient
+      failures. Automatic retry runs silently but is visible in the pipeline
+      dashboard's processing log.
+    backoff_schedule:
+      - { attempt: 1, delay_seconds: 10 }
+      - { attempt: 2, delay_seconds: 60 }
+      - { attempt: 3, delay_seconds: 300 }
+    after_exhaustion: >
+      Item transitions to pipeline_state='failed' and becomes visible in the
+      feed with error badge. No more automatic retries. User must manually
+      retry or accept the failure.
+
+model_health:
+  description: >
+    A subsection of the pipeline dashboard dedicated to the health of loaded
+    ML models. Shows loading status, inference benchmarks, memory consumption,
+    and proactive suggestions when the system detects degradation.
+
+  indicators:
+    loading_status:
+      description: "Per-model: not loaded, loading (with progress %), loaded, error"
+      states:
+        - { state: not_loaded, display: "Not loaded", color: gray }
+        - { state: loading, display: "Loading... (N%)", color: amber }
+        - { state: loaded, display: "Ready", color: green }
+        - { state: error, display: "Failed to load — [reason]", color: red }
+
+    inference_benchmark:
+      description: >
+        On model load, run a micro-benchmark: 3 short inference calls to
+        measure tokens/second. Compare against expected baseline for the
+        model and hardware. Display: "Qwen3-30B-A3B: 14.2 tok/s (expected:
+        12-18 tok/s on your hardware)". If below 70% of expected baseline,
+        flag: "Model running slower than expected. Possible causes: memory
+        pressure, thermal throttling, background processes."
+      benchmark_items: 3
+      baseline_source: "Hardcoded per model + detected RAM/CPU class"
+
+    memory_usage:
+      description: >
+        Per-model memory footprint (resident set). Displayed as: "LLM: 17.2GB
+        / 32GB available. Whisper: 1.5GB. Embedding: 0.5GB. Total models:
+        19.2GB." If total model memory exceeds 80% of system RAM, warn:
+        "Models are using most of your RAM. Consider switching to a lighter
+        model or closing other applications."
+      threshold_warn: 0.80
+      threshold_critical: 0.92
+
+    swap_suggestion:
+      description: >
+        When the system detects repeated OOM errors or inference speed below
+        50% of baseline, proactively suggest a lighter model: "Qwen3-30B-A3B
+        is struggling on your system. Switch to Qwen2.5-14B (Q4, ~8GB) for
+        faster processing with moderately reduced quality? Your current
+        extraction queue has N items." The suggestion links directly to
+        model settings with a one-tap swap. Re-extraction offer follows
+        model swap (US-042 from 005).
+      triggers:
+        - "3+ OOM errors in 24 hours"
+        - "inference speed < 50% of expected baseline for 10+ consecutive items"
+        - "system swap usage exceeds 2GB during inference"
+
+source_health:
+  description: >
+    Per-source diagnostics visible in the source management settings.
+    Each configured source shows its operational health, enabling the user
+    to diagnose why a particular source is producing fewer items than expected.
+
+  per_source_metrics:
+    - { metric: "Success rate (7d)", description: "Successful crawls / total crawl attempts in last 7 days", display: "percentage + trend arrow" }
+    - { metric: "Last successful crawl", description: "Timestamp of most recent successful fetch", display: "relative time (e.g., '2 hours ago')" }
+    - { metric: "Last error", description: "Most recent error with reason_code and timestamp", display: "reason code + relative time" }
+    - { metric: "Items fetched (7d)", description: "Count of new items from this source in last 7 days", display: "count + daily average" }
+    - { metric: "Average crawl latency", description: "Mean time from crawl start to raw item insertion", display: "seconds" }
+
+  adapter_diagnostics:
+    description: >
+      Each source adapter can emit platform-specific diagnostic information
+      beyond the generic error taxonomy. These are shown in an expandable
+      "Diagnostics" section per source.
+    examples:
+      youtube: "yt-dlp version, last known working version, YouTube API quota remaining (premium)"
+      twitter: "API rate limit remaining, bearer token expiry, monthly tweet read count vs cap"
+      reddit: "OAuth token expiry, rate limit headers, subreddit accessibility status"
+      rss: "Feed format (RSS 2.0 / Atom), last-modified header, ETag caching status"
+      hackernews: "Algolia API response time, items per page, search quota status"
+
+  health_alerts:
+    description: >
+      The system generates alerts when source health degrades beyond thresholds.
+      Alerts appear as notifications and in the source health dashboard.
+    thresholds:
+      - { condition: "Success rate drops below 50% over 24 hours", alert: "Source {name} is failing frequently. Last error: {reason_code}." }
+      - { condition: "No successful crawl in 48 hours", alert: "Source {name} has not produced new items in 2 days. Check source health." }
+      - { condition: "Adapter returns NET_ADAPTER_BROKEN 3+ times", alert: "Source {name} may have changed its format. Check for app updates." }
+
+graceful_degradation:
+  principle: >
+    When a pipeline stage fails, the system degrades to the best available
+    state rather than dropping the item entirely. The user always sees
+    something, never nothing. Each degradation level is explicitly labeled
+    so the user knows what's missing.
+
+  hierarchy:
+    - level: 0
+      name: "Full enrichment"
+      state: enriched
+      description: "All stages succeeded. Item has summary, features, score, transcript (if applicable), embeddings."
+      visible_indicator: none
+
+    - level: 1
+      name: "Enriched without embeddings"
+      state: enriched
+      description: "LLM extraction succeeded but embedding failed. Item has summary and features but no novelty/repetition signals."
+      visible_indicator: "Subtle icon indicating partial enrichment. Tooltip: 'Novelty signals unavailable.'"
+      missing: ["novelty (defaulted to 0.5)", "repetition (defaulted to 0.0)"]
+
+    - level: 2
+      name: "Enriched without transcript"
+      state: enriched
+      description: "Transcription failed but LLM extracted features from available metadata (title, description). Audio/video content still playable."
+      visible_indicator: "'No transcript' badge on audio/video items. Summary notes metadata-only analysis."
+      missing: ["transcript", "transcript-derived features are lower confidence"]
+
+    - level: 3
+      name: "Raw item (extraction failed)"
+      state: failed
+      description: "LLM extraction failed entirely. Item shows Stage 1 metadata only: title, author, timestamp, thumbnail, source link."
+      visible_indicator: "'Analysis failed' badge with reason code and retry button."
+      missing: ["summary", "all feature signals", "score (sorted by recency only)"]
+
+    - level: 4
+      name: "Crawl failed (item never created)"
+      state: "(no item)"
+      description: "Source adapter failed to fetch the item. No database record exists. Failure is visible only in source health dashboard."
+      visible_indicator: "Source health dashboard shows error. No feed item exists."
+      missing: ["everything"]
+
+  user_choice: >
+    At each degradation level, the user can: (1) retry the failed stage,
+    (2) accept the degraded state and use the item as-is, (3) hide the item
+    from their feed via the standard dismiss mechanism. The system never
+    auto-hides failed items. The user decides what to do with partial results.
+
+error_surfacing_schema:
+  description: >
+    Extensions to the feed_items table for structured error tracking. These
+    fields supplement the existing pipeline_state, error_message, and
+    retry_count columns from 005.
+  additional_columns:
+    - { name: error_code, type: "TEXT", description: "Machine-readable reason code from error_taxonomy (e.g., LLM_OOM, TX_TIMEOUT). NULL if pipeline_state != 'failed'." }
+    - { name: error_stage, type: "TEXT", description: "Pipeline stage where failure occurred: 'crawl', 'transcription', 'extraction', 'embedding', 'storage'. NULL if not failed." }
+    - { name: failed_at, type: "INTEGER", description: "Unix epoch millis when the failure occurred. NULL if not failed." }
+    - { name: last_retry_at, type: "INTEGER", description: "Unix epoch millis of most recent retry attempt. NULL if never retried." }
+    - { name: degradation_level, type: "INTEGER DEFAULT 0", description: "Current degradation level (0-3). 0 = full enrichment. Set by pipeline on completion." }
+
+  indexes:
+    - "CREATE INDEX idx_items_error_code ON feed_items(error_code) WHERE pipeline_state = 'failed'"
+    - "CREATE INDEX idx_items_degradation ON feed_items(degradation_level) WHERE degradation_level > 0"
+
+  pipeline_log_table:
+    description: >
+      Append-only log of pipeline processing events. Enables the pipeline
+      dashboard's processing rates, error breakdown, and retry history.
+      Separate from feed_items to avoid bloating the main table.
+    columns:
+      - { name: id, type: "INTEGER PRIMARY KEY AUTOINCREMENT" }
+      - { name: item_id, type: "TEXT NOT NULL REFERENCES feed_items(id)" }
+      - { name: event_type, type: "TEXT NOT NULL", description: "Enum: stage_start, stage_complete, stage_failed, retry_queued, retry_started" }
+      - { name: stage, type: "TEXT NOT NULL", description: "Enum: crawl, transcription, extraction, embedding, storage" }
+      - { name: error_code, type: "TEXT", description: "Reason code if event_type = stage_failed. NULL otherwise." }
+      - { name: error_detail, type: "TEXT", description: "Extended error detail (stack trace hash, HTTP status, model output snippet). For debugging, not user-facing." }
+      - { name: duration_ms, type: "INTEGER", description: "Duration of the stage in milliseconds. NULL for start events." }
+      - { name: model_id, type: "TEXT", description: "Model used for this stage (extraction_model_id, whisper variant, embedding model). NULL for crawl/storage." }
+      - { name: created_at, type: "INTEGER NOT NULL", description: "Unix epoch millis." }
+    indexes:
+      - "CREATE INDEX idx_pipeline_log_item ON pipeline_log(item_id, created_at DESC)"
+      - "CREATE INDEX idx_pipeline_log_stage ON pipeline_log(stage, event_type, created_at DESC)"
+      - "CREATE INDEX idx_pipeline_log_errors ON pipeline_log(error_code) WHERE error_code IS NOT NULL"
+    retention: >
+      Pipeline log entries older than 30 days are garbage-collected. The log
+      is operational telemetry, not permanent data. Aggregate statistics
+      (daily error counts, throughput) are materialized into a separate
+      pipeline_stats table for long-term trending.
+
+user_stories:
+  - id: US-150
+    as: "user who sees a failed item in my feed"
+    i_want: "to understand why it failed and retry with one tap"
+    so_that: "I'm never left with a broken item and no recourse"
+    acceptance:
+      - failed items render in the feed with title, author, timestamp, thumbnail (Stage 1 data)
+      - an "Analysis failed" badge in red with the human_message from error taxonomy
+      - reason code shown in smaller text below the badge (for technically literate users)
+      - retry button with attempt count: "Retry (2 of 3)"
+      - a "Show raw" option displays the item with Stage 1 metadata only, no enrichment
+      - after 3 failed attempts, retry button replaced with "Permanently failed — show raw"
+      - tapping the reason code opens a tooltip with the full error detail and suggestions
+      - failed items are never auto-hidden from the feed
+
+  - id: US-151
+    as: "user who wants to see the pipeline's current state"
+    i_want: "a dashboard showing what the pipeline is doing right now"
+    so_that: "I understand why my feed hasn't updated or why items are pending"
+    acceptance:
+      - persistent status chip on main feed shows queue depth (e.g., "7 processing")
+      - tapping chip opens pipeline dashboard with: queue overview, processing rates, error breakdown
+      - queue overview shows items per stage with counts updated every 2 seconds
+      - processing rates show items/hour and average time per item for each stage
+      - error breakdown groups errors by category and reason code for last 24 hours
+      - tapping any error group navigates to the list of affected items
+      - dashboard is read-only — no settings changes, just visibility
+
+  - id: US-152
+    as: "user managing my compute budget"
+    i_want: "the budget bar to show pipeline stage breakdown with live updates"
+    so_that: "I see exactly where my compute is going and can make informed tradeoffs"
+    acceptance:
+      - budget bar has 5 colored segments: Crawling, Transcription, Summarization, Ranking, Storage
+      - each segment shows percentage on hover/tap
+      - bar updates every 5 seconds during active processing
+      - tapping a segment shows: contributing items, average per-item time, cost reduction suggestions
+      - overflow beyond 100% renders in red with explanation
+      - Ranking segment is always a thin sliver (1-3%) to honestly communicate its minimal cost
+      - segment proportions reflect actual measured durations, not estimates
+
+  - id: US-153
+    as: "user who wants to retry multiple failed items at once"
+    i_want: "a bulk retry option that handles transient errors automatically"
+    so_that: "I don't have to tap retry on 30 items one by one after a network outage"
+    acceptance:
+      - pipeline dashboard has "Retry all failed" button
+      - button shows count and breakdown: "Retry 23 items (18 transient, 5 require action)"
+      - only transient-error items are retried; non-retryable items listed separately with actions
+      - bulk retry confirmation dialog shows expected processing time
+      - progress is visible in the pipeline dashboard as items re-enter the queue
+      - non-retryable items show specific user_action for each error type
+
+  - id: US-154
+    as: "user who wants to check my models' health"
+    i_want: "to see model loading status, inference speed, and memory usage"
+    so_that: "I know if my models are performing well or need attention"
+    acceptance:
+      - model health section in pipeline dashboard lists all loaded models
+      - per-model: loading status (not loaded / loading / ready / error), role, file size
+      - inference benchmark on load: measured tok/s vs expected range for user's hardware
+      - memory usage per model and total, with percentage of system RAM
+      - warning at 80% RAM usage, critical alert at 92%
+      - if inference speed drops below 50% of baseline, system suggests lighter model with one-tap swap
+      - model swap preserves existing enrichments; offers re-extraction of recent items
+
+  - id: US-155
+    as: "user monitoring the health of my content sources"
+    i_want: "per-source success rates, last successful crawl, and adapter diagnostics"
+    so_that: "I know when a source is broken before my feed goes stale"
+    acceptance:
+      - source settings page shows health indicators per source
+      - per-source: success rate (7d), last successful crawl (relative time), items fetched (7d)
+      - expandable diagnostics section with adapter-specific info (yt-dlp version, API quota, token expiry)
+      - health alert when success rate drops below 50% over 24 hours
+      - health alert when no successful crawl in 48 hours
+      - alert for adapter breakage (NET_ADAPTER_BROKEN) suggesting app update check
+      - source health visible at a glance — green/amber/red indicator per source
+
+  - id: US-156
+    as: "user whose LLM failed on several items"
+    i_want: "those items to still appear in my feed with available metadata"
+    so_that: "I never miss content just because the analysis engine had a bad day"
+    acceptance:
+      - items with LLM failure show in feed with title, author, timestamp, thumbnail, source link
+      - items are sorted by recency (no ranking signals available)
+      - an "Analysis failed" badge clearly distinguishes them from enriched items
+      - user can tap through to original source as usual (EC-010)
+      - user can manually prioritize retry for specific items
+      - when LLM recovers, queued retries process automatically in the background
+      - no silent removal — all items that entered the pipeline remain visible
+
+  - id: US-157
+    as: "user who wants to understand the error history"
+    i_want: "a processing log showing recent pipeline events and errors"
+    so_that: "I can diagnose patterns like recurring failures at specific times or from specific sources"
+    acceptance:
+      - pipeline dashboard includes a "Recent activity" log view
+      - log shows: stage starts, completions, failures, retries with timestamps
+      - log is filterable by stage, error code, and source
+      - error entries show: item title, stage, error code, duration, model used
+      - log entries older than 30 days are garbage-collected
+      - aggregate stats (daily throughput, daily error rate) are preserved long-term
+      - log is append-only and cannot be edited by the user
+
+collective_lifetime_stories:
+  - id: CL-150
+    title: "Error fatigue and learned helplessness"
+    description: >
+      A user with a marginally capable machine (24GB RAM running Qwen3-30B-A3B
+      near the edge) will experience intermittent LLM_OOM failures. If 10-20%
+      of items fail on a typical day, the feed becomes littered with "Analysis
+      failed" badges. The user starts ignoring them. The retry buttons go
+      untouched. The feed becomes a mix of enriched and degraded items with no
+      clear boundary, and the user stops trusting the system's output.
+    worst_case: >
+      User ignores all error indicators. 40% of items are degraded. Feed
+      quality is poor but user doesn't realize the system is struggling because
+      they've normalized the error badges. Fix: proactive model swap suggestion
+      after 3+ OOM errors in 24 hours. Batch the suggestion — don't nag per
+      item. Show the concrete improvement: "Switching to Qwen2.5-14B would
+      eliminate OOM errors. Your feed quality would decrease by ~15% on
+      credibility/hype detection but items would actually process." The swap
+      suggestion must quantify the tradeoff, not just say "try a smaller model."
+      Additionally, the pipeline dashboard should surface a weekly health
+      summary: "This week: 847 items processed, 38 failed (4.5%). Dominant
+      error: LLM_OOM (31 items). Suggested action: switch to lighter model."
+
+  - id: CL-151
+    title: "Cascading failures from resource exhaustion"
+    description: >
+      On a desktop processing 500 items/day with Qwen3-30B-A3B (18GB) +
+      Whisper Turbo (1.5GB) + embedding model (0.5GB), total model memory is
+      ~20GB on a 32GB system. A browser with 30 tabs open alongside the feed
+      app pushes the system into swap. Whisper starts timing out (TX_TIMEOUT).
+      The LLM starts producing malformed JSON because inference is corrupted
+      by memory pressure (LLM_MALFORMED_OUTPUT). Embedding inference fails
+      silently. All three pipeline stages fail in cascade, producing a burst
+      of errors that overwhelms the retry mechanism.
+    worst_case: >
+      All 3 retries exhaust during the memory pressure window. 200 items
+      permanently fail. When the user closes their browser and memory recovers,
+      the items are already marked as permanently failed. Fix: the automatic
+      retry mechanism must detect system-wide resource pressure (check
+      /proc/meminfo on Linux, similar on macOS/Windows) and PAUSE the pipeline
+      rather than burning retry attempts during degraded conditions. Retry
+      attempts consumed during detected resource pressure should not count
+      toward the max_retries cap. Pipeline pause state is visible in the
+      dashboard: "Pipeline paused — system memory pressure detected. Will
+      resume when resources are available."
+
+  - id: CL-152
+    title: "Model degradation over months of continuous operation"
+    description: >
+      The llama.cpp inference server runs as a long-lived process. Over weeks
+      of continuous operation, subtle issues accumulate: memory fragmentation
+      increases inference latency, KV cache grows stale after thousands of
+      context switches, and the process's resident set creeps upward. Inference
+      speed degrades from 15 tok/s to 8 tok/s over 30 days. The user doesn't
+      notice because the degradation is gradual — each day is only marginally
+      slower. But after a month, the pipeline cannot complete its nightly
+      processing window, and items start queuing up with no clear cause.
+    worst_case: >
+      User sees "Pipeline will not complete in configured window" overflow
+      warning but has changed nothing in their configuration. They blame the
+      app. Fix: the inference benchmark runs not just on model load but
+      periodically (daily, during idle time). If measured tok/s drops below
+      70% of the initial benchmark, the system recommends restarting the
+      inference server: "Inference speed has degraded to 8.1 tok/s (was
+      14.2 tok/s at load). Restarting the model will restore performance.
+      Restart now? (Queue will pause for ~30 seconds during reload.)" The
+      restart is non-destructive — in-progress items are re-queued, not lost.
+      The periodic benchmark result is logged in pipeline_stats for the user
+      to see the trend.
+
+enforced_constraints:
+  - id: EC-150
+    constraint: "Failed items are always visible in the feed, never silently hidden"
+    type: trust (extends EC-004 from 001, EC-042 from 005)
+    rationale: >
+      The "no silent degradation" invariant means every item that enters the
+      pipeline must be visible to the user in some state. An item that fails
+      enrichment still has its Stage 1 metadata (title, author, source link).
+      Hiding it would violate the user's trust — they asked for content from
+      this source, the content exists, the system failed to process it.
+    testable: >
+      No code path transitions an item from 'failed' to deleted/hidden without
+      explicit user action (dismiss or obliterate). Query: SELECT COUNT(*)
+      FROM feed_items WHERE pipeline_state='failed' must equal the count of
+      failed items visible in the feed UI.
+
+  - id: EC-151
+    constraint: "Every error carries a structured reason_code and a human-readable message"
+    type: transparency
+    rationale: >
+      Machine-readable codes enable bulk retry filtering, dashboard aggregation,
+      and automated diagnostics. Human-readable messages enable the user to
+      understand and act. Both are required. An error with only a code is
+      inscrutable. An error with only a message is unautomatable.
+    testable: >
+      Every transition to pipeline_state='failed' sets both error_code (from
+      the error_taxonomy enum) and error_message (non-empty, no stack traces,
+      no technical jargon). No NULL error_code when pipeline_state='failed'.
+
+  - id: EC-152
+    constraint: "Automatic retries do not consume attempts during detected resource pressure"
+    type: reliability
+    rationale: >
+      Burning retry attempts while the system is under memory or CPU pressure
+      wastes the user's retry budget on failures that are guaranteed to repeat.
+      The pipeline must detect resource pressure and pause rather than retry
+      into a known-bad state.
+    testable: >
+      When system available memory is below 10% of total RAM, the pipeline
+      worker pauses (no new items picked up, no retries attempted). Pipeline
+      dashboard shows "Paused — resource pressure" state. retry_count is not
+      incremented for failures that occur after the pause threshold is breached
+      but before the worker fully stops.
+
+  - id: EC-153
+    constraint: "Pipeline log is append-only and garbage-collected at 30 days"
+    type: data hygiene
+    rationale: >
+      The pipeline log is operational telemetry that enables the dashboard but
+      must not grow unbounded. At 500 items/day with ~5 events per item (start,
+      complete for 2-3 stages), the log accumulates ~75K rows/month. At ~200
+      bytes per row: ~15MB/month. 30-day retention keeps the log under 15MB.
+      Aggregate stats are materialized separately for long-term trending.
+    testable: >
+      No rows in pipeline_log have created_at older than 30 days. A daily
+      GC job runs during idle time. pipeline_stats table contains daily
+      aggregates that persist indefinitely.
+
+  - id: EC-154
+    constraint: "App-level crash rollback: 3 crashes within 30s of launch triggers automatic rollback to previous version"
+    type: reliability (cross-ref story 014 rollback section)
+    rationale: >
+      An update that repeatedly crashes on startup is worse than no update.
+      Tauri's updater supports backup/rollback. Three consecutive crashes
+      within 30 seconds of launch (measured by process lifetime) triggers
+      automatic restoration of the previous binary. The user sees: 'Update
+      failed. Reverted to previous version. Please report this issue.'
+      This prevents a bad update from bricking the app.
+    testable: >
+      Simulate a crash-on-launch scenario (exit(1) within 30s, 3 times).
+      Fourth launch loads the previous version. Pipeline state and database
+      are unaffected (only the binary is rolled back, not the data).
+
+opinionated_constraints:
+  - id: OC-150
+    constraint: "Graceful degradation always prefers showing something over showing nothing"
+    rationale: >
+      When transcription fails, show the item without a transcript. When LLM
+      extraction fails, show the item with raw metadata. When embedding fails,
+      rank without novelty signals. The user can always tap through to the
+      original source (EC-010). A partially processed item with a source link
+      is infinitely more useful than a silently dropped item. This means the
+      enrichment pipeline must be designed as a series of independent stages
+      where each stage's failure degrades but does not block subsequent stages
+      or item visibility.
+    acceptable_loss: >
+      Degraded items pollute the ranking because they lack feature signals.
+      An item without hype_score is not penalized for hype — it's treated
+      as neutral. This can cause low-quality items to rank higher than they
+      should when degraded. The visible degradation badge mitigates this:
+      the user knows the item hasn't been fully analyzed and adjusts their
+      trust accordingly.
+
+  - id: OC-151
+    constraint: "The pipeline dashboard is always accessible, not buried in settings"
+    rationale: >
+      The target user is technically literate. They want to see the engine room
+      on demand, not hunt for it in a settings hierarchy. The persistent status
+      chip on the main feed (showing queue depth and error count) is the entry
+      point. One tap to full dashboard. This is not a "debug mode" or "developer
+      tools" — it's a first-class feature for users who want to understand
+      their system.
+    acceptable_loss: >
+      Non-technical users (if any use this product) may find the status chip
+      and dashboard confusing or anxiety-inducing. The chip is minimal by
+      default (just a number). The full dashboard is opt-in via tap. Users
+      who never tap it are unaffected.
+
+  - id: OC-152
+    constraint: "Error messages are written for the technically literate, not dumbed down"
+    rationale: >
+      The target user is a software developer, researcher, or technical
+      professional. They can handle "Model produced invalid JSON (attempt 2 of
+      3, retrying with temperature=0)" without panicking. They would be
+      insulted by "Something went wrong! We're working on it." Error messages
+      include the reason code, the stage, the attempt count, and the suggested
+      action. No euphemisms, no vagueness, no false reassurance.
+    acceptable_loss: >
+      Error messages are longer and more detailed than consumer-grade apps.
+      Users who just want their feed to work without understanding why
+      something failed may find the detail overwhelming. The visual hierarchy
+      mitigates this: the badge says "Analysis failed" (quick scan), the
+      detail panel shows the full error context (opt-in depth).

@@ -1,0 +1,909 @@
+vocabulary:
+  display_session: "An isolated X11 display environment consisting of Xvfb, a window manager (i3), optional per-display somatic, and optional xpra shadow/viewer processes. Identified by display number (e.g. 99)."
+  display_id: "String identifier for a display session, equal to the display number as a string (e.g. '99'). Used by all tool APIs."
+  display_number: "Integer X11 display number (e.g. 99 for :99). Assigned sequentially from config.displayStartNumber via AtomicInteger."
+  xvfb: "X Virtual Frame Buffer — headless X11 server providing a virtual screen without physical hardware."
+  xdpyinfo: "X11 utility used to verify that a display is accepting connections. Polled during startup instead of checking socket file existence (stale sockets persist after crashes)."
+  xpra_shadow_server: "xpra process running in 'shadow' mode against the Xvfb display, providing remote access to the virtual display content. Runs with --readonly=yes, --opengl=no, --resize-display=no, --daemon=no."
+  xpra_viewer_client: "xpra process running in 'attach' mode on the user's real display (:0), rendering the shadow server's content in a window. Runs with autograb disabled."
+  autograb: "xpra feature where the viewer calls XGrabKeyboard on mouse-enter in shadow mode, stealing ALL keyboard input from the host WM. Disabled via XPRA_AUTOGRAB_MODES='' and XPRA_AUTOGRAB_WITH_POINTER=0."
+  somatic_shm_suffix: "Per-display suffix for shared memory paths (e.g. '_d99'), ensuring each display's somatic instance uses isolated SHM segments."
+  display_router: "Routing layer that resolves tool call arguments to the correct display's environment and somatic instance. Uses 'host' sentinel for user's real display, falls back to lowest-numbered running display."
+  host_display: "Sentinel display_id value 'host' that routes tool calls to the user's real X11 display (:0) instead of any isolated display."
+  stale_processes: "Orphaned Xvfb, xpra, i3, or somatic processes from previous gateway runs that still hold resources on a display number. Cleaned up before each display start."
+  display_environment: "Utility class for detecting the user's real X11 display and XAUTHORITY, shared by DisplayManager and DisplaySession."
+  viewer_workspace: "i3 workspace 9, where xpra viewer windows are placed via i3 assign rules. Accessed via Super+9."
+  panel_height: "Configurable pixel height subtracted from detected user resolution to account for desktop panels/taskbars when auto-sizing displays."
+
+metadata:
+  feature: actual-server
+  component: display-lifecycle
+  date: "2026-02-15"
+
+stories:
+  # === DisplaySession lifecycle ===
+
+  - name: create-display-with-explicit-geometry
+    description: >
+      Create an isolated display with explicit width/height/depth parameters via ACT_create_display.
+      Verifies the full startup sequence: stale cleanup → Xvfb → xdpyinfo verification → i3 WM → per-display somatic.
+    preconditions:
+      - "Gateway is running with display isolation enabled (config.displayEnabled() == true)"
+      - "No stale processes exist on the target display number"
+      - "Xvfb, i3, and somatic binaries are available on PATH"
+    steps:
+      - "Call ACT_create_display with width=1920, height=1080, depth=24"
+      - "DisplayManager.createDisplay(1920, 1080, 24) assigns next display number via AtomicInteger"
+      - "DisplaySession constructor stores displayNumber, width, height, depth, windowManager, somaticBinaryPath, xpraPort"
+      - "DisplaySession.start() sets state = STARTING"
+      - "killStaleProcesses() runs first (xpra stop, pkill patterns, socket/lock cleanup)"
+      - "Xvfb launches: Xvfb :N -screen 0 1920x1080x24 -nolisten tcp"
+      - "verifyDisplay polls xdpyinfo up to 50 times at 100ms intervals (5s timeout)"
+      - "i3 launches with --shmlog-size=0 and DISPLAY=:N in environment"
+      - "500ms pause for WM initialization"
+      - "SomaticClient starts with DISPLAY=:N and SOMATIC_SHM_SUFFIX=_dN"
+      - "State transitions to RUNNING"
+    verify:
+      - "ACT_create_display returns JSON with display_id, display_number, xpra_port, state='RUNNING', ambient_path"
+      - "DisplaySession.state() == RUNNING"
+      - "xvfbProcess is alive"
+      - "windowManagerProcess is alive"
+      - "somaticClient is non-null and started"
+      - "sessions ConcurrentHashMap contains the new display"
+      - "Display number is sequential from config.displayStartNumber()"
+      - "xpraPort == config.displayXpraBasePort() + (number - config.displayStartNumber())"
+      - "provideEnvironment() returns Map.of('DISPLAY', ':N')"
+      - "provideAmbientPath() returns '/dev/shm/somatic_ambient_dN'"
+
+  - name: create-display-auto-resolution
+    description: >
+      Create a display matching user's screen resolution via no-argument ACT_create_display.
+      Auto-detects resolution from user's :0 display via xdpyinfo and subtracts panel height.
+    preconditions:
+      - "Gateway is running with display isolation enabled"
+      - "User's X11 display (:0) is accessible"
+      - "XAUTHORITY is detectable from running i3 process on :0"
+    steps:
+      - "Call ACT_create_display with no width/height/depth arguments"
+      - "DisplayManager.createDisplay() (no-arg) calls detectUserResolution()"
+      - "detectUserResolution() runs xdpyinfo on :0 with detected XAUTHORITY"
+      - "Parses 'dimensions: WxH pixels' from xdpyinfo output via regex"
+      - "If config.displayPanelHeight() > 0, subtracts from height"
+      - "Calls createDisplay(detectedWidth, adjustedHeight, config.displayDefaultDepth())"
+    verify:
+      - "Display resolution matches user's screen minus panel height"
+      - "Falls back to config.displayDefaultWidth()/displayDefaultHeight() if detection fails"
+      - "stderr logs 'Detected user display resolution: WxH'"
+      - "stderr logs 'Adjusted display height for panel: H -> adjustedH' when panel configured"
+
+  - name: create-display-resolution-detection-failure
+    description: >
+      When user resolution detection fails, display creation falls back to config defaults.
+    preconditions:
+      - "Gateway is running with display isolation enabled"
+      - "User's X11 display is NOT accessible (e.g. headless server, no i3 running)"
+    steps:
+      - "Call ACT_create_display with no arguments"
+      - "detectUserResolution() fails (xdpyinfo throws or no matching pattern)"
+      - "Returns null, createDisplay() uses config.displayDefaultWidth() and config.displayDefaultHeight()"
+    verify:
+      - "Display is created with config default dimensions"
+      - "stderr logs 'Could not detect user resolution: <error message>'"
+      - "No exception propagated to caller"
+
+  - name: display-session-full-lifecycle
+    description: >
+      Complete lifecycle: CREATED → STARTING → RUNNING → STOPPING → STOPPED.
+      Verifies state transitions are correct and all processes are properly managed.
+    preconditions:
+      - "Gateway is running with display isolation enabled"
+    steps:
+      - "Instantiate DisplaySession — state is CREATED"
+      - "Call start() — state transitions to STARTING"
+      - "After successful startup — state transitions to RUNNING"
+      - "Call stop() — state transitions to STOPPING"
+      - "After all processes terminated — state transitions to STOPPED"
+    verify:
+      - "state() returns CREATED before start()"
+      - "state() returns STARTING during startup sequence"
+      - "state() returns RUNNING after successful start()"
+      - "state() returns STOPPING during shutdown"
+      - "state() returns STOPPED after stop() completes"
+      - "All process references are nulled after stop()"
+
+  - name: destroy-display
+    description: >
+      Destroy a display via ACT_destroy_display. Stops all processes in reverse order and removes from registry.
+    preconditions:
+      - "A display with the given display_id exists and is RUNNING"
+    steps:
+      - "Call ACT_destroy_display with display_id"
+      - "DisplayManager.destroyDisplay() removes session from ConcurrentHashMap"
+      - "DisplaySession.stop() sets state = STOPPING"
+      - "Terminates viewerClientProcess (3s grace period)"
+      - "Terminates xpraProcess (3s grace period)"
+      - "Closes somaticClient"
+      - "Terminates windowManagerProcess (3s grace period)"
+      - "Terminates xvfbProcess (3s grace period)"
+      - "Sets state = STOPPED"
+    verify:
+      - "ACT_destroy_display returns 'Display <id> destroyed'"
+      - "DisplayManager.locateDisplay(displayId) returns null after destroy"
+      - "All process references nulled (xvfb, wm, xpra, viewer, somatic)"
+      - "stderr logs 'Display :N stopped'"
+      - "Termination order is reverse of startup: viewer → xpra → somatic → WM → Xvfb"
+
+  - name: destroy-nonexistent-display
+    description: >
+      Attempting to destroy a display that doesn't exist returns an error.
+    preconditions:
+      - "No display with display_id '999' exists"
+    steps:
+      - "Call ACT_destroy_display with display_id='999'"
+    verify:
+      - "Returns isError=true with 'Display not found: 999'"
+
+  - name: destroy-display-missing-param
+    description: >
+      Calling ACT_destroy_display without display_id returns a validation error.
+    preconditions: []
+    steps:
+      - "Call ACT_destroy_display with no display_id (null or empty)"
+    verify:
+      - "Returns isError=true with 'Missing required parameter: display_id'"
+
+  - name: shutdown-all-displays
+    description: >
+      Gateway shutdown hook calls DisplayManager.shutdown() to stop all displays and clear the registry.
+    preconditions:
+      - "Multiple displays are running (e.g. displays 99, 100, 101)"
+    steps:
+      - "Gateway shutdown hook invokes displayManager.shutdown()"
+      - "Iterates over all sessions and calls session.stop() on each"
+      - "Clears the sessions ConcurrentHashMap"
+    verify:
+      - "All displays are stopped"
+      - "sessions map is empty after shutdown"
+      - "Errors during individual stop() are caught and logged, not propagated"
+      - "stderr logs error for any display that fails to stop"
+
+  # === Xvfb startup verification ===
+
+  - name: xvfb-xdpyinfo-verification
+    description: >
+      Xvfb readiness is verified by polling xdpyinfo, NOT by checking socket file existence.
+      Stale sockets persist after crashes, so file existence is unreliable.
+    preconditions:
+      - "Xvfb process has been launched on display :N"
+    steps:
+      - "verifyDisplay(50, 100) begins polling"
+      - "Each attempt runs X11Client.run(['xdpyinfo'], 5, {DISPLAY=:N})"
+      - "If xdpyinfo succeeds (exit 0), display is ready"
+      - "If xdpyinfo fails (IOException), sleep 100ms and retry"
+    verify:
+      - "Returns normally when xdpyinfo succeeds within 50 attempts"
+      - "Total timeout is 5 seconds (50 * 100ms)"
+      - "xdpyinfo runs with correct DISPLAY environment variable"
+      - "xdpyinfo has 5-second per-invocation timeout"
+
+  - name: xvfb-dies-during-startup
+    description: >
+      If Xvfb process dies before xdpyinfo succeeds, start() throws IOException.
+    preconditions:
+      - "Xvfb binary exists but will fail (e.g. display number already in use after stale cleanup fails)"
+    steps:
+      - "DisplaySession.start() launches Xvfb"
+      - "Xvfb exits immediately (e.g. cannot bind to display)"
+      - "verifyDisplay loop exhausts attempts, then checks xvfbProcess.isAlive()"
+      - "Finds process dead, throws IOException"
+    verify:
+      - "IOException message: 'Xvfb process died during startup for :N'"
+      - "State remains STARTING (never reaches RUNNING)"
+
+  - name: xvfb-timeout-but-alive
+    description: >
+      If Xvfb is alive but xdpyinfo never succeeds within the timeout, start() throws IOException.
+    preconditions:
+      - "Xvfb is running but not accepting connections (e.g. resource exhaustion)"
+    steps:
+      - "verifyDisplay(50, 100) exhausts all 50 attempts"
+      - "xvfbProcess.isAlive() returns true"
+      - "Throws IOException with timeout message"
+    verify:
+      - "IOException message: 'Display :N failed to become ready within 5s'"
+      - "State remains STARTING"
+
+  # === Window manager startup ===
+
+  - name: i3-window-manager-launch
+    description: >
+      i3 window manager starts on the isolated display with --shmlog-size=0 flag.
+    preconditions:
+      - "Xvfb is running and verified on :N"
+    steps:
+      - "ProcessBuilder creates command: [i3, --shmlog-size=0]"
+      - "Environment is set to DISPLAY=:N via provideEnvironment()"
+      - "Process starts with redirectErrorStream(true)"
+      - "500ms sleep for WM initialization"
+    verify:
+      - "i3 process is alive after 500ms pause"
+      - "--shmlog-size=0 prevents shared memory log allocation"
+      - "DISPLAY environment points to isolated display, not host"
+
+  # === Per-display somatic ===
+
+  - name: per-display-somatic-startup
+    description: >
+      Each display gets its own somatic instance with suffixed SHM paths for isolation.
+    preconditions:
+      - "Xvfb and i3 are running on :N"
+      - "somaticBinaryPath points to valid somatic binary"
+    steps:
+      - "SHM suffix computed: '_d' + displayNumber (e.g. '_d99')"
+      - "SomaticClient constructed with environment: DISPLAY=:N, SOMATIC_SHM_SUFFIX=_d99"
+      - "somaticClient.start() launches the per-display somatic process"
+    verify:
+      - "SomaticClient receives correct DISPLAY and SOMATIC_SHM_SUFFIX"
+      - "provideSomatic() returns the per-display SomaticClient"
+      - "provideAmbientPath() returns '/dev/shm/somatic_ambient_d99'"
+      - "SHM paths are unique per display (no collisions between displays)"
+
+  - name: per-display-somatic-failure-nonfatal
+    description: >
+      If per-display somatic fails to start, the display still enters RUNNING state.
+      Somatic is optional — the display works without it.
+    preconditions:
+      - "Xvfb and i3 are running on :N"
+      - "somatic binary is missing or fails to start"
+    steps:
+      - "somaticClient.start() throws an exception"
+      - "Exception is caught and logged as WARNING"
+      - "somaticClient set to null"
+      - "State still transitions to RUNNING"
+    verify:
+      - "stderr logs: 'WARNING: Per-display somatic failed for :N: <message>'"
+      - "provideSomatic() returns null"
+      - "DisplaySession.state() == RUNNING"
+      - "Display is still usable for X11 operations without somatic"
+
+  # === Stale process cleanup ===
+
+  - name: stale-process-cleanup-on-start
+    description: >
+      Before starting a new display, killStaleProcesses() removes orphaned processes
+      from previous gateway runs that still hold resources on the target display number.
+    preconditions:
+      - "Previous gateway instance crashed, leaving Xvfb/xpra/i3/somatic processes on :N"
+      - "Stale X lock file and socket may exist"
+    steps:
+      - "killStaleProcesses() runs first in start()"
+      - "Runs 'xpra stop :N' (5s timeout) to cleanly stop xpra session"
+      - "Runs pkill -f for patterns: 'Xvfb :N', 'xpra.*:N', 'i3.*:N', 'somatic.*_dN'"
+      - "1000ms wait for processes to die"
+      - "Removes /tmp/.XN-lock if exists"
+      - "Removes /tmp/.X11-unix/XN if exists"
+      - "Removes /run/user/1000/xpra/N directory contents"
+      - "Removes matching files from /run/user/1000/xpra"
+      - "Removes matching files from ~/.xpra"
+    verify:
+      - "All stale Xvfb, xpra, i3, and somatic processes are killed"
+      - "Stale X lock file removed, stderr logs removal"
+      - "Stale X socket removed, stderr logs removal"
+      - "xpra runtime directories cleaned"
+      - "~/.xpra sockets cleaned for matching display number"
+      - "stderr logs 'Cleaned stale xpra state for :N'"
+      - "Failures in cleanup are silently ignored (exception caught)"
+      - "3s timeout per pkill command"
+      - "5s timeout for xpra stop"
+
+  # === xpra shadow server ===
+
+  - name: xpra-shadow-server-startup
+    description: >
+      When a viewer is attached, xpra shadow server starts against the isolated display
+      with specific flags for read-only, no-OpenGL, no-resize operation.
+    preconditions:
+      - "Display :N is RUNNING"
+      - "No xpra shadow server is running for this display"
+    steps:
+      - "attachViewer() checks xpraProcess == null || !xpraProcess.isAlive()"
+      - "Shadow server launches: xpra shadow :N --readonly=yes --resize-display=no --opengl=no --daemon=no --systemd-run=no --notifications=no --tray=no --system-tray=no --no-audio --no-mdns"
+      - "DISPLAY=:N set in process environment"
+      - "Output redirected to temp file xpra-shadow-*.log"
+      - "Polls shadow log for 'xpra is ready.' string — up to 90 attempts at 1s intervals (90s max)"
+      - "Each poll checks xpraProcess.isAlive() first"
+    verify:
+      - "Shadow server uses --readonly=yes (no input relay)"
+      - "Shadow server uses --opengl=no (avoids GPU dependency in headless)"
+      - "Shadow server uses --resize-display=no (preserves Xvfb geometry)"
+      - "Shadow server uses --daemon=no (stays as foreground child process)"
+      - "Shadow server uses --systemd-run=no (no systemd unit creation)"
+      - "Readiness detected by 'xpra is ready.' in log file, NOT by socket/PID file existence"
+      - "stderr logs 'xpra shadow server started for :N'"
+
+  - name: xpra-shadow-already-running
+    description: >
+      If shadow server is already running, attachViewer() skips shadow startup and proceeds to viewer.
+    preconditions:
+      - "Display :N is RUNNING"
+      - "xpra shadow server already running for this display (xpraProcess != null && isAlive())"
+    steps:
+      - "attachViewer() checks xpraProcess — it's alive"
+      - "Skips shadow server startup entirely"
+      - "Proceeds directly to viewer client launch"
+    verify:
+      - "No new shadow server process started"
+      - "Existing shadow server continues running"
+      - "Viewer attaches to existing shadow"
+
+  - name: xpra-shadow-dies-during-startup
+    description: >
+      If the xpra shadow server dies during log polling, attachViewer() throws IOException.
+    preconditions:
+      - "Display :N is RUNNING"
+      - "xpra shadow fails immediately (e.g. missing dependency, permission error)"
+    steps:
+      - "Shadow process starts but exits before logging 'xpra is ready.'"
+      - "Log polling loop detects !xpraProcess.isAlive()"
+      - "IOException thrown immediately"
+    verify:
+      - "IOException message: 'xpra shadow server died during startup for :N'"
+      - "Failure detected on the iteration where isAlive() returns false, not after full timeout"
+
+  - name: xpra-shadow-timeout
+    description: >
+      If xpra shadow never reports readiness within 90 seconds, attachViewer() throws IOException.
+    preconditions:
+      - "Display :N is RUNNING"
+      - "xpra shadow process is alive but never completes OpenGL/menu initialization"
+    steps:
+      - "Shadow process runs but log never contains 'xpra is ready.'"
+      - "Log polling exhausts 90 iterations at 1s each"
+      - "IOException thrown after timeout"
+    verify:
+      - "IOException message: 'xpra shadow server not ready within 90s for :N'"
+      - "Shadow process remains alive (not killed by this timeout)"
+
+  # === xpra viewer attach/detach ===
+
+  - name: attach-viewer-full-flow
+    description: >
+      Attach a read-only xpra viewer to an isolated display. Starts shadow server if needed,
+      detects user display, launches viewer with autograb disabled.
+    preconditions:
+      - "Display :N is RUNNING"
+      - "User's X11 display (:0) is accessible"
+    steps:
+      - "Call ACT_attach_viewer with display_id"
+      - "DisplayManager.locateDisplay(displayId) finds the session"
+      - "session.attachViewer() runs"
+      - "Shadow server started if not running (see xpra-shadow-server-startup)"
+      - "detectUserDisplay() returns user's DISPLAY (falls back to ':0')"
+      - "detectUserXauthority() probes i3 processes for XAUTHORITY"
+      - "Viewer launches: xpra attach :N with flags"
+      - "Viewer flags: --readonly=yes, --desktop-scaling=off, --resize-display=no, --keyboard-raw=no, --shortcut-modifiers=none, --keyboard-sync=no, --splash=no, --notifications=no, --tray=no, --system-tray=no, --headerbar=no, --border=no, --title='Agent Display :N'"
+      - "Environment: DISPLAY=<userDisplay>, XPRA_AUTOGRAB_MODES='', XPRA_AUTOGRAB_WITH_POINTER=0"
+      - "If XAUTHORITY detected, set in viewer environment"
+      - "2000ms wait for viewer startup"
+      - "Check viewerClientProcess.isAlive()"
+    verify:
+      - "ACT_attach_viewer returns 'Viewer attached: Viewer attached on workspace 9 (Super+9 to view)'"
+      - "Viewer runs on user's display, NOT on the isolated display"
+      - "XPRA_AUTOGRAB_MODES='' prevents XGrabKeyboard on mouse-enter"
+      - "XPRA_AUTOGRAB_WITH_POINTER=0 prevents pointer-triggered grab"
+      - "Viewer is read-only (--readonly=yes)"
+      - "hasViewer() returns true"
+      - "stderr logs workspace 9 instructions"
+      - "Viewer title includes display number for identification"
+
+  - name: viewer-autograb-disabled
+    description: >
+      xpra viewer MUST have autograb disabled. Without this, xpra calls XGrabKeyboard
+      on mouse-enter in shadow mode, stealing ALL keyboard input from the host WM (i3).
+    preconditions:
+      - "Viewer is being launched against shadow server"
+    steps:
+      - "Viewer environment includes XPRA_AUTOGRAB_MODES='' (empty string)"
+      - "Viewer environment includes XPRA_AUTOGRAB_WITH_POINTER=0"
+    verify:
+      - "Both env vars are set (not just one)"
+      - "XPRA_AUTOGRAB_MODES is empty string, not unset"
+      - "XPRA_AUTOGRAB_WITH_POINTER is '0', not unset"
+      - "User can hover over viewer window without losing keyboard to xpra"
+      - "Host i3 retains keyboard control at all times"
+
+  - name: viewer-fails-to-start
+    description: >
+      If the viewer client process dies within 2 seconds of launch, attachViewer throws IOException.
+    preconditions:
+      - "Shadow server is running on :N"
+      - "User display is accessible"
+      - "But viewer fails (e.g. xpra binary issue, display authentication failure)"
+    steps:
+      - "Viewer process starts"
+      - "2000ms wait"
+      - "viewerClientProcess.isAlive() returns false"
+      - "IOException thrown"
+    verify:
+      - "IOException message: 'xpra viewer client failed to start'"
+      - "hasViewer() returns false"
+
+  - name: detach-viewer
+    description: >
+      Detach the xpra viewer client while keeping the shadow server running.
+    preconditions:
+      - "Display :N has an active viewer (hasViewer() == true)"
+    steps:
+      - "Call ACT_detach_viewer with display_id"
+      - "DisplaySession.detachViewer() calls terminateProcess(viewerClientProcess, 'xpra-viewer', 3)"
+      - "viewerClientProcess set to null"
+    verify:
+      - "ACT_detach_viewer returns 'Viewer detached from display <id>'"
+      - "hasViewer() returns false"
+      - "Shadow server (xpraProcess) remains running"
+      - "Viewer can be re-attached later without restarting shadow"
+      - "3-second grace period before force-kill"
+
+  - name: detach-viewer-nonexistent-display
+    description: >
+      Detaching from a nonexistent display returns an error.
+    preconditions:
+      - "No display with display_id '999' exists"
+    steps:
+      - "Call ACT_detach_viewer with display_id='999'"
+    verify:
+      - "Returns isError=true with 'Display not found: 999'"
+
+  - name: detach-viewer-missing-param
+    description: >
+      Calling ACT_detach_viewer without display_id returns a validation error.
+    preconditions: []
+    steps:
+      - "Call ACT_detach_viewer with no display_id"
+    verify:
+      - "Returns isError=true with 'Missing required parameter: display_id'"
+
+  - name: attach-viewer-nonexistent-display
+    description: >
+      Attaching a viewer to a nonexistent display returns an error.
+    preconditions:
+      - "No display with display_id '999' exists"
+    steps:
+      - "Call ACT_attach_viewer with display_id='999'"
+    verify:
+      - "Returns isError=true with 'Display not found: 999'"
+
+  - name: attach-viewer-missing-param
+    description: >
+      Calling ACT_attach_viewer without display_id returns a validation error.
+    preconditions: []
+    steps:
+      - "Call ACT_attach_viewer with no display_id"
+    verify:
+      - "Returns isError=true with 'Missing required parameter: display_id'"
+
+  # === Display routing ===
+
+  - name: display-router-default-display
+    description: >
+      When no display_id is specified in tool arguments, DisplayRouter routes to the
+      lowest-numbered running display.
+    preconditions:
+      - "Display isolation is enabled"
+      - "Displays 99 and 100 are both RUNNING"
+    steps:
+      - "Tool call made with no display_id in arguments"
+      - "DisplayRouter.chooseEnvironment() calls displayManager.locateDefaultDisplay()"
+      - "locateDefaultDisplay() streams sessions, filters RUNNING, finds min by displayNumber"
+    verify:
+      - "Returns environment for display :99 (lowest numbered)"
+      - "DISPLAY=:99 in returned map"
+
+  - name: display-router-explicit-display-id
+    description: >
+      When display_id is specified, DisplayRouter routes to that specific display.
+    preconditions:
+      - "Display isolation is enabled"
+      - "Display '100' exists and is RUNNING"
+    steps:
+      - "Tool call made with display_id='100'"
+      - "DisplayRouter.chooseEnvironment() calls displayManager.locateDisplay('100')"
+    verify:
+      - "Returns environment for display :100"
+      - "DISPLAY=:100 in returned map"
+
+  - name: display-router-host-sentinel
+    description: >
+      When display_id='host', DisplayRouter routes to the user's real X11 display (:0).
+    preconditions:
+      - "Display isolation may or may not be enabled"
+      - "User's real display is accessible"
+    steps:
+      - "Tool call made with display_id='host'"
+      - "DisplayRouter.chooseEnvironment() detects HOST_DISPLAY sentinel"
+      - "Calls hostEnvironment() which uses DisplayEnvironment.detectUserDisplay()"
+      - "Detects XAUTHORITY via DisplayEnvironment.detectUserXauthority()"
+    verify:
+      - "Returns DISPLAY=<user's real display>"
+      - "XAUTHORITY included if detectable"
+      - "Bypasses display isolation entirely"
+      - "Does not require display isolation to be enabled"
+
+  - name: display-router-isolation-disabled
+    description: >
+      When display isolation is disabled (config.displayEnabled() == false), all routing
+      returns empty environment maps and fallback somatic.
+    preconditions:
+      - "config.displayEnabled() returns false"
+      - "displayManager.isEnabled() returns false"
+    steps:
+      - "Any tool call, regardless of display_id argument"
+      - "DisplayRouter.chooseEnvironment() checks isEnabled(), returns Map.of()"
+      - "DisplayRouter.chooseSomatic() checks isEnabled(), returns fallbackSomatic"
+    verify:
+      - "chooseEnvironment() returns empty map (inherits process DISPLAY)"
+      - "chooseSomatic() returns the primary/fallback somatic client"
+      - "No display lookup attempted"
+
+  - name: display-router-no-displays-exist
+    description: >
+      When isolation is enabled but no displays exist, routing returns empty environment.
+    preconditions:
+      - "Display isolation is enabled"
+      - "No displays have been created (sessions map is empty)"
+    steps:
+      - "Tool call with no display_id"
+      - "locateDefaultDisplay() finds no RUNNING sessions, returns null"
+    verify:
+      - "chooseEnvironment() returns Map.of()"
+      - "chooseSomatic() returns fallbackSomatic"
+
+  - name: display-router-somatic-fallback
+    description: >
+      When a display's per-display somatic is null (failed to start), chooseSomatic
+      falls back to the primary somatic client.
+    preconditions:
+      - "Display :N is RUNNING but provideSomatic() returns null"
+      - "Primary somatic client is available"
+    steps:
+      - "Tool call targets display :N"
+      - "DisplayRouter.chooseSomatic() locates the display"
+      - "session.provideSomatic() returns null"
+      - "Falls back to fallbackSomatic parameter"
+    verify:
+      - "Returns the primary/fallback somatic client, not null"
+      - "Tool execution proceeds with primary somatic"
+
+  - name: display-router-host-somatic
+    description: >
+      When display_id='host', chooseSomatic returns the fallback somatic (primary instance).
+    preconditions:
+      - "display_id='host' in tool arguments"
+    steps:
+      - "DisplayRouter.chooseSomatic() detects HOST_DISPLAY sentinel"
+      - "Returns fallbackSomatic immediately"
+    verify:
+      - "Primary somatic is used for host display operations"
+      - "No display lookup performed"
+
+  # === DisplayEnvironment detection ===
+
+  - name: detect-user-display-from-env
+    description: >
+      DisplayEnvironment.detectUserDisplay() reads DISPLAY from system environment,
+      filtering out Xvfb displays that start with ':99'.
+    preconditions:
+      - "Process has DISPLAY environment variable set"
+    steps:
+      - "Reads System.getenv('DISPLAY')"
+      - "If non-null and does not start with ':99', returns it"
+    verify:
+      - "Returns the actual DISPLAY value (e.g. ':0', ':1')"
+      - "Handles display values like ':0', ':0.0', ':1'"
+
+  - name: detect-user-display-fallback
+    description: >
+      When DISPLAY is null or starts with ':99' (a Xvfb display), falls back to ':0'.
+    preconditions:
+      - "Process DISPLAY is ':99' or null (e.g. gateway started from Xvfb context)"
+    steps:
+      - "Reads System.getenv('DISPLAY')"
+      - "Condition fails (null or starts with ':99')"
+      - "Returns ':0'"
+    verify:
+      - "Returns ':0' as safe default"
+      - "Only ':99' prefix is filtered, not ':100' or other Xvfb displays"
+
+  - name: detect-xauthority-from-i3-process
+    description: >
+      DisplayEnvironment.detectUserXauthority() probes running i3 processes
+      to find the XAUTHORITY used by the i3 instance on :0.
+    preconditions:
+      - "At least one i3 process running under current user"
+      - "i3 on :0 has XAUTHORITY in its /proc/PID/environ"
+    steps:
+      - "Runs pgrep -u <username> i3"
+      - "For each PID, reads /proc/PID/environ (null-separated)"
+      - "Searches for entry 'DISPLAY=:0' and 'XAUTHORITY=...'"
+      - "Returns XAUTHORITY from the first i3 instance running on :0"
+    verify:
+      - "Returns XAUTHORITY path (e.g. /home/user/.Xauthority or /run/user/1000/Xauthority)"
+      - "Filters out i3 instances running on Xvfb displays (DISPLAY != :0)"
+      - "Scans all PIDs, returns first match"
+
+  - name: detect-xauthority-fallback
+    description: >
+      When i3 process probing fails, falls back to system XAUTHORITY environment variable.
+    preconditions:
+      - "No i3 processes found, or none running on :0, or /proc access fails"
+    steps:
+      - "All i3 PID scanning fails or finds no :0 match"
+      - "Falls back to System.getenv('XAUTHORITY')"
+    verify:
+      - "Returns env XAUTHORITY if set, null if not"
+      - "Exceptions are silently caught (no crash)"
+
+  # === SENSE_list_displays ===
+
+  - name: list-displays-empty
+    description: >
+      SENSE_list_displays returns an empty array when no displays exist.
+    preconditions:
+      - "No displays have been created"
+    steps:
+      - "Call SENSE_list_displays (no arguments — schema is empty)"
+    verify:
+      - "Returns JSON: []"
+      - "No error"
+
+  - name: list-displays-multiple
+    description: >
+      SENSE_list_displays returns metadata for all displays.
+    preconditions:
+      - "Displays 99 (RUNNING, viewer attached) and 100 (RUNNING, no viewer) exist"
+    steps:
+      - "Call SENSE_list_displays"
+      - "DisplayManager.listDisplays() iterates sessions map"
+    verify:
+      - "Returns JSON array with two entries"
+      - "Each entry contains: display_id, display_number, state, xpra_port, has_viewer, ambient_path"
+      - "display_id is string, display_number is int"
+      - "state is enum name (e.g. 'RUNNING')"
+      - "has_viewer is true for display with viewer, false for the other"
+      - "ambient_path matches /dev/shm/somatic_ambient_d<N>"
+      - "LinkedHashMap preserves field insertion order in JSON"
+
+  # === Process termination ===
+
+  - name: graceful-process-termination
+    description: >
+      terminateProcess() sends SIGTERM first, waits for grace period, then force-kills if needed.
+    preconditions:
+      - "A managed process is alive"
+    steps:
+      - "terminateProcess(process, name, 3) called"
+      - "Checks process != null && process.isAlive()"
+      - "Calls process.destroy() (SIGTERM)"
+      - "Waits up to 3 seconds for exit via process.waitFor(3, SECONDS)"
+      - "If not exited, calls process.destroyForcibly() (SIGKILL)"
+    verify:
+      - "SIGTERM sent first (graceful shutdown)"
+      - "3-second grace period before force-kill"
+      - "Force-kill logged to stderr: 'Force-killed <name>'"
+      - "InterruptedException handled: force-kill + re-interrupt thread"
+
+  - name: terminate-already-dead-process
+    description: >
+      terminateProcess() is a no-op for null or already-dead processes.
+    preconditions:
+      - "process is null or !isAlive()"
+    steps:
+      - "terminateProcess(null, 'test', 3) or terminateProcess(deadProcess, 'test', 3)"
+    verify:
+      - "Returns immediately, no action taken"
+      - "No NPE or exception"
+
+  # === ACT_create_display tool parameters ===
+
+  - name: create-display-partial-dimensions
+    description: >
+      ACT_create_display with partial dimension params fills in defaults for missing values.
+    preconditions:
+      - "Display isolation enabled"
+    steps:
+      - "Call ACT_create_display with only width=2560 (no height or depth)"
+      - "widthValue != null triggers explicit-dimension path"
+      - "height defaults to 1080, depth defaults to 24"
+    verify:
+      - "Display created with 2560x1080x24"
+      - "Any subset of width/height/depth triggers the explicit path"
+      - "Missing values use hardcoded defaults (1920, 1080, 24), NOT config defaults"
+
+  - name: create-display-failure-returns-error
+    description: >
+      If display creation fails (any exception), ACT_create_display returns isError=true.
+    preconditions:
+      - "Something causes display creation to fail (e.g. Xvfb binary missing)"
+    steps:
+      - "Call ACT_create_display"
+      - "displayManager.createDisplay() throws IOException"
+      - "Caught by catch block"
+    verify:
+      - "Returns isError=true"
+      - "Text: 'Failed to create display: <exception message>'"
+
+  # === Multiple display sessions ===
+
+  - name: multiple-concurrent-displays
+    description: >
+      Multiple displays can run simultaneously with independent process trees and SHM isolation.
+    preconditions:
+      - "Display isolation enabled"
+      - "config.displayStartNumber() = 99"
+    steps:
+      - "Create display 1 → gets number 99, port basePort+0"
+      - "Create display 2 → gets number 100, port basePort+1"
+      - "Create display 3 → gets number 101, port basePort+2"
+    verify:
+      - "Each display has unique display number (AtomicInteger ensures atomicity)"
+      - "Each display has unique xpra port"
+      - "SHM paths are isolated: _d99, _d100, _d101"
+      - "Ambient paths are isolated: /dev/shm/somatic_ambient_d99, etc."
+      - "ConcurrentHashMap provides thread-safe session registry"
+      - "Each display has independent Xvfb, i3, and somatic processes"
+
+  - name: locate-default-display-none-running
+    description: >
+      When displays exist but none are RUNNING, locateDefaultDisplay returns null.
+    preconditions:
+      - "Display 99 exists but state is STOPPED"
+    steps:
+      - "locateDefaultDisplay() filters for state == RUNNING"
+      - "No matches found"
+    verify:
+      - "Returns null"
+      - "Tool routing falls through to empty environment"
+
+enforced_constraints:
+  - name: xdpyinfo-not-socket-check
+    description: >
+      Display readiness MUST be verified by polling xdpyinfo, never by checking
+      /tmp/.X11-unix/XN socket existence. Stale sockets persist after crashes
+      and will pass a file-existence check when the display is actually dead.
+    rationale: >
+      Stale X11 sockets persist after unclean Xvfb shutdown. File existence checks
+      give false positives, causing i3 and somatic to launch against a dead display.
+      xdpyinfo actively connects to the X server and will fail if it's not accepting
+      connections, providing a reliable liveness check.
+
+  - name: xpra-readiness-by-log-not-socket
+    description: >
+      xpra shadow server readiness MUST be detected by polling the log file for
+      'xpra is ready.' string, never by checking PID files or socket existence.
+      PID/socket files appear early but the shadow isn't accepting connections
+      until it finishes menu/OpenGL initialization (5-40 seconds).
+    rationale: >
+      xpra writes its PID file and socket early in startup, long before it's ready
+      to accept viewer connections. A viewer attaching before 'xpra is ready.' will
+      fail or hang. The log-based check is the only reliable readiness signal.
+
+  - name: autograb-must-be-disabled
+    description: >
+      xpra viewer MUST be launched with XPRA_AUTOGRAB_MODES='' (empty string) and
+      XPRA_AUTOGRAB_WITH_POINTER=0. Both environment variables must be set.
+    rationale: >
+      Without these, xpra calls XGrabKeyboard on mouse-enter in shadow mode,
+      which steals ALL keyboard input from the host window manager (i3).
+      The user loses ability to switch workspaces, open terminals, or interact
+      with any non-viewer window. This is a critical usability-breaking bug.
+      See: xpra/client/gtk3/window/grab.py AUTOGRAB_MODES / AUTOGRAB_WITH_POINTER.
+
+  - name: reverse-order-shutdown
+    description: >
+      Display shutdown MUST terminate processes in reverse startup order:
+      viewer → xpra shadow → somatic → window manager → Xvfb.
+      Each process gets a 3-second grace period before force-kill.
+    rationale: >
+      Forward-order shutdown (killing Xvfb first) causes cascading failures in
+      dependent processes, potentially leaving zombie processes and leaked resources.
+      Reverse order ensures each process exits cleanly before its dependencies are removed.
+
+  - name: stale-cleanup-before-start
+    description: >
+      killStaleProcesses() MUST run before Xvfb launch in start(). This cleans up
+      orphaned processes from previous gateway runs that still hold resources.
+    rationale: >
+      After a gateway crash or service restart, tracked process handles are lost.
+      Orphaned Xvfb/xpra/i3 processes block the new display from binding to the
+      same display number. Without cleanup, the new Xvfb will fail with
+      'server is already active for display :N'.
+
+  - name: i3-shmlog-disabled
+    description: >
+      i3 window manager MUST be launched with --shmlog-size=0 on isolated displays.
+    rationale: >
+      Without --shmlog-size=0, i3 allocates shared memory for debug logging on each
+      display. With multiple isolated displays, this wastes SHM space and can cause
+      resource exhaustion. The SHM log is only useful for debugging i3 itself.
+
+  - name: somatic-shm-isolation
+    description: >
+      Each display's somatic instance MUST use a unique SHM suffix (SOMATIC_SHM_SUFFIX=_dN)
+      to prevent SHM path collisions between displays.
+    rationale: >
+      Without per-display suffixes, multiple somatic instances would write to the same
+      shared memory segments, causing data corruption and cross-display interference.
+      The ambient path /dev/shm/somatic_ambient_dN must be unique per display.
+
+  - name: thread-safe-session-registry
+    description: >
+      DisplayManager.sessions must be a ConcurrentHashMap and display number
+      allocation must use AtomicInteger for thread safety.
+    rationale: >
+      Multiple MCP tool calls can arrive concurrently. Without thread-safe data
+      structures, concurrent createDisplay/destroyDisplay calls can cause lost
+      sessions, duplicate display numbers, or ConcurrentModificationException.
+
+opinionated_constraints:
+  - name: shadow-readonly-mode
+    description: >
+      xpra shadow server runs with --readonly=yes. The viewer is observation-only —
+      no input relay from viewer to isolated display.
+    rationale: >
+      The agent should control the isolated display via MCP tools (ACT_send_keystroke,
+      ACT_send_click, etc.), not through the xpra viewer. Read-only mode prevents
+      accidental input injection and maintains the MCP-mediated control model.
+
+  - name: viewer-workspace-9
+    description: >
+      xpra viewer windows are assigned to i3 workspace 9 via i3 config assign rules.
+      VIEWER_WORKSPACE constant is 9. No manual workspace movement in code.
+    rationale: >
+      Workspace 9 is a convention for observation windows. Using a fixed, high-numbered
+      workspace keeps viewer windows out of the user's primary workspaces (1-4) while
+      remaining accessible via Super+9. i3 assign rules handle placement automatically.
+
+  - name: somatic-failure-nonfatal
+    description: >
+      Per-display somatic failure is non-fatal. The display enters RUNNING state
+      even if somatic fails to start. A WARNING is logged and somaticClient is set to null.
+    rationale: >
+      Somatic provides sensing capabilities but is not required for core display
+      functionality (X11 operations, window management). Making it fatal would prevent
+      display usage when somatic has transient startup issues or is not installed.
+
+  - name: xvfb-nolisten-tcp
+    description: >
+      Xvfb is launched with -nolisten tcp to prevent remote X11 connections.
+      Only local Unix socket connections are allowed.
+    rationale: >
+      TCP listening on X11 is a security risk — remote clients could connect to the
+      display. Since all access is local (same machine), Unix sockets are sufficient
+      and more secure.
+
+  - name: display-start-number-configurable
+    description: >
+      Display numbers start from config.displayStartNumber() (typically 99) and increment.
+      This avoids collision with the user's real display (:0) and common VNC displays (:1-:10).
+    rationale: >
+      Starting at a high display number minimizes the chance of colliding with
+      existing X11 displays. The user's display is typically :0, and VNC/remote
+      desktop tools often use :1 through :10. Starting at :99 provides ample clearance.
+
+  - name: panel-height-subtraction
+    description: >
+      When auto-detecting resolution, config.displayPanelHeight() is subtracted from
+      the detected height to account for desktop panels/taskbars.
+    rationale: >
+      If the isolated display matches the user's full resolution but the user has a
+      panel, the xpra viewer window would be slightly too tall for the available space.
+      Subtracting panel height ensures the viewer fits within the usable screen area.
+
+  - name: xpra-no-daemon-mode
+    description: >
+      xpra shadow runs with --daemon=no and --systemd-run=no to stay as a foreground
+      child process managed by the JVM.
+    rationale: >
+      If xpra daemonizes, the JVM loses the process handle and cannot track lifecycle
+      or terminate it during cleanup. Foreground mode keeps xpra as a direct child
+      process with reliable lifecycle management via Process.destroy().

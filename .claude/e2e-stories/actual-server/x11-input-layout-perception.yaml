@@ -1,0 +1,1529 @@
+vocabulary:
+  xdotool: "X11 automation tool used to simulate keyboard/mouse input via KeyPress/KeyRelease and ButtonPress/ButtonRelease events"
+  maim: "Screenshot utility for X11 that captures screen/window/region to PNG"
+  i3-msg: "IPC command interface to the i3 tiling window manager"
+  somatic: "C++ sensor-fusion daemon connected via stdio JSON-RPC (MCP protocol). Provides typing rhythm, pointer state, clipboard, events, keystrokes, and fused environment snapshots"
+  display_id: "Optional tool parameter routing a call to a specific X11 display. 'host' routes to the user's real display (:0). A numeric ID (e.g. '99') routes to an isolated Xvfb display"
+  DisplayRouter: "Static utility that resolves display_id to either a hostEnvironment() map or a DisplaySession's provideEnvironment() map"
+  DisplayEnvironment: "Utility that detects the user's real DISPLAY (:0) and XAUTHORITY by scanning i3 process /proc/PID/environ"
+  X11Client: "Stateless subprocess wrapper. run() throws on non-zero exit; runCapture() returns CommandResult record with exitCode/stdout/stderr without throwing"
+  SomaticClient: "JSON-RPC stdio client to the somatic C++ daemon. Manages child process lifecycle, request/response pairing via ConcurrentHashMap<Integer, CompletableFuture>, ReentrantLock for stdin writes"
+  virtual_thread_reader: "Pattern used in X11Client: stdout and stderr are read in virtual threads to prevent blocking on inherited file descriptors. After process exit, readers get 2s join + force-close + 500ms join"
+  ResponseEnricher: "Wraps every tool handler to append tier 1 ambient state header and tier 2 alert lines to the response"
+  AlertDetector: "Tier 2 state-change detector. Compares consecutive ambient snapshots, fires [ALERT: focus-changed], [ALERT: typing-state-changed], [ALERT: clipboard-changed] on transitions"
+  AmbientStateHeader: "Tier 1 reader. Reads /dev/shm/somatic_ambient (or per-display variant) and formats as [env: typing=idle dwell=2340ms focus=0x01a00003 ...] (~30 tokens)"
+  SHM_suffix: "Per-display somatic uses SOMATIC_SHM_SUFFIX=_dN so its SHM files don't collide with the host somatic instance"
+  TimeoutClass: "ToolRegistry timeout tiers — FAST(5s) for SENSE reads, STANDARD(25s) for ACT tools, SLOW(120s) for indexing/LLM"
+  ppt: "Percentage points, the unit used by i3 resize commands"
+  clearmodifiers: "xdotool flag that releases held modifier keys before sending input, preventing interference from stuck modifiers"
+  typing_gate: "Client-side enforcement (keyboard-handoff skill) that checks somatic typing state and rejects X11 input if user is actively typing on the host display. Not enforced in gateway code itself"
+
+metadata:
+  feature: actual-server
+  component: x11-input-layout-perception
+  date: "2026-02-15"
+
+stories:
+  # ═══════════════════════════════════════════════════════════════
+  # ACT_send_keystroke
+  # ═══════════════════════════════════════════════════════════════
+  - name: keystroke-default-display
+    description: >
+      Send a keystroke with no display_id. DisplayRouter returns empty environment
+      when DisplayManager is null or disabled, so xdotool inherits the gateway's
+      own DISPLAY (typically :99 if launched inside Xvfb, or :0 if on host).
+    preconditions:
+      - "Gateway is running with display isolation disabled (displayManager.isEnabled() == false)"
+      - "An X11 server is reachable on the gateway's inherited DISPLAY"
+    steps:
+      - "Call ACT_send_keystroke with keys='ctrl+c'"
+      - "DisplayRouter.chooseEnvironment returns Map.of() (empty)"
+      - "X11Client.run executes ['xdotool', 'key', '--clearmodifiers', 'ctrl+c'] with 10s timeout and empty environment"
+      - "xdotool sends KeyPress+KeyRelease to the focused window"
+    verify:
+      - "Response text is 'Sent keys: ctrl+c'"
+      - "isError is false"
+      - "ResponseEnricher appends ambient state header and any alerts"
+
+  - name: keystroke-explicit-host-display
+    description: >
+      Send a keystroke with display_id='host'. DisplayRouter builds
+      hostEnvironment() with DISPLAY from detectUserDisplay() and
+      XAUTHORITY from detectUserXauthority().
+    preconditions:
+      - "User's real X11 display is :0"
+      - "An i3 process is running on :0 with XAUTHORITY set"
+    steps:
+      - "Call ACT_send_keystroke with keys='Return', display_id='host'"
+      - "DisplayRouter.chooseEnvironment detects HOST_DISPLAY sentinel"
+      - "hostEnvironment() calls detectUserDisplay() (returns ':0' or env DISPLAY if not :99)"
+      - "hostEnvironment() calls detectUserXauthority() which pgreps i3, reads /proc/PID/environ for DISPLAY=:0, extracts XAUTHORITY"
+      - "X11Client.run executes ['xdotool', 'key', '--clearmodifiers', 'Return'] with {DISPLAY=:0, XAUTHORITY=...}"
+    verify:
+      - "Response text is 'Sent keys: Return'"
+      - "isError is false"
+      - "xdotool targeted the user's actual display, not a Xvfb display"
+
+  - name: keystroke-isolated-display
+    description: >
+      Send a keystroke to an isolated Xvfb display by numeric display_id.
+    preconditions:
+      - "Display isolation is enabled"
+      - "DisplayManager has a RUNNING session for display_id '99'"
+      - "DisplaySession.provideEnvironment() returns {DISPLAY=:99}"
+    steps:
+      - "Call ACT_send_keystroke with keys='alt+Tab', display_id='99'"
+      - "DisplayRouter locates session via displayManager.locateDisplay('99')"
+      - "X11Client.run executes with environment {DISPLAY=:99}"
+    verify:
+      - "Response text is 'Sent keys: alt+Tab'"
+      - "Keystroke was sent to display :99, not :0"
+
+  - name: keystroke-with-window-id
+    description: >
+      Send a keystroke to a specific X11 window by ID.
+    preconditions:
+      - "Window 0x01a00003 exists on the target display"
+    steps:
+      - "Call ACT_send_keystroke with keys='Escape', window_id='0x01a00003'"
+      - "Command becomes ['xdotool', 'key', '--window', '0x01a00003', '--clearmodifiers', 'Escape']"
+    verify:
+      - "Response text is 'Sent keys: Escape'"
+      - "xdotool targeted the specific window, not the focused window"
+
+  - name: keystroke-xdotool-fails
+    description: >
+      xdotool returns non-zero exit code (e.g., invalid key name, display unreachable).
+    preconditions:
+      - "Target display is unreachable or key name is invalid"
+    steps:
+      - "Call ACT_send_keystroke with keys='nonexistent_key_xyz'"
+      - "X11Client.run throws IOException('Command failed (exit N): stderr...')"
+      - "Exception caught in handler"
+    verify:
+      - "Response text starts with 'Key send failed:'"
+      - "isError is true"
+
+  - name: keystroke-timeout
+    description: >
+      xdotool hangs beyond the 10s command timeout.
+    preconditions:
+      - "xdotool blocks (e.g., waiting for a window that never appears)"
+    steps:
+      - "Call ACT_send_keystroke"
+      - "X11Client.run: proc.waitFor(10, SECONDS) returns false"
+      - "Process destroyed forcibly"
+      - "IOException thrown with 'Command timed out after 10s'"
+    verify:
+      - "Response text contains 'Key send failed:' and 'timed out'"
+      - "isError is true"
+      - "Process is cleaned up (destroyForcibly called)"
+
+  # ═══════════════════════════════════════════════════════════════
+  # ACT_send_click
+  # ═══════════════════════════════════════════════════════════════
+  - name: click-left-single
+    description: >
+      Left-click at coordinates. SendClick performs two sequential xdotool calls:
+      mousemove then click.
+    preconditions:
+      - "Target display is reachable"
+    steps:
+      - "Call ACT_send_click with x=500, y=300"
+      - "First X11Client.run: ['xdotool', 'mousemove', '500', '300'] with 10s timeout"
+      - "Second X11Client.run: ['xdotool', 'click', '1'] with 10s timeout"
+    verify:
+      - "Response text is 'Clicked at (500, 300) button 1'"
+      - "isError is false"
+      - "Mouse moved before clicking (two separate commands)"
+
+  - name: click-right-double
+    description: >
+      Right-button double-click.
+    preconditions:
+      - "Target display is reachable"
+    steps:
+      - "Call ACT_send_click with x=100, y=200, button=3, clicks=2"
+      - "Move command: ['xdotool', 'mousemove', '100', '200']"
+      - "Click command: ['xdotool', 'click', '--repeat', '2', '3']"
+    verify:
+      - "Response text is 'Clicked at (100, 200) button 3'"
+      - "isError is false"
+
+  - name: click-with-window-id
+    description: >
+      Click relative to a specific window.
+    preconditions:
+      - "Window 0x02000004 exists on the target display"
+    steps:
+      - "Call ACT_send_click with x=50, y=50, window_id='0x02000004'"
+      - "Move command includes '--window', '0x02000004'"
+      - "Coordinates are relative to the window, not the screen"
+    verify:
+      - "Response text is 'Clicked at (50, 50) button 1'"
+
+  - name: click-move-fails-click-skipped
+    description: >
+      If the mousemove step fails, the click step is never reached.
+    preconditions:
+      - "Target display is unreachable"
+    steps:
+      - "Call ACT_send_click with x=100, y=100"
+      - "X11Client.run for mousemove throws IOException"
+      - "Exception propagates — click command never executed"
+    verify:
+      - "Response text starts with 'Click failed:'"
+      - "isError is true"
+      - "No click event was sent"
+
+  - name: click-display-routing
+    description: >
+      Click routed to an isolated display via display_id.
+    preconditions:
+      - "Isolated display '99' is RUNNING"
+    steps:
+      - "Call ACT_send_click with x=300, y=400, display_id='99'"
+      - "Both mousemove and click commands use environment {DISPLAY=:99}"
+    verify:
+      - "Click happened on display :99, not :0"
+
+  # ═══════════════════════════════════════════════════════════════
+  # ACT_send_mouse_move
+  # ═══════════════════════════════════════════════════════════════
+  - name: mouse-move-absolute
+    description: >
+      Move the mouse cursor to absolute screen coordinates.
+    preconditions:
+      - "Target display is reachable"
+    steps:
+      - "Call ACT_send_mouse_move with x=1920, y=540"
+      - "X11Client.run: ['xdotool', 'mousemove', '1920', '540']"
+    verify:
+      - "Response text is 'Moved mouse to (1920, 540)'"
+      - "isError is false"
+
+  - name: mouse-move-window-relative
+    description: >
+      Move the mouse to coordinates relative to a window.
+    preconditions:
+      - "Window 0x01a00003 exists"
+    steps:
+      - "Call ACT_send_mouse_move with x=10, y=10, window_id='0x01a00003'"
+      - "Command includes '--window', '0x01a00003'"
+    verify:
+      - "Response text is 'Moved mouse to (10, 10)'"
+
+  - name: mouse-move-fails
+    description: >
+      xdotool mousemove fails (display unreachable).
+    preconditions:
+      - "No X11 server on target DISPLAY"
+    steps:
+      - "Call ACT_send_mouse_move with x=0, y=0"
+      - "X11Client.run throws IOException"
+    verify:
+      - "Response text starts with 'Mouse move failed:'"
+      - "isError is true"
+
+  # ═══════════════════════════════════════════════════════════════
+  # ACT_send_text_input
+  # ═══════════════════════════════════════════════════════════════
+  - name: text-input-default-delay
+    description: >
+      Type text with default 12ms inter-key delay.
+    preconditions:
+      - "Target display is reachable"
+      - "A text-accepting window is focused"
+    steps:
+      - "Call ACT_send_text_input with text='hello world'"
+      - "Command: ['xdotool', 'type', '--delay', '12', '--clearmodifiers', 'hello world']"
+      - "Timeout is 30s (longer than keystroke's 10s due to potential long text)"
+    verify:
+      - "Response text is 'Typed 11 characters'"
+      - "isError is false"
+
+  - name: text-input-custom-delay
+    description: >
+      Type text with a custom inter-key delay.
+    preconditions:
+      - "Target display is reachable"
+    steps:
+      - "Call ACT_send_text_input with text='fast', delay=5"
+      - "Command uses '--delay', '5'"
+    verify:
+      - "Response text is 'Typed 4 characters'"
+
+  - name: text-input-with-window-id
+    description: >
+      Type into a specific window.
+    preconditions:
+      - "Window 0x03000001 exists and accepts text input"
+    steps:
+      - "Call ACT_send_text_input with text='target', window_id='0x03000001'"
+      - "Command includes 'type', '--window', '0x03000001'"
+    verify:
+      - "Response text is 'Typed 6 characters'"
+
+  - name: text-input-clearmodifiers
+    description: >
+      Verify --clearmodifiers is always passed, preventing stuck modifier keys
+      from corrupting the typed text.
+    preconditions:
+      - "A modifier key (Ctrl/Alt/Shift) might be held by a prior tool call"
+    steps:
+      - "Call ACT_send_text_input with text='abc'"
+      - "Command ends with '--clearmodifiers', 'abc'"
+    verify:
+      - "Text typed without modifier interference"
+      - "'abc' appears in the target, not 'Ctrl+a', 'Ctrl+b', 'Ctrl+c'"
+
+  - name: text-input-fails
+    description: >
+      xdotool type fails.
+    preconditions:
+      - "Display unreachable or xdotool crashes"
+    steps:
+      - "Call ACT_send_text_input with text='test'"
+      - "X11Client.run throws IOException"
+    verify:
+      - "Response text starts with 'Type failed:'"
+      - "isError is true"
+
+  # ═══════════════════════════════════════════════════════════════
+  # ACT_arrange_windows
+  # ═══════════════════════════════════════════════════════════════
+  - name: arrange-workspace-switch
+    description: >
+      Switch to a different i3 workspace.
+    preconditions:
+      - "i3 is running on the target display"
+    steps:
+      - "Call ACT_arrange_windows with command='workspace 2'"
+      - "X11Client.run: ['i3-msg', 'workspace 2'] with display environment"
+    verify:
+      - "Response contains i3-msg JSON output (success/failure array)"
+      - "isError is false"
+
+  - name: arrange-split-horizontal
+    description: >
+      Set horizontal split layout.
+    preconditions:
+      - "i3 is running on the target display"
+    steps:
+      - "Call ACT_arrange_windows with command='split h'"
+    verify:
+      - "Response reflects i3-msg output or 'Command executed' if output is empty"
+
+  - name: arrange-move-focus
+    description: >
+      Move focus between windows.
+    preconditions:
+      - "Multiple windows exist on the current workspace"
+    steps:
+      - "Call ACT_arrange_windows with command='focus left'"
+    verify:
+      - "Focus moved to the window on the left"
+
+  - name: arrange-display-routing
+    description: >
+      i3 commands are routed to the correct display's i3 instance via DISPLAY env var.
+      Each isolated display runs its own i3 (connected via its own i3 IPC socket).
+    preconditions:
+      - "Isolated display '99' is running i3"
+    steps:
+      - "Call ACT_arrange_windows with command='workspace 3', display_id='99'"
+      - "i3-msg connects to the i3 socket on display :99"
+    verify:
+      - "Workspace 3 activated on display :99, not on the user's display :0"
+
+  - name: arrange-i3-command-fails
+    description: >
+      i3-msg returns error for invalid command.
+    preconditions:
+      - "i3 is running"
+    steps:
+      - "Call ACT_arrange_windows with command='invalid_garbage_command'"
+      - "X11Client.run throws IOException or i3-msg returns error JSON"
+    verify:
+      - "Response contains 'i3 command failed:' or error JSON"
+      - "isError is true (if exception thrown)"
+
+  # ═══════════════════════════════════════════════════════════════
+  # ACT_focus_window
+  # ═══════════════════════════════════════════════════════════════
+  - name: focus-window-by-container-id
+    description: >
+      Focus a specific i3 container by its ID. FocusWindow constructs the
+      criteria string '[con_id=X] focus'.
+    preconditions:
+      - "i3 is running"
+      - "Container ID 12345 exists in the i3 tree"
+    steps:
+      - "Call ACT_focus_window with container_id='12345'"
+      - "Command becomes ['i3-msg', '[con_id=12345] focus']"
+    verify:
+      - "Response is 'Focused' or i3-msg JSON output"
+      - "isError is false"
+
+  - name: focus-window-nonexistent
+    description: >
+      Attempt to focus a container that doesn't exist.
+    preconditions:
+      - "Container ID 99999 does not exist"
+    steps:
+      - "Call ACT_focus_window with container_id='99999'"
+      - "i3-msg returns error JSON (no matching container)"
+    verify:
+      - "Response contains i3 error output"
+      - "isError may be false (i3-msg exits 0 even for no-match) but response indicates failure"
+
+  - name: focus-window-on-isolated-display
+    description: >
+      Focus a window on an isolated display.
+    preconditions:
+      - "Isolated display '99' has container 5678"
+    steps:
+      - "Call ACT_focus_window with container_id='5678', display_id='99'"
+      - "i3-msg runs with DISPLAY=:99"
+    verify:
+      - "Focus changed on display :99"
+
+  # ═══════════════════════════════════════════════════════════════
+  # ACT_resize_window
+  # ═══════════════════════════════════════════════════════════════
+  - name: resize-window-ppt
+    description: >
+      Resize the focused window using percentage points.
+    preconditions:
+      - "i3 is running and a window is focused"
+    steps:
+      - "Call ACT_resize_window with width=60, height=40"
+      - "Command: ['i3-msg', 'resize set 60 ppt 40 ppt']"
+    verify:
+      - "Response is 'Resized' or i3-msg JSON output"
+      - "isError is false"
+
+  - name: resize-window-on-isolated-display
+    description: >
+      Resize on an isolated display.
+    preconditions:
+      - "Isolated display '99' has a focused window"
+    steps:
+      - "Call ACT_resize_window with width=50, height=50, display_id='99'"
+      - "i3-msg runs with DISPLAY=:99"
+    verify:
+      - "Window resized on display :99"
+
+  - name: resize-window-fails
+    description: >
+      i3 resize fails (e.g., no focused window, or tiling mode prevents resize).
+    preconditions:
+      - "No window is focused or i3 is not running"
+    steps:
+      - "Call ACT_resize_window with width=50, height=50"
+      - "i3-msg fails or returns error"
+    verify:
+      - "Response contains 'Resize failed:'"
+      - "isError is true"
+
+  # ═══════════════════════════════════════════════════════════════
+  # SENSE_capture_screen_region
+  # ═══════════════════════════════════════════════════════════════
+  - name: screenshot-full-screen
+    description: >
+      Capture the entire screen. CaptureScreenRegion uses X11Client.captureScreenshot
+      which runs maim to a temp file, reads bytes, base64-encodes, deletes temp.
+    preconditions:
+      - "maim is installed"
+      - "Target display is reachable"
+    steps:
+      - "Call SENSE_capture_screen_region with no arguments"
+      - "X11Client.captureScreenshot(null, null, env) runs ['maim', tmpPath]"
+      - "Reads temp file, encodes to base64, deletes temp file"
+    verify:
+      - "Response contains ImageContent with mimeType='image/png' and base64 data"
+      - "isError is false"
+      - "Temp file is deleted in finally block"
+
+  - name: screenshot-specific-window
+    description: >
+      Capture a specific window by its X11 window ID.
+    preconditions:
+      - "Window 0x01a00003 exists on the target display"
+    steps:
+      - "Call SENSE_capture_screen_region with window_id='0x01a00003'"
+      - "maim command becomes ['maim', '-i', '0x01a00003', tmpPath]"
+    verify:
+      - "Response contains ImageContent of just that window"
+      - "isError is false"
+
+  - name: screenshot-region
+    description: >
+      Capture a rectangular region of the screen.
+    preconditions:
+      - "Target display is reachable"
+    steps:
+      - "Call SENSE_capture_screen_region with region='800x600+100+100'"
+      - "maim command becomes ['maim', '-g', '800x600+100+100', tmpPath]"
+    verify:
+      - "Response contains ImageContent of the specified 800x600 region"
+
+  - name: screenshot-save-to-disk
+    description: >
+      Capture and save to a specified output path. Creates parent directories.
+    preconditions:
+      - "Target display is reachable"
+    steps:
+      - "Call SENSE_capture_screen_region with output_path='/tmp/test/screenshot.png'"
+      - "After base64 capture, decodes bytes and writes to /tmp/test/screenshot.png"
+      - "Files.createDirectories creates /tmp/test/ if needed"
+    verify:
+      - "Response contains ImageContent (base64) AND TextContent 'Saved to: /tmp/test/screenshot.png'"
+      - "File exists at /tmp/test/screenshot.png"
+
+  - name: screenshot-save-and-open
+    description: >
+      Capture, save, and open in image viewer on the USER's display (not the target display).
+      Uses DisplayEnvironment.detectUserDisplay() for the viewer, regardless of which
+      display was captured.
+    preconditions:
+      - "Target display is reachable"
+      - "xdg-open is available"
+    steps:
+      - "Call SENSE_capture_screen_region with output_path='/tmp/shot.png', open=true"
+      - "Screenshot captured from target display"
+      - "Saved to /tmp/shot.png"
+      - "ProcessBuilder runs 'xdg-open /tmp/shot.png' with DISPLAY from detectUserDisplay() and XAUTHORITY from detectUserXauthority()"
+    verify:
+      - "Response contains three contents: ImageContent, 'Saved to:...', 'Opened in image viewer.'"
+      - "Image viewer opens on user's real display (:0), even if screenshot was from :99"
+
+  - name: screenshot-open-without-output-path
+    description: >
+      open=true without output_path is silently ignored (the open block is inside
+      the output_path != null check).
+    preconditions:
+      - "Target display is reachable"
+    steps:
+      - "Call SENSE_capture_screen_region with open=true but no output_path"
+    verify:
+      - "Response contains only ImageContent"
+      - "No file saved, no viewer opened"
+
+  - name: screenshot-isolated-display
+    description: >
+      Screenshot an isolated Xvfb display.
+    preconditions:
+      - "Isolated display '99' is RUNNING"
+    steps:
+      - "Call SENSE_capture_screen_region with display_id='99'"
+      - "maim runs with DISPLAY=:99"
+    verify:
+      - "Screenshot shows content of display :99"
+
+  - name: screenshot-maim-fails
+    description: >
+      maim fails (display unreachable, invalid window ID, etc.).
+    preconditions:
+      - "Target display is unreachable"
+    steps:
+      - "Call SENSE_capture_screen_region"
+      - "X11Client.captureScreenshot throws IOException"
+      - "Temp file is deleted in finally block even on failure"
+    verify:
+      - "Response text starts with 'Screenshot failed:'"
+      - "isError is true"
+      - "No temp file leaked"
+
+  # ═══════════════════════════════════════════════════════════════
+  # SENSE_read_window_layout
+  # ═══════════════════════════════════════════════════════════════
+  - name: window-layout-default-format
+    description: >
+      Read window layout with default 'windows' format. Currently returns
+      the full i3 tree (same as 'tree' format — noted as matching x11-mcp behavior).
+    preconditions:
+      - "i3 is running on the target display"
+    steps:
+      - "Call SENSE_read_window_layout with no arguments"
+      - "Default format is 'windows'"
+      - "Executes ['i3-msg', '-t', 'get_tree']"
+    verify:
+      - "Response contains i3 tree JSON"
+      - "isError is false"
+
+  - name: window-layout-workspaces-format
+    description: >
+      Read workspace list.
+    preconditions:
+      - "i3 is running"
+    steps:
+      - "Call SENSE_read_window_layout with format='workspaces'"
+      - "Executes ['i3-msg', '-t', 'get_workspaces']"
+    verify:
+      - "Response contains JSON array of workspace objects"
+
+  - name: window-layout-tree-format
+    description: >
+      Read the full i3 tree.
+    preconditions:
+      - "i3 is running"
+    steps:
+      - "Call SENSE_read_window_layout with format='tree'"
+      - "Executes ['i3-msg', '-t', 'get_tree']"
+    verify:
+      - "Response contains full i3 tree JSON with all containers"
+
+  - name: window-layout-display-routing
+    description: >
+      Query window layout on an isolated display's i3 instance.
+    preconditions:
+      - "Isolated display '99' is running i3"
+    steps:
+      - "Call SENSE_read_window_layout with display_id='99'"
+      - "i3-msg runs with DISPLAY=:99, connecting to that display's i3 IPC socket"
+    verify:
+      - "Response shows the i3 tree of display :99, not :0"
+
+  - name: window-layout-i3-fails
+    description: >
+      i3-msg fails (i3 not running, display unreachable).
+    preconditions:
+      - "i3 is not running on target display"
+    steps:
+      - "Call SENSE_read_window_layout"
+      - "X11Client.run throws IOException"
+    verify:
+      - "Response text starts with 'Failed:'"
+      - "isError is true"
+
+  # ═══════════════════════════════════════════════════════════════
+  # SENSE_read_accessibility_tree
+  # ═══════════════════════════════════════════════════════════════
+  - name: accessibility-tree-query
+    description: >
+      Query AT-SPI bus via gdbus. Currently returns only the bus address
+      with a note about incomplete implementation.
+    preconditions:
+      - "AT-SPI bus is available (org.a11y.Bus on D-Bus)"
+    steps:
+      - "Call SENSE_read_accessibility_tree"
+      - "Executes ['gdbus', 'call', '--session', '--dest', 'org.a11y.Bus', '--object-path', '/org/a11y/bus', '--method', 'org.a11y.Bus.GetAddress']"
+    verify:
+      - "Response contains 'AT-SPI bus:' followed by the bus address"
+      - "Response contains note about incomplete implementation and fallback to capture_screen_region"
+      - "isError is false"
+
+  - name: accessibility-tree-not-available
+    description: >
+      AT-SPI is not available (no accessibility bus running).
+    preconditions:
+      - "org.a11y.Bus is not registered on D-Bus"
+    steps:
+      - "Call SENSE_read_accessibility_tree"
+      - "gdbus command fails"
+    verify:
+      - "Response text starts with 'AT-SPI not available:'"
+      - "Response suggests using sense.capture_screen_region as fallback"
+      - "isError is true"
+
+  - name: accessibility-tree-with-display
+    description: >
+      AT-SPI query routed to an isolated display.
+    preconditions:
+      - "Isolated display '99' has D-Bus session running"
+    steps:
+      - "Call SENSE_read_accessibility_tree with display_id='99'"
+      - "gdbus runs with DISPLAY=:99"
+    verify:
+      - "Query targets the D-Bus session on display :99"
+
+  # ═══════════════════════════════════════════════════════════════
+  # SENSE_read_process_list
+  # ═══════════════════════════════════════════════════════════════
+  - name: process-list-with-pattern
+    description: >
+      Search for processes matching a pattern. Uses runCapture (not run)
+      so non-zero exit (no matches) doesn't throw.
+    preconditions:
+      - "System has running processes"
+    steps:
+      - "Call SENSE_read_process_list with pattern='i3'"
+      - "X11Client.runCapture(['pgrep', '-a', 'i3'], 10) returns CommandResult"
+      - "If stdout is blank, returns 'No matching processes'"
+      - "Otherwise returns stdout.strip()"
+    verify:
+      - "Response contains PID + command lines of matching processes, or 'No matching processes'"
+      - "isError is false"
+
+  - name: process-list-no-pattern
+    description: >
+      List all processes when no pattern specified.
+    preconditions:
+      - "System has running processes"
+    steps:
+      - "Call SENSE_read_process_list with no arguments"
+      - "X11Client.run(['ps', 'aux']) returns full process listing"
+    verify:
+      - "Response contains full ps aux output"
+      - "isError is false"
+
+  - name: process-list-no-display-routing
+    description: >
+      ReadProcessList does NOT accept display_id and does NOT use DisplayRouter.
+      Process listing is system-wide regardless of display.
+    preconditions: []
+    steps:
+      - "Call SENSE_read_process_list with pattern='Xvfb'"
+      - "No display routing occurs — processes from all displays are visible"
+    verify:
+      - "Response includes Xvfb processes for all displays (:0, :99, etc.)"
+
+  - name: process-list-pgrep-fails
+    description: >
+      pgrep or ps command fails.
+    preconditions:
+      - "System in degraded state"
+    steps:
+      - "Call SENSE_read_process_list with pattern='something'"
+      - "X11Client.runCapture returns CommandResult with error"
+      - "Or exception propagates"
+    verify:
+      - "Response text starts with 'Failed:'"
+      - "isError is true"
+
+  # ═══════════════════════════════════════════════════════════════
+  # Somatic proxy tools — all route through SomaticClient
+  # ═══════════════════════════════════════════════════════════════
+  - name: desktop-events-default-host
+    description: >
+      ReadDesktopEvents defaults display_id to HOST_DISPLAY when not specified,
+      ensuring it reads from the host somatic (user's display), not a virtual display.
+    preconditions:
+      - "Somatic daemon is running on host display"
+      - "No display_id provided"
+    steps:
+      - "Call SENSE_read_desktop_events with no arguments"
+      - "Handler injects display_id='host' into args (new HashMap copy)"
+      - "DisplayRouter.chooseSomatic returns fallbackSomatic (host somatic)"
+      - "Calls somatic.callTool('read_events', {})"
+    verify:
+      - "Response contains JSON from somatic's read_events tool"
+      - "Events are from the host display, not any isolated display"
+      - "isError is false"
+
+  - name: desktop-events-with-count
+    description: >
+      Request a specific number of recent events.
+    preconditions:
+      - "Somatic daemon is running"
+    steps:
+      - "Call SENSE_read_desktop_events with count=10"
+      - "Somatic args include {count: 10}"
+      - "Calls somatic.callTool('read_events', {count: 10})"
+    verify:
+      - "Response contains at most 10 events"
+
+  - name: desktop-events-isolated-display
+    description: >
+      Read events from an isolated display's per-display somatic instance.
+    preconditions:
+      - "Isolated display '99' has a running per-display somatic (SOMATIC_SHM_SUFFIX=_d99)"
+    steps:
+      - "Call SENSE_read_desktop_events with display_id='99'"
+      - "DisplayRouter.chooseSomatic finds display session, returns session.provideSomatic()"
+      - "Per-display somatic's read_events called"
+    verify:
+      - "Events are from display :99's somatic instance"
+      - "SHM paths use _d99 suffix"
+
+  - name: desktop-events-somatic-not-running
+    description: >
+      Somatic daemon is not running or has crashed.
+    preconditions:
+      - "Somatic process is dead"
+    steps:
+      - "Call SENSE_read_desktop_events"
+      - "somatic.callTool throws IOException('No response from somatic')"
+    verify:
+      - "Response text starts with 'Failed:'"
+      - "isError is true"
+
+  - name: typing-rhythm-host
+    description: >
+      Read typing rhythm analysis from host somatic.
+    preconditions:
+      - "Host somatic is running"
+    steps:
+      - "Call SENSE_read_typing_rhythm with no arguments"
+      - "Handler injects display_id='host'"
+      - "Calls somatic.callTool('read_timing', {})"
+    verify:
+      - "Response contains inter-key intervals, burst/pause ratios"
+      - "isError is false"
+
+  - name: typing-rhythm-isolated-display
+    description: >
+      Read typing rhythm from isolated display's somatic.
+    preconditions:
+      - "Display '99' has per-display somatic running"
+    steps:
+      - "Call SENSE_read_typing_rhythm with display_id='99'"
+      - "Per-display somatic's read_timing called"
+    verify:
+      - "Rhythm data is from display :99's input, not host"
+
+  - name: pointer-state-host
+    description: >
+      Read pointer position, velocity, and dwell time from host somatic.
+    preconditions:
+      - "Host somatic is running"
+    steps:
+      - "Call SENSE_read_pointer_state with no arguments"
+      - "Handler injects display_id='host'"
+      - "Calls somatic.callTool('read_dynamics', {})"
+    verify:
+      - "Response contains pointer position, velocity, dwell time"
+      - "isError is false"
+
+  - name: pointer-state-isolated
+    description: >
+      Read pointer state from isolated display.
+    preconditions:
+      - "Display '99' has per-display somatic"
+    steps:
+      - "Call SENSE_read_pointer_state with display_id='99'"
+    verify:
+      - "Pointer data is from display :99"
+
+  - name: clipboard-metadata-host
+    description: >
+      Read clipboard metadata (hash, size, type — never content) from host somatic.
+    preconditions:
+      - "Host somatic is running"
+      - "Clipboard has content"
+    steps:
+      - "Call SENSE_read_clipboard_metadata with no arguments"
+      - "Handler injects display_id='host'"
+      - "Calls somatic.callTool('read_latest', {})"
+    verify:
+      - "Response contains clipboard hash, size, and type"
+      - "Response does NOT contain clipboard content (privacy by design)"
+
+  - name: clipboard-metadata-isolated
+    description: >
+      Read clipboard metadata from an isolated display.
+    preconditions:
+      - "Display '99' has per-display somatic with clipboard monitoring"
+    steps:
+      - "Call SENSE_read_clipboard_metadata with display_id='99'"
+    verify:
+      - "Clipboard metadata is from display :99's clipboard, not host"
+
+  - name: input-history-host
+    description: >
+      Read recent keystrokes with keycodes and keysyms from host somatic.
+    preconditions:
+      - "Host somatic is running"
+    steps:
+      - "Call SENSE_read_input_history with no arguments"
+      - "Handler injects display_id='host'"
+      - "Calls somatic.callTool('read_keystrokes', {})"
+    verify:
+      - "Response contains recent keystrokes"
+
+  - name: input-history-with-count
+    description: >
+      Request a specific number of recent keystrokes.
+    preconditions:
+      - "Host somatic is running"
+    steps:
+      - "Call SENSE_read_input_history with count=20"
+      - "Somatic args include {count: 20}"
+    verify:
+      - "Response contains at most 20 keystroke entries"
+
+  - name: input-history-isolated
+    description: >
+      Read input history from isolated display's somatic.
+    preconditions:
+      - "Display '99' has per-display somatic"
+    steps:
+      - "Call SENSE_read_input_history with display_id='99', count=5"
+    verify:
+      - "Keystrokes are from display :99 input"
+
+  - name: environment-snapshot-host
+    description: >
+      Read the full 14-dimensional fused environment state vector from host somatic.
+    preconditions:
+      - "Host somatic is running with sensor fusion active"
+    steps:
+      - "Call SENSE_read_environment_snapshot with no arguments"
+      - "Handler injects display_id='host'"
+      - "Calls somatic.callTool('read_snapshot', {})"
+    verify:
+      - "Response contains fused state vector (14 dimensions)"
+      - "isError is false"
+
+  - name: environment-snapshot-isolated
+    description: >
+      Read environment snapshot from isolated display.
+    preconditions:
+      - "Display '99' has per-display somatic"
+    steps:
+      - "Call SENSE_read_environment_snapshot with display_id='99'"
+    verify:
+      - "Snapshot is from display :99's somatic"
+
+  # ═══════════════════════════════════════════════════════════════
+  # X11Client infrastructure
+  # ═══════════════════════════════════════════════════════════════
+  - name: x11client-run-virtual-thread-readers
+    description: >
+      X11Client.run() reads stdout and stderr in separate virtual threads
+      to prevent deadlocks when child processes inherit file descriptors
+      that keep streams open.
+    preconditions:
+      - "A command produces output on stdout and/or stderr"
+    steps:
+      - "X11Client.run() starts a ProcessBuilder"
+      - "Two virtual threads started: one reads proc.getInputStream() (stdout), one reads proc.getErrorStream() (stderr)"
+      - "proc.waitFor(timeout, SECONDS) blocks for process exit"
+      - "After exit: stdoutThread.join(2000), stderrThread.join(2000)"
+      - "If reader still alive: force-close the stream, then join(500)"
+      - "Check exit code: non-zero throws IOException with stderr"
+    verify:
+      - "stdout is returned as String"
+      - "No deadlock from full pipe buffers"
+      - "Inherited FD blocking is handled by force-closing streams after timeout"
+
+  - name: x11client-run-process-timeout
+    description: >
+      Command exceeds timeout — process is force-killed.
+    preconditions:
+      - "A command hangs indefinitely"
+    steps:
+      - "X11Client.run() with timeoutSeconds=10"
+      - "proc.waitFor(10, SECONDS) returns false"
+      - "proc.destroyForcibly() called"
+      - "IOException thrown with 'Command timed out after 10s'"
+    verify:
+      - "Process is force-killed, not just signaled"
+      - "IOException message includes the command for debugging"
+
+  - name: x11client-run-interrupted
+    description: >
+      Thread is interrupted while waiting for process.
+    preconditions:
+      - "Another thread interrupts the calling thread"
+    steps:
+      - "proc.waitFor throws InterruptedException"
+      - "Process destroyed forcibly"
+      - "Thread.currentThread().interrupt() re-sets interrupt flag"
+      - "IOException('Interrupted') thrown"
+    verify:
+      - "Interrupt flag is preserved"
+      - "Process is cleaned up"
+
+  - name: x11client-runcapture-no-throw
+    description: >
+      X11Client.runCapture() returns CommandResult record instead of throwing,
+      allowing callers to inspect exit code and stderr gracefully.
+    preconditions:
+      - "A command exits with non-zero code"
+    steps:
+      - "X11Client.runCapture(['pgrep', '-a', 'nonexistent'], 10)"
+      - "Process exits with code 1 (no matches)"
+      - "Returns CommandResult(1, '', '')"
+    verify:
+      - "No exception thrown"
+      - "exitCode is 1"
+      - "stdout is empty, stderr is empty"
+      - "output() method returns '(no output)' when both are blank"
+
+  - name: x11client-runcapture-timeout
+    description: >
+      runCapture() handles timeout without throwing.
+    preconditions:
+      - "Command hangs beyond timeout"
+    steps:
+      - "X11Client.runCapture(['sleep', '999'], 1)"
+      - "proc.waitFor returns false"
+      - "proc.destroyForcibly()"
+      - "Returns CommandResult(-1, '', 'Command timed out after 1s')"
+    verify:
+      - "exitCode is -1"
+      - "stderr contains timeout message"
+      - "No exception propagated"
+
+  - name: x11client-capture-screenshot-temp-file-cleanup
+    description: >
+      captureScreenshot creates a temp file, runs maim, reads bytes,
+      base64 encodes, and deletes the temp file in a finally block.
+    preconditions:
+      - "maim is installed"
+      - "Display is reachable"
+    steps:
+      - "captureScreenshot creates temp file 'gateway-screenshot-*.png'"
+      - "Runs maim with appropriate flags to capture to temp file"
+      - "Reads all bytes from temp file"
+      - "Base64 encodes the bytes"
+      - "finally block: Files.deleteIfExists(tmp)"
+    verify:
+      - "Base64 string returned"
+      - "No temp files leaked even if maim fails"
+
+  # ═══════════════════════════════════════════════════════════════
+  # SomaticClient infrastructure
+  # ═══════════════════════════════════════════════════════════════
+  - name: somatic-client-lifecycle
+    description: >
+      SomaticClient manages a child process with bidirectional JSON-RPC stdio.
+    preconditions:
+      - "Somatic binary exists at the configured path"
+    steps:
+      - "SomaticClient constructed with binaryPath and optional environment map"
+      - "start() launches child process via ProcessBuilder"
+      - "Environment map merged into ProcessBuilder environment (e.g. DISPLAY, SOMATIC_SHM_SUFFIX)"
+      - "Virtual thread 'somatic-reader' reads JSON-RPC responses line by line"
+      - "Sends 'initialize' request with protocolVersion '2024-11-05'"
+      - "Waits for initialize response (30s timeout)"
+      - "Sends 'notifications/initialized' notification (no response expected)"
+    verify:
+      - "Process is running"
+      - "Reader thread is active"
+      - "Initialize handshake completed"
+      - "Stderr prints '[gateway] Somatic client connected to <path>'"
+
+  - name: somatic-client-call-tool
+    description: >
+      callTool dispatches a tools/call JSON-RPC request and extracts the result.
+    preconditions:
+      - "SomaticClient is started and initialized"
+    steps:
+      - "callTool('read_snapshot', {}) called"
+      - "sendRequest builds JSON: {jsonrpc:'2.0', id:N, method:'tools/call', params:{name:'read_snapshot', arguments:{}}}"
+      - "stdinLock acquired (ReentrantLock, virtual-thread-safe)"
+      - "JSON written to stdin + newline + flush"
+      - "CompletableFuture registered in pending map with ID N"
+      - "Reader thread reads response line, matches ID, completes the future"
+      - "callTool extracts response.get('result')"
+    verify:
+      - "Returns the 'result' field from the JSON-RPC response"
+      - "Pending future removed from map"
+
+  - name: somatic-client-request-timeout
+    description: >
+      Somatic doesn't respond within 30 seconds.
+    preconditions:
+      - "Somatic is started but unresponsive"
+    steps:
+      - "callTool('read_snapshot', {}) called"
+      - "sendRequest puts CompletableFuture in pending map"
+      - "future.get(30, SECONDS) throws TimeoutException"
+      - "Pending entry removed from map"
+      - "IOException('Somatic request timed out: tools/call') thrown"
+    verify:
+      - "IOException propagated to tool handler"
+      - "Pending map cleaned up"
+
+  - name: somatic-client-error-response
+    description: >
+      Somatic returns a JSON-RPC error response.
+    preconditions:
+      - "Somatic is running but tool doesn't exist"
+    steps:
+      - "callTool('nonexistent_tool', {}) called"
+      - "Response contains {error: {message: 'Unknown tool'}}"
+      - "callTool checks response.has('error')"
+      - "Throws IOException('Somatic error: Unknown tool')"
+    verify:
+      - "IOException propagated"
+      - "Error message from somatic preserved"
+
+  - name: somatic-client-null-response
+    description: >
+      No response received (somatic process died mid-request).
+    preconditions:
+      - "Somatic process crashes after request sent"
+    steps:
+      - "callTool called"
+      - "sendRequest returns null (future completed exceptionally or reader died)"
+      - "callTool throws IOException('No response from somatic for tool: X')"
+    verify:
+      - "IOException propagated"
+
+  - name: somatic-client-close
+    description: >
+      Graceful shutdown of somatic child process.
+    preconditions:
+      - "SomaticClient is running"
+    steps:
+      - "close() called"
+      - "running set to false (stops reader thread loop)"
+      - "process.destroy() sends SIGTERM"
+      - "process.waitFor(5, SECONDS) waits for graceful exit"
+      - "If not exited in 5s, process.destroyForcibly()"
+      - "All pending CompletableFutures cancelled"
+      - "pending map cleared"
+    verify:
+      - "Process is terminated"
+      - "No lingering futures"
+      - "Reader thread exits loop"
+
+  - name: somatic-client-concurrent-requests
+    description: >
+      Multiple virtual threads call callTool concurrently. ReentrantLock
+      serializes stdin writes, but responses can arrive in any order.
+    preconditions:
+      - "SomaticClient is running"
+      - "Multiple tool calls arrive simultaneously"
+    steps:
+      - "Thread A calls callTool('read_timing', {}) — gets ID 5"
+      - "Thread B calls callTool('read_dynamics', {}) — gets ID 6"
+      - "stdinLock serializes the two JSON writes"
+      - "Reader thread receives response for ID 6 first, completes future 6"
+      - "Reader thread receives response for ID 5, completes future 5"
+    verify:
+      - "Both threads receive their correct responses"
+      - "No cross-talk between requests"
+      - "AtomicInteger ensures unique IDs"
+
+  - name: somatic-client-shm-suffix-routing
+    description: >
+      Per-display somatic instances use SOMATIC_SHM_SUFFIX environment variable
+      to namespace their SHM files, preventing collision with host somatic.
+    preconditions:
+      - "DisplaySession starts somatic with SOMATIC_SHM_SUFFIX=_d99"
+    steps:
+      - "DisplaySession.start() creates SomaticClient with environment {DISPLAY=:99, SOMATIC_SHM_SUFFIX=_d99}"
+      - "Somatic process uses suffix for SHM paths (e.g. /dev/shm/somatic_ambient_d99)"
+      - "DisplaySession.provideAmbientPath() returns '/dev/shm/somatic_ambient_d99'"
+    verify:
+      - "Host somatic uses /dev/shm/somatic_ambient (no suffix)"
+      - "Display 99 somatic uses /dev/shm/somatic_ambient_d99"
+      - "No collision between instances"
+
+  # ═══════════════════════════════════════════════════════════════
+  # Display routing infrastructure
+  # ═══════════════════════════════════════════════════════════════
+  - name: display-router-no-display-manager
+    description: >
+      When DisplayManager is null or disabled, chooseEnvironment returns
+      empty map and chooseSomatic returns the fallback client.
+    preconditions:
+      - "Display isolation is disabled (displayManager.isEnabled() == false or null)"
+    steps:
+      - "Call any tool with display_id='99'"
+      - "chooseEnvironment: displayManager null or not enabled → return Map.of()"
+      - "chooseSomatic: displayManager null or not enabled → return fallbackSomatic"
+    verify:
+      - "Tool uses gateway's inherited DISPLAY"
+      - "Tool uses primary somatic client"
+
+  - name: display-router-host-sentinel
+    description: >
+      display_id='host' always routes to the user's real display,
+      regardless of DisplayManager state.
+    preconditions:
+      - "Display isolation may be enabled or disabled"
+    steps:
+      - "Call any tool with display_id='host'"
+      - "chooseEnvironment: detects HOST_DISPLAY → hostEnvironment()"
+      - "hostEnvironment: DISPLAY from detectUserDisplay(), XAUTHORITY from detectUserXauthority()"
+      - "chooseSomatic: detects HOST_DISPLAY → return fallbackSomatic"
+    verify:
+      - "Environment targets user's real display (:0)"
+      - "Somatic is the primary (host) instance"
+
+  - name: display-router-no-display-id-default
+    description: >
+      When no display_id is provided and isolation is enabled, route to
+      the default display (lowest-numbered RUNNING session).
+    preconditions:
+      - "Display isolation is enabled"
+      - "Sessions exist for displays 99 and 100, both RUNNING"
+    steps:
+      - "Call a tool with no display_id"
+      - "chooseEnvironment: displayId is null → displayManager.locateDefaultDisplay()"
+      - "locateDefaultDisplay returns session with lowest displayNumber (99)"
+      - "Returns session.provideEnvironment() → {DISPLAY=:99}"
+    verify:
+      - "Tool targets display :99 (lowest-numbered running)"
+
+  - name: display-router-display-not-found
+    description: >
+      display_id specifies a non-existent display.
+    preconditions:
+      - "Display isolation is enabled"
+      - "No session with display_id '999'"
+    steps:
+      - "Call a tool with display_id='999'"
+      - "displayManager.locateDisplay('999') returns null"
+      - "chooseEnvironment returns Map.of()"
+      - "chooseSomatic returns fallbackSomatic"
+    verify:
+      - "Tool falls back to gateway's inherited environment"
+      - "No crash — graceful degradation"
+
+  - name: display-router-per-display-somatic-unavailable
+    description: >
+      Display session exists but its per-display somatic failed to start
+      (somaticClient is null).
+    preconditions:
+      - "Display '99' is RUNNING but somatic launch failed during start()"
+    steps:
+      - "Call a somatic tool with display_id='99'"
+      - "DisplayRouter.chooseSomatic finds session, session.provideSomatic() returns null"
+      - "chooseSomatic returns fallbackSomatic"
+    verify:
+      - "Falls back to host somatic rather than crashing"
+      - "Somatic data may reflect host display, not isolated display (acceptable degradation)"
+
+  # ═══════════════════════════════════════════════════════════════
+  # DisplayEnvironment detection
+  # ═══════════════════════════════════════════════════════════════
+  - name: detect-user-display-from-env
+    description: >
+      detectUserDisplay returns $DISPLAY if it's not :99.
+    preconditions:
+      - "Gateway started with DISPLAY=:0"
+    steps:
+      - "detectUserDisplay() reads System.getenv('DISPLAY')"
+      - "Returns ':0' (not starting with ':99')"
+    verify:
+      - "Returns ':0'"
+
+  - name: detect-user-display-fallback
+    description: >
+      If DISPLAY is :99 (gateway running inside Xvfb), falls back to ':0'.
+    preconditions:
+      - "Gateway started with DISPLAY=:99"
+    steps:
+      - "detectUserDisplay() reads ':99'"
+      - "Condition: starts with ':99' → return ':0'"
+    verify:
+      - "Returns ':0' as fallback"
+
+  - name: detect-xauthority-from-i3-process
+    description: >
+      detectUserXauthority scans i3 processes, reads /proc/PID/environ,
+      finds the one with DISPLAY=:0, extracts its XAUTHORITY.
+    preconditions:
+      - "i3 is running on :0 with XAUTHORITY=/home/user/.Xauthority"
+      - "Another i3 may be running on :99 (Xvfb)"
+    steps:
+      - "pgrep -u <user> i3 returns PIDs for all i3 instances"
+      - "For each PID, read /proc/PID/environ (null-delimited)"
+      - "Find PID where DISPLAY=:0"
+      - "Extract XAUTHORITY value from that PID's environ"
+    verify:
+      - "Returns the XAUTHORITY from the :0 i3 process"
+      - "Does NOT return XAUTHORITY from :99 i3 process"
+
+  - name: detect-xauthority-fallback-to-env
+    description: >
+      If i3 process scanning fails, falls back to System.getenv('XAUTHORITY').
+    preconditions:
+      - "No i3 processes found or /proc reading fails"
+    steps:
+      - "pgrep fails or returns no results"
+      - "Catch block returns System.getenv('XAUTHORITY')"
+    verify:
+      - "Returns the XAUTHORITY environment variable or null"
+
+  # ═══════════════════════════════════════════════════════════════
+  # ResponseEnricher and AlertDetector
+  # ═══════════════════════════════════════════════════════════════
+  - name: response-enricher-appends-ambient
+    description: >
+      Every tool response is enriched with ambient state from /dev/shm/somatic_ambient.
+    preconditions:
+      - "Somatic is writing to /dev/shm/somatic_ambient"
+    steps:
+      - "Tool handler returns CallToolResult"
+      - "ResponseEnricher.wrap calls ambient.read()"
+      - "AmbientStateHeader reads /dev/shm/somatic_ambient, formats as '[env: typing=idle dwell=2340ms ...]'"
+      - "AlertDetector.check() compares against previous state"
+      - "Appended as TextContent to response"
+    verify:
+      - "Response has original content plus ambient footer"
+      - "Footer is ~30 tokens"
+
+  - name: alert-detector-typing-state-change
+    description: >
+      AlertDetector fires typing-state-changed alert when user starts or stops typing.
+    preconditions:
+      - "typingAlert is enabled"
+      - "Previous ambient showed typing=idle"
+      - "Current ambient shows typing=active"
+    steps:
+      - "alert.check(ambientLine) extracts typing field"
+      - "Compares 'active' != 'idle' (previousTypingState)"
+      - "Appends '[ALERT: typing-state-changed] User typing state: idle -> active'"
+    verify:
+      - "Alert text appended to tool response"
+      - "AI agent can use this to pause input operations"
+
+  - name: alert-detector-focus-change
+    description: >
+      AlertDetector fires focus-changed alert when window focus changes.
+    preconditions:
+      - "focusAlert is enabled"
+      - "Focus moved from 0x01a00003 to 0x02000004"
+    steps:
+      - "alert.check extracts focus field"
+      - "Detects change in focus"
+      - "Appends '[ALERT: focus-changed] Window focus moved from 0x01a00003 to 0x02000004'"
+    verify:
+      - "Alert included in response"
+
+  - name: alert-detector-clipboard-change
+    description: >
+      AlertDetector fires clipboard-changed alert when clipboard content changes.
+    preconditions:
+      - "clipboardAlert is enabled"
+      - "Clipboard hash changed"
+    steps:
+      - "alert.check extracts clip field"
+      - "Detects change from previous clipboard hash"
+      - "Appends '[ALERT: clipboard-changed] Clipboard updated to text:128b'"
+    verify:
+      - "Alert included in response"
+
+  - name: response-enricher-ambient-unavailable
+    description: >
+      Ambient SHM file doesn't exist (somatic not running). Enricher is a no-op.
+    preconditions:
+      - "/dev/shm/somatic_ambient does not exist"
+    steps:
+      - "ambient.read() returns ''"
+      - "alert.check('') returns ''"
+      - "ResponseEnricher returns the original result unchanged"
+    verify:
+      - "No footer appended"
+      - "Original tool response preserved"
+
+  # ═══════════════════════════════════════════════════════════════
+  # ToolRegistry timeout enforcement
+  # ═══════════════════════════════════════════════════════════════
+  - name: tool-timeout-fast-class
+    description: >
+      SENSE tools are registered with FAST timeout (5s) or default STANDARD (25s).
+      ToolRegistry wraps all handlers with a per-call timeout on a virtual thread executor.
+    preconditions:
+      - "Tool registered with STANDARD timeout (25s, default)"
+    steps:
+      - "Tool call arrives"
+      - "ToolRegistry submits handler to virtual thread executor"
+      - "future.get(25, SECONDS) waits"
+      - "Handler completes within 25s"
+    verify:
+      - "Result returned normally"
+      - "Metrics recorded via Metrics.recordToolCall"
+
+  - name: tool-timeout-exceeded
+    description: >
+      Tool handler exceeds its timeout class limit.
+    preconditions:
+      - "Tool is STANDARD class (25s)"
+      - "Handler blocks for >25s"
+    steps:
+      - "future.get(25, SECONDS) throws TimeoutException"
+      - "future.cancel(true) interrupts the virtual thread"
+      - "Metrics.recordToolError logged"
+      - "Response: 'Tool timed out after 25s. Try a simpler query or reduce scope.'"
+    verify:
+      - "isError is true"
+      - "Virtual thread interrupted"
+      - "Error metric recorded"
+
+  - name: tool-response-size-capped
+    description: >
+      ToolRegistry truncates responses exceeding 100KB characters.
+    preconditions:
+      - "Tool returns very large output (e.g. full i3 tree on busy display)"
+    steps:
+      - "Handler returns CallToolResult with >100,000 chars of TextContent"
+      - "capResponseSize truncates text and appends truncation notice"
+    verify:
+      - "Response truncated to 100KB"
+      - "Truncation notice appended: '[Truncated: response exceeded 100KB. Use a more specific query.]'"
+      - "Non-text content (ImageContent) preserved untruncated"
+
+  # ═══════════════════════════════════════════════════════════════
+  # Somatic tools — host display default injection
+  # ═══════════════════════════════════════════════════════════════
+  - name: somatic-tool-host-default-injection-pattern
+    description: >
+      All somatic proxy tools (ReadDesktopEvents, ReadTypingRhythm, ReadPointerState,
+      ReadClipboardMetadata, ReadInputHistory, ReadEnvironmentSnapshot) share a common
+      pattern: if no display_id is provided, they inject display_id='host' before routing.
+      This ensures they always read from the user's real display by default, not
+      a virtual display the gateway might be running on.
+    preconditions:
+      - "Gateway may be running with DISPLAY=:99 (inside Xvfb)"
+      - "No display_id provided in tool arguments"
+    steps:
+      - "Handler checks !args.containsKey('display_id')"
+      - "Creates new HashMap copy of args (original may be immutable)"
+      - "Inserts display_id='host'"
+      - "DisplayRouter.chooseSomatic sees HOST_DISPLAY → returns fallbackSomatic (host)"
+    verify:
+      - "Somatic data is from host display, not gateway's own display"
+      - "Original args map is not mutated (new HashMap created)"
+
+enforced_constraints:
+  - name: virtual-thread-stream-readers
+    description: >
+      X11Client.run() and runCapture() MUST read stdout and stderr in separate
+      virtual threads. Direct stream reads on the calling thread can deadlock
+      when child processes inherit file descriptors from the JVM, keeping
+      streams open even after the intended child exits.
+    rationale: >
+      The gateway runs as a long-lived JVM process that launches many child
+      processes (xdotool, maim, i3-msg, somatic). Inherited FDs from the JVM
+      can keep pipe reads blocked indefinitely. Virtual threads + force-close
+      after timeout prevents this class of deadlock.
+
+  - name: temp-file-cleanup-on-screenshot
+    description: >
+      captureScreenshot MUST delete the temp PNG file in a finally block,
+      even if maim fails or base64 encoding throws.
+    rationale: >
+      Screenshots can be large. Leaked temp files in /tmp accumulate quickly
+      when an agent takes screenshots every 15 seconds for visual verification.
+
+  - name: somatic-host-display-default
+    description: >
+      All somatic proxy SENSE tools MUST inject display_id='host' when no
+      display_id is provided, before calling DisplayRouter.chooseSomatic.
+    rationale: >
+      The gateway process may run with DISPLAY=:99 (inside an isolated Xvfb).
+      Without this injection, somatic tools would read sensor data from the
+      Xvfb display (no real user activity) instead of the user's actual display.
+      This is the single most important routing decision for perception tools.
+
+  - name: reentrantlock-not-synchronized
+    description: >
+      SomaticClient MUST use ReentrantLock (not synchronized blocks) for
+      stdin write serialization.
+    rationale: >
+      Java synchronized blocks pin the carrier thread when used inside virtual
+      threads, defeating the purpose of virtual threads. ReentrantLock is
+      virtual-thread-safe and doesn't cause carrier pinning.
+
+  - name: display-router-graceful-degradation
+    description: >
+      DisplayRouter MUST return empty map / fallback somatic when display
+      is not found, display manager is null, or per-display somatic is null.
+      Never throw from routing.
+    rationale: >
+      Tool calls should degrade gracefully when display isolation is partially
+      broken. A missing display somatic should fall back to host somatic, not
+      crash the entire tool call.
+
+  - name: process-cleanup-on-timeout
+    description: >
+      X11Client MUST call destroyForcibly() when process exceeds timeout,
+      and must force-close stream readers that don't join within 500ms.
+    rationale: >
+      Zombie processes accumulate if not force-killed. Stream reader threads
+      blocked on inherited FDs must be interrupted to free resources.
+
+  - name: tool-timeout-enforcement
+    description: >
+      ToolRegistry MUST wrap all tool handlers with a timeout on virtual thread
+      executor, cancelling the future and interrupting the virtual thread on timeout.
+    rationale: >
+      Claude Code has a 30s client timeout. Gateway tools must return within that
+      window. STANDARD class (25s) leaves 5s headroom for response serialization.
+
+  - name: response-size-cap
+    description: >
+      ToolRegistry MUST truncate TextContent responses exceeding 100,000 characters.
+    rationale: >
+      Large responses (e.g., full i3 tree) can bloat the LLM context window,
+      causing token budget exhaustion and degraded reasoning quality.
+
+opinionated_constraints:
+  - name: two-step-click
+    description: >
+      SendClick performs mousemove and click as two separate xdotool invocations,
+      not as a single 'xdotool mousemove --click' combined command.
+    rationale: >
+      Separating move and click provides clearer error attribution. If the move
+      fails, the click is never attempted, preventing accidental clicks at the
+      previous cursor position.
+
+  - name: clearmodifiers-always
+    description: >
+      SendKeystroke and SendTextInput always pass --clearmodifiers to xdotool.
+    rationale: >
+      Agent-driven automation may leave modifier keys in an unexpected state
+      between tool calls. Clearing modifiers prevents Ctrl/Alt/Shift from
+      bleeding between operations.
+
+  - name: screenshot-viewer-on-user-display
+    description: >
+      CaptureScreenRegion's open=true launches xdg-open on the USER's display
+      (via detectUserDisplay), not on the display that was captured.
+    rationale: >
+      The purpose of opening is for the user to see the screenshot. If capturing
+      from an isolated Xvfb display, the viewer must appear on the user's actual
+      screen, not inside the headless virtual display.
+
+  - name: sendtextinput-30s-timeout
+    description: >
+      SendTextInput uses a 30s command timeout (vs 10s for other input tools)
+      because xdotool type can take significantly longer for long text strings.
+    rationale: >
+      At the default 12ms per character delay, typing 1000 characters takes 12
+      seconds — well beyond the 10s timeout used for simple keystroke/click commands.
+
+  - name: somatic-tool-name-aliasing
+    description: >
+      Gateway tool names (SENSE_read_*) map to different somatic tool names
+      (read_events, read_timing, read_dynamics, read_latest, read_keystrokes,
+      read_snapshot). This aliasing insulates the MCP API from somatic internals.
+    rationale: >
+      Somatic's internal tool naming convention uses short verbs (read_timing,
+      read_dynamics). The gateway uses descriptive names (SENSE_read_typing_rhythm,
+      SENSE_read_pointer_state) that are self-documenting in the MCP tool listing.
+
+  - name: process-list-no-display-routing
+    description: >
+      ReadProcessList does not accept display_id and does not use DisplayRouter.
+      Process listing is inherently system-wide.
+    rationale: >
+      Unlike X11 tools that target a specific display, processes are OS-level
+      entities visible system-wide. Display routing would be misleading.
+
+  - name: accessibility-tree-partial-implementation
+    description: >
+      ReadAccessibilityTree only queries the AT-SPI bus address, not the full tree.
+      It explicitly documents this limitation and suggests screenshot fallback.
+    rationale: >
+      Full AT-SPI tree traversal is complex and the visual-first approach
+      (screenshot → vision model analysis) has proven more reliable in practice.
+      The stub preserves the tool slot for future implementation.
+
+  - name: window-layout-windows-equals-tree
+    description: >
+      ReadWindowLayout's 'windows' format currently returns the full i3 tree
+      (same as 'tree' format), matching x11-mcp legacy behavior.
+    rationale: >
+      The original x11-mcp Python tool returned the full tree for the 'windows'
+      format. Preserving this behavior ensures compatibility, even though a
+      parsed window-only list would be more useful. Future enhancement.
+
+  - name: ambient-shm-mid-rename-tolerance
+    description: >
+      AmbientStateHeader catches IOException when reading /dev/shm/somatic_ambient
+      and silently returns empty string, tolerating the SHM file being mid-rename
+      or temporarily unavailable.
+    rationale: >
+      The somatic daemon may atomically update the SHM file via rename(2).
+      During the rename window, the file may not exist momentarily. Missing
+      one ambient read cycle is harmless.

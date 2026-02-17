@@ -6,7 +6,7 @@ argument-hint: [optional feature name or story file path]
 
 # Create User Story
 
-Formalize the user's natural language description (from the current conversation context) into well-formed e2e user stories compatible with `/e2e-test-debug-loop`.
+Formalize the user's natural language description (from the current conversation context) into well-formed e2e user stories compatible with `/e2e-loop-demonstration`.
 
 ## Arguments
 
@@ -49,7 +49,7 @@ Transform the user's description into YAML stories following these patterns:
 **Story file structure:**
 ```yaml
 # {Description comment}
-# Run with: /e2e-test-debug-loop {feature-name}
+# Run with: /e2e-loop-demonstration {feature-name}
 
 feature: {feature-name}
 description: {one-line description}
@@ -130,7 +130,7 @@ On user approval:
 Report:
 - Number of stories created
 - File path written to
-- Suggest: "Run with `/e2e-test-debug-loop {feature-name}` to test"
+- Suggest: "Run with `/e2e-loop-demonstration {feature-name}` to test"
 
 ## Quality Checklist
 

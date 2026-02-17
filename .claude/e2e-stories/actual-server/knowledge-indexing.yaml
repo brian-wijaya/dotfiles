@@ -1,0 +1,1566 @@
+vocabulary:
+  vault: "The ~/vault/ directory tree containing org notes, data, and indexed knowledge."
+  vault_db: "SQLite database at ~/vault/data/vault.db storing sessions, documents, chunks, emails, and FTS5 indexes."
+  fts5: "SQLite Full-Text Search extension version 5. Used for BM25 ranked text search over sessions and chunks."
+  bm25: "Best Match 25 ranking function built into FTS5. Returns negative scores where lower (more negative) = better match."
+  wal_mode: "SQLite Write-Ahead Log mode. Enables concurrent reads during writes. Requires periodic checkpointing."
+  wal_checkpoint: "Process of moving WAL content back to the main database file. PASSIVE mode avoids blocking readers."
+  rrf: "Reciprocal Rank Fusion. Combines rankings from FTS5 and Qdrant by scoring each result as sum(1/(k+rank+1)) across ranking lists, with k=60."
+  qdrant: "Vector database for semantic search. Collection vault_chunks stores 768-dim cosine-distance embeddings."
+  tei: "HuggingFace Text Embeddings Inference server. Generates 768-dim vectors via nomic-embed-text-v1.5."
+  nomic_task_prefix: "nomic-embed-text-v1.5 requires task prefixes: 'search_query: ' for queries, 'search_document: ' for documents."
+  semantic_search: "Qdrant nearest-neighbor search using embedded query vectors. Part of P2 layer; gracefully degrades when unavailable."
+  p2_layer: "Phase 2 infrastructure (Qdrant + TEI). Optional; all recall tools work FTS5-only when P2 is unavailable."
+  chunk: "A text segment (~400 tokens / 1600 chars max) with 50-token (200 char) overlap. Org-mode chunks preserve heading context."
+  recency_bias: "Float 0.0-1.0 controlling recency vs relevance weighting. 0.0=pure BM25 relevance, 1.0=pure time-decay."
+  debounce: "Delay before processing a file change event. 2s for org files, 10s for .jsonl conversations. Prevents redundant re-indexing during rapid edits."
+  content_hash: "SHA-256 hex digest of file content (or size:mtime for conversations). Used to skip re-indexing unchanged files."
+  source_id: "Unique identifier for session origin. Format 'claude:<session-id>' for conversation-sourced sessions. Enables upsert semantics."
+  noise_line: "System boilerplate, XML tags, code fences, subagent prompts, and other non-substantive content filtered by isNoiseLine()."
+  maildir: "Email storage format. Messages as individual files in cur/ (read) and new/ (unread) subdirectories."
+  mbsync: "IMAP synchronization tool. Pulls email to ~/Mail/ in Maildir format. 120s timeout."
+  reindex_marker: "Sentinel file .reindex-{source_type} in ~/vault/data/. When present, invalidates content hashes for that source type, forcing re-indexing on next scan."
+  write_executor: "Dedicated platform thread for all SQLite write operations. Prevents virtual thread carrier pinning from sqlite-jdbc synchronized blocks."
+  read_executor: "Dedicated platform thread for all SQLite read operations. Tracks active query count for write isolation."
+  active_query_count: "AtomicInteger tracking in-flight read queries. VaultWatcher calls awaitQueryQuiet() to defer writes when agent reads are active."
+
+metadata:
+  feature: actual-server
+  component: recall-knowledge-indexing
+  date: "2026-02-15"
+
+stories:
+  # ── FTS5 Full-Text Search ──
+
+  - name: fts5-vault-search-basic
+    description: >
+      Basic full-text search via SENSE_documents_search returns FTS5-only results
+      when Qdrant/TEI are unavailable. Output includes mode: "fts5_only".
+    preconditions:
+      - "vault.db exists with documents, chunks, and chunks_fts tables populated"
+      - "Qdrant and TEI services are not running (P2 unavailable)"
+    steps:
+      - "Call SENSE_documents_search with query='emacs configuration' and default limit"
+      - "SearchHybrid checks qdrant.isAvailable() and tei.isAvailable() — both return false"
+      - "SqliteClient.searchFulltext() runs FTS5 MATCH on chunks_fts with sanitized query"
+      - "Query tokens are individually double-quoted: '\"emacs\" \"configuration\"'"
+      - "Results joined from chunks_fts → chunks → documents to get doc_id, title, source_path, snippet"
+      - "BM25 scores are abs()'d since FTS5 returns negative values"
+      - "Results capped at limit (default 10, hard cap MAX_RESULTS=20)"
+    verify:
+      - "Response JSON has mode: 'fts5_only'"
+      - "Results array contains objects with doc_id, title, source_path, source_type, snippet, score"
+      - "Snippet has >>>/<<< delimiters around matched terms"
+      - "Results are ordered by BM25 score descending"
+      - "No more than 10 results returned with default limit"
+
+  - name: fts5-query-sanitization
+    description: >
+      FTS5 query sanitization quotes each token individually and escapes embedded
+      double-quotes, preventing FTS5 syntax errors from user input.
+    preconditions:
+      - "vault.db exists with chunks_fts populated"
+    steps:
+      - "Call SENSE_documents_search with query containing FTS5 operators: 'NOT OR AND NEAR'"
+      - "sanitizeFts5Query() splits on whitespace, wraps each token in double quotes"
+      - "Result: '\"NOT\" \"OR\" \"AND\" \"NEAR\"' — operators treated as literal tokens"
+      - "Call with query containing embedded quotes: 'my \"special\" query'"
+      - "Embedded quotes are doubled: '\"my\" \"\"\"special\"\"\"\" \"query\"'"
+      - "Call with blank/null query"
+      - "Returns empty quoted string: '\"\"'"
+    verify:
+      - "FTS5 operator keywords are treated as literal search terms, not syntax"
+      - "Embedded double-quotes are escaped by doubling ('\"\"')"
+      - "Blank queries produce the empty string literal '\"\"'"
+      - "No FTS5 syntax errors thrown for any user input"
+
+  - name: fts5-result-limit-cap
+    description: >
+      All search methods enforce MAX_RESULTS=20 hard cap regardless of user-requested limit.
+    preconditions:
+      - "vault.db has >20 matching documents"
+    steps:
+      - "Call SENSE_documents_search with limit=100"
+      - "SqliteClient.searchFulltext() applies Math.min(limit, MAX_RESULTS) → 20"
+      - "SQL LIMIT clause set to cappedLimit * 2 = 40 (FTS fetches 2x for RRF merging)"
+      - "Final result list truncated to user limit or MAX_RESULTS, whichever is smaller"
+    verify:
+      - "No more than 20 results returned regardless of requested limit"
+      - "SQL query uses capped limit, not raw user input"
+
+  # ── Hybrid Search (FTS5 + Qdrant) ──
+
+  - name: hybrid-search-rrf-fusion
+    description: >
+      When both Qdrant and TEI are available, SearchHybrid performs reciprocal rank
+      fusion combining FTS5 BM25 scores with Qdrant cosine similarity rankings.
+    preconditions:
+      - "Qdrant running with vault_chunks collection containing embedded vectors"
+      - "TEI running with nomic-embed-text-v1.5 model loaded"
+      - "vault.db has matching documents in both FTS5 and Qdrant"
+    steps:
+      - "Call SENSE_documents_search with query='emacs org-mode workflow'"
+      - "FTS5 BM25 search returns up to limit*2 results from chunks_fts"
+      - "TeiClient.embedQuery() prepends 'search_query: ' and calls POST /embed"
+      - "QdrantVectorClient.search() sends 768-dim vector, returns up to limit*2 scored points"
+      - "reciprocalRankFusion() merges both lists using source_path as join key"
+      - "Each result scored: sum(1/(60 + rank + 1)) across FTS5 and Qdrant rankings"
+      - "Results sorted by RRF score descending, truncated to limit"
+      - "Each result includes rrf_score field"
+    verify:
+      - "Response JSON has mode: 'hybrid'"
+      - "Results contain rrf_score field showing combined ranking score"
+      - "Documents appearing in both FTS5 and Qdrant results get boosted scores"
+      - "RRF_K constant is 60 (controls rank smoothing)"
+      - "Results use source_path as the join key; fallback keys 'fts_N' and 'sem_N' used when source_path is null"
+
+  - name: hybrid-search-semantic-fallback
+    description: >
+      When Qdrant/TEI are available but semantic search throws an exception,
+      SearchHybrid falls back to FTS5-only results gracefully.
+    preconditions:
+      - "Qdrant nominally available but experiencing transient errors"
+      - "TEI available"
+    steps:
+      - "Call SENSE_documents_search with query='debugging strategy'"
+      - "qdrant.isAvailable() returns true, tei.isAvailable() returns true"
+      - "tei.embedQuery() succeeds"
+      - "qdrant.search() throws ExecutionException (transient gRPC error)"
+      - "Exception caught, logged to stderr: '[gateway] Semantic search failed, falling back to FTS5'"
+      - "semanticAvailable remains false"
+      - "FTS5 results returned directly, truncated to limit"
+    verify:
+      - "Response JSON has mode: 'fts5_only' (not 'hybrid')"
+      - "Results still returned despite semantic search failure"
+      - "Error logged to stderr with the exception message"
+      - "No error propagated to the caller"
+
+  # ── Session Search ──
+
+  - name: session-search-pure-relevance
+    description: >
+      SENSE_sessions_search with recency_bias=0.0 ranks results purely by
+      BM25 relevance score, ignoring how recently sessions occurred.
+    preconditions:
+      - "vault.db has sessions spanning multiple weeks with sessions_fts populated"
+    steps:
+      - "Call SENSE_sessions_search with query='sqlite WAL mode', recency_bias=0.0"
+      - "SqliteClient.searchSessions() sanitizes query tokens"
+      - "SQL queries sessions_fts MATCH with BM25 ranking, JOINs sessions table"
+      - "For each result: score = abs(bm25) * ((1.0 - 0.0) + 0.0 * decay) = abs(bm25)"
+      - "Results sorted by score descending in Java (post-query re-ranking)"
+      - "Snippet generated by FTS5 snippet() with 32-token window and >>>/<<< delimiters"
+    verify:
+      - "Results ordered purely by BM25 relevance"
+      - "Older sessions with better keyword matches rank above recent sessions"
+      - "Each result has session_id, summary, snippet, score, created_at, topics"
+      - "Snippet delimiters are >>> and <<<"
+
+  - name: session-search-high-recency-bias
+    description: >
+      SENSE_sessions_search with recency_bias=0.7 heavily favors recent sessions,
+      applying exponential time-decay to BM25 scores.
+    preconditions:
+      - "vault.db has sessions from today and from 30 days ago, both matching the query"
+    steps:
+      - "Call SENSE_sessions_search with query='emacs configuration', recency_bias=0.7"
+      - "For each result: decay = 1.0 / (1.0 + days_ago)"
+      - "score = abs(bm25) * ((1.0 - 0.7) + 0.7 * decay)"
+      - "Today's session (days_ago=0): decay=1.0, multiplier = 0.3 + 0.7 = 1.0"
+      - "30-day-old session (days_ago=30): decay=0.032, multiplier = 0.3 + 0.022 = 0.322"
+      - "Recent session's score ~3x higher even with same BM25 relevance"
+    verify:
+      - "Recent sessions ranked significantly higher than older sessions with similar relevance"
+      - "Score formula correctly combines BM25 with time decay"
+      - "days_ago computed via julianday('now') - julianday(created_at) in SQL"
+
+  - name: session-search-pure-recency
+    description: >
+      SENSE_sessions_search with recency_bias=1.0 ranks purely by recency,
+      effectively ignoring BM25 scores (multiplied by pure decay).
+    preconditions:
+      - "vault.db has sessions from various dates"
+    steps:
+      - "Call SENSE_sessions_search with query='any keyword', recency_bias=1.0"
+      - "score = abs(bm25) * (0.0 + 1.0 * decay) = abs(bm25) * decay"
+      - "For today: decay=1.0, for yesterday: decay=0.5"
+      - "Recent sessions dominate regardless of BM25 match quality"
+    verify:
+      - "Results ordered primarily by recency"
+      - "The most recent matching session always appears first"
+
+  # ── Session Listing and Retrieval ──
+
+  - name: list-recent-sessions
+    description: >
+      SENSE_sessions_list returns sessions in reverse chronological order
+      with full metadata (summary, topics, key_facts, word_count, message_count).
+    preconditions:
+      - "vault.db has multiple sessions"
+    steps:
+      - "Call SENSE_sessions_list with default limit (5)"
+      - "SqliteClient.listRecentSessions() queries sessions ORDER BY created_at DESC LIMIT 5"
+      - "Limit capped at MAX_RESULTS=20"
+    verify:
+      - "Returns up to 5 sessions in reverse chronological order"
+      - "Each session includes id, created_at, updated_at, summary, topics, key_facts, word_count, message_count"
+      - "Default limit is 5 when not specified"
+      - "Maximum allowed limit is 20 (MAX_RESULTS cap)"
+
+  - name: retrieve-session-by-id
+    description: >
+      SENSE_sessions_retrieve fetches a single session by integer ID with full detail.
+    preconditions:
+      - "vault.db has a session with known ID"
+    steps:
+      - "Call SENSE_sessions_retrieve with session_id=42"
+      - "SqliteClient.fetchSession(42) queries sessions WHERE id=42"
+      - "Returns full session row including key_facts and topics JSON"
+    verify:
+      - "Response includes all session fields: id, created_at, updated_at, summary, topics, key_facts, word_count, message_count"
+      - "topics and key_facts are JSON-encoded arrays stored as strings"
+
+  - name: retrieve-session-not-found
+    description: >
+      SENSE_sessions_retrieve returns a structured error when session ID does not exist.
+    preconditions:
+      - "vault.db exists but has no session with ID 99999"
+    steps:
+      - "Call SENSE_sessions_retrieve with session_id=99999"
+      - "SqliteClient.fetchSession(99999) returns null"
+      - "Tool returns isError=true with JSON error message"
+    verify:
+      - "Response is error with isError=true"
+      - "Error JSON: {error: 'Session not found', session_id: 99999}"
+
+  # ── Document Retrieval ──
+
+  - name: retrieve-document-by-id
+    description: >
+      SENSE_documents_retrieve fetches document metadata by doc_id, plus reads
+      file content from disk if the file still exists at vault_root/source_path.
+    preconditions:
+      - "vault.db has a document record with known ID"
+      - "The document file exists on disk at vaultRoot/source_path"
+    steps:
+      - "Call SENSE_documents_retrieve with doc_id=7"
+      - "SqliteClient.fetchDocument(7, null) queries documents WHERE id=7"
+      - "Result contains source_path relative to vault root"
+      - "Tool resolves vaultRoot.resolve(source_path) and checks Files.exists()"
+      - "File content read via Files.readString() and added to result as 'content' field"
+    verify:
+      - "Response includes all document fields: id, source_type, source_path, title, created_at, content_hash, word_count, metadata"
+      - "Response includes 'content' field with actual file content from disk"
+
+  - name: retrieve-document-by-source-path
+    description: >
+      SENSE_documents_retrieve fetches document by source_path when doc_id not provided.
+    preconditions:
+      - "vault.db has a document with known source_path"
+    steps:
+      - "Call SENSE_documents_retrieve with source_path='org/projects/actual-server.org'"
+      - "SqliteClient.fetchDocument(null, 'org/projects/actual-server.org') queries WHERE source_path=?"
+    verify:
+      - "Document found and returned with metadata"
+      - "source_path lookup works as alternative to doc_id"
+
+  - name: retrieve-document-file-missing
+    description: >
+      When the indexed document file no longer exists on disk, SENSE_documents_retrieve
+      returns the database metadata without the content field.
+    preconditions:
+      - "vault.db has a document record but the file has been deleted from disk"
+    steps:
+      - "Call SENSE_documents_retrieve with doc_id for a deleted file"
+      - "Files.exists(filePath) returns false"
+      - "Database metadata returned without 'content' field"
+    verify:
+      - "Response contains database metadata but no 'content' field"
+      - "No error — graceful degradation when file is missing"
+
+  - name: retrieve-document-no-params
+    description: >
+      SENSE_documents_retrieve returns an error when neither doc_id nor source_path is provided.
+    preconditions:
+      - "vault.db exists"
+    steps:
+      - "Call SENSE_documents_retrieve with no arguments"
+      - "Both docId and sourcePath are null"
+    verify:
+      - "Response is error with isError=true"
+      - "Error JSON: {error: 'Must provide either doc_id or source_path'}"
+
+  - name: retrieve-document-not-found
+    description: >
+      SENSE_documents_retrieve returns an error when the document does not exist in the database.
+    preconditions:
+      - "vault.db exists but has no matching document"
+    steps:
+      - "Call SENSE_documents_retrieve with doc_id=99999"
+      - "SqliteClient.fetchDocument(99999, null) returns null"
+    verify:
+      - "Response is error with isError=true"
+      - "Error JSON: {error: 'Document not found'}"
+
+  # ── Loose Ends Reassembly ──
+
+  - name: reassemble-loose-ends-basic
+    description: >
+      SENSE_sessions_reassemble aggregates recent sessions into compact intelligence:
+      topic clusters with counts, deduplicated key facts, daily session rollups,
+      and recent session titles (not raw data).
+    preconditions:
+      - "vault.db has 50+ sessions over the past 10 days"
+    steps:
+      - "Call SENSE_sessions_reassemble with default lookback_days=10"
+      - "SqliteClient.fetchSessionsSince(10) returns all sessions from last 10 days"
+      - "For each session: daily rollup counts sessions per date"
+      - "Topics JSON parsed, frequencies aggregated into topicCounts map"
+      - "Key facts JSON parsed, deduplicated (first 40 chars prefix matching), noise filtered via isNoiseLine()"
+      - "Recent sessions: first 15 unique titles extracted via extractTitle()"
+      - "extractTitle() skips blank/noise lines, strips 'User: ' and 'Assistant: ' prefixes"
+      - "Topics sorted by frequency descending, limited to 15"
+      - "Facts limited to 30 after deduplication"
+    verify:
+      - "Response has constant-size structure regardless of session count"
+      - "Contains: lookback_days, total_sessions, sessions_per_day, recent_sessions, key_topics, key_facts"
+      - "recent_sessions has at most 15 entries with id, created_at, title"
+      - "key_topics sorted by frequency with topic name and session count"
+      - "key_facts deduplicated by 40-char case-insensitive prefix, limited to 30"
+      - "Noise lines (XML, JSON, code fences, boilerplate) filtered from facts"
+      - "Duplicate session titles are collapsed (seenTitles set)"
+      - "All-noise summaries skipped entirely (extractTitle returns null)"
+
+  - name: reassemble-loose-ends-title-extraction
+    description: >
+      extractTitle() correctly handles noise filtering, role prefix stripping,
+      and null/blank summaries in session title extraction.
+    preconditions:
+      - "Sessions have various summary formats including noise-only summaries"
+    steps:
+      - "Session A summary starts with 'User: Fix the login bug'"
+      - "Session B summary starts with '<system-reminder>\\nAssistant: some stuff'"
+      - "Session C summary is blank or all-noise lines"
+      - "Session D is a duplicate title of Session A"
+    verify:
+      - "Session A: title='Fix the login bug' (User: prefix stripped)"
+      - "Session B: first line '<system-reminder>' skipped (starts with '<'), 'Assistant: ' prefix stripped from next non-noise line"
+      - "Session C: extractTitle returns null, session skipped in recent_sessions"
+      - "Session D: title matches Session A, deduplicated via seenTitles set — only one entry appears"
+
+  # ── Session Save ──
+
+  - name: save-session-full
+    description: >
+      ACT_sessions_save persists a session with summary, topics array, key_facts
+      array, word_count, and message_count. Topics serialized as both JSON and
+      space-separated text for FTS5 indexing.
+    preconditions:
+      - "vault.db exists with sessions and sessions_fts tables"
+    steps:
+      - "Call ACT_sessions_save with summary='Configured emacs org-mode workflow', topics=['emacs','org-mode'], key_facts=['Switched to use-package','Enabled org-babel'], word_count=5000, message_count=42"
+      - "Topics serialized: JSON=['emacs','org-mode'], text='emacs org-mode'"
+      - "Key facts serialized: JSON=['Switched to use-package','Enabled org-babel'], text='Switched to use-package\\nEnabled org-babel'"
+      - "SqliteClient.saveSession(null, summary, topicsJson, keyFactsJson, topicsText, keyFactsText, 5000, 42)"
+      - "INSERT INTO sessions with all fields"
+      - "last_insert_rowid() returns new session ID"
+      - "FTS5 trigger (sessions_fts) auto-inserts summary, topics_text, key_facts_text"
+    verify:
+      - "Response: {session_id: N, status: 'saved'} with actual integer ID"
+      - "Session row has both JSON and text variants of topics and key_facts"
+      - "sessions_fts automatically updated via INSERT trigger"
+      - "Session searchable by both topic keywords and key fact text"
+
+  - name: save-session-minimal
+    description: >
+      ACT_sessions_save works with only the required 'summary' field.
+    preconditions:
+      - "vault.db exists"
+    steps:
+      - "Call ACT_sessions_save with summary='Quick debugging session'"
+      - "topics defaults to empty list, key_facts defaults to empty list"
+      - "word_count and message_count are null"
+    verify:
+      - "Session saved successfully with empty topics and key_facts arrays"
+      - "word_count and message_count stored as NULL in database"
+
+  - name: save-session-upsert-with-source-id
+    description: >
+      When saveSession is called with a source_id (used by ClaudeConversationIndexer),
+      it uses INSERT ON CONFLICT(source_id) DO UPDATE to prevent duplicates.
+    preconditions:
+      - "vault.db has an existing session with source_id='claude:abc123'"
+    steps:
+      - "SqliteClient.saveSession('claude:abc123', updatedSummary, ...) called"
+      - "ON CONFLICT(source_id) triggers UPDATE of summary, topics, key_facts, updated_at"
+      - "Session ID retrieved via SELECT id FROM sessions WHERE source_id = ?"
+    verify:
+      - "Existing session updated, not duplicated"
+      - "updated_at set to datetime('now')"
+      - "Original created_at preserved"
+
+  # ── Document Indexing Pipeline ──
+
+  - name: index-documents-fts5-only
+    description: >
+      ACT_documents_index runs the full read→chunk→upsert pipeline in FTS5-only
+      mode when Qdrant/TEI are unavailable.
+    preconditions:
+      - "Qdrant and TEI not running"
+      - "vault.db has documents and chunks tables"
+      - "Target file exists at vaultRoot/path"
+    steps:
+      - "Call ACT_documents_index with paths=['org/notes/daily.org']"
+      - "File read from vaultRoot.resolve(path)"
+      - "SHA-256 content hash computed"
+      - "Source type detected from extension: .org → 'org'"
+      - "Title extracted from #+title: or #+TITLE: line, or # heading, or filename fallback"
+      - "Word count computed via content.split('\\s+')"
+      - "db.upsertDocument() creates or updates document record"
+      - "Old chunks fetched and deleted (no Qdrant delete since unavailable)"
+      - "Content chunked: org-mode aware splitting at heading boundaries"
+      - "Chunks ≤1600 chars with 200 char overlap"
+      - "db.insertChunk() writes each chunk to chunks table + chunks_fts"
+    verify:
+      - "Response: {status: 'ok', mode: 'fts5_only', indexed: 1, skipped: 0, total_chunks: N, files: [...]}"
+      - "Each file result has path, status='indexed', chunks count, doc_id"
+      - "Chunks searchable via FTS5"
+
+  - name: index-documents-semantic-pipeline
+    description: >
+      With Qdrant+TEI available, IndexDocuments runs the full semantic pipeline:
+      read→chunk→embed→upsert to both Qdrant and SQLite.
+    preconditions:
+      - "Qdrant and TEI running and available"
+      - "Target files exist"
+    steps:
+      - "Call ACT_documents_index with paths=['org/notes/project.org']"
+      - "Semantic available: qdrant.isAvailable() && tei.isAvailable() both true"
+      - "Old chunks deleted from both SQLite and Qdrant (qdrant.delete(oldIds))"
+      - "Content chunked into segments"
+      - "Chunks embedded in batches of EMBED_BATCH_SIZE=32 via tei.embedDocuments()"
+      - "TEI adds 'search_document: ' prefix to each chunk text"
+      - "Each chunk: db.insertChunk() to SQLite, then VaultPoint built with (chunkId, embedding, payload)"
+      - "Payload includes: source_path, doc_id, chunk_index, heading_context"
+      - "Batch upserted to Qdrant via qdrant.upsert(points)"
+    verify:
+      - "Response: {status: 'ok', mode: 'semantic+fts5', ...}"
+      - "Chunks stored in both SQLite (FTS5-searchable) and Qdrant (vector-searchable)"
+      - "Qdrant points have correct payload metadata"
+      - "Embedding batch size respects TEI max_client_batch_size of 32"
+
+  - name: index-documents-content-hash-dedup
+    description: >
+      IndexDocuments skips files whose content hash matches the stored hash,
+      unless force=true is specified.
+    preconditions:
+      - "vault.db has a document with content_hash matching current file content"
+    steps:
+      - "Call ACT_documents_index with paths=['org/notes/unchanged.org'], force=false"
+      - "SHA-256 of file content matches existing document's content_hash"
+      - "File skipped with status='unchanged'"
+      - "Call again with force=true"
+      - "Hash check bypassed, file re-indexed"
+    verify:
+      - "Without force: status='unchanged', no chunks written, skipped count incremented"
+      - "With force=true: file re-indexed regardless of hash match"
+
+  - name: index-documents-file-not-found
+    description: >
+      IndexDocuments returns 'not_found' status for paths that don't exist on disk.
+    preconditions:
+      - "Path does not exist at vaultRoot"
+    steps:
+      - "Call ACT_documents_index with paths=['nonexistent/file.org']"
+      - "Files.exists() and Files.isRegularFile() return false"
+    verify:
+      - "File result: {path: 'nonexistent/file.org', status: 'not_found'}"
+      - "Other valid paths in the same request still processed"
+
+  - name: index-documents-no-paths
+    description: >
+      IndexDocuments returns an error when paths list is null or empty.
+    preconditions:
+      - "vault.db exists"
+    steps:
+      - "Call ACT_documents_index with paths=[] or no paths argument"
+    verify:
+      - "Response is error with isError=true"
+      - "Error: {status: 'error', reason: 'No paths provided'}"
+
+  - name: index-documents-org-mode-chunking
+    description: >
+      Org-mode files are chunked at heading boundaries (* , ** , *** )
+      with heading context preserved in each chunk.
+    preconditions:
+      - "Org file with multiple headings exists"
+    steps:
+      - "Org file contains: '* Planning\\ncontent\\n** Tasks\\ntask content\\n*** Subtask\\nmore'"
+      - "chunkOrgMode() splits at heading lines (* , ** , *** )"
+      - "Each heading block flushed as chunk(s) with heading context"
+      - "Large heading blocks (>1600 chars) split with 200 char overlap, break at newlines"
+      - "headingContext = heading text with asterisk prefix stripped"
+    verify:
+      - "Each chunk has headingContext set to the heading text (e.g., 'Planning', 'Tasks', 'Subtask')"
+      - "Chunks break at heading boundaries first"
+      - "Large blocks split with overlap, preferring newline break points"
+
+  - name: index-documents-plain-text-chunking
+    description: >
+      Non-org files use plain text chunking with paragraph boundary splits.
+    preconditions:
+      - "Markdown file with >1600 chars exists"
+    steps:
+      - "chunkPlainText() called for .md file"
+      - "Content passed to addChunksFromBlock() with null heading"
+      - "Split at MAX_CHUNK_CHARS=1600 with OVERLAP_CHARS=200"
+      - "Break points prefer newlines within the last half of the chunk"
+    verify:
+      - "All chunks have headingContext=null"
+      - "Chunks have overlapping content at boundaries"
+      - "Short files (≤1600 chars) produce a single chunk"
+
+  - name: index-documents-source-type-detection
+    description: >
+      detectSourceType() correctly identifies file types from extensions.
+    preconditions:
+      - "Various file types exist"
+    steps:
+      - "Index files with extensions: .org, .md, .txt, .json, .yaml, .yml, .py"
+    verify:
+      - ".org → 'org'"
+      - ".md → 'markdown'"
+      - ".txt → 'text'"
+      - ".json → 'json'"
+      - ".yaml and .yml → 'yaml'"
+      - "Unknown extensions → 'text'"
+
+  - name: index-documents-title-extraction
+    description: >
+      extractTitle() tries org-mode #+title:, then markdown # heading,
+      then falls back to filename.
+    preconditions:
+      - "Files with various title formats"
+    steps:
+      - "Org file with '#+title: My Notes' → title='My Notes'"
+      - "Org file with '#+TITLE: My Notes' → title='My Notes' (case-insensitive prefix)"
+      - "Markdown file with '# Project Docs' → title='Project Docs'"
+      - "Plain text with no heading → title=filename (e.g., 'notes.txt')"
+    verify:
+      - "#+title: and #+TITLE: both parsed (first 10 lines scanned)"
+      - "# heading parsed as markdown title"
+      - "Filename used as fallback"
+
+  # ── VaultWatcher Background Pipeline ──
+
+  - name: vaultwatcher-startup-file-lock
+    description: >
+      VaultWatcher acquires a file lock to ensure only one instance runs system-wide.
+      Multiple gateway processes (spawned by MCP proxy) share the same lock file.
+    preconditions:
+      - "No other VaultWatcher instance running"
+      - "~/vault/data/ directory exists"
+    steps:
+      - "VaultWatcher.start() called"
+      - "FileChannel opened on ~/vault/data/.watcher.lock"
+      - "tryLock() succeeds — exclusive lock acquired"
+      - "running set to true"
+      - "Three virtual threads spawned: watcher-org, watcher-claude, watcher-initial-scan"
+      - "Email sync scheduled at emailSyncIntervalMs intervals"
+    verify:
+      - "Lock file created at ~/vault/data/.watcher.lock"
+      - "Only one VaultWatcher processes events across all gateway instances"
+      - "Subsequent instances log 'another instance holds the lock, skipping'"
+
+  - name: vaultwatcher-lock-contention
+    description: >
+      When another VaultWatcher holds the lock, the new instance skips all
+      watching and signals initialScanDone immediately.
+    preconditions:
+      - "Another VaultWatcher instance already holds the file lock"
+    steps:
+      - "Second VaultWatcher.start() called"
+      - "tryLock() returns null (lock held by other process)"
+      - "initialScanDone.countDown() called immediately"
+      - "No watch threads started"
+    verify:
+      - "No duplicate indexing occurs"
+      - "awaitInitialScan() returns immediately (latch already counted down)"
+      - "Stderr: '[gateway] Watcher: another instance holds the lock, skipping'"
+
+  - name: vaultwatcher-initial-scan
+    description: >
+      On startup, VaultWatcher performs a full scan of ~/vault/org/ and
+      ~/.claude/projects/, indexing any new or changed files.
+    preconditions:
+      - "~/vault/org/ contains .org files"
+      - "~/.claude/projects/ contains .jsonl conversation files"
+    steps:
+      - "initialScan() runs on virtual thread watcher-initial-scan"
+      - "checkReindexMarkers() checks for .reindex-{type} sentinel files"
+      - "Files.walk(orgDir) finds all .org files recursively"
+      - "Each .org file passed to indexer.indexIfChanged()"
+      - "Files.walk(claudeProjectsDir) finds all .jsonl files (excluding dot-prefixed)"
+      - "Each .jsonl file passed to claudeIndexer.indexIfChanged()"
+      - "initialScanDone.countDown() signals completion"
+      - "Initial email sync runs if emailSyncIntervalMs > 0"
+    verify:
+      - "All .org files scanned and indexed if changed"
+      - "All .jsonl files scanned (excluding hidden files starting with '.')"
+      - "Scan counts logged: 'initial scan complete — N org files, M claude conversations indexed'"
+      - "initialScanDone latch released after scan completes"
+      - "Watch event processing waits until initial scan completes (initialScanDone.await())"
+
+  - name: vaultwatcher-reindex-markers
+    description: >
+      Sentinel files .reindex-{type} trigger content hash invalidation, forcing
+      re-indexing of specific source types on next scan.
+    preconditions:
+      - "File ~/vault/data/.reindex-claude exists"
+      - "vault.db has documents with source type prefix 'claude:%'"
+    steps:
+      - "checkReindexMarkers() detects .reindex-claude marker"
+      - "db.invalidateContentHashes('claude:%') sets content_hash='invalidated' for all matching docs"
+      - "Marker file deleted after processing"
+      - "Normal scan proceeds — content hash mismatches trigger re-indexing"
+    verify:
+      - "All documents with source_path LIKE 'claude:%' have content_hash='invalidated'"
+      - "Marker file removed from disk"
+      - "Re-indexing occurs for those documents on next scan pass"
+      - "Supported source types: claude, org, email"
+
+  - name: vaultwatcher-org-file-change-debounce
+    description: >
+      File changes are debounced to prevent redundant re-indexing during rapid edits.
+      Org files use 2s debounce, .jsonl files use 10s.
+    preconditions:
+      - "VaultWatcher running and monitoring ~/vault/org/"
+      - "Initial scan completed"
+    steps:
+      - "User saves an org file rapidly 5 times in 1 second"
+      - "WatchService emits 5 ENTRY_MODIFY events"
+      - "Each event calls debounce() which cancels any pending ScheduledFuture for the same path"
+      - "Generation counter increments with each debounce call"
+      - "Only the last scheduled handler fires (after 2s quiet period)"
+      - "Handler checks generation counter matches — stale handlers are no-ops"
+      - "awaitQueryQuiet(5000) defers indexing if agent reads are active"
+      - "indexer.indexIfChanged() runs on worker virtual thread"
+    verify:
+      - "Only one indexing operation occurs despite 5 file change events"
+      - "Debounce delay is 2000ms for .org files (debounceMs constructor param)"
+      - "Debounce delay is 10000ms for .jsonl files (CONVERSATION_DEBOUNCE_MS)"
+      - "Stale debounce generations are ignored (only latest fires)"
+
+  - name: vaultwatcher-claude-conversation-change
+    description: >
+      Claude conversation .jsonl file changes trigger ClaudeConversationIndexer,
+      which parses messages, generates summaries, and upserts to sessions + documents.
+    preconditions:
+      - "VaultWatcher monitoring ~/.claude/projects/"
+      - "A .jsonl conversation file is modified"
+    steps:
+      - "WatchService detects ENTRY_MODIFY on conversation.jsonl"
+      - "Debounced with 10s delay (CONVERSATION_DEBOUNCE_MS)"
+      - "handleClaudeChange() filters: must end with .jsonl, must not start with '.'"
+      - "awaitQueryQuiet(5000) waits for agent reads to complete"
+      - "claudeIndexer.indexIfChanged() processes the file"
+    verify:
+      - "Hidden .jsonl files (starting with '.') are skipped"
+      - "Non-.jsonl files are skipped"
+      - "Indexing deferred when agent queries are active"
+
+  - name: vaultwatcher-directory-registration
+    description: >
+      WatchService registers all subdirectories recursively, skipping hidden dirs,
+      node_modules, and __pycache__. New subdirectories are registered dynamically.
+    preconditions:
+      - "VaultWatcher watching a directory tree"
+    steps:
+      - "registerTree() walks directory tree via FileVisitor"
+      - "Directories starting with '.' skipped (SKIP_SUBTREE)"
+      - "'node_modules' and '__pycache__' directories skipped"
+      - "All other directories registered for ENTRY_CREATE and ENTRY_MODIFY events"
+      - "When ENTRY_CREATE is a directory, registerTree() called for the new subtree"
+    verify:
+      - "Hidden directories excluded from watching"
+      - "node_modules and __pycache__ excluded"
+      - "New subdirectories dynamically registered"
+
+  - name: vaultwatcher-write-isolation
+    description: >
+      VaultWatcher defers write operations when agent read queries are in flight,
+      preventing SQLite contention.
+    preconditions:
+      - "Agent is performing a read query via SqliteClient"
+      - "VaultWatcher needs to index a changed file"
+    steps:
+      - "handleOrgChange() calls awaitQueryQuiet(5000)"
+      - "db.activeQueryCount() returns >0 (agent read in progress)"
+      - "Loop sleeps 100ms increments, checking activeQueryCount()"
+      - "Agent read completes, activeQueryCount() returns 0"
+      - "Indexing proceeds"
+    verify:
+      - "Watcher waits up to 5000ms for agent reads to complete"
+      - "If 5s deadline exceeded, indexing proceeds anyway"
+      - "100ms polling interval between checks"
+
+  - name: vaultwatcher-email-periodic-sync
+    description: >
+      Email syncing runs on a periodic schedule (not inotify) because mbsync
+      writes temp files that confuse file watchers.
+    preconditions:
+      - "emailSyncIntervalMs > 0"
+      - "mbsync installed and configured"
+    steps:
+      - "debounceScheduler.scheduleAtFixedRate() schedules syncEmail()"
+      - "syncEmail() calls awaitQueryQuiet(5000) first"
+      - "emailIndexer.syncAndIndex() invoked on worker thread"
+    verify:
+      - "Email sync runs at configured interval"
+      - "Sync deferred when agent reads active"
+      - "Email sync also runs once after initial scan completion"
+
+  - name: vaultwatcher-orphan-handling
+    description: >
+      When parent MCP session dies, VaultWatcher can be marked as orphaned
+      to signal it should finish current work then exit.
+    preconditions:
+      - "VaultWatcher running"
+    steps:
+      - "markOrphaned() called"
+      - "orphaned volatile boolean set to true"
+      - "isOrphaned() returns true"
+    verify:
+      - "Orphan state is observable via isOrphaned()"
+      - "Watcher can be cleanly shut down after finishing current scan"
+
+  - name: vaultwatcher-shutdown
+    description: >
+      VaultWatcher.shutdown() cleanly stops all threads and releases the file lock.
+    preconditions:
+      - "VaultWatcher running with active watch threads"
+    steps:
+      - "shutdown() called"
+      - "running set to false"
+      - "debounceScheduler.shutdownNow() cancels pending debounce futures"
+      - "workerPool.close() terminates worker virtual threads"
+      - "processLock released, lockChannel closed"
+    verify:
+      - "Watch loops exit (running=false checked in while loop)"
+      - "File lock released for other instances to acquire"
+      - "No resource leaks"
+
+  # ── DocumentIndexer ──
+
+  - name: document-indexer-if-changed
+    description: >
+      DocumentIndexer.indexIfChanged() reads file content outside the write lock,
+      then performs all DB operations (upsert, delete old chunks, insert new chunks)
+      in a single transaction.
+    preconditions:
+      - "vault.db exists"
+      - "File content has changed since last indexing"
+    steps:
+      - "File content read via Files.readString() (outside write executor)"
+      - "SHA-256 computed, relative path resolved"
+      - "Source type detected, title extracted, word count computed, chunks generated"
+      - "db.executeWrite() wraps all DB operations"
+      - "conn.setAutoCommit(false) — explicit transaction"
+      - "db.fetchDocument() checks existing content_hash"
+      - "Hash mismatch → db.upsertDocument(), db.deleteChunks(), N x db.insertChunk()"
+      - "conn.commit() on success, conn.rollback() on exception"
+      - "conn.setAutoCommit() restored in finally block"
+    verify:
+      - "File I/O happens on caller thread (outside write lock)"
+      - "All DB writes atomic within a single transaction"
+      - "Transaction rolled back on any exception"
+      - "Returns true when indexed, false when skipped (unchanged)"
+
+  - name: document-indexer-unchanged-skip
+    description: >
+      DocumentIndexer skips files whose content hash has not changed.
+    preconditions:
+      - "vault.db has document with matching content_hash"
+    steps:
+      - "indexIfChanged() reads file, computes SHA-256"
+      - "db.fetchDocument() returns existing doc with same content_hash"
+      - "executeWrite callback returns false immediately"
+    verify:
+      - "No chunks deleted or inserted"
+      - "No document metadata updated"
+      - "Returns false"
+
+  # ── ClaudeConversationIndexer ──
+
+  - name: claude-indexer-conversation-parsing
+    description: >
+      ClaudeConversationIndexer parses .jsonl conversation files, extracting
+      user and assistant messages while skipping other entry types.
+    preconditions:
+      - ".jsonl file with user, assistant, system, and tool_use entries"
+    steps:
+      - "BufferedReader reads line-by-line"
+      - "Each line parsed as JSON via ObjectMapper"
+      - "Only entries with type='user' or type='assistant' processed"
+      - "Content extracted: textual content from message.content (string or array)"
+      - "Array content: text items extracted, thinking/tool_use blocks skipped"
+      - "Blank content messages skipped"
+    verify:
+      - "Only user and assistant messages in output"
+      - "System entries, tool_use entries skipped"
+      - "Content arrays correctly parsed — only 'text' type items extracted"
+      - "Malformed lines silently skipped (exception caught and ignored)"
+
+  - name: claude-indexer-title-generation
+    description: >
+      Title generated from first non-noise line of first user message,
+      truncated to 80 chars with '...' suffix.
+    preconditions:
+      - "Conversation has user messages"
+    steps:
+      - "Iterate messages looking for role='user' with non-blank content"
+      - "Split content on newlines, find first line passing !isNoiseLine()"
+      - "Title truncated to 80 chars + '...' if longer"
+      - "If no substantive user line found, title = 'Untitled conversation'"
+    verify:
+      - "Title comes from first substantive user message line"
+      - "Long titles truncated at 80 chars"
+      - "Noise lines (XML, JSON, code fences, boilerplate) skipped"
+      - "Fallback to 'Untitled conversation' when all content is noise"
+
+  - name: claude-indexer-topic-extraction
+    description: >
+      Topics extracted via keyword matching against a predefined keyword→topic map.
+      Only user messages scanned, up to 8 topics per conversation.
+    preconditions:
+      - "Conversation has user messages mentioning various topics"
+    steps:
+      - "User messages scanned for keyword matches (case-insensitive)"
+      - "Keywords mapped to canonical topics: 'emacs'→'emacs', 'elisp'→'emacs', 'sqlite'→'sqlite'"
+      - "LinkedHashSet preserves insertion order and deduplicates"
+      - "Stops after 8 topics found"
+    verify:
+      - "Topics are canonical names, not raw keywords ('elisp' → 'emacs')"
+      - "At most 8 topics per conversation"
+      - "Duplicate topics collapsed (same keyword maps to same topic)"
+      - "Only user messages considered"
+
+  - name: claude-indexer-noise-filter
+    description: >
+      isNoiseLine() filters out a comprehensive set of non-substantive content
+      including XML tags, JSON, code fences, role prefixes, subagent prompts,
+      session continuation boilerplate, and imperative commands with file paths.
+    preconditions:
+      - "Various noise line patterns present in conversation content"
+    steps:
+      - "Lines starting with '<' filtered (XML/HTML tags)"
+      - "Lines starting with '{' or '[' filtered (JSON payloads)"
+      - "Lines starting with '```' filtered (code fences)"
+      - "Lines starting with '## ' or '### ' filtered (markdown headings)"
+      - "Elisp code: (use-package, (defun, (setq, (require filtered"
+      - "Numbered lists (1. ..., 2. ...) filtered"
+      - "Bullet points (- ..., * ...) filtered"
+      - "Session continuation: 'This session is being continued...'"
+      - "Imperative commands with paths: 'search /home/...', 'read ~/...'"
+      - "Assistant leaks: 'I'll ...', 'Let me ...', 'Here's ...'"
+      - "Lines < 3 chars filtered as trivial"
+    verify:
+      - "All documented noise patterns return true"
+      - "Substantive user intent lines return false"
+      - "Case-insensitive matching used for many patterns"
+
+  - name: claude-indexer-llm-fact-scoring
+    description: >
+      ClaudeConversationIndexer delegates to LlmFactScorer for title and key fact
+      quality scoring. Scored title and facts used in summary and database.
+    preconditions:
+      - "LlmFactScorer available"
+      - "Conversation parsed with title and key facts extracted"
+    steps:
+      - "First 5 non-noise user message lines collected as titleContext"
+      - "LlmFactScorer.score(title, keyFacts, titleContext) called"
+      - "Returns scored title (potentially improved) and filtered/ranked facts"
+      - "Scored title used in summary generation and document upsert"
+      - "Scored facts serialized to JSON and stored in sessions table"
+    verify:
+      - "LlmFactScorer receives raw title, facts, and context"
+      - "Scored output used in all downstream operations"
+      - "titleContext limited to 5 lines"
+
+  - name: claude-indexer-content-hash-dedup
+    description: >
+      Conversation content hash based on file size + mtime prevents re-indexing
+      unchanged conversations. Uses source_id for session dedup.
+    preconditions:
+      - "Conversation file already indexed"
+      - "File not modified since last index"
+    steps:
+      - "size + mtime → SHA-256 content hash"
+      - "source_path = 'claude:' + sessionId (from filename without .jsonl)"
+      - "db.fetchDocument(null, sourcePath) returns existing doc"
+      - "contentHash matches existing content_hash → returns false (skipped)"
+    verify:
+      - "Content hash derived from size:mtime, not full file content (performance optimization)"
+      - "source_id format: 'claude:<session-id>'"
+      - "Unchanged files skipped without reading full content into DB"
+
+  - name: claude-indexer-summary-generation
+    description: >
+      generateSummary() creates a structured summary from conversation title
+      and first 6 substantive exchanges, capped at 2000 chars.
+    preconditions:
+      - "Conversation parsed with messages"
+    steps:
+      - "Summary starts with scored title + newline"
+      - "First 6 messages with substantive content included"
+      - "Each message: extractSubstantiveContent() skips noise lines, takes first 300 chars"
+      - "Role prefix added: 'User: ' or 'Assistant: '"
+      - "Total summary capped at MAX_SUMMARY_CHARS=2000"
+    verify:
+      - "Summary includes title as first line"
+      - "Up to 6 substantive exchanges included"
+      - "Noise lines filtered from exchange content"
+      - "Summary truncated at 2000 chars with '...' suffix"
+
+  - name: claude-indexer-transaction-atomicity
+    description: >
+      All DB operations (session save, document upsert, chunk delete/insert)
+      run in a single transaction with rollback on failure.
+    preconditions:
+      - "vault.db exists"
+      - "Conversation file changed"
+    steps:
+      - "db.executeWrite() wrapper entered"
+      - "conn.setAutoCommit(false) starts transaction"
+      - "db.saveSession(sourcePath, ...) — session upsert with source_id"
+      - "db.upsertDocument(sourcePath, 'claude', ...) — document upsert"
+      - "db.fetchChunksForDocument(docId) + db.deleteChunks(docId) — clear old chunks"
+      - "N x db.insertChunk() — write new chunks + FTS5 entries"
+      - "conn.commit() — all-or-nothing"
+      - "On exception: conn.rollback()"
+    verify:
+      - "Session and document always consistent (both updated or neither)"
+      - "Chunks fully replaced (old deleted, new inserted) atomically"
+      - "autoCommit restored in finally block"
+
+  # ── EmailIndexer ──
+
+  - name: email-indexer-sync-and-index
+    description: >
+      EmailIndexer.syncAndIndex() first pulls new mail via mbsync, then walks
+      ~/Mail/ Maildir directories to index new messages.
+    preconditions:
+      - "mbsync installed and configured"
+      - "~/Mail/ contains Maildir-format email accounts"
+    steps:
+      - "runMbsync() shells out to 'mbsync -a -q' with 120s timeout"
+      - "Walk ~/Mail/ — each top-level subdirectory is an account"
+      - "indexAccount() walks up to 3 levels deep looking for cur/ and new/ directories"
+      - "Each file in cur/ or new/ passed to indexMessage()"
+    verify:
+      - "mbsync called with -a (all accounts) and -q (quiet)"
+      - "Each account directory processed independently"
+      - "Only files in cur/ and new/ subdirectories are processed"
+      - "Total indexed count logged: '[gateway] Email: indexed N new messages'"
+
+  - name: email-indexer-mbsync-not-installed
+    description: >
+      When mbsync is not installed, EmailIndexer logs a message and continues
+      to index existing Maildir files.
+    preconditions:
+      - "mbsync not available on PATH"
+    steps:
+      - "ProcessBuilder('mbsync', '-a', '-q') throws IOException"
+      - "Exception caught, logged: '[gateway] Email: mbsync not available'"
+      - "indexing of existing Maildir files proceeds"
+    verify:
+      - "No crash when mbsync missing"
+      - "Existing email files still indexed"
+
+  - name: email-indexer-mbsync-timeout
+    description: >
+      If mbsync hangs, it is forcibly killed after 120 seconds.
+    preconditions:
+      - "mbsync process hangs"
+    steps:
+      - "p.waitFor(120, TimeUnit.SECONDS) returns false"
+      - "p.destroyForcibly() called"
+      - "Logged: '[gateway] Email: mbsync timed out after 120s'"
+    verify:
+      - "Process killed after 120s"
+      - "Indexing continues with whatever mail was already synced"
+
+  - name: email-indexer-rfc822-parsing
+    description: >
+      parseEmail() correctly parses RFC 822 email format including header
+      continuation lines, message-id extraction, and body truncation.
+    preconditions:
+      - "Email file in Maildir format"
+    steps:
+      - "Raw email split at first '\\n\\n' into header section and body"
+      - "Headers parsed line by line with HEADER_PATTERN regex"
+      - "Continuation lines (starting with space/tab) appended to current header"
+      - "Headers stored lowercase for case-insensitive lookup"
+      - "message-id extracted with <> stripped; if blank, SHA-256 of first 500 chars used"
+      - "Body truncated to MAX_BODY_CHARS=50000"
+    verify:
+      - "Multi-line headers correctly joined"
+      - "Header names lowercased"
+      - "Message-ID angle brackets stripped"
+      - "Fallback hash generated for emails without Message-ID"
+      - "Body capped at 50000 chars"
+
+  - name: email-indexer-maildir-flags
+    description: >
+      Maildir filename flags correctly parsed for read and flagged status.
+    preconditions:
+      - "Email files with various Maildir filename conventions"
+    steps:
+      - "Filename 'msg123:2,S' — contains ':2,' and 'S' → isRead=true, isFlagged=false"
+      - "Filename 'msg456:2,SF' — contains 'S' and 'F' → isRead=true, isFlagged=true"
+      - "Filename 'msg789' — no ':2,' → isRead=false, isFlagged=false"
+    verify:
+      - "'S' flag in filename → isRead=true"
+      - "'F' flag in filename → isFlagged=true"
+      - "Both flags require ':2,' prefix in filename"
+
+  - name: email-indexer-folder-extraction
+    description: >
+      extractFolder() determines email folder from Maildir path structure.
+    preconditions:
+      - "Email files in various Maildir folders"
+    steps:
+      - "~/Mail/gmail/INBOX/cur/msg → folder='INBOX'"
+      - "~/Mail/gmail/.Sent/cur/msg → folder='Sent' (leading dot stripped)"
+      - "~/Mail/gmail/cur/msg → folder='INBOX' (cur/new at root = INBOX)"
+    verify:
+      - "Folder name extracted from first path component relative to account dir"
+      - "Leading dots stripped from folder names"
+      - "Root-level cur/new directories mapped to 'INBOX'"
+
+  - name: email-indexer-dedup
+    description: >
+      EmailIndexer deduplicates emails using content_hash (SHA-256 of file absolute path)
+      stored in the emails table.
+    preconditions:
+      - "Email already indexed in vault.db"
+    steps:
+      - "SHA-256 computed from file absolute path"
+      - "isAlreadyIndexed() queries: SELECT 1 FROM emails WHERE content_hash = ? LIMIT 1"
+      - "Result exists → skip"
+    verify:
+      - "Already-indexed emails skipped without re-parsing"
+      - "Content hash based on absolute file path (not content)"
+      - "INSERT OR IGNORE used for additional safety against race conditions"
+
+  - name: email-indexer-malformed-skip
+    description: >
+      Malformed email files are silently skipped without crashing the indexer.
+    preconditions:
+      - "Corrupted or non-email file exists in cur/ or new/ directory"
+    steps:
+      - "parseEmail() returns null (no header/body separator found)"
+      - "Or: messageId is blank after parsing"
+      - "indexMessage() returns false"
+      - "Outer loop catches any exception and continues to next file"
+    verify:
+      - "No crash from malformed emails"
+      - "Other emails in the same account still indexed"
+      - "No error logged for individual malformed files (silently skipped)"
+
+  # ── SqliteClient Infrastructure ──
+
+  - name: sqlite-client-wal-mode
+    description: >
+      SqliteClient configures both read and write connections for WAL mode
+      with appropriate busy timeouts.
+    preconditions:
+      - "vault.db path configured"
+    steps:
+      - "Write connection: PRAGMA journal_mode=WAL, busy_timeout=30000, foreign_keys=ON"
+      - "Read connection: PRAGMA journal_mode=WAL, busy_timeout=5000, query_only=ON"
+      - "Write connection triggers migrateSchema()"
+    verify:
+      - "Both connections use WAL mode"
+      - "Write busy timeout: 30 seconds"
+      - "Read busy timeout: 5 seconds"
+      - "Read connection is query_only (prevents accidental writes)"
+      - "Foreign keys enforced on write connection"
+
+  - name: sqlite-client-dedicated-platform-threads
+    description: >
+      All JDBC operations dispatched to dedicated platform threads to prevent
+      virtual thread carrier pinning from sqlite-jdbc synchronized blocks.
+    preconditions:
+      - "SqliteClient initialized"
+    steps:
+      - "writeExecutor = single-thread executor with platform thread named 'sqlite-write'"
+      - "readExecutor = single-thread executor with platform thread named 'sqlite-read'"
+      - "executeWrite() submits Callable to writeExecutor, caller blocks on Future.get()"
+      - "executeRead() submits Callable to readExecutor, blocks on Future.get()"
+      - "Daemon threads — won't prevent JVM shutdown"
+    verify:
+      - "All write operations run on sqlite-write thread"
+      - "All read operations run on sqlite-read thread"
+      - "Virtual threads calling executeWrite/Read block without carrier pinning"
+      - "Both threads are daemon threads"
+
+  - name: sqlite-client-reentrant-execution
+    description: >
+      executeWrite() and executeRead() support reentrant calls: if already on the
+      correct executor thread, the operation executes directly without deadlock.
+    preconditions:
+      - "Code calls executeWrite() from within another executeWrite() callback"
+    steps:
+      - "Outer executeWrite() runs on sqlite-write thread"
+      - "Inner executeWrite() detects Thread.currentThread() == writeThread"
+      - "Inner operation executes directly (no executor submit)"
+      - "Inner call skips WAL checkpoint (outer call handles it)"
+    verify:
+      - "No deadlock from nested executeWrite() calls"
+      - "No deadlock from nested executeRead() calls"
+      - "Reentrant detection via volatile writeThread/readThread fields"
+
+  - name: sqlite-client-wal-checkpoint-periodic
+    description: >
+      WAL checkpoints run automatically: passive checkpoint every 100 write
+      operations, with additional size-based checkpointing at 50MB WAL.
+    preconditions:
+      - "vault.db with WAL mode"
+    steps:
+      - "Every writeExecutor completion calls maybeCheckpointWal()"
+      - "writeCount incremented atomically"
+      - "Every 100th write: PRAGMA wal_checkpoint(PASSIVE)"
+      - "Every 10th write: check WAL file size, checkpoint if >50MB"
+      - "Checkpoint failures logged but don't block writes"
+    verify:
+      - "Periodic checkpoint at CHECKPOINT_INTERVAL=100 writes"
+      - "WAL size checked every 10 writes against WAL_SIZE_CAP=50MB"
+      - "PASSIVE checkpoint mode (doesn't block readers)"
+      - "Checkpoint failures non-fatal"
+
+  - name: sqlite-client-active-query-tracking
+    description: >
+      Read operations increment/decrement activeQueries counter, enabling
+      VaultWatcher to defer writes during agent reads.
+    preconditions:
+      - "Agent performing a search query"
+    steps:
+      - "executeRead() calls activeQueries.incrementAndGet() before submitting"
+      - "After read completes (or fails), activeQueries.decrementAndGet() in finally block"
+      - "activeQueryCount() returns current count"
+    verify:
+      - "Counter accurately reflects in-flight read queries"
+      - "Decremented in finally block (even on exception)"
+      - "Thread-safe via AtomicInteger"
+
+  - name: sqlite-client-fts5-token-quoting
+    description: >
+      sanitizeFts5Query() produces safe FTS5 MATCH expressions by individually
+      quoting each whitespace-delimited token.
+    preconditions:
+      - "Various user query strings"
+    steps:
+      - "'hello world' → '\"hello\" \"world\"'"
+      - "'emacs config setup' → '\"emacs\" \"config\" \"setup\"'"
+      - "'test\"query' → '\"test\"\"query\"' (embedded quote doubled)"
+      - "'  spaced   out  ' → '\"spaced\" \"out\"' (whitespace normalized)"
+      - "'' or null → '\"\"'"
+    verify:
+      - "Each token wrapped in double quotes"
+      - "Embedded double quotes escaped by doubling"
+      - "Leading/trailing whitespace stripped"
+      - "Multiple spaces between tokens collapsed"
+      - "Empty/null input returns empty string literal"
+
+  - name: sqlite-client-schema-migration
+    description: >
+      migrateSchema() runs on write connection initialization, adding columns
+      and triggers idempotently.
+    preconditions:
+      - "vault.db opened for writing"
+    steps:
+      - "ALTER TABLE sessions ADD COLUMN source_id TEXT — idempotent (catches 'duplicate column')"
+      - "CREATE UNIQUE INDEX idx_sessions_source_id ON sessions(source_id) — uses IF NOT EXISTS"
+      - "Checks for sessions_au trigger; creates if missing"
+      - "Trigger: AFTER UPDATE ON sessions — deletes old FTS5 entry, inserts new one"
+    verify:
+      - "source_id column added if not present"
+      - "Unique index on source_id enables upsert"
+      - "FTS5 update trigger keeps sessions_fts in sync with sessions table"
+      - "Migration is idempotent — safe to run multiple times"
+
+  - name: sqlite-client-knowledge-stats
+    description: >
+      knowledgeStats() returns aggregate statistics about the vault knowledge store.
+    preconditions:
+      - "vault.db with data"
+    steps:
+      - "executeRead() queries: COUNT(*) from sessions, documents, chunks"
+      - "COUNT(*) from documents WHERE source_type='email'"
+      - "MIN/MAX created_at from sessions"
+      - "Database size via pragma_page_count * pragma_page_size"
+      - "WAL file size checked if WAL file exists"
+      - "write_ops_total from writeCount counter"
+    verify:
+      - "Returns: sessions, documents, chunks, emails counts"
+      - "Returns: oldest_session, newest_session timestamps"
+      - "Returns: db_size_bytes, wal_size_bytes (if WAL exists), write_ops_total"
+
+  - name: sqlite-client-close
+    description: >
+      close() cleanly shuts down both executor threads and closes connections.
+    preconditions:
+      - "SqliteClient with open connections"
+    steps:
+      - "writeExecutor.submit() to close writeConn on write thread"
+      - "readExecutor.submit() to close readConn on read thread"
+      - "Both executors shut down"
+    verify:
+      - "Connections closed on their owning threads"
+      - "Exceptions during close silently ignored"
+      - "Executors shut down after connection close"
+
+  # ── QdrantVectorClient ──
+
+  - name: qdrant-client-connect-ensure-collection
+    description: >
+      QdrantVectorClient.connect() creates the vault_chunks collection if it
+      doesn't exist, using cosine distance and 768 dimensions.
+    preconditions:
+      - "Qdrant server running"
+    steps:
+      - "ManagedChannel built via Grpc.newChannelBuilder with InsecureChannelCredentials"
+      - "QdrantClient constructed from ManagedChannel"
+      - "collectionExistsAsync() checked"
+      - "If not exists: createCollectionAsync() with VectorParams(size=768, distance=Cosine)"
+    verify:
+      - "Collection created with correct dimensions (768 for nomic-embed-text-v1.5)"
+      - "Cosine distance metric used"
+      - "TCP transport forced (avoids Java 25 'unix NameResolver' bug)"
+      - "Idempotent — existing collection not recreated"
+
+  - name: qdrant-client-availability-check
+    description: >
+      isAvailable() verifies Qdrant connectivity by listing collections.
+    preconditions:
+      - "QdrantVectorClient initialized"
+    steps:
+      - "isAvailable() calls client.listCollectionsAsync().get()"
+      - "Returns true on success, false on any exception"
+      - "Returns false if client is null (not yet connected)"
+    verify:
+      - "Available when Qdrant responds to listCollections"
+      - "Unavailable when gRPC connection fails"
+      - "Unavailable when client is null"
+
+  - name: qdrant-client-upsert-search-delete
+    description: >
+      QdrantVectorClient supports upsert, search, and delete operations on
+      the vault_chunks collection.
+    preconditions:
+      - "Qdrant connected with vault_chunks collection"
+    steps:
+      - "upsert(): VaultPoint(id, vector, payload) → PointStruct with typed payload values"
+      - "Payload supports String, Number (as long), Boolean values"
+      - "Empty upsert list is a no-op"
+      - "search(): query vector → SearchPoints with payload enabled → scored results"
+      - "Results mapped: point_id, score, and all payload fields"
+      - "delete(): list of point IDs → deleteAsync()"
+      - "Empty delete list is a no-op"
+    verify:
+      - "Upsert handles mixed payload types correctly"
+      - "Search returns scored results with full payload"
+      - "Delete removes specific points by ID"
+      - "Empty batch operations are no-ops (no server call)"
+
+  # ── TeiClient ──
+
+  - name: tei-client-embed-query
+    description: >
+      TeiClient.embedQuery() adds the 'search_query: ' prefix required by
+      nomic-embed-text-v1.5 and returns a single 768-dim float array.
+    preconditions:
+      - "TEI server running with nomic-embed-text-v1.5"
+    steps:
+      - "embedQuery('emacs configuration') → embed(['search_query: emacs configuration'])"
+      - "POST /embed with JSON body {inputs: ['search_query: emacs configuration']}"
+      - "Response: [[0.1, -0.2, ...]] parsed to float[]"
+    verify:
+      - "'search_query: ' prefix prepended automatically"
+      - "Single embedding vector returned"
+      - "768 dimensions (nomic v1.5)"
+
+  - name: tei-client-embed-documents
+    description: >
+      TeiClient.embedDocuments() adds 'search_document: ' prefix to each text
+      and returns batch embeddings.
+    preconditions:
+      - "TEI server running"
+    steps:
+      - "embedDocuments(['chunk 1', 'chunk 2']) → embed(['search_document: chunk 1', 'search_document: chunk 2'])"
+      - "POST /embed with batch input"
+      - "Response parsed to List<float[]>"
+    verify:
+      - "'search_document: ' prefix prepended to each text"
+      - "Batch embedding returned (one vector per input text)"
+      - "120s timeout on HTTP request"
+
+  - name: tei-client-availability-check
+    description: >
+      isAvailable() checks TEI health via GET /info endpoint with 5s timeout.
+    preconditions:
+      - "TeiClient initialized"
+    steps:
+      - "GET /info sent to TEI base URL"
+      - "Returns true if HTTP 200, false otherwise"
+      - "Returns false on connection timeout or exception"
+    verify:
+      - "5s timeout for health check"
+      - "Non-200 status → unavailable"
+      - "Connection failure → unavailable (not exception)"
+
+  - name: tei-client-embed-failure
+    description: >
+      TEI embed failure (non-200 response) throws RuntimeException with status and body.
+    preconditions:
+      - "TEI server returns error response"
+    steps:
+      - "POST /embed returns HTTP 413 (payload too large)"
+      - "RuntimeException thrown: 'TEI embed failed (HTTP 413): ...'"
+    verify:
+      - "Exception includes HTTP status code"
+      - "Exception includes response body for debugging"
+
+  # ── Error Paths ──
+
+  - name: search-hybrid-total-failure
+    description: >
+      When both FTS5 and semantic search fail, SearchHybrid returns isError=true
+      with the exception message.
+    preconditions:
+      - "vault.db is corrupted or tables missing"
+    steps:
+      - "searchFulltext() throws SQLException"
+      - "Exception caught in outer try-catch"
+    verify:
+      - "Response: 'Search hybrid failed: <message>' with isError=true"
+      - "No partial results returned"
+
+  - name: sqlite-busy-error
+    description: >
+      SQLite busy errors handled by busy_timeout pragma. Write operations
+      wait up to 30s, read operations wait up to 5s.
+    preconditions:
+      - "Another process holding a write lock on vault.db"
+    steps:
+      - "Write operation submitted to writeExecutor"
+      - "JDBC blocks up to busy_timeout=30000ms"
+      - "If still busy after timeout: SQLException thrown"
+    verify:
+      - "Write operations retry internally for up to 30 seconds"
+      - "Read operations retry for up to 5 seconds"
+      - "SQLException propagated to caller after timeout exhausted"
+
+  - name: qdrant-unavailable-graceful-degradation
+    description: >
+      All tools that use Qdrant degrade gracefully to FTS5-only when Qdrant
+      is unavailable. No errors returned to the user.
+    preconditions:
+      - "Qdrant server not running"
+    steps:
+      - "SearchHybrid: qdrant.isAvailable() returns false → FTS5-only mode"
+      - "IndexDocuments: semanticAvailable=false → chunks stored in SQLite only"
+      - "No Qdrant upsert, search, or delete attempted"
+    verify:
+      - "mode: 'fts5_only' in search results"
+      - "mode: 'fts5_only' in index results"
+      - "No error messages returned to the user"
+      - "Full functionality available minus semantic search"
+
+  - name: malformed-fts5-query-handling
+    description: >
+      Malformed FTS5 queries are neutralized by sanitizeFts5Query() which wraps
+      all tokens in quotes, preventing syntax injection.
+    preconditions:
+      - "vault.db with FTS5 tables"
+    steps:
+      - "Query with FTS5 syntax: 'NOT emacs OR AND *' → '\"NOT\" \"emacs\" \"OR\" \"AND\" \"*\"'"
+      - "Query with parentheses: '(emacs) AND (vim)' → '\"(emacs)\" \"AND\" \"(vim)\"'"
+      - "Each token treated as literal text, not FTS5 operator"
+    verify:
+      - "No FTS5 syntax errors"
+      - "All tokens treated as literal search terms"
+      - "FTS5 operators (NOT, OR, AND, NEAR) neutralized"
+
+  - name: ledger-malformed-lines
+    description: >
+      Malformed lines in the JSONL ledger are silently skipped during reassembly.
+    preconditions:
+      - "Ledger file contains mix of valid JSONL and corrupted lines"
+    steps:
+      - "BufferedReader reads line-by-line"
+      - "MAPPER.readValue() throws on malformed line"
+      - "Exception caught in inner try-catch (ignored)"
+      - "Processing continues with next line"
+    verify:
+      - "Valid events processed normally"
+      - "Malformed lines silently skipped"
+      - "No crash or error returned to caller"
+
+enforced_constraints:
+  - name: max-results-cap
+    description: >
+      All search methods enforce MAX_RESULTS=20 hard cap via Math.min(limit, MAX_RESULTS).
+      This prevents unbounded result sets regardless of user-requested limit.
+    rationale: >
+      Protects against memory exhaustion and ensures bounded response sizes
+      for MCP tool results. Defined as ADR-008.
+
+  - name: fts5-query-sanitization
+    description: >
+      All FTS5 MATCH queries pass through sanitizeFts5Query() which individually
+      double-quotes each token and escapes embedded quotes. No raw user input
+      reaches FTS5 MATCH expressions.
+    rationale: >
+      Prevents FTS5 syntax injection that could cause query errors or unexpected
+      matching behavior. Token-level quoting is the safest approach for untrusted input.
+
+  - name: dedicated-platform-threads
+    description: >
+      All SQLite JDBC operations run on dedicated platform threads (sqlite-write,
+      sqlite-read), never on virtual threads. Operations use executor dispatch
+      with Future.get() blocking.
+    rationale: >
+      sqlite-jdbc uses internal synchronized blocks that pin virtual thread carriers.
+      Dedicated platform threads prevent carrier thread exhaustion that would
+      deadlock the entire virtual thread pool.
+
+  - name: wal-mode-always
+    description: >
+      Both read and write connections configure PRAGMA journal_mode=WAL.
+      Read connection uses query_only=ON for additional safety.
+    rationale: >
+      WAL mode enables concurrent reads during writes, critical for a system
+      where background indexing and agent queries happen simultaneously.
+
+  - name: single-watcher-file-lock
+    description: >
+      VaultWatcher uses a file lock at ~/vault/data/.watcher.lock to ensure
+      exactly one instance runs across all gateway processes.
+    rationale: >
+      MCP proxy may spawn multiple gateway processes. Without coordination,
+      parallel watchers would cause duplicate indexing, WAL contention, and
+      data races on the vault database.
+
+  - name: ledger-fsync
+    description: >
+      AppendLedgerEvent writes to the ledger file with explicit fsync
+      (fos.getFD().sync()) after each event append.
+    rationale: >
+      Work tracking events are critical audit data. fsync ensures events
+      survive system crashes and power loss. JSONL format enables append-only
+      writes without file-level locking.
+
+  - name: write-isolation-active-queries
+    description: >
+      VaultWatcher defers writes via awaitQueryQuiet() when agent read queries
+      are in flight (activeQueryCount > 0). Maximum wait 5 seconds.
+    rationale: >
+      Prevents background indexing from contending with agent queries at the
+      sqlite-jdbc level. Agent reads take priority over background indexing.
+
+  - name: nomic-task-prefixes
+    description: >
+      TeiClient always prepends 'search_query: ' for query embeddings and
+      'search_document: ' for document embeddings.
+    rationale: >
+      nomic-embed-text-v1.5 requires task-specific prefixes to generate
+      appropriate embeddings for asymmetric retrieval. Omitting prefixes
+      degrades search quality significantly.
+
+  - name: transaction-atomicity
+    description: >
+      DocumentIndexer and ClaudeConversationIndexer wrap all DB operations
+      (document upsert, chunk delete, chunk insert) in explicit transactions
+      with rollback on failure.
+    rationale: >
+      Partial indexing (document updated but chunks inconsistent) would corrupt
+      search results. All-or-nothing transactions ensure consistency.
+
+opinionated_constraints:
+  - name: fts5-before-semantic
+    description: >
+      FTS5 full-text search is the primary search mechanism. Semantic (Qdrant)
+      search is additive (P2 layer). All tools work without Qdrant/TEI.
+    rationale: >
+      FTS5 is zero-dependency, fast, and reliable. Semantic search adds value
+      for conceptual queries but requires external services (Qdrant, TEI) that
+      may not be running. FTS5-first design ensures the system is always functional.
+
+  - name: content-hash-skip
+    description: >
+      Files are skipped during indexing if their SHA-256 content hash matches
+      the stored hash. Conversations use size:mtime hash for performance.
+    rationale: >
+      Re-indexing unchanged files wastes CPU on chunking, embedding, and DB writes.
+      Content hash comparison is cheap and eliminates redundant work. Conversations
+      use size:mtime because full hashing of large .jsonl files is expensive.
+
+  - name: org-mode-heading-aware-chunking
+    description: >
+      .org files are chunked at heading boundaries (* , ** , *** ) with heading
+      context preserved in each chunk. Other file types use plain paragraph chunking.
+    rationale: >
+      Org-mode headings represent semantic boundaries. Chunking at headings
+      produces more coherent chunks than fixed-size splitting. Heading context
+      improves search relevance by providing structural information.
+
+  - name: debounce-strategy
+    description: >
+      File changes debounced at 2s for org files, 10s for conversation .jsonl files.
+      Generation counters ensure only the latest change is processed.
+    rationale: >
+      Org files change frequently during editing (autosave). 2s debounce reduces
+      redundant indexing. Conversations (.jsonl) accumulate rapidly during active
+      sessions; 10s debounce prevents constant re-indexing of in-progress conversations.
+
+  - name: noise-line-filtering
+    description: >
+      isNoiseLine() aggressively filters system boilerplate, XML tags, code fences,
+      subagent prompts, and assistant response leaks from conversation content.
+    rationale: >
+      Claude Code injects significant protocol noise into user messages (system
+      reminders, subagent delegation, context compaction prompts). Without filtering,
+      session summaries, titles, and key facts would be dominated by noise rather
+      than actual user intent.
+
+  - name: rrf-k-60
+    description: >
+      Reciprocal Rank Fusion uses k=60, a standard smoothing constant that
+      prevents top-ranked results from dominating the fused ranking.
+    rationale: >
+      k=60 is the standard RRF constant from the original paper (Cormack et al. 2009).
+      Lower values over-weight top results; higher values flatten the ranking.
+      60 provides good balance for merging keyword and semantic search results.
+
+  - name: email-periodic-not-inotify
+    description: >
+      Email sync uses periodic scheduling (not inotify/WatchService) because
+      mbsync writes temporary files that generate spurious file change events.
+    rationale: >
+      Maildir sync tools create temp files, rename them, and modify flags,
+      generating many WatchService events per message. Periodic sync (default
+      interval from config) is more efficient and avoids thundering herd behavior
+      during mail fetch.
+
+  - name: reindex-marker-files
+    description: >
+      External processes can force re-indexing of specific source types by
+      creating .reindex-{type} marker files in ~/vault/data/. Marker is
+      deleted after processing.
+    rationale: >
+      Provides an out-of-band mechanism to trigger re-indexing without
+      restarting the gateway. Useful when indexing logic changes (code update)
+      or when index corruption is detected. File-based signaling is simple
+      and doesn't require IPC.

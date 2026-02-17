@@ -1,0 +1,83 @@
+vocabulary:
+  fleet: "Multi-device set: Linux desktop (primary), Mac Pro, Android phone, iPad, NAS (4-drive RAID). Connected via Tailscale."
+  service_placement: "Which services run on which device. Desktop keeps compute (GPU), NAS gets stateful services (Kafka, PostgreSQL, Neo4j)."
+  openclaw: "Telegram bot that connects mobile users to the gateway via Tailscale + MCP."
+  k3s: "Lightweight Kubernetes distribution. Container orchestration, auto-restart, scheduling across nodes."
+
+metadata:
+  feature: multi-device
+  project: actual-server
+  date: "2026-02-13"
+  status: NOT_IMPLEMENTED
+
+stories:
+  - name: mobile_queries_agent_via_telegram
+    status: NOT_IMPLEMENTED
+    description: "User sends a query from their phone via Telegram and receives an agent response."
+    preconditions:
+      - "OpenClaw Telegram bot deployed"
+      - "Gateway HTTP endpoint operational on Tailscale network"
+      - "Phone has Telegram installed"
+    steps:
+      - "User sends message to OpenClaw Telegram bot from phone"
+      - "OpenClaw receives message, connects to gateway:8080/mcp via Tailscale"
+      - "Gateway processes the MCP request"
+      - "Gateway returns response via Streamable HTTP"
+      - "OpenClaw formats response and sends back via Telegram"
+      - "User sees agent response on phone"
+    verify:
+      - "End-to-end latency < 5s for simple queries"
+      - "Tailscale provides encrypted transport (no port forwarding)"
+      - "Same MCP endpoint serves desktop and mobile clients"
+      - "Session context isolated per client"
+
+  - name: nas_hosts_stateful_services
+    status: NOT_IMPLEMENTED
+    description: "Stateful services migrate from desktop Docker to NAS K3s pods."
+    preconditions:
+      - "NAS joined K3s cluster as worker node"
+      - "Node labeled node-role=nas"
+      - "RAID storage available"
+    steps:
+      - "Kafka pods scheduled to NAS node (node affinity: node-role=nas)"
+      - "PostgreSQL pod scheduled to NAS node"
+      - "Neo4j pod scheduled to NAS node"
+      - "MinIO pod scheduled to NAS node (S3-compatible storage)"
+      - "Desktop retains: sensor (systemd), gateway (K3s pod, hostNetwork), Ollama (GPU), TEI (GPU)"
+      - "Cross-node communication via Tailscale mesh"
+    verify:
+      - "Stateful services accessible from desktop gateway via Tailscale IPs"
+      - "RAID provides storage redundancy"
+      - "Desktop CPU/memory freed from stateful service overhead"
+      - "Gateway-to-Kafka latency < 5ms over Tailscale"
+      - "NAS runs 24/7 regardless of desktop power state"
+
+  - name: k3s_auto_restarts_crashed_service
+    status: NOT_IMPLEMENTED
+    description: "K3s detects a crashed pod and auto-restarts it."
+    preconditions:
+      - "Service deployed as K3s pod with health check"
+      - "Pod has restart policy: Always"
+    steps:
+      - "Neo4j pod crashes (OOM, bug, etc.)"
+      - "K3s detects failed health check"
+      - "K3s schedules pod restart on same node"
+      - "Pod restarts with persistent volume intact"
+      - "Neo4j recovers from WAL and resumes accepting queries"
+      - "Gateway reconnects to Neo4j automatically"
+    verify:
+      - "Crash detected within 30s (health check interval)"
+      - "Restart completes within 60s"
+      - "Persistent data survives restart"
+      - "No manual intervention required"
+      - "Grafana alert fires for the outage (TEL-DS3)"
+
+enforced_constraints:
+  - "Tailscale for all cross-device networking — no port forwarding, no VPN servers"
+  - "Gateway is the single MCP entry point — all clients connect to one gateway"
+  - "Sensor daemon not containerized — requires X11, SHM, hardware access"
+
+opinionated_constraints:
+  - "Defer until Phase 6 — multi-device depends on stable observability"
+  - "NAS first, Mac Pro second — NAS solves the immediate resource problem"
+  - "Mobile is a thin client — notification and query interface, not a full agent session"

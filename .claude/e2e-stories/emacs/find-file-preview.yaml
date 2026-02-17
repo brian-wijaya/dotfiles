@@ -1,0 +1,330 @@
+# Live file preview during find-file (SPC .)
+# Run with: /e2e-loop-demonstration find-file-preview
+
+feature: find-file-preview
+description: Live file preview in background buffer during SPC . candidate navigation
+vocabularies: [emacs]
+
+stories:
+  - name: arrow-navigation-previews-files
+    description: >
+      Arrowing through candidates in SPC . previews the highlighted file
+      in the buffer behind the minibuffer.
+    preconditions:
+      - Emacs is focused and in a normal buffer (not in minibuffer)
+      - Current directory contains at least 3 regular files
+    steps:
+      - x11_key: "space period"
+        note: "Open find-file via SPC ."
+      - wait_ms: 300
+      - x11_key: "Down"
+        note: "Move to second candidate"
+      - wait_ms: 200
+      - screenshot: true
+        note: "Background buffer should show contents of highlighted file"
+      - x11_key: "Down"
+        note: "Move to third candidate"
+      - wait_ms: 200
+      - screenshot: true
+        note: "Background buffer should update to show third candidate"
+      - x11_key: "Escape"
+        note: "Abort to clean up"
+    expect:
+      - screenshot: "Background buffer behind minibuffer shows file contents matching the highlighted candidate"
+      - emacs_minibuffer: "Minibuffer shows find-file prompt with candidate list"
+
+  - name: pgup-pgdn-scrolls-preview-buffer
+    description: >
+      Prior (PgUp) and Next (PgDn) scroll the preview buffer content,
+      not the candidate list.
+    preconditions:
+      - Emacs is focused and in a normal buffer
+      - Current directory contains a file with more content than fits in one screen
+    steps:
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - x11_key: "Down"
+        note: "Select a candidate to trigger preview"
+      - wait_ms: 200
+      - screenshot: true
+        note: "Capture initial preview state"
+      - x11_key: "Next"
+        note: "PgDn to scroll preview buffer down"
+      - wait_ms: 200
+      - screenshot: true
+        note: "Preview buffer should have scrolled down; candidate highlight unchanged"
+      - x11_key: "Prior"
+        note: "PgUp to scroll preview buffer back up"
+      - wait_ms: 200
+      - screenshot: true
+        note: "Preview buffer should have scrolled back up"
+      - x11_key: "Escape"
+    expect:
+      - screenshot: "Preview buffer scrolls on PgDn/PgUp while minibuffer candidate selection remains unchanged"
+
+  - name: shift-pgup-pgdn-pages-candidate-list
+    description: >
+      Shift+Prior (S-PgUp) and Shift+Next (S-PgDn) page through the
+      Vertico candidate list, not the preview buffer.
+    preconditions:
+      - Emacs is focused and in a normal buffer
+      - Current directory contains more candidates than fit in one Vertico page
+    steps:
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - screenshot: true
+        note: "Capture initial candidate page"
+      - x11_key: "shift+Next"
+        note: "S-PgDn to page forward in candidate list"
+      - wait_ms: 200
+      - screenshot: true
+        note: "Candidate list should show next page of candidates"
+      - x11_key: "shift+Prior"
+        note: "S-PgUp to page backward in candidate list"
+      - wait_ms: 200
+      - screenshot: true
+        note: "Candidate list should return to previous page"
+      - x11_key: "Escape"
+    expect:
+      - screenshot: "S-PgDn/S-PgUp page through candidate list; visible candidates change between screenshots"
+
+  - name: enter-confirms-and-keeps-previewed-file
+    description: >
+      Pressing Return confirms the selection. The previewed file becomes
+      the current buffer. Preview-only buffers (files previewed but not
+      selected) are cleaned up.
+    preconditions:
+      - Emacs is focused and in a normal buffer
+      - Current directory contains at least 3 regular files
+    steps:
+      - emacs_elisp: "(length (buffer-list))"
+        note: "Record buffer count before find-file"
+        capture: buffer_count_before
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - x11_key: "Down"
+        note: "Preview first candidate"
+      - wait_ms: 200
+      - x11_key: "Down"
+        note: "Preview second candidate (first preview should be tracked)"
+      - wait_ms: 200
+      - x11_key: "Down"
+        note: "Preview third candidate"
+      - wait_ms: 200
+      - emacs_elisp: "(buffer-name)"
+        note: "Will be checked after Return to confirm selected file is current"
+        capture: candidate_before_enter
+      - x11_key: "Return"
+        note: "Confirm selection"
+      - wait_ms: 300
+      - screenshot: true
+        note: "Selected file should now be the current buffer"
+      - emacs_elisp: "(buffer-file-name)"
+        capture: final_buffer
+    expect:
+      - screenshot: "Minibuffer is closed; current buffer shows the file that was highlighted at time of Return"
+      - emacs_elisp: "final_buffer is non-nil and points to the file that was selected"
+      - note: "Preview-only buffers (candidates that were previewed but not selected) should have been killed"
+
+  - name: escape-aborts-and-restores
+    description: >
+      Pressing Escape cancels find-file, restores the original buffer,
+      and kills all preview-only buffers.
+    preconditions:
+      - Emacs is focused and in a normal buffer
+    steps:
+      - emacs_elisp: "(buffer-name)"
+        capture: original_buffer
+      - emacs_elisp: "(length (buffer-list))"
+        capture: buffer_count_before
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - x11_key: "Down"
+        note: "Preview a candidate"
+      - wait_ms: 200
+      - x11_key: "Down"
+        note: "Preview another candidate"
+      - wait_ms: 200
+      - x11_key: "Escape"
+        note: "Abort find-file"
+      - wait_ms: 300
+      - emacs_elisp: "(buffer-name)"
+        capture: restored_buffer
+      - emacs_elisp: "(length (buffer-list))"
+        capture: buffer_count_after
+      - screenshot: true
+    expect:
+      - emacs_elisp: "restored_buffer equals original_buffer"
+      - emacs_elisp: "buffer_count_after equals buffer_count_before (preview buffers were killed)"
+      - screenshot: "Original buffer is displayed; no leftover preview buffers"
+
+  - name: c-g-aborts-and-restores
+    description: >
+      C-g also cancels find-file, identical behavior to Escape.
+    preconditions:
+      - Emacs is focused and in a normal buffer
+    steps:
+      - emacs_elisp: "(buffer-name)"
+        capture: original_buffer
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - x11_key: "Down"
+        note: "Preview a candidate"
+      - wait_ms: 200
+      - x11_key: "ctrl+g"
+        note: "C-g to abort"
+      - wait_ms: 300
+      - emacs_elisp: "(buffer-name)"
+        capture: restored_buffer
+      - screenshot: true
+    expect:
+      - emacs_elisp: "restored_buffer equals original_buffer"
+      - screenshot: "Original buffer restored, minibuffer closed"
+
+  - name: no-edge-flash-on-scroll
+    description: >
+      Scrolling past beginning or end of the preview buffer does NOT
+      flash "Beginning of buffer" or "End of buffer" messages.
+    preconditions:
+      - Emacs is focused and in a normal buffer
+      - Current directory contains a short file (fewer lines than window height)
+    steps:
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - x11_key: "Down"
+        note: "Select a candidate to preview"
+      - wait_ms: 200
+      - x11_key: "Prior"
+        note: "PgUp at top of short file — should not flash"
+      - wait_ms: 100
+      - x11_key: "Prior"
+        note: "PgUp again — still no flash"
+      - wait_ms: 100
+      - screenshot: true
+        note: "No 'Beginning of buffer' message in echo area or minibuffer"
+      - x11_key: "Next"
+        note: "PgDn at bottom of short file"
+      - wait_ms: 100
+      - x11_key: "Next"
+        note: "PgDn again — should not flash"
+      - wait_ms: 100
+      - screenshot: true
+        note: "No 'End of buffer' message in echo area or minibuffer"
+      - x11_key: "Escape"
+    expect:
+      - screenshot: "No 'Beginning of buffer' or 'End of buffer' messages visible at any point"
+
+  - name: candidates-sorted-alphabetically
+    description: >
+      File and directory candidates in SPC . are sorted alphabetically
+      (via vertico-multiform-mode with vertico-sort-alpha for file category).
+    preconditions:
+      - Emacs is focused and in a normal buffer
+      - Current directory contains multiple files/directories
+    steps:
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - screenshot: true
+        note: "Capture candidate list"
+      - x11_key: "Escape"
+    expect:
+      - screenshot: "Candidates are sorted alphabetically (directories and files intermixed in alpha order, not by recency or frequency)"
+
+  - name: stale-buffer-silently-reverted
+    description: >
+      If a file was modified on disk (e.g. by another process or agent),
+      previewing it silently reverts the buffer without prompting.
+    preconditions:
+      - Emacs is focused and in a normal buffer
+    steps:
+      - bash: "echo 'original content' > /tmp/e2e-stale-test.txt"
+        note: "Create test file with known content"
+      - emacs_elisp: "(find-file-noselect \"/tmp/e2e-stale-test.txt\")"
+        note: "Open the file in Emacs to create a buffer"
+      - emacs_elisp: "(with-current-buffer (get-file-buffer \"/tmp/e2e-stale-test.txt\") (buffer-string))"
+        capture: initial_content
+        note: "Verify initial content is 'original content'"
+      - bash: "echo 'modified by external process' > /tmp/e2e-stale-test.txt"
+        note: "Modify the file on disk externally"
+      - emacs_elisp: "(kill-buffer (get-file-buffer \"/tmp/e2e-stale-test.txt\"))"
+        note: "Kill the buffer so preview will re-open it"
+      - bash: "cd /tmp && ls e2e-stale-test.txt"
+        note: "Verify file exists in /tmp"
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - x11_key: "BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace"
+        note: "Clear default path"
+      - x11_key: "slash t m p slash e 2 e minus"
+        note: "Type /tmp/e2e- to narrow to test file"
+      - wait_ms: 300
+      - x11_key: "Down"
+        note: "Highlight the test file"
+      - wait_ms: 300
+      - screenshot: true
+        note: "Preview should show 'modified by external process', not 'original content'"
+      - x11_key: "Escape"
+      - bash: "rm -f /tmp/e2e-stale-test.txt"
+        note: "Clean up"
+    expect:
+      - screenshot: "Preview buffer shows 'modified by external process' — the on-disk version, not the stale buffer content"
+      - note: "No revert confirmation prompt appeared"
+
+  - name: directories-not-previewed
+    description: >
+      Highlighting a directory candidate does not attempt to preview it
+      (no dired buffer opened in background).
+    preconditions:
+      - Emacs is focused and in a normal buffer
+      - Current directory contains at least one subdirectory
+    steps:
+      - emacs_elisp: "(buffer-name)"
+        capture: original_buffer
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - screenshot: true
+        note: "Identify a directory candidate in the list"
+      - note: "Navigate to highlight a directory entry (ends with /)"
+      - x11_key: "Down"
+        note: "Move through candidates to find a directory"
+      - wait_ms: 200
+      - screenshot: true
+        note: "Background buffer should NOT show dired listing; should remain on previous preview or original buffer"
+      - x11_key: "Escape"
+    expect:
+      - screenshot: "When a directory is highlighted, background buffer does not change to a dired listing"
+
+  - name: large-files-not-previewed
+    description: >
+      Files over 1MB are not previewed to avoid performance issues.
+    preconditions:
+      - Emacs is focused and in a normal buffer
+    steps:
+      - bash: "dd if=/dev/zero of=/tmp/e2e-largefile.bin bs=1M count=2 2>/dev/null"
+        note: "Create a 2MB test file"
+      - x11_key: "space period"
+        note: "Open find-file"
+      - wait_ms: 300
+      - x11_key: "BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace BackSpace"
+        note: "Clear default path"
+      - x11_key: "slash t m p slash e 2 e minus l a r g e"
+        note: "Type /tmp/e2e-large to narrow to large file"
+      - wait_ms: 300
+      - x11_key: "Down"
+        note: "Highlight the large file"
+      - wait_ms: 300
+      - screenshot: true
+        note: "Background buffer should NOT show file contents; should remain unchanged or show a skip message"
+      - x11_key: "Escape"
+      - bash: "rm -f /tmp/e2e-largefile.bin"
+        note: "Clean up"
+    expect:
+      - screenshot: "Large file (>1MB) is not previewed; background buffer remains on previous content"

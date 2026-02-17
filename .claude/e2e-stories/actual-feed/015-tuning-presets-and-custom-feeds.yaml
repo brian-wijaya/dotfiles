@@ -1,0 +1,692 @@
+title: "Tuning Presets & Custom Feeds"
+status: draft
+version: 1
+
+principle: >
+  A tuning preset is a complete philosophy of information consumption, encoded
+  as a portable data object. It captures the user's answer to: 'What do I value
+  in the content I see?' The 12 signal weights express deliberate priorities.
+  The taste slider expresses trust in learned patterns. The serendipity slider
+  expresses appetite for surprise. Together, a preset defines a diet — not just
+  a configuration, but an intention.
+
+  Custom feeds are filtered views that pair a content filter (modality, source,
+  topic, or combination) with a preset. The main feed uses one preset. A
+  'deep research' custom feed uses another. A 'background audio' feed uses a
+  third. The same user, the same content corpus, three different lenses. Presets
+  are the lenses. Custom feeds are the viewfinders.
+
+  Presets are first-class objects: named, versioned, portable, exportable. A
+  user can share a preset with another user. A community can converge on shared
+  presets the way editors converge on code style configurations. This is the
+  .editorconfig of information diets.
+
+preset_schema:
+  description: >
+    A tuning preset stores the complete scoring configuration: 12 signal
+    weights, the taste slider (neural blend), and the serendipity slider
+    (exploration rate). Presets are stored in SQLite alongside feed items.
+    Each preset is identified by UUIDv7, versioned on every edit, and
+    soft-deletable.
+
+  tables:
+    tuning_presets:
+      columns:
+        - { name: id, type: "TEXT PRIMARY KEY", description: "UUIDv7. Immutable identity." }
+        - { name: name, type: "TEXT NOT NULL", description: "User-facing name. Unique per profile. e.g., 'Deep Research', 'Morning Briefing'." }
+        - { name: description, type: "TEXT", description: "Optional user-authored description of the preset's purpose." }
+        - { name: is_shipped, type: "INTEGER DEFAULT 0", description: "Boolean. 1 = factory default preset. Cannot be deleted, only cloned and hidden." }
+        - { name: version, type: "INTEGER NOT NULL DEFAULT 1", description: "Incremented on every edit. Enables history tracking." }
+        - { name: created_at, type: "INTEGER NOT NULL", description: "Unix epoch millis." }
+        - { name: updated_at, type: "INTEGER NOT NULL", description: "Unix epoch millis. Updated on every edit." }
+        - { name: deleted_at, type: "INTEGER", description: "Soft delete. NULL = active. Non-null = hidden from UI but retained for history." }
+
+        # === Signal Weights (12 signals, all REAL in [-1.0, 1.0]) ===
+        # Positive values boost items scoring high on that signal.
+        # Negative values penalize items scoring high on that signal.
+        # 0.0 means the signal is ignored.
+        # Weights are NOT required to sum to 1.0 — they are relative magnitudes.
+        - { name: w_topic_relevance, type: "REAL NOT NULL DEFAULT 0.20", description: "Weight for topic_relevance signal." }
+        - { name: w_nominal_density, type: "REAL NOT NULL DEFAULT 0.10", description: "Weight for nominal_density signal." }
+        - { name: w_novelty, type: "REAL NOT NULL DEFAULT 0.10", description: "Weight for novelty signal." }
+        - { name: w_credibility, type: "REAL NOT NULL DEFAULT 0.10", description: "Weight for credibility signal." }
+        - { name: w_freshness, type: "REAL NOT NULL DEFAULT 0.10", description: "Weight for freshness signal." }
+        - { name: w_actionability, type: "REAL NOT NULL DEFAULT 0.05", description: "Weight for actionability signal." }
+        - { name: w_hype_score, type: "REAL NOT NULL DEFAULT -0.15", description: "Weight for hype_score. Negative = penalize hype. Default is negative." }
+        - { name: w_vagueness, type: "REAL NOT NULL DEFAULT -0.10", description: "Weight for vagueness. Negative = penalize vagueness." }
+        - { name: w_repetition, type: "REAL NOT NULL DEFAULT -0.10", description: "Weight for repetition. Negative = penalize repeated content." }
+        - { name: w_missing_sources, type: "REAL NOT NULL DEFAULT -0.05", description: "Weight for missing_sources. Negative = penalize unsourced claims." }
+        - { name: w_source_authority, type: "REAL NOT NULL DEFAULT 0.10", description: "Weight for source_authority signal." }
+        - { name: w_modality_preference, type: "REAL NOT NULL DEFAULT 0.05", description: "Weight for modality_preference signal." }
+
+        # === Meta-sliders ===
+        - { name: taste_slider, type: "REAL NOT NULL DEFAULT 0.40", description: "Neural taste model blend. 0.0 = pure formula, 1.0 = pure neural. [0.0, 1.0]." }
+        - { name: serendipity, type: "REAL NOT NULL DEFAULT 0.10", description: "Exploration rate. 0.0 = no exploration, 0.50 = aggressive discovery. [0.0, 0.50]." }
+
+        # === Metadata ===
+        - { name: profile_id, type: "TEXT NOT NULL", description: "Owning profile. Presets are per-profile." }
+
+    tuning_preset_history:
+      description: >
+        Every time a preset is modified, the previous version is snapshotted
+        here. Enables undo, drift tracking, and before/after comparison.
+        The snapshot is the full column set from tuning_presets at the
+        moment before the edit.
+      columns:
+        - { name: id, type: "TEXT PRIMARY KEY", description: "UUIDv7 for this history entry." }
+        - { name: preset_id, type: "TEXT NOT NULL REFERENCES tuning_presets(id)", description: "Which preset was modified." }
+        - { name: version, type: "INTEGER NOT NULL", description: "Version number of this snapshot (the version BEFORE the edit)." }
+        - { name: snapshot_json, type: "TEXT NOT NULL", description: "Full JSON serialization of the preset at this version." }
+        - { name: changed_fields_json, type: "TEXT NOT NULL", description: "JSON array of field names that changed in this edit. e.g., ['w_freshness', 'serendipity']." }
+        - { name: created_at, type: "INTEGER NOT NULL", description: "When this snapshot was created (= when the edit happened)." }
+
+shipped_preset_definitions:
+  description: >
+    Six factory-default presets ship with every installation. These encode
+    opinionated information diet philosophies. They are read-only — users
+    clone them to customize. Each definition specifies: all 12 signal
+    weights, taste_slider, serendipity, and the design rationale. Weights
+    are relative magnitudes, not probabilities — they do not sum to 1.0.
+    Negative weights penalize. All signals are percentile-normalized
+    (ADR-015) before weighting, so a weight of 0.20 on topic_relevance
+    means: 'For each percentile point of topic relevance, add 0.20 to
+    the formula score.'
+
+  presets:
+    - name: deliberate
+      description: "Maximum user control, minimal surprises. The formula dominates. Neural influence is vestigial. Exploration is nearly zero. This is the diet of someone who knows exactly what they want and trusts their explicit weights over any learned pattern. The intellectual equivalent of meal prep."
+      weights:
+        w_topic_relevance: 0.30
+        w_nominal_density: 0.20
+        w_novelty: 0.05
+        w_credibility: 0.15
+        w_freshness: 0.05
+        w_actionability: 0.10
+        w_hype_score: -0.25
+        w_vagueness: -0.15
+        w_repetition: -0.10
+        w_missing_sources: -0.10
+        w_source_authority: 0.15
+        w_modality_preference: 0.05
+      taste_slider: 0.10
+      serendipity: 0.02
+      rationale: >
+        Relevance and density dominate. Credibility and source authority
+        are elevated because a deliberate user wants vetted substance.
+        Hype suppression is aggressive (-0.25). Freshness is deprioritized
+        — this user reads what matters, not what's new. Neural influence
+        at 10% provides a faint nudge from learned taste without overriding
+        explicit weights. Serendipity at 2% means roughly 1 in 50 items
+        is an exploration wildcard — barely noticeable.
+
+    - name: discovery
+      description: "High serendipity, strong neural influence, explore freely. This is the diet of someone who wants to be surprised — to find articles from domains they've never visited, to stumble onto a podcast from an author they've never heard of. The intellectual equivalent of wandering a bookstore."
+      weights:
+        w_topic_relevance: 0.10
+        w_nominal_density: 0.05
+        w_novelty: 0.25
+        w_credibility: 0.05
+        w_freshness: 0.15
+        w_actionability: 0.00
+        w_hype_score: -0.05
+        w_vagueness: -0.05
+        w_repetition: -0.15
+        w_missing_sources: -0.02
+        w_source_authority: 0.05
+        w_modality_preference: 0.10
+      taste_slider: 0.70
+      serendipity: 0.30
+      rationale: >
+        Novelty dominates (+0.25). Repetition suppression is strong because
+        discovery means seeing NEW things. Topic relevance is deliberately
+        low — this user doesn't want to be trapped by their declared
+        interests. Credibility and missing_sources are relaxed: discovery
+        tolerates rougher edges. Neural influence at 70% means the learned
+        taste model drives most of the ranking, which captures latent
+        preferences the user didn't explicitly declare. Serendipity at 30%
+        means roughly 1 in 3 items is an exploration wildcard. The feed
+        will feel unpredictable — that's the point.
+
+    - name: balanced
+      description: "Default main feed. A tasteful equilibrium of deliberate priorities and learned patterns, with enough exploration to prevent staleness. This is the preset that ships as the default for the main feed. It should produce a good experience for any user who never touches settings."
+      weights:
+        w_topic_relevance: 0.20
+        w_nominal_density: 0.10
+        w_novelty: 0.10
+        w_credibility: 0.10
+        w_freshness: 0.10
+        w_actionability: 0.05
+        w_hype_score: -0.15
+        w_vagueness: -0.10
+        w_repetition: -0.10
+        w_missing_sources: -0.05
+        w_source_authority: 0.10
+        w_modality_preference: 0.05
+      taste_slider: 0.40
+      serendipity: 0.10
+      rationale: >
+        No single signal dominates. Topic relevance has a slight edge
+        because the user declared those topics and should see them
+        reflected. All negative signals are active but not aggressive.
+        Neural influence at 40% blends learned taste without overwhelming
+        the formula. Serendipity at 10% inserts roughly 1 wildcard per
+        10 items. This preset is the zero-configuration experience. If
+        only one preset could exist, it would be this one.
+
+    - name: deep_research
+      description: "Dense, credible, actionable. Suppress hype, suppress noise, maximize substance. Freshness is nearly irrelevant — a well-sourced paper from 2019 ranks alongside one from today. This is the diet of someone in project mode: building something, learning something, solving something."
+      weights:
+        w_topic_relevance: 0.25
+        w_nominal_density: 0.30
+        w_novelty: 0.05
+        w_credibility: 0.25
+        w_freshness: 0.02
+        w_actionability: 0.20
+        w_hype_score: -0.35
+        w_vagueness: -0.25
+        w_repetition: -0.10
+        w_missing_sources: -0.20
+        w_source_authority: 0.15
+        w_modality_preference: 0.00
+      taste_slider: 0.20
+      serendipity: 0.05
+      rationale: >
+        Nominal density (+0.30) and credibility (+0.25) dominate. This
+        preset surfaces technical writing, academic papers, well-sourced
+        analyses. Hype suppression is the most aggressive of any preset
+        (-0.35). Vagueness and missing_sources are heavily penalized
+        because research requires specificity. Freshness is nearly zero
+        (+0.02) — evergreen content ranks. Actionability is elevated
+        (+0.20) because a researcher wants things they can USE: code
+        examples, methodologies, concrete techniques. Modality is ignored
+        (0.00) — format doesn't matter when depth does. Neural influence
+        at 20% provides light learned guidance. Serendipity at 5% ensures
+        occasional cross-domain discovery without derailing focus.
+
+    - name: breaking_news
+      description: "Freshness dominates everything. Tolerate noise, tolerate hype, tolerate vagueness — if it's happening NOW, surface it. This is the diet for a crisis, a product launch, an election night. Aggressive discovery because breaking events come from unexpected sources."
+      weights:
+        w_topic_relevance: 0.15
+        w_nominal_density: 0.00
+        w_novelty: 0.20
+        w_credibility: 0.05
+        w_freshness: 0.50
+        w_actionability: 0.00
+        w_hype_score: -0.05
+        w_vagueness: 0.00
+        w_repetition: -0.25
+        w_missing_sources: 0.00
+        w_source_authority: 0.05
+        w_modality_preference: 0.05
+      taste_slider: 0.50
+      serendipity: 0.20
+      rationale: >
+        Freshness at +0.50 is the highest weight in any shipped preset.
+        This is a recency-obsessed mode. Novelty at +0.20 ensures new
+        developments surface over rehashed takes. Repetition suppression
+        is strong (-0.25) because breaking news generates floods of
+        duplicate coverage. Quality signals (density, actionability,
+        vagueness, missing_sources) are deliberately relaxed or zeroed:
+        breaking news is inherently noisy and incomplete. Credibility is
+        low (+0.05) but not zero — completely uncredible sources still
+        get mild demotion. Neural influence at 50% lets learned taste
+        help filter the flood. Serendipity at 20% casts a wide net
+        for unexpected sources covering the event.
+
+    - name: background_audio
+      description: "Optimized for passive listening. Dense, long-form content with no urgency. Freshness is irrelevant. Modality preference is elevated to favor audio-native content (podcasts, audiobooks, long interviews). This is the diet for commuting, exercising, or doing chores."
+      weights:
+        w_topic_relevance: 0.15
+        w_nominal_density: 0.25
+        w_novelty: 0.05
+        w_credibility: 0.10
+        w_freshness: 0.01
+        w_actionability: 0.05
+        w_hype_score: -0.15
+        w_vagueness: -0.10
+        w_repetition: -0.10
+        w_missing_sources: -0.05
+        w_source_authority: 0.10
+        w_modality_preference: 0.30
+      taste_slider: 0.30
+      serendipity: 0.08
+      rationale: >
+        Modality preference at +0.30 is the defining feature — this
+        preset rewards audio/video content and penalizes text-only items
+        (which are less suitable for passive listening even with TTS).
+        Nominal density at +0.25 selects for substantive content that
+        rewards sustained attention. Freshness is near-zero (+0.01)
+        because a great podcast episode from last month is just as
+        valuable while commuting. Actionability is low (+0.05) because
+        you can't take notes while driving. Hype suppression is moderate
+        (-0.15) — enough to filter clickbait but not so aggressive
+        as to exclude entertaining content. Neural influence at 30%
+        provides gentle taste guidance. Serendipity at 8% inserts
+        occasional surprises without disrupting the listening flow.
+
+custom_feed_schema:
+  description: >
+    A custom feed is a named, filtered view of the content corpus. Each
+    custom feed has a filter definition (what items it includes) and a
+    preset reference (how those items are ranked). The main feed is
+    special — it has no filter (all items) and a preset reference.
+    Custom feeds are ordered by the user for navigation (tab order
+    or sidebar order).
+
+  tables:
+    custom_feeds:
+      columns:
+        - { name: id, type: "TEXT PRIMARY KEY", description: "UUIDv7." }
+        - { name: name, type: "TEXT NOT NULL", description: "User-facing name. e.g., 'Research', 'Audio Queue', 'HN Only'." }
+        - { name: profile_id, type: "TEXT NOT NULL", description: "Owning profile." }
+        - { name: preset_id, type: "TEXT NOT NULL REFERENCES tuning_presets(id)", description: "Which tuning preset ranks this feed's items." }
+        - { name: sort_order, type: "INTEGER NOT NULL DEFAULT 0", description: "User-defined display order. Lower = further left in tab bar." }
+        - { name: icon, type: "TEXT", description: "Optional emoji or icon identifier for the feed tab." }
+        - { name: created_at, type: "INTEGER NOT NULL" }
+        - { name: updated_at, type: "INTEGER NOT NULL" }
+        - { name: deleted_at, type: "INTEGER", description: "Soft delete." }
+
+    custom_feed_filters:
+      description: >
+        Filters are AND-composed: an item must match ALL active filter
+        rows for a given feed to appear in that feed. Multiple rows of
+        the same filter_type are OR-composed within that type. Example:
+        modality=video OR modality=audio (two rows, same type) AND
+        source_platform=youtube (one row, different type) = YouTube
+        videos and audio.
+      columns:
+        - { name: id, type: "TEXT PRIMARY KEY", description: "UUIDv7." }
+        - { name: feed_id, type: "TEXT NOT NULL REFERENCES custom_feeds(id)" }
+        - { name: filter_type, type: "TEXT NOT NULL", description: "Enum: modality, source_platform, topic, author." }
+        - { name: filter_value, type: "TEXT NOT NULL", description: "The value to match. For modality: 'video', 'audio', 'text'. For source_platform: 'youtube', 'hackernews'. For topic: a topic tag string. For author: an author_id." }
+
+  filter_semantics: >
+    Filter composition: rows with the same filter_type are OR'd. Different
+    filter_types are AND'd. This means:
+
+      feed_id=X, filter_type=modality, filter_value=video
+      feed_id=X, filter_type=modality, filter_value=audio
+      feed_id=X, filter_type=source_platform, filter_value=youtube
+
+    Resolves to: (modality = 'video' OR modality = 'audio') AND
+    (source_platform = 'youtube'). In practice: YouTube videos and audio.
+
+    The main feed has no rows in custom_feed_filters — it shows everything.
+    A custom feed with no filters is valid but identical to the main feed
+    (different preset, same items).
+
+preset_export_format:
+  description: >
+    Presets are exportable as JSON files. The format is self-contained:
+    it includes all weights, sliders, metadata, and a schema version for
+    forward compatibility. Exported presets carry no profile_id (portable
+    across users). Import creates a new preset with a new UUIDv7, owned
+    by the importing profile. Name collisions are resolved by appending
+    ' (imported)' to the name.
+
+  json_schema:
+    type: object
+    required: [schema_version, name, weights, taste_slider, serendipity]
+    properties:
+      schema_version: { type: integer, description: "Format version. Currently 1. Import rejects unknown versions." }
+      name: { type: string }
+      description: { type: string }
+      exported_at: { type: string, description: "ISO 8601 timestamp." }
+      exported_from_version: { type: integer, description: "Preset version at time of export." }
+      weights:
+        type: object
+        required: [topic_relevance, nominal_density, novelty, credibility, freshness, actionability, hype_score, vagueness, repetition, missing_sources, source_authority, modality_preference]
+        properties:
+          topic_relevance: { type: number, minimum: -1.0, maximum: 1.0 }
+          nominal_density: { type: number, minimum: -1.0, maximum: 1.0 }
+          novelty: { type: number, minimum: -1.0, maximum: 1.0 }
+          credibility: { type: number, minimum: -1.0, maximum: 1.0 }
+          freshness: { type: number, minimum: -1.0, maximum: 1.0 }
+          actionability: { type: number, minimum: -1.0, maximum: 1.0 }
+          hype_score: { type: number, minimum: -1.0, maximum: 1.0 }
+          vagueness: { type: number, minimum: -1.0, maximum: 1.0 }
+          repetition: { type: number, minimum: -1.0, maximum: 1.0 }
+          missing_sources: { type: number, minimum: -1.0, maximum: 1.0 }
+          source_authority: { type: number, minimum: -1.0, maximum: 1.0 }
+          modality_preference: { type: number, minimum: -1.0, maximum: 1.0 }
+      taste_slider: { type: number, minimum: 0.0, maximum: 1.0 }
+      serendipity: { type: number, minimum: 0.0, maximum: 0.5 }
+
+  example_export: |
+    {
+      "schema_version": 1,
+      "name": "Deep Research",
+      "description": "Dense, credible, actionable. Suppress hype, maximize substance.",
+      "exported_at": "2026-03-15T09:22:00Z",
+      "exported_from_version": 3,
+      "weights": {
+        "topic_relevance": 0.25,
+        "nominal_density": 0.30,
+        "novelty": 0.05,
+        "credibility": 0.25,
+        "freshness": 0.02,
+        "actionability": 0.20,
+        "hype_score": -0.35,
+        "vagueness": -0.25,
+        "repetition": -0.10,
+        "missing_sources": -0.20,
+        "source_authority": 0.15,
+        "modality_preference": 0.00
+      },
+      "taste_slider": 0.20,
+      "serendipity": 0.05
+    }
+
+live_preview:
+  description: >
+    When the user adjusts any weight or slider in the preset editor, the
+    feed behind the editor re-ranks in real-time. This is the core feedback
+    loop: drag a slider, see items move. The preview is not hypothetical —
+    it is the actual feed, re-scored with the draft weights.
+
+  mechanism: >
+    The preset editor operates on a draft copy of the preset. On every
+    slider change (debounced at 150ms), the scoring pipeline re-runs
+    Layer 1 (formula) with the draft weights against the current feed
+    items. Layer 2 (neural) and Layer 3 (exploration) are included using
+    the draft taste_slider and serendipity values. The result is a
+    re-ordered feed visible behind the editor (or in a split-pane view).
+
+    Items that moved significantly (>3 positions) are highlighted with
+    directional indicators (arrow up/down + position delta). Items that
+    entered or left the visible top-N are emphasized. The user sees
+    cause and effect: 'I increased hype suppression, and that clickbait
+    article dropped 12 positions.'
+
+  performance: >
+    Layer 1 scoring is a dot product of 12 weights against 12 signal
+    values per item. For 1000 items: 12,000 multiplications + sort.
+    Sub-millisecond. Layer 2 inference (ONNX): ~1ms per item, ~1 second
+    for 1000 items. Layer 3 (Thompson sampling): negligible. Total
+    re-rank latency for live preview: <2 seconds for 1000 items on
+    desktop. Acceptable for real-time slider feedback at 150ms debounce.
+
+user_stories:
+  - id: US-140
+    as: "user who wants a different ranking philosophy for different contexts"
+    i_want: "to create a new tuning preset from scratch"
+    so_that: "I encode a specific information diet as a reusable, named configuration"
+    acceptance:
+      - "'New Preset' button in preset management screen"
+      - starts with balanced preset weights as defaults (not zeros)
+      - all 12 signal weight sliders visible and adjustable [-1.0, 1.0]
+      - taste slider adjustable [0.0, 1.0] with labeled range ('Pure Formula' to 'Pure Neural')
+      - serendipity slider adjustable [0.0, 0.50] with labeled range ('None' to 'Aggressive Discovery')
+      - live preview shows feed re-ranking as sliders change
+      - user provides name and optional description
+      - preset saved and immediately available for assignment to any feed
+
+  - id: US-141
+    as: "user who likes a shipped preset but wants to tweak it"
+    i_want: "to clone an existing preset and modify the clone"
+    so_that: "I start from a proven baseline instead of configuring 14 values from scratch"
+    acceptance:
+      - any preset (shipped or user-created) has a 'Clone' action
+      - clone creates a new preset with all values copied
+      - clone name defaults to 'Original Name (copy)' — editable
+      - clone is immediately opened in the preset editor for modification
+      - original preset is unchanged
+      - shipped presets cannot be edited directly — only cloned
+
+  - id: US-142
+    as: "user editing a preset used by multiple feeds"
+    i_want: "to be warned before editing a shared preset, with the option to clone instead"
+    so_that: "I don't accidentally change the ranking of 5 feeds when I meant to change 1"
+    acceptance:
+      - opening the editor for a preset used by N>1 feeds shows: 'This preset is used by N feeds. Edit in place (all feeds change) or clone (only this feed changes)?'
+      - "'Edit in place' proceeds with editing; change propagates to all feeds"
+      - "'Clone' creates a copy, assigns the copy to the current feed, opens the editor on the clone"
+      - preset editor always shows 'Used by: Feed A, Feed B, ...' in the header
+      - single-feed presets show no warning
+
+  - id: US-143
+    as: "user who wants to delete a preset they no longer use"
+    i_want: "to delete a preset with clear confirmation of consequences"
+    so_that: "I keep my preset list clean without accidentally breaking my feeds"
+    acceptance:
+      - delete action available on user-created presets (not shipped presets)
+      - "if preset is assigned to 0 feeds: confirm dialog — 'Delete [name]? This cannot be undone.'"
+      - "if preset is assigned to N feeds: confirm dialog — 'Delete [name]? These N feeds will revert to Balanced. Continue?'"
+      - feeds referencing a deleted preset revert to 'balanced' shipped preset
+      - deleted preset is soft-deleted (retained in history, removed from UI)
+      - shipped presets show 'Hide' instead of 'Delete' — hidden from preset picker but still available for assignment if unhidden
+
+  - id: US-144
+    as: "user assigning presets to feeds"
+    i_want: "to pick which preset governs each of my feeds"
+    so_that: "my main feed, research feed, and audio feed each rank content differently"
+    acceptance:
+      - main feed has a preset selector (default: balanced)
+      - each custom feed has a preset selector
+      - changing a feed's preset immediately re-ranks that feed (live, not on next refresh)
+      - preset picker shows: preset name, description, taste/serendipity values as compact summary
+      - preset picker groups: shipped presets first, then user-created, sorted by last-used
+      - same preset assignable to multiple feeds
+
+  - id: US-145
+    as: "user who wants to share my preset with another Actual Feed user"
+    i_want: "to export a preset as a JSON file and import presets from others"
+    so_that: "information diet configurations are portable and shareable"
+    acceptance:
+      - export action on any preset produces a .json file (schema_version, name, description, all weights, sliders)
+      - exported file contains no profile_id, no UUIDs, no device-specific data
+      - import from .json file creates a new preset owned by the importing profile
+      - import validates schema_version — rejects unknown versions with clear error
+      - import validates all weight ranges [-1.0, 1.0], taste_slider [0.0, 1.0], serendipity [0.0, 0.50]
+      - name collision on import appends ' (imported)' — no silent overwrite
+      - import shows preview of all values before confirming creation
+
+  - id: US-146
+    as: "user creating a custom feed for a specific content slice"
+    i_want: "to define filters by modality, source, topic, or combination"
+    so_that: "I have a dedicated feed for exactly the content I want"
+    acceptance:
+      - "'New Custom Feed' action in feed management"
+      - filter builder with addable filter rows
+      - filter types: modality (video, audio, text), source_platform (youtube, hackernews, rss, etc.), topic (from user's declared topic tags), author (specific author_id)
+      - multiple values within same filter type are OR'd
+      - different filter types are AND'd
+      - filter composition previewed as readable sentence: 'Videos or Audio from YouTube about machine-learning'
+      - live preview shows matching item count and sample items
+      - user assigns a name, icon (optional emoji), and preset
+      - feed appears as a new tab alongside main feed
+
+  - id: US-147
+    as: "user managing my collection of custom feeds"
+    i_want: "to rename, reorder, reassign presets, and delete custom feeds"
+    so_that: "my feed tabs stay organized as my needs evolve"
+    acceptance:
+      - drag-to-reorder feeds in the tab bar (or sort_order field in Emacs)
+      - rename inline or via feed settings
+      - change assigned preset from feed settings (immediate re-rank)
+      - change filters from feed settings (immediate content update)
+      - delete custom feed: confirm dialog, no impact on preset or items
+      - main feed cannot be deleted or reordered (always first position)
+      - maximum 20 custom feeds per profile (prevents UI degradation)
+
+collective_lifetime_stories:
+  - id: CL-140
+    title: "Preset drift over months of incremental edits"
+    description: >
+      A user creates a preset, tweaks one weight, adjusts serendipity,
+      bumps another weight, adjusts taste_slider. After 30 incremental
+      edits over 4 months, the preset bears no resemblance to its original
+      configuration. The user can't remember what it used to be or why
+      it was good then. Preset version history exists for this reason:
+      the user can browse previous versions, compare side-by-side, and
+      restore any historical version. The UI should surface: 'This preset
+      has been edited 30 times since creation. Compare to original?'
+      after detecting significant drift (>50% of weights changed from
+      the version 1 values).
+    worst_case: >
+      User over-tunes a preset into a degenerate configuration (e.g., all
+      weights near zero except one signal at 1.0), producing a bizarre
+      feed they don't understand. The 'Compare to shipped original' action
+      and version history provide the escape hatch. A 'Reset to shipped
+      defaults' option on cloned-from-shipped presets offers a one-click
+      recovery. For presets created from scratch, version 1 serves as the
+      reference point.
+
+  - id: CL-141
+    title: "Shipped preset staleness as user behavior evolves"
+    description: >
+      The 6 shipped presets encode the product team's opinion of good
+      defaults at launch time. After 2 years, user behavior patterns may
+      reveal that the shipped presets are suboptimal — perhaps the default
+      hype suppression is too aggressive, or the balanced preset's
+      serendipity is too low for most users. Shipped presets should be
+      updateable via app updates. However, users who cloned a shipped
+      preset should not have their clone silently modified. App updates
+      may refresh the shipped preset definitions, but cloned copies
+      remain frozen at the user's version.
+    worst_case: >
+      A shipped preset update changes the 'balanced' default, and every
+      user who never customized (still on shipped 'balanced') experiences
+      a sudden feed shift on app update. Mitigation: shipped preset
+      updates increment the version and show a one-time notification:
+      'The Balanced preset has been updated. Your feed may look different.
+      Compare changes?' with an option to revert to the previous version.
+
+  - id: CL-142
+    title: "Community preset quality and trust"
+    description: >
+      Sharing presets between users is a feature, not a social network.
+      There is no marketplace, no upvote system, no 'trending presets'
+      feed. Preset sharing is peer-to-peer: a user exports a JSON file
+      and sends it to another user via whatever channel they choose
+      (email, forum post, chat message). The receiving user imports it,
+      reviews all values in the import preview, and decides whether to
+      adopt it. The risk is presets designed to be deceptive — a preset
+      named 'Balanced' that actually maximizes hype and suppresses
+      credibility. The import preview mitigates this: every value is
+      visible before confirmation. A 'Compare to shipped Balanced'
+      option during import would further help the user evaluate the
+      imported preset against known-good defaults.
+    worst_case: >
+      A malicious preset with extreme weights (hype_score: +1.0,
+      credibility: -1.0) is shared as 'recommended settings' on a
+      forum. Users who import without reviewing get a garbage feed.
+      Mitigation: import preview shows all values with visual indicators
+      for extreme weights (e.g., any weight at |0.5|+ is flagged as
+      'strong'). The import preview also shows a comparison to the
+      user's current active preset. The system does not validate
+      preset 'quality' — it validates ranges and shows values. The
+      user decides.
+
+enforced_constraints:
+  - id: EC-140
+    constraint: "Shipped presets are immutable — users clone to customize"
+    type: data integrity
+    rationale: >
+      Shipped presets serve as reference points. A user must always be able
+      to return to the factory definition of 'balanced' or 'deep_research'.
+      If shipped presets were editable, users could modify them and lose
+      the baseline. Clone-to-edit preserves the originals while giving
+      full customization freedom.
+    testable: >
+      Attempting to modify a shipped preset (is_shipped=1) via the API
+      returns an error. The UI shows 'Clone to Edit' instead of 'Edit'
+      for shipped presets.
+
+  - id: EC-141
+    constraint: "Preset edits are versioned — every modification creates a history snapshot"
+    type: auditability
+    rationale: >
+      Preset configuration is high-stakes — a bad edit changes every feed
+      that references the preset. Version history enables undo, comparison,
+      and drift detection. The snapshot is the full preset state, not a
+      diff, because presets are small (14 numeric values + metadata) and
+      full snapshots are simpler to restore than diffs to replay.
+    testable: >
+      Edit a preset 3 times. tuning_preset_history contains 3 rows for
+      that preset_id, with version 1, 2, and 3. Each row's snapshot_json
+      deserializes to a valid preset. Each row's changed_fields_json
+      lists only the fields that actually changed.
+
+  - id: EC-142
+    constraint: "Deleting a preset used by feeds reverts those feeds to 'balanced'"
+    type: referential integrity
+    rationale: >
+      A feed must always have a valid preset reference. Deleting a preset
+      without a fallback would leave feeds in an undefined scoring state.
+      Reverting to 'balanced' (a shipped preset that cannot be deleted)
+      ensures every feed always has a valid scoring configuration.
+      The user is explicitly warned which feeds will be affected before
+      confirming deletion.
+    testable: >
+      Create preset X, assign to feeds A and B, delete preset X.
+      Feeds A and B now reference the shipped 'balanced' preset.
+      Feed rankings update immediately.
+
+opinionated_constraints:
+  - id: OC-140
+    constraint: "Preset weights are unbounded magnitudes, not probabilities — they do not sum to 1.0"
+    rationale: >
+      Signal weights are relative importance multipliers, not probability
+      distributions. A weight of 0.30 on topic_relevance means 'topic
+      relevance is very important to me.' A weight of 0.05 means 'I care
+      a little.' The user should not need to redistribute weight when
+      increasing one signal — increasing freshness should not force them
+      to decrease something else. This is psychologically correct: 'I want
+      MORE freshness' is a natural thought. 'I want 5% more freshness at
+      the expense of 2% credibility and 3% novelty' is not.
+    acceptable_loss: >
+      Weights with large magnitudes dominate the formula. A user who sets
+      freshness to 1.0 and everything else to 0.01 has a freshness-only
+      feed. This is allowed — it's their preset. The shipped presets
+      demonstrate balanced weight distributions. The live preview makes
+      the consequences of extreme weights immediately visible.
+
+  - id: OC-141
+    constraint: "Six shipped presets cover the real-world modes of information consumption"
+    rationale: >
+      Deliberate, discovery, balanced, deep_research, breaking_news, and
+      background_audio map to real user contexts: focused work, browsing,
+      default, research, crisis monitoring, and commuting. These are not
+      arbitrary — they emerged from analyzing how technically literate
+      professionals actually consume information across their day. More
+      presets would create choice paralysis. Fewer would miss real modes.
+      Six is the right number. Users who need something different clone
+      and customize.
+    acceptable_loss: >
+      Edge cases like 'social monitoring' (tracking what peers share) or
+      'historical archive' (reading old content chronologically) are not
+      shipped as defaults. Users with these needs create custom presets.
+      The shipped six cover >90% of use cases for the target demographic.
+
+  - id: OC-142
+    constraint: "Custom feed filters compose with AND across types and OR within types"
+    rationale: >
+      This composition model is simple, predictable, and covers the vast
+      majority of filter needs. 'YouTube videos about machine-learning'
+      is expressible. 'Videos OR audio from any source about Rust' is
+      expressible. Arbitrary boolean logic (NOT, nested OR/AND) adds UI
+      complexity that serves <5% of use cases. Power users who need
+      complex filters create multiple custom feeds, each with simpler
+      filters.
+    acceptable_loss: >
+      'Everything EXCEPT YouTube' is not directly expressible — the user
+      would need to create a filter with every source platform except
+      YouTube. A future enhancement could add exclude filters (NOT
+      semantics per row) but this is explicitly out of scope for V1.
+
+  - id: OC-143
+    constraint: "Live preview during preset editing is mandatory, not optional"
+    rationale: >
+      Adjusting 14 numeric values without seeing the effect is like tuning
+      an equalizer with the speakers off. The live preview is the mechanism
+      that makes preset editing accessible to non-technical users. Without
+      it, presets are a power-user-only feature — JSON files traded on
+      forums. With it, anyone can drag sliders and see their feed respond.
+      The preview is the difference between 'configure your algorithm'
+      (intimidating) and 'shape your feed' (empowering).
+    acceptable_loss: >
+      Live preview requires re-scoring on every slider change. On large
+      item sets (>5000 items), this may take 2-3 seconds. Acceptable
+      with debouncing and a progress indicator. On mobile with smaller
+      item sets, preview is effectively instant.

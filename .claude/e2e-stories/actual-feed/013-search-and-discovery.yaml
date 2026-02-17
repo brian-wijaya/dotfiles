@@ -1,0 +1,440 @@
+title: "Search & Discovery — Find What You've Already Found"
+status: draft
+version: 1
+
+principle: >
+  Search is memory retrieval, not web search. The user has already curated their
+  feed — sources chosen, content crawled, features extracted, transcripts indexed.
+  Search queries that corpus. It works offline. It works instantly. FTS5 handles
+  text matching across title, summary, transcript, entities, and topics. Embeddings
+  handle semantic similarity ("find similar"). The ranking pipeline's 13 feature
+  signals are available as structured filters. Search is not a separate system —
+  it is a different lens on the same SQLite database that powers the feed.
+
+schema_additions:
+  description: >
+    The existing feed_items_fts virtual table (005) indexes title, summary, and
+    transcript. Search and discovery requires expanding FTS coverage to entities
+    and topics, adding saved search and search history tables, and storing
+    per-item embeddings for nearest-neighbor queries.
+
+  fts_expansion:
+    migration: >
+      The FTS5 virtual table must index entities and topics alongside title,
+      summary, and transcript. Entities and topics are stored as JSON arrays
+      in the main table — the FTS content must be the flattened text
+      representation (entity names joined by space, topic labels joined by
+      space). FTS5 column weights let us boost title matches over transcript
+      matches at query time.
+    ddl:
+      - >
+        DROP TABLE IF EXISTS feed_items_fts;
+        CREATE VIRTUAL TABLE feed_items_fts USING fts5(
+          title,
+          summary,
+          transcript,
+          entities_text,
+          topics_text,
+          content='feed_items',
+          content_rowid='rowid',
+          tokenize='porter unicode61'
+        );
+      - description: >
+          entities_text and topics_text are derived columns — populated by
+          triggers that flatten entities_json and topics_json on INSERT/UPDATE.
+          The porter stemmer enables matching "indexing" when searching "index".
+          unicode61 tokenizer handles non-ASCII content (accented names,
+          CJK characters in technical terms).
+
+  new_columns:
+    feed_items:
+      - { name: entities_text, type: "TEXT", description: "Flattened entity names from entities_json, space-separated. Populated by trigger. Indexed by FTS5." }
+      - { name: topics_text, type: "TEXT", description: "Flattened topic labels from topics_json, space-separated. Populated by trigger. Indexed by FTS5." }
+      - { name: embedding_blob, type: "BLOB", description: "768-float or 384-float vector as raw bytes. Used for nearest-neighbor similarity search. Populated during Stage 2 enrichment." }
+
+  new_tables:
+    saved_searches:
+      description: >
+        Named, persistent search queries. A saved search is a reusable filter
+        definition — not a snapshot of results. Running a saved search re-executes
+        the query against the current corpus. Saved searches can have notification
+        triggers: alert when a new item matches.
+      columns:
+        - { name: id, type: "TEXT PRIMARY KEY", description: "UUIDv7" }
+        - { name: name, type: "TEXT NOT NULL", description: "User-chosen label: 'SQLite performance articles'" }
+        - { name: query_text, type: "TEXT NOT NULL", description: "FTS5 query string. Supports AND, OR, NOT, phrase, prefix, NEAR." }
+        - { name: filters_json, type: "TEXT", description: "JSON. Structured filters: {source_platform, modality, date_from, date_to, score_min, score_max, feed_id}" }
+        - { name: notify_on_match, type: "INTEGER DEFAULT 0", description: "Boolean. If 1, new items matching this saved search produce a notification." }
+        - { name: created_at, type: "INTEGER NOT NULL" }
+        - { name: last_run_at, type: "INTEGER", description: "Unix epoch millis of last execution." }
+        - { name: run_count, type: "INTEGER DEFAULT 0" }
+        - { name: profile_id, type: "TEXT NOT NULL REFERENCES profiles(id)", description: "Scoped to the profile that created it." }
+
+    search_history:
+      description: >
+        Recent search queries for autocomplete and re-execution. Automatically
+        pruned to the most recent 200 entries per profile. Not exported in
+        sync (local-only — search history is device-specific context).
+      columns:
+        - { name: id, type: "INTEGER PRIMARY KEY AUTOINCREMENT" }
+        - { name: query_text, type: "TEXT NOT NULL" }
+        - { name: filters_json, type: "TEXT" }
+        - { name: result_count, type: "INTEGER", description: "Number of results returned." }
+        - { name: searched_at, type: "INTEGER NOT NULL" }
+        - { name: profile_id, type: "TEXT NOT NULL REFERENCES profiles(id)" }
+
+  new_indexes:
+    - "CREATE INDEX idx_saved_searches_profile ON saved_searches(profile_id)"
+    - "CREATE INDEX idx_search_history_profile ON search_history(profile_id, searched_at DESC)"
+
+query_patterns:
+  basic_fts5:
+    description: "Standard full-text search with BM25 ranking and snippet extraction"
+    example: >
+      SELECT fi.id, fi.title, fi.source_platform, fi.published_at, fi.modality,
+             snippet(feed_items_fts, 1, '<mark>', '</mark>', '...', 32) AS summary_snippet,
+             snippet(feed_items_fts, 2, '<mark>', '</mark>', '...', 32) AS transcript_snippet,
+             bm25(feed_items_fts, 10.0, 5.0, 1.0, 3.0, 3.0) AS fts_rank
+      FROM feed_items_fts
+      JOIN feed_items fi ON fi.rowid = feed_items_fts.rowid
+      WHERE feed_items_fts MATCH ?
+        AND fi.pipeline_state = 'enriched'
+      ORDER BY fts_rank
+      LIMIT 50;
+    column_weights: >
+      bm25 weights: title=10.0, summary=5.0, transcript=1.0, entities=3.0,
+      topics=3.0. Rationale: Title is the strongest relevance signal (user
+      intent matches title far more often than transcript noise), so 10x
+      transcript. Summary is curated LLM output (5x transcript). Transcript
+      is baseline 1.0 — high recall but low precision in a 60-minute video.
+      Entities and topics are LLM-extracted structured terms — precise but
+      narrow, so 3x transcript. These are tunable defaults, not hardcoded.
+
+  filtered_search:
+    description: "FTS5 query with structured filters applied via JOIN conditions"
+    example: >
+      SELECT fi.id, fi.title,
+             snippet(feed_items_fts, 1, '<mark>', '</mark>', '...', 32) AS summary_snippet,
+             bm25(feed_items_fts, 10.0, 5.0, 1.0, 3.0, 3.0) AS fts_rank
+      FROM feed_items_fts
+      JOIN feed_items fi ON fi.rowid = feed_items_fts.rowid
+      WHERE feed_items_fts MATCH ?
+        AND fi.pipeline_state = 'enriched'
+        AND fi.source_platform IN (?, ?)
+        AND fi.modality = ?
+        AND fi.published_at BETWEEN ? AND ?
+        AND fi.credibility >= ?
+      ORDER BY fts_rank
+      LIMIT 50;
+
+  feed_scoped_search:
+    description: >
+      Search narrowed to items visible in a specific feed or preset. Requires
+      joining against the feed's source/preset configuration to filter the
+      candidate set before FTS matching. This is the "search within this feed"
+      interaction — the user is looking in the feed view, opens search, and
+      expects results scoped to that view's content.
+    implementation: >
+      The feed's source filter (platform + author whitelist) and preset's
+      hard limits (obliterate, minimum thresholds) are applied as WHERE
+      clauses that wrap the FTS MATCH. The query planner uses the FTS index
+      first (fast), then filters the result set against feed constraints.
+
+  nearest_neighbor:
+    description: >
+      "Find similar" uses the item's embedding vector to find the K nearest
+      neighbors by cosine similarity. This is a brute-force scan on desktop
+      (fast enough for <500K items with SIMD) and an HNSW index on mobile
+      (hnswlib via JNI, pre-built index updated on enrichment). The query
+      returns items ordered by embedding distance, which captures semantic
+      similarity that keyword search misses.
+    implementation: >
+      Desktop: SELECT all embedding_blob vectors, compute cosine similarity
+      in Kotlin (vectorized with Panama Vector API on JDK 21+), return top-K.
+      At 200K items with 768-dim vectors: ~150MB scan, ~50ms with SIMD.
+      Mobile: HNSW index file alongside SQLite DB. Query time: <5ms for top-50.
+      Fallback if no embeddings: disable "find similar" button, show tooltip
+      explaining embeddings are required.
+
+  search_result_scoring:
+    description: >
+      Search results carry two scores: FTS5 BM25 rank (text relevance) and
+      the item's existing feed score (ranking pipeline output). The UI shows
+      both. The default sort is BM25 rank (relevance to query). The user can
+      toggle to feed score sort (best-ranked items that match the query).
+      This dual-score model lets the user choose between "most relevant to
+      what I typed" and "highest quality items that mention this topic".
+
+user_stories:
+  - id: US-120
+    as: "user searching my feed history"
+    i_want: "full-text search across titles, summaries, transcripts, entities, and topics"
+    so_that: "I find that video I watched last week about database indexing"
+    acceptance:
+      - search bar accessible from any feed view (main, custom, autoplay queue)
+      - FTS5 query with porter stemming — 'indexing' matches 'index', 'indexed'
+      - results show highlighted snippets from the matching column
+      - "results show: title, source platform icon, author, published date, modality badge"
+      - results show both BM25 relevance score and feed ranking score
+      - results ordered by BM25 relevance by default, toggleable to feed score
+      - "entity and topic matches highlighted distinctly (e.g., 'Matched entity: SQLite')"
+      - search latency < 100ms for corpora up to 500K items
+      - search works offline — zero network, pure local SQLite
+
+  - id: US-121
+    as: "user filtering search results"
+    i_want: "to narrow results by source platform, modality, date range, and score range"
+    so_that: "I find the specific YouTube video about Rust, not the 200 articles"
+    acceptance:
+      - "filter chips: source platform (multi-select), modality (multi-select)"
+      - "date range picker: preset ranges (today, this week, this month, last 90 days) plus custom"
+      - "score range slider: filter by minimum feed ranking score (credibility, overall score, etc.)"
+      - filters compose with FTS query — all filters are AND conditions
+      - active filters shown as removable chips above results
+      - filter state persisted during search session (navigating to a result and back preserves filters)
+      - "empty result set shows: 'No items match. Try broadening your filters.' Not a blank screen."
+
+  - id: US-122
+    as: "user browsing a specific feed"
+    i_want: "search scoped to the current feed's content"
+    so_that: "I search within my 'deep research' feed without seeing casual browse items"
+    acceptance:
+      - search initiated from a feed view defaults to that feed's scope
+      - "scope indicator visible: 'Searching in: Deep Research' with option to expand to all"
+      - feed scope applies source filters, preset hard limits, and obliterate exclusions
+      - switching scope to 'All feeds' re-runs the query unscoped
+      - search from main feed scopes to all non-obliterated, enriched items
+
+  - id: US-123
+    as: "user who searches repeatedly for the same topics"
+    i_want: "to save searches and see my recent search history"
+    so_that: "I don't retype the same queries and can set up persistent monitors"
+    acceptance:
+      - "search history: last 200 queries shown as autocomplete suggestions"
+      - "history entries show: query text, result count, timestamp"
+      - swipe or tap to delete individual history entries
+      - "save search: name a query + filters as a saved search"
+      - saved searches listed in a dedicated section (sidebar or settings)
+      - saved search with notify_on_match=true alerts when new items match on crawl
+      - "saved search notification shows: search name, N new matches, tap to view"
+      - saved searches are profile-scoped (child profile has separate saved searches)
+
+  - id: US-124
+    as: "user who found an interesting item"
+    i_want: "to find semantically similar items in my corpus"
+    so_that: "I discover related content I might have missed"
+    acceptance:
+      - "'Find similar' button on every enriched item with an embedding"
+      - results ordered by embedding cosine similarity (nearest neighbors)
+      - "results show similarity score as a percentage ('92% similar')"
+      - results exclude the source item itself
+      - results exclude obliterated sources
+      - works across modalities — a podcast transcript can surface a similar article
+      - if item has no embedding (pending enrichment), button is disabled with tooltip
+      - find-similar latency < 200ms on desktop (brute-force scan), < 50ms on mobile (HNSW)
+
+  - id: US-125
+    as: "user viewing search results"
+    i_want: "to interact with results the same way I interact with feed items"
+    so_that: "I can thumbs-up, thumbs-down, obliterate, or open items from search"
+    acceptance:
+      - thumbs-up/down on search results logs to user_interactions (same as feed)
+      - "thumbs-up/down context_json records {source: 'search', query: '...'}"
+      - obliterate from search results triggers same rage-quit flow as feed
+      - "'Open' navigates to original source (same as feed punch-through, EC-010)"
+      - all search interactions feed into neural taste model training
+      - search result cards have identical interaction affordances to feed cards
+
+  - id: US-126
+    as: "user who wants to clean up search results"
+    i_want: "to permanently exclude specific items from future search results"
+    so_that: "irrelevant matches stop polluting my searches"
+    acceptance:
+      - "'Hide from search' action on individual search results"
+      - hidden items stored in a search_exclusions list (item_id + profile_id)
+      - hidden items are excluded from FTS results but remain in feed (not deleted)
+      - exclusion list reviewable and reversible in settings
+      - hiding an item is NOT obliterate — the item stays in the feed, just not in search
+      - maximum 1000 exclusions per profile (prevents accidental corpus destruction)
+
+collective_lifetime_stories:
+  - id: CL-120
+    title: "FTS5 performance degradation at scale"
+    description: >
+      FTS5 is fast for small corpora but performance characteristics change at
+      scale. At 500K items with transcripts averaging 5000 tokens each, the FTS
+      index is several GB. Common queries ('the', 'and') produce enormous posting
+      lists. BM25 ranking must scan the full posting list before returning top-K.
+      Mitigation: FTS5 prefix indexes for autocomplete, rank cutoff via LIMIT
+      pushdown (SQLite 3.44+), and transcript column at weight 1.0 (low) to
+      reduce the impact of transcript noise on ranking. Monitor: query latency
+      p99 at 100K, 250K, 500K items. If p99 exceeds 500ms, consider partitioning
+      the FTS table by date (recent items in hot partition, old items in cold).
+    worst_case: >
+      User with 3 years of podcast transcripts searches for a common word.
+      FTS5 scans millions of posting list entries. Query takes 2+ seconds.
+      Mitigation: suggest more specific queries via autocomplete. Hard limit:
+      FTS5 queries that exceed 1 second are cancelled and the user is prompted
+      to narrow their search. Never let a search query block the UI thread.
+
+  - id: CL-121
+    title: "Search quality vs ranking quality — two different problems"
+    description: >
+      The ranking pipeline optimizes for 'what should I see next?' — a
+      preference-weighted ordering. Search optimizes for 'does this match my
+      query?' — a relevance problem. These produce different orderings for the
+      same corpus. A high-ranking item (great credibility, high novelty) may
+      be a poor search result (barely mentions the query term). A low-ranking
+      item (old, repetitive) may be the perfect search result (exact match for
+      a specific phrase). The system must not conflate these. BM25 is the
+      primary search ranking signal. Feed score is secondary, shown but not
+      dominant. Users who sort by feed score are explicitly choosing 'best items
+      that happen to mention this' over 'best matches for what I typed.'
+    worst_case: >
+      User searches for a term, sees results sorted by feed score (toggled
+      accidentally), wonders why the top result barely mentions their query.
+      The default must always be BM25 relevance. Feed score sort must be
+      clearly labeled as an alternative view, not the default.
+
+  - id: CL-122
+    title: "FTS5 query injection and adversarial search input"
+    description: >
+      FTS5 has its own query syntax: AND, OR, NOT, NEAR, phrase quotes, prefix
+      asterisk, column filters. User input is passed as the MATCH argument.
+      Malformed queries (unbalanced quotes, invalid operators) cause FTS5 to
+      throw errors. Adversarial inputs could construct expensive queries (deeply
+      nested OR chains, NEAR with large distance) that degrade performance.
+      All user input must be sanitized before reaching FTS5: escape special
+      characters for literal search, or parse into a structured query builder
+      that validates syntax before execution. Power users who want raw FTS5
+      syntax can opt into an 'advanced search' mode with explicit syntax
+      documentation and a query validator.
+    worst_case: >
+      User types a query with unbalanced quotes. FTS5 throws SQLITE_ERROR.
+      The app shows a cryptic error. Fix: the default search mode wraps user
+      input in double quotes (phrase search) with special characters stripped.
+      Advanced mode validates syntax before execution and shows a human-readable
+      error ('Unmatched quote — did you mean to search for the exact phrase?').
+
+enforced_constraints:
+  - id: EC-120
+    constraint: "Search is local-only — no network requests, no cloud, no telemetry"
+    type: local-first principle
+    rationale: >
+      Search queries are intimate signals of user intent. They are never
+      transmitted. Search runs against the local SQLite FTS5 index. Cloud sync
+      (premium) syncs feed items and interactions, never search queries or
+      search history. The user's search behavior is strictly device-local.
+    testable: >
+      Airplane mode enabled. Search returns results. No network request is
+      attempted. search_history table is excluded from sync_state tracking.
+
+  - id: EC-121
+    constraint: "Search input is sanitized before FTS5 MATCH execution"
+    type: robustness
+    rationale: >
+      Unsanitized user input passed to FTS5 MATCH causes crashes on malformed
+      syntax and performance degradation on adversarial queries. Default search
+      mode escapes all FTS5 operators. Advanced search mode validates syntax
+      before execution. No raw user string ever reaches MATCH unprocessed.
+    testable: >
+      Fuzz test: 10,000 random strings including FTS5 special characters
+      (*, ", NEAR, OR, NOT, parentheses, column:) passed to search. Zero
+      SQLITE_ERROR exceptions. Zero queries exceeding 2 seconds.
+
+  - id: EC-122
+    constraint: "Search results respect obliterate and maturity pre-filters"
+    type: consistency
+    rationale: >
+      Obliterated sources are gone. Maturity-filtered content for child profiles
+      is gone. Search must not be a backdoor that resurfaces excluded content.
+      The same pre-filters that apply to the feed apply to search results.
+    testable: >
+      Obliterate a source. Search for content from that source by exact title.
+      Zero results. Switch to child profile with strict maturity. Search for
+      a known mature item by title. Zero results.
+
+  - id: EC-123
+    constraint: "Find-similar never sends embeddings over the network"
+    type: privacy
+    rationale: >
+      Embeddings are dense representations of content meaning. Transmitting
+      them would leak the semantic content of the user's entire corpus.
+      Nearest-neighbor search is computed locally — brute-force on desktop,
+      HNSW on mobile. No vector database cloud service. No embedding API calls
+      for similarity queries.
+    testable: >
+      Run find-similar with network monitoring. Zero outbound requests.
+      Embedding vectors stored in embedding_blob column, queried locally.
+
+opinionated_constraints:
+  - id: OC-120
+    constraint: "FTS5 with porter stemmer and unicode61 tokenizer — not Tantivy, not Lucene, not external search engine"
+    rationale: >
+      FTS5 is built into SQLite. Zero additional dependencies. Zero additional
+      processes. The same database file that holds the feed also holds the search
+      index. Tantivy (Rust) and Lucene (Java) are more powerful but require a
+      separate index file, separate memory allocation, separate crash domain,
+      and separate sync story. FTS5 is good enough for a personal corpus of
+      <1M items. The porter stemmer covers English morphology. unicode61
+      handles international content. BM25 ranking is the standard baseline
+      for text retrieval. We are not building a search engine — we are adding
+      search to a feed reader.
+    acceptable_loss: >
+      FTS5 lacks: typo tolerance (fuzzy matching), synonym expansion, semantic
+      understanding, multilingual stemming. Mitigations: find-similar covers
+      the semantic gap. Autocomplete from search history covers common typos.
+      Multilingual stemming is a V2 concern — porter covers English, which is
+      the V1 target. Users searching in non-English languages get exact and
+      prefix matching but not stemming.
+
+  - id: OC-121
+    constraint: "Brute-force cosine similarity on desktop, HNSW on mobile — not a vector database"
+    rationale: >
+      Desktop has RAM. 200K items at 768 dimensions at 4 bytes per float =
+      ~600MB of vectors. Brute-force cosine scan with SIMD (JDK 21+ Vector
+      API) completes in <100ms. This is simpler, more debuggable, and more
+      portable than an embedded vector database. Mobile cannot afford the RAM
+      scan, so it uses hnswlib (C++ via JNI, ~200KB binary, pre-built index
+      file). Both approaches are local. Neither requires a server. Neither
+      requires a separate process. The vector search is an appendix to the
+      SQLite database, not a replacement for it.
+    acceptable_loss: >
+      Brute-force does not scale past ~500K items on desktop (scan time
+      grows linearly). At that scale, switch to HNSW on desktop too. This is
+      a config flag, not an architecture change — the HNSW code already
+      exists for mobile.
+
+  - id: OC-122
+    constraint: "Default search is phrase-escaped, not raw FTS5 syntax"
+    rationale: >
+      The user types words. They expect Google-style behavior: type words,
+      get results. FTS5 syntax (AND, OR, NOT, NEAR, column:, prefix*) is
+      powerful but hostile to casual use. Default search wraps the user's
+      input in double quotes (phrase search) with FTS5 operators stripped.
+      This means 'database OR cache' searches for the literal string
+      'database OR cache', not an OR query. Power users who want the full
+      FTS5 syntax access it via a toggle ('Advanced syntax') that is off by
+      default. This is not dumbing down — it's not surprising the user with
+      accidental boolean logic in their search results.
+    acceptable_loss: >
+      Casual users cannot use OR, NOT, or NEAR without toggling advanced
+      mode. This is acceptable because: (1) most searches are simple keyword
+      lookups, (2) the toggle is one tap away, (3) incorrect implicit
+      boolean interpretation is worse than no boolean at all.
+
+  - id: OC-123
+    constraint: "Search history is device-local, never synced"
+    rationale: >
+      Search queries reveal intent more precisely than feed interactions.
+      'How to file for divorce' in search history is categorically more
+      sensitive than a feed item about family law appearing in the ranked
+      feed. Premium sync replicates feed items, interactions, and saved
+      searches (explicitly created by the user). It does not replicate the
+      ephemeral search history log. Each device has its own search history.
+      This is a privacy-by-design decision, not a sync limitation.
+    acceptable_loss: >
+      Users switching devices lose autocomplete suggestions from their
+      previous device. Saved searches (explicitly named and saved) do sync.
+      The distinction: saved searches are deliberate artifacts; search
+      history is ephemeral context.

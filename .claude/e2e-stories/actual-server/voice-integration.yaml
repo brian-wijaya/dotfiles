@@ -1,0 +1,56 @@
+vocabulary:
+  actual_dictation: "Existing Whisper-based speech-to-text system. Runs on GPU. Integrated with desktop via keybinding. Produces text output."
+  voice_sensor: "Proposed somatic sensor channel for microphone activity. Would export voice_active/idle to SHM alongside typing rhythm and pointer dynamics."
+
+metadata:
+  feature: voice-integration
+  project: actual-server
+  date: "2026-02-13"
+  status: NOT_IMPLEMENTED
+
+stories:
+  - name: dictation_text_reaches_agent
+    status: NOT_IMPLEMENTED
+    description: "User dictates via Actual Dictation and the text reaches Claude through the normal input flow."
+    preconditions:
+      - "Actual Dictation operational with Whisper on GPU"
+      - "User has dictation keybinding configured"
+    steps:
+      - "User presses dictation keybinding"
+      - "Actual Dictation activates Whisper, captures audio"
+      - "Whisper transcribes speech to text"
+      - "Text is produced (clipboard, direct input, or paste)"
+      - "User submits text to Claude Code"
+      - "Agent processes the dictated text as normal input"
+    verify:
+      - "Whisper runs on GPU (not CPU)"
+      - "Transcription latency < 2s for typical utterance"
+      - "No gateway changes required (option 1: minimal integration)"
+      - "Agent cannot distinguish typed from dictated input (no metadata)"
+
+  - name: voice_activity_detected_as_sensor
+    status: NOT_IMPLEMENTED
+    description: "Somatic sensor detects microphone activity and exports voice state."
+    preconditions:
+      - "Sensor daemon has microphone access"
+      - "Voice activity detection enabled in sensor config"
+    steps:
+      - "User begins speaking"
+      - "Sensor detects microphone energy above threshold"
+      - "Sensor exports voice_active=true to SHM"
+      - "Gateway ambient header includes voice=active"
+      - "Agent sees voice=active in ambient context"
+      - "User stops speaking"
+      - "Sensor exports voice_active=false after silence threshold"
+    verify:
+      - "Voice activity detection latency < 100ms"
+      - "No false positives from ambient noise (threshold calibration)"
+      - "Privacy: audio is NOT recorded or transmitted — only activity detection"
+      - "Voice state integrates with typing gate (agent pauses during voice activity)"
+
+enforced_constraints:
+  - "Whisper stays on GPU — no CPU inference for voice"
+
+opinionated_constraints:
+  - "Option 1 (dictation → text → normal flow) is sufficient for now"
+  - "Voice sensor channel deferred to post-Phase 4 — requires microphone access, raises privacy questions"

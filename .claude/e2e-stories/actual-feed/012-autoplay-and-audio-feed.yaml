@@ -1,0 +1,283 @@
+title: "Autoplay & Audio Feed Modes"
+status: draft
+version: 1
+
+principle: >
+  The feed is not just visual. Autoplay transforms Actual Feed into a
+  personalized, infinite audio channel — narrated text summaries interspersed
+  with original audio/video content, played in ranked order. Four modes
+  define the rhythm: scan (fast briefing), deep (full content), background
+  (ambient information), and project-focused (filtered to active project
+  topics). Autoplay is consumption infrastructure for when your eyes are
+  busy but your ears are free.
+
+modes:
+  scan:
+    description: >
+      Fast briefing mode. TTS reads the 2-4 sentence summary of each item.
+      Original audio/video content is NOT played — only summaries. Items
+      advance automatically after summary. Average pace: 15-20 items per
+      10 minutes. Designed for: morning briefing, commute overview, quick
+      catch-up.
+    content_played: "TTS summary only. No original content."
+    advance_trigger: "Automatic after summary ends."
+    skip_behavior: "Next item immediately."
+    budget_interaction: "Counts toward article budget (text consumption)."
+
+  deep:
+    description: >
+      Full content mode. For audio/video items: play the original content
+      in full. For text items: TTS reads the full extracted text (not just
+      summary). Items advance automatically. Average pace: 2-5 items per
+      hour (depends on content length). Designed for: focused listening,
+      podcast-style deep consumption.
+    content_played: "Original audio/video in full. TTS of full text for articles."
+    advance_trigger: "Automatic after content ends."
+    skip_behavior: "Next item. Current item marked as 'skipped' in interaction log."
+    budget_interaction: "Counts toward respective content type budget (video/audio/article)."
+
+  background:
+    description: >
+      Ambient information mode. Mix of summaries and short-form original
+      content. Items longer than a configurable threshold (default: 10 min)
+      are summarized instead of played in full. Low cognitive demand.
+      Designed for: working with headphones, doing chores, light ambient
+      awareness.
+    content_played: >
+      TTS summary for text items and long audio/video (> threshold).
+      Original content for short audio/video (<= threshold).
+    advance_trigger: "Automatic after content/summary ends."
+    skip_behavior: "Next item."
+    budget_interaction: "Counts toward respective content type budget."
+    configurable:
+      - max_item_duration_seconds: 600  # 10 min default. Items longer than this get summary-only.
+
+  project_focused:
+    description: >
+      Filtered autoplay locked to a specific tuning preset or custom feed.
+      Only items matching the selected feed/preset are played. All items
+      play in deep mode (full content). Designed for: research sessions,
+      project-specific deep dives, technical learning.
+    content_played: "Original audio/video in full. TTS of full text for articles."
+    advance_trigger: "Automatic after content ends."
+    skip_behavior: "Next item in the filtered set."
+    budget_interaction: "Counts toward respective content type budget."
+    configurable:
+      - feed_id: "Which feed or preset to use as filter."
+
+tts_engine:
+  description: >
+    Text-to-speech for summary/article narration. The TTS engine must
+    produce natural speech without requiring a cloud API (local-first
+    principle). Piper TTS (ONNX-based, MIT license) is the recommended
+    engine — fast, local, supports multiple voices, ~50MB model.
+  desktop: "Piper TTS via ONNX Runtime (same runtime as embedding model)"
+  mobile: "Platform TTS API (Android TextToSpeech, iOS AVSpeechSynthesizer) with Piper as optional upgrade"
+  cloud: "Server-side TTS with higher quality voices (premium)"
+  voice_selection: "User selects from available voices in settings. Default: medium-quality English."
+
+playback_queue:
+  description: >
+    Autoplay draws from the active feed's ranked item list. The queue is
+    the feed — items play in score order (same order as visual feed).
+    User interactions during autoplay (skip, thumbs-up, thumbs-down)
+    feed back into the ranking system in real-time. The neural taste
+    model updates; the next item in queue may shift.
+
+  queue_behavior:
+    - "Queue is dynamically generated from current feed ranking"
+    - "Played items are marked as 'played' in interaction log"
+    - "Skipped items are marked as 'skipped' (negative signal, weaker than thumbs-down)"
+    - "User can thumbs-up/down via hardware buttons or notification controls"
+    - "Queue position synced across devices (premium sync)"
+    - "Resuming autoplay continues from last played position"
+    - "New items crawled during autoplay are inserted into queue at their ranked position"
+
+  interruption_handling:
+    - "Phone call: autoplay pauses, resumes after call"
+    - "Budget expiry: autoplay pauses, shows budget notification, advances to next non-budget content type"
+    - "Tripwire fire: autoplay pauses, reads tripwire notification, user decides to investigate or continue"
+    - "Network loss: autoplay continues with cached/local content, skips items requiring network"
+
+user_stories:
+  - id: US-110
+    as: "user commuting"
+    i_want: "scan mode to read me a fast briefing of top items"
+    so_that: "I'm caught up in 10 minutes without looking at my phone"
+    acceptance:
+      - TTS reads summary of each item in ranked order
+      - items advance automatically (no manual interaction needed)
+      - 15-20 items covered in 10 minutes
+      - skip via headphone button or notification control
+      - thumbs-up/down via headphone long-press or notification
+      - works with screen off / app backgrounded on mobile
+
+  - id: US-111
+    as: "user doing deep research"
+    i_want: "deep mode to play full original content for my research feed"
+    so_that: "I hear the complete podcast/video/article without switching apps"
+    acceptance:
+      - original audio/video plays in full
+      - text articles read via TTS (full extracted text, not just summary)
+      - items advance automatically
+      - playback position tracked per item (resume if interrupted)
+      - budget enforcement applies (pause on budget expiry)
+
+  - id: US-112
+    as: "user working with headphones"
+    i_want: "background mode as ambient information while I code"
+    so_that: "I absorb information passively without context-switching"
+    acceptance:
+      - short items (< 10 min) play in full
+      - long items get summary-only (TTS)
+      - low cognitive demand — no interaction required
+      - duration threshold configurable
+      - won't play items I've already seen (skips played items)
+
+  - id: US-113
+    as: "user listening to my feed"
+    i_want: "to skip, like, or dislike items with hardware controls"
+    so_that: "I interact without pulling out my phone"
+    acceptance:
+      - "headphone button single-press: play/pause"
+      - "headphone button double-press: skip to next item"
+      - "headphone button triple-press or long-press: thumbs-up"
+      - "notification controls: play/pause, skip, thumbs-up, thumbs-down"
+      - all interactions logged and feed back into ranking
+      - "Android: MediaSession API. iOS: MPNowPlayingInfoCenter + MPRemoteCommandCenter."
+
+  - id: US-114
+    as: "user who hit a budget limit during autoplay"
+    i_want: "autoplay to skip to the next non-budgeted content type"
+    so_that: "my audio feed doesn't just stop"
+    acceptance:
+      - video budget hit → skip video items, continue with audio/text
+      - audio budget hit → skip audio items, continue with text (TTS)
+      - "all budgets hit → autoplay stops, notification: \"All content budgets reached\""
+      - budget notification read via TTS before skipping
+
+  - id: US-115
+    as: "user who gets a tripwire notification during autoplay"
+    i_want: "autoplay to interrupt and read me the alert"
+    so_that: "I don't miss time-sensitive events"
+    acceptance:
+      - current item pauses
+      - "TTS reads: tripwire name, item title, confidence"
+      - "user choice: \"investigate\" (opens item, stops autoplay) or \"continue\" (resumes autoplay)"
+      - choice made via voice command (V2) or notification control (V1)
+      - non-critical tripwires queue for next natural break (between items)
+      - critical tripwires interrupt immediately
+
+collective_lifetime_stories:
+  - id: CL-110
+    title: "TTS quality and listener fatigue"
+    description: >
+      Local TTS (Piper) produces functional but not broadcast-quality speech.
+      Listening to hours of TTS narration causes fatigue. Mitigation:
+      alternating TTS summaries with original audio/video content in
+      background mode reduces monotony. Users can upgrade to higher-quality
+      TTS voices. Long-term: as local TTS models improve (Piper, Coqui,
+      Bark), voice quality will converge with cloud TTS.
+    worst_case: >
+      User abandons autoplay after 20 minutes of robotic TTS. Mitigation:
+      scan mode is designed for short sessions (10 min). Deep mode plays
+      original content, minimizing TTS exposure. Background mode mixes
+      both. The product must not oversell TTS quality.
+
+  - id: CL-111
+    title: "Queue coherence during real-time feed updates"
+    description: >
+      During autoplay, new items arrive from the crawler. These items
+      enter the ranked queue at their computed position. If a high-scoring
+      item arrives, it may jump ahead of the current playback position.
+      This creates a coherence issue: the user is hearing items in one
+      order, but the visual feed shows a different order. Solution: new
+      items during autoplay are queued AFTER the current position unless
+      they're tripwire fires or above a configurable priority threshold.
+    worst_case: >
+      Burst of high-scoring items arrives during autoplay. User's queue
+      is disrupted. Mitigation: configurable "queue stability" setting
+      — high stability means new items wait until next session; low
+      stability means they insert dynamically.
+
+  - id: CL-112
+    title: "Autoplay and parental controls interaction"
+    description: >
+      A child profile in autoplay mode must not play or narrate
+      maturity-filtered content. The autoplay queue is drawn from the
+      child's filtered feed — maturity-filtered items never enter the
+      queue. Budget enforcement also applies per-profile.
+    worst_case: >
+      TTS narrates a summary that contains mature language even though
+      the overall item scored below the maturity threshold. Mitigation:
+      the maturity assessment includes a "language" category flag —
+      if the child profile has a strict language override, the TTS
+      summary is also subject to that flag.
+
+enforced_constraints:
+  - id: EC-110
+    constraint: "Autoplay TTS is local-first — no cloud API required for basic narration"
+    type: local-first principle
+    rationale: >
+      Autoplay must work offline and without subscription. Piper TTS
+      runs locally via ONNX Runtime (same runtime as embedding model).
+      Cloud TTS is a premium upgrade, not a requirement.
+    testable: "Autoplay scan mode works with airplane mode enabled."
+
+  - id: EC-111
+    constraint: "All autoplay interactions (skip, like, dislike) are logged in user_interactions"
+    type: data integrity
+    rationale: >
+      Autoplay generates implicit and explicit signals. Skips are weak
+      negatives. Play-to-completion is a weak positive. Likes/dislikes
+      are explicit. All feed into the neural taste model.
+    testable: "After a 30-minute autoplay session, user_interactions contains entries for every item played, skipped, or rated."
+
+  - id: EC-112
+    constraint: "Budget enforcement applies during autoplay"
+    type: consistency
+    rationale: >
+      Autoplay must respect the same budgets as manual browsing. A user
+      cannot circumvent video budget by switching to autoplay deep mode.
+    testable: "Video budget at 0 remaining → autoplay skips all video items."
+
+opinionated_constraints:
+  - id: OC-110
+    constraint: "Piper TTS as default local narration engine"
+    rationale: >
+      Piper is MIT-licensed, ONNX-based (same runtime as embedding model),
+      supports 20+ languages, ~50MB per voice model, runs at 10x+ realtime
+      on modern hardware. Alternatives: Coqui TTS (larger models, better
+      quality, heavier), platform APIs (no control over voice/quality),
+      Bark (GPT-style, much slower, not realtime on CPU). Piper is the
+      only option that satisfies: local, fast, small, open-source.
+    acceptable_loss: >
+      Piper voice quality is functional but not broadcast-grade. Users
+      sensitive to TTS quality can use platform TTS APIs or wait for
+      cloud premium TTS.
+
+  - id: OC-111
+    constraint: "Four autoplay modes (scan, deep, background, project-focused) — not configurable per-parameter"
+    rationale: >
+      Modes are opinionated presets, not a configuration matrix. Exposing
+      every parameter (TTS vs original, duration threshold, queue priority)
+      creates decision fatigue. Four modes cover the real use cases.
+      Power users who want custom autoplay behavior create a custom feed
+      with a tuning preset and use project-focused mode.
+    acceptable_loss: >
+      A user who wants "scan but with short videos" must use background
+      mode with a low duration threshold. Not perfectly named but
+      functionally equivalent.
+
+  - id: OC-112
+    constraint: "Autoplay queue is the ranked feed — not a separate playlist"
+    rationale: >
+      The feed IS the queue. Autoplay plays items in the same order the
+      visual feed shows them. This is simple, predictable, and means
+      every ranking improvement automatically improves autoplay quality.
+      A separate playlist would create a parallel ranking system to
+      maintain.
+    acceptable_loss: >
+      Items that are visually engaging but poor audio (e.g., code
+      screenshots, diagrams) get TTS'd as summaries in autoplay,
+      which may feel redundant. The user can skip these.

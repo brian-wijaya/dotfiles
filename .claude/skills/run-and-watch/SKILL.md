@@ -2,7 +2,7 @@
 name: run-and-watch
 description: Run a command while watching X11 events and timing. Use for testing, debugging, or when you need to correlate a command's execution with desktop side effects.
 disable-model-invocation: true
-allowed-tools: mcp__somatic-temporal__now, mcp__somatic-temporal__delta, mcp__somatic-x11-bus__get_events, mcp__somatic-hud__flash_text, Bash
+allowed-tools: mcp__somatic-temporal__now, mcp__somatic-temporal__delta, mcp__somatic-x11-bus__read_events, mcp__somatic-hud__flash_text, Bash
 ---
 
 # Run Command with Somatic Observation
@@ -37,7 +37,7 @@ Execute a command while capturing timing and X11 events to understand its side e
 
 5. **Query X11 events during execution**:
    ```
-   mcp__somatic-x11-bus__get_events(count=200)
+   mcp__somatic-x11-bus__read_events(count=200)
    Filter to events with timestamp >= start_ns
    ```
 

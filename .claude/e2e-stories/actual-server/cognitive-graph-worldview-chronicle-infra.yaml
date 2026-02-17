@@ -1,0 +1,1807 @@
+vocabulary:
+  session-scoped-scratchpad: >
+    Per-MCP-session ConcurrentHashMap<String, String> isolated key-value store.
+    Each session gets its own SessionData record containing the store, call counters,
+    tool history deque (capped at 20), start time, and a single-threaded virtual-thread
+    ScheduledExecutorService for deferred tasks.
+  ambient-state-header: >
+    Tier 1 awareness line (~30 tokens) read from /dev/shm/somatic_ambient on every tool
+    response. Format: [env: typing=idle dwell=2340ms focus=0x01a00003 clip=text:47b ptr_v=0.0 ...].
+    Appended as a TextContent footer by ResponseEnricher.wrap().
+  tier-2-alert: >
+    State transition detection (~200 tokens) fired by AlertDetector.check() when consecutive
+    ambient snapshots show focus, typing, or clipboard changes. Format: [ALERT: focus-changed] ...
+  worldview: >
+    Three-layer compressed representation of user knowledge state.
+    L1 ActiveContext: recent topics, session summaries, deposit count today.
+    L2 WorkingMemory: recurring themes, active projects, open questions, loose ends.
+    L3 CoreBeliefs: LLM-summarized summary, CLAUDE.md preferences, stable patterns, identity facets.
+    Plus a contradictions list. Token budget: 1400 tokens max, trimmed progressively from L1 to L3.
+  deposit: >
+    Fundamental unit of recorded knowledge. Record with deposit_id (UUID), session_id,
+    pass_number, timestamp (Instant), event_type (OBSERVATION/DECISION/ARTIFACT/QUESTION/CORRECTION),
+    content, tags, references. Produced to chronicle.deposits Kafka topic.
+  loop-score: >
+    Ratio of most-repeated tool name in last 10 calls. 1.0 = all same tool.
+    Computed in SessionState.inspect() from the toolHistory deque.
+  response-enrichment: >
+    Manual BiFunction wrapper (ResponseEnricher.wrap()) that appends tier-1 ambient
+    and tier-2 alert TextContent footers to every tool CallToolResult.
+  protocol-version-filter: >
+    Servlet filter that rewrites "protocolVersion":"YYYY-MM-DD" in-flight from
+    whatever SDK version (2024-11-05 or 2025-06-18) to "2025-11-25" required by Claude Code.
+    Same-length date replacement avoids Content-Length issues.
+  session-reaper: >
+    Background virtual thread that uses reflection to access SDK's private
+    ConcurrentHashMap<String, McpStreamableServerSession> sessions field, cross-references
+    with TrafficLogFilter.sessionActivity() timestamps, and evicts sessions idle > 5 minutes.
+    Sweeps every 60 seconds. Delays first sweep by one interval.
+  somatic-proxy: >
+    SomaticProxyRegistrar queries somatic daemon's tools/list, registers each as a
+    gateway proxy tool with ACT_ or SENSE_ prefix based on verb classification.
+    Default display_id is host display (:0). DisplayRouter selects target somatic instance.
+  tool-timeout-class: >
+    Three tiers: FAST (5s, SENSE reads), STANDARD (25s, ACT operations),
+    SLOW (120s, LLM/indexing). Per-call timeout arg can shorten but never exceed class max.
+  response-cap: >
+    Tool responses exceeding 100,000 chars are truncated with a "[Truncated: response exceeded 100KB]"
+    message appended. Prevents context window bloat.
+  resource-scaler: >
+    VaultResourceScaler polls xprintidle at configurable interval (default 30s).
+    Conservative mode: 8GB RAM, 50% CPU, IOWeight=100.
+    Aggressive mode: 32GB RAM, 100% CPU, IOWeight=500.
+    Threshold: 6h idle -> aggressive, <1min idle -> return to conservative.
+    Applies systemd drop-in overrides and restarts target service.
+
+metadata:
+  feature: actual-server
+  component: cognitive-graph-worldview-chronicle-infra
+  date: "2026-02-15"
+
+stories:
+  # ── Session-scoped cognitive tools ──
+
+  - name: self-write-stores-key-value-in-session
+    description: >
+      ACT_self_write stores a key-value pair in the session-scoped scratchpad and returns
+      confirmation JSON with the key and status "written".
+    preconditions:
+      - "Gateway is running with MCP server accepting connections"
+      - "A valid MCP session exists (session ID propagated via ThreadLocal)"
+    steps:
+      - "Client calls ACT_self_write with key='my_key' and value='my_value'"
+      - "Handler retrieves session ID from SessionState.getCurrentSession() (falls back to 'default' if null)"
+      - "SessionState.put(sessionId, 'my_key', 'my_value') stores into ConcurrentHashMap"
+      - "Handler returns CallToolResult with TextContent '{\"key\":\"my_key\",\"status\":\"written\"}' and isError=false"
+      - "ResponseEnricher appends ambient state header and any alerts as footer"
+    verify:
+      - "Response contains JSON with key and status='written'"
+      - "SessionState.get(sessionId, 'my_key') returns 'my_value'"
+      - "ToolRegistry records the tool call in SessionState.recordToolCall()"
+      - "Metrics.recordToolCall('ACT_self_write', durationMs) is invoked"
+      - "Timeout class is FAST (5s max)"
+
+  - name: self-write-isolated-across-sessions
+    description: >
+      Values written in one session are not visible in another session.
+      Session isolation is guaranteed by separate ConcurrentHashMap instances per session ID.
+    preconditions:
+      - "Two MCP sessions (session-A, session-B) are active"
+    steps:
+      - "Client on session-A calls ACT_self_write with key='secret' value='alpha'"
+      - "Client on session-B calls ACT_self_write with key='secret' value='beta'"
+      - "Client on session-A calls SENSE_self_read with key='secret'"
+      - "Client on session-B calls SENSE_self_read with key='secret'"
+    verify:
+      - "Session-A SENSE_self_read returns value='alpha'"
+      - "Session-B SENSE_self_read returns value='beta'"
+      - "Values are stored in distinct SessionData.store() instances"
+
+  - name: self-read-returns-value-for-existing-key
+    description: >
+      SENSE_self_read retrieves a previously written key-value pair from the session scratchpad.
+      Values with special characters are JSON-escaped in the response.
+    preconditions:
+      - "ACT_self_write has been called with key='note' value='line1\\nline2\\t\"quoted\"'"
+    steps:
+      - "Client calls SENSE_self_read with key='note'"
+      - "Handler reads from SessionState.get(sessionId, 'note')"
+      - "Value is JSON-escaped: backslash, quote, newline, carriage return, tab"
+    verify:
+      - "Response contains JSON with key='note' and properly escaped value"
+      - "Newlines appear as \\n, tabs as \\t, quotes as \\\" in response"
+
+  - name: self-read-returns-null-for-missing-key
+    description: >
+      SENSE_self_read returns null value when the key does not exist in the session scratchpad.
+    preconditions:
+      - "Session exists but key 'nonexistent' was never written"
+    steps:
+      - "Client calls SENSE_self_read with key='nonexistent'"
+    verify:
+      - "Response contains '{\"key\":\"nonexistent\",\"value\":null}'"
+      - "isError is false (missing key is not an error)"
+
+  - name: self-read-returns-null-for-unknown-session
+    description: >
+      When SessionState has no data for the current session ID, SENSE_self_read returns null.
+    preconditions:
+      - "Session ID is set but no SessionData exists for it in the sessions map"
+    steps:
+      - "Client calls SENSE_self_read with key='anything'"
+      - "SessionState.get() returns null because sessions map has no entry"
+    verify:
+      - "Response contains value:null"
+
+  - name: self-inspect-returns-session-metrics
+    description: >
+      SENSE_self_inspect returns tool_call_count, error_count, last_tools history,
+      session_elapsed_ms, and loop_score for the current session.
+    preconditions:
+      - "Session has had multiple tool calls including some errors"
+    steps:
+      - "Client calls SENSE_self_inspect with no parameters (empty schema)"
+      - "Handler calls SessionState.inspect(sessionId)"
+      - "inspect() computes loop_score from last 10 entries in toolHistory deque"
+    verify:
+      - "Response is JSON with keys: tool_call_count, error_count, last_tools, session_elapsed_ms, loop_score"
+      - "tool_call_count matches total calls recorded for this session"
+      - "error_count matches calls where isError was true"
+      - "last_tools is a list of up to 20 most recent tool names"
+      - "loop_score is between 0.0 and 1.0"
+      - "session_elapsed_ms is positive and monotonically increasing"
+
+  - name: self-inspect-loop-score-detects-repetition
+    description: >
+      When the same tool is called repeatedly, loop_score approaches 1.0.
+      This enables the LLM to detect and break out of tool call loops.
+    preconditions:
+      - "Session has been calling SENSE_self_read 10 times in a row"
+    steps:
+      - "Client calls SENSE_self_inspect"
+    verify:
+      - "loop_score is 1.0 (10 out of 10 calls are the same tool)"
+      - "last_tools contains 10+ entries of 'SENSE_self_read'"
+
+  - name: self-inspect-empty-session
+    description: >
+      SENSE_self_inspect returns zero counts and empty history for a session that
+      has no prior tool calls (or does not exist in the sessions map).
+    preconditions:
+      - "Session ID exists but no tool calls have been recorded"
+    steps:
+      - "Client calls SENSE_self_inspect"
+    verify:
+      - "tool_call_count is 0, error_count is 0, last_tools is [], session_elapsed_ms is 0, loop_score is 0.0"
+
+  - name: self-defer-schedules-deferred-execution
+    description: >
+      ACT_self_defer schedules a deferred task that writes its result to the session scratchpad
+      after a specified delay. The result can be retrieved later via SENSE_self_read using the
+      returned retrieve_key.
+    preconditions:
+      - "Gateway is running with a valid session"
+    steps:
+      - "Client calls ACT_self_defer with tool_name='SENSE_graph_neighbors', delay_seconds=5"
+      - "Handler validates delay_seconds is between 1 and 300"
+      - "Handler generates UUID-based deferId and constructs retrieve_key='__deferred:<uuid>'"
+      - "SessionState.scheduleDeferred() schedules a Runnable on the session's single-threaded ScheduledExecutorService"
+      - "Handler returns JSON with defer_id, scheduled_for_seconds, and retrieve_key"
+      - "After 5 seconds, the scheduled Runnable executes and writes 'executed at <ISO timestamp>' to the retrieve_key"
+    verify:
+      - "Immediate response contains defer_id (UUID), scheduled_for_seconds=5, retrieve_key prefix '__deferred:'"
+      - "After delay, SENSE_self_read with the retrieve_key returns the execution timestamp"
+      - "The deferred task runs on a virtual thread named 'defer-<sessionId>'"
+
+  - name: self-defer-rejects-out-of-range-delay
+    description: >
+      ACT_self_defer rejects delay_seconds values outside the 1-300 range.
+    preconditions:
+      - "Gateway is running"
+    steps:
+      - "Client calls ACT_self_defer with delay_seconds=0"
+      - "Client calls ACT_self_defer with delay_seconds=301"
+    verify:
+      - "Both calls return isError=true with message 'delay_seconds must be between 1 and 300'"
+      - "No task is scheduled"
+
+  # ── Session state internals ──
+
+  - name: session-state-tool-history-capped-at-20
+    description: >
+      The toolHistory ConcurrentLinkedDeque is capped at 20 entries.
+      When a 21st tool call is recorded, the oldest entry is evicted.
+    preconditions:
+      - "Session has had 25 tool calls"
+    steps:
+      - "SessionState.recordToolCall() is called for each tool invocation"
+      - "After each add, while(history.size() > 20) history.pollFirst() trims the deque"
+    verify:
+      - "inspect().last_tools contains exactly 20 entries"
+      - "The 5 oldest tool names are no longer in the list"
+
+  - name: session-state-get-or-create-is-idempotent
+    description: >
+      SessionState.getOrCreate() uses computeIfAbsent to ensure exactly one SessionData
+      per session ID, even under concurrent access.
+    preconditions:
+      - "Multiple threads call getOrCreate() with the same session ID simultaneously"
+    steps:
+      - "ConcurrentHashMap.computeIfAbsent() guarantees atomicity"
+      - "Only one SessionData is created; all threads get the same instance"
+    verify:
+      - "All threads share the same store, counters, and deferScheduler"
+      - "The ScheduledExecutorService uses virtual threads"
+
+  - name: session-state-cleanup-shuts-down-scheduler
+    description: >
+      SessionState.cleanup() removes the session from the map and shuts down its
+      deferred task scheduler, cancelling any pending deferred operations.
+    preconditions:
+      - "Session has a pending deferred task scheduled for 60s in the future"
+    steps:
+      - "SessionState.cleanup(sessionId) is called"
+      - "sessions.remove(sessionId) removes the SessionData"
+      - "data.deferScheduler().shutdownNow() interrupts pending tasks"
+    verify:
+      - "Session is no longer in the sessions map"
+      - "Pending deferred tasks are cancelled"
+      - "Subsequent get() calls for this sessionId return null"
+
+  - name: session-state-thread-local-propagation
+    description: >
+      Session ID is propagated via ThreadLocal. TrafficLogFilter sets it from Mcp-Session-Id header.
+      ToolRegistry.withTimeout() captures it from the request thread and re-sets it in the virtual
+      thread executor.
+    preconditions:
+      - "HTTP request arrives with Mcp-Session-Id header"
+    steps:
+      - "TrafficLogFilter.doFilter() calls SessionState.setCurrentSession(sessionId)"
+      - "ToolRegistry.withTimeout() captures sessionId = SessionState.getCurrentSession()"
+      - "Virtual thread executor re-sets SessionState.setCurrentSession(sessionId) before invoking handler"
+    verify:
+      - "Cognitive tools (SelfWrite, SelfRead, etc.) see the correct session ID"
+      - "SessionState.recordToolCall() attributes calls to the correct session"
+
+  # ── Graph tools ──
+
+  - name: graph-neighbors-returns-connected-entities
+    description: >
+      SENSE_graph_neighbors queries Neo4j for 1-hop neighbors of a named entity
+      and returns them as a JSON array with relationship type, labels, name, and properties.
+    preconditions:
+      - "Neo4j is connected and contains entities with relationships"
+      - "Entity 'Emacs' exists with neighbors 'elisp', 'org-mode', 'magit'"
+    steps:
+      - "Client calls SENSE_graph_neighbors with name='Emacs'"
+      - "Handler calls neo4j.neighbors('Emacs', 20)"
+      - "Neo4j executes: MATCH (n {name: $name})-[r]-(m) RETURN ... LIMIT $limit"
+    verify:
+      - "Response is JSON array of objects with rel, labels, name, props keys"
+      - "Default limit is 20 when not specified"
+      - "Timeout class is FAST (5s)"
+
+  - name: graph-neighbors-with-custom-limit
+    description: >
+      SENSE_graph_neighbors respects the optional limit parameter.
+    preconditions:
+      - "Neo4j is connected, entity 'Emacs' has 50 neighbors"
+    steps:
+      - "Client calls SENSE_graph_neighbors with name='Emacs', limit=5"
+    verify:
+      - "Response contains at most 5 neighbor entries"
+
+  - name: graph-path-finds-shortest-path
+    description: >
+      SENSE_graph_path finds the shortest path between two entities using Neo4j's
+      shortestPath algorithm with configurable max depth.
+    preconditions:
+      - "Neo4j is connected"
+      - "Path exists: Emacs -[CONTAINS]-> org-mode -[TAGGED_WITH]-> productivity"
+    steps:
+      - "Client calls SENSE_graph_path with from='Emacs', to='productivity'"
+      - "Handler calls neo4j.shortestPath('Emacs', 'productivity', 5)"
+      - "Neo4j executes: MATCH p = shortestPath((a {name: $from})-[*1..5]-(b {name: $to})) RETURN ..."
+    verify:
+      - "Response contains path (list of node names) and rels (list of relationship types)"
+      - "Default max_depth is 5"
+      - "max_depth is clamped to 10 maximum in Neo4jClient.shortestPath()"
+
+  - name: graph-path-no-path-exists
+    description: >
+      SENSE_graph_path returns empty results when no path exists between entities.
+    preconditions:
+      - "Neo4j is connected but entities 'A' and 'Z' are in disconnected subgraphs"
+    steps:
+      - "Client calls SENSE_graph_path with from='A', to='Z'"
+    verify:
+      - "Response is an empty JSON array []"
+      - "isError is false (no path is not an error)"
+
+  - name: graph-query-executes-read-only-cypher
+    description: >
+      SENSE_graph_query executes arbitrary read-only Cypher queries with optional parameters.
+    preconditions:
+      - "Neo4j is connected"
+    steps:
+      - "Client calls SENSE_graph_query with cypher='MATCH (n:Document) RETURN n.name LIMIT 10'"
+      - "Handler verifies query doesn't contain write keywords"
+      - "neo4j.query() executes the Cypher and returns result records"
+    verify:
+      - "Response is JSON array of result records"
+      - "Optional params map is passed to the query"
+      - "Timeout class is STANDARD (25s, default) since no explicit class is set"
+
+  - name: graph-query-rejects-write-operations
+    description: >
+      SENSE_graph_query blocks Cypher queries containing write keywords:
+      CREATE, DELETE, SET, REMOVE, MERGE, DROP.
+    preconditions:
+      - "Neo4j is connected"
+    steps:
+      - "Client calls SENSE_graph_query with cypher='CREATE (n:Test {name: \"bad\"})'"
+      - "Handler checks upper-cased query for forbidden keywords"
+    verify:
+      - "Response is error: 'Write operations not allowed via SENSE_graph_query. Use a dedicated ACT_ tool.'"
+      - "isError is true"
+      - "Query is never sent to Neo4j"
+
+  - name: graph-query-rejects-all-write-keywords
+    description: >
+      All six write keywords are blocked individually: CREATE, DELETE, SET, REMOVE, MERGE, DROP.
+    preconditions:
+      - "Neo4j is connected"
+    steps:
+      - "Client sends queries containing each keyword one at a time"
+    verify:
+      - "Each query returns the write-operations-not-allowed error"
+      - "Case is ignored (upper() comparison)"
+
+  - name: graph-tools-unavailable-when-neo4j-down
+    description: >
+      When Neo4j connection fails at startup, graph tools (SENSE_graph_neighbors,
+      SENSE_graph_path, SENSE_graph_query) are not registered at all.
+    preconditions:
+      - "Neo4j is unreachable at bolt://127.0.0.1:7687"
+    steps:
+      - "Main.main() catches Neo4j connection exception"
+      - "neo4j variable is set to null"
+      - "The 'if (neo4j != null)' guard in tool registration is false"
+    verify:
+      - "Graph tools do not appear in the server's tool list"
+      - "Warning is logged: 'Neo4j connection failed ... Graph tools will be unavailable.'"
+      - "Gateway continues to start without graph functionality"
+
+  - name: graph-neighbor-query-neo4j-runtime-error
+    description: >
+      When Neo4j is connected but a query fails at runtime (e.g., network partition),
+      the graph tool returns an error response rather than crashing.
+    preconditions:
+      - "Neo4j was connected at startup but becomes unreachable during operation"
+    steps:
+      - "Client calls SENSE_graph_neighbors with name='anything'"
+      - "neo4j.neighbors() throws an exception"
+    verify:
+      - "Response is isError=true with message 'Graph neighbors query failed: <exception message>'"
+      - "Gateway remains operational"
+
+  # ── Entity extraction ──
+
+  - name: entity-extractor-org-mode-documents
+    description: >
+      EntityExtractor.extract() parses org-mode files to produce Document, Heading, Topic,
+      Link, and Person entities with CONTAINS, TAGGED_WITH, LINKS_TO, and AUTHORED_BY relationships.
+    preconditions:
+      - "Content is an org-mode file with headings, tags, links, and #+AUTHOR property"
+    steps:
+      - "extract(content, 'notes.org') is called"
+      - "ORG_HEADING regex extracts headings with levels"
+      - "ORG_TAG regex extracts tags (skipping ARCHIVE)"
+      - "ORG_LINK regex extracts file: and http links"
+      - "ORG_PROPERTY regex extracts #+AUTHOR as Person entity"
+    verify:
+      - "Document entity is always created with source_path"
+      - "Each heading produces Heading entity + CONTAINS relationship from Document"
+      - "Each tag produces Topic entity + TAGGED_WITH relationship"
+      - "Each link produces Link entity + LINKS_TO relationship"
+      - "#+AUTHOR produces Person entity + AUTHORED_BY relationship"
+      - "Tags of length 1 and 'ARCHIVE' tags are skipped"
+
+  - name: entity-extractor-markdown-documents
+    description: >
+      EntityExtractor extracts headings and links from markdown files.
+    preconditions:
+      - "Content is a markdown file with # headings and [text](url) links"
+    steps:
+      - "extract(content, 'README.md') is called"
+      - "MD_HEADING regex extracts heading text and level (# count)"
+      - "MD_LINK regex extracts link text and URL"
+    verify:
+      - "Heading entities have level property matching # count"
+      - "Link entities have text property from link text"
+      - "CONTAINS and LINKS_TO relationships are created"
+
+  - name: entity-extractor-java-imports
+    description: >
+      EntityExtractor extracts Java import statements as CodeImport entities.
+    preconditions:
+      - "Content is a Java file with import statements"
+    steps:
+      - "extract(content, 'Main.java') is called"
+      - "JAVA_IMPORT regex matches both regular and static imports"
+    verify:
+      - "Each import produces CodeImport entity with language='java'"
+      - "IMPORTS relationship links Document to CodeImport"
+
+  - name: entity-extractor-python-imports
+    description: >
+      EntityExtractor extracts Python import and from-import statements.
+    preconditions:
+      - "Content is a Python file with 'import x' and 'from y import z' statements"
+    steps:
+      - "extract(content, 'app.py') is called"
+      - "PYTHON_IMPORT regex handles both import forms"
+    verify:
+      - "from-import produces module.imported format"
+      - "Only first import in comma-separated list is captured"
+      - "CodeImport entity has language='python'"
+
+  - name: entity-extractor-javascript-imports
+    description: >
+      EntityExtractor extracts ES module import statements from .js, .ts, .tsx files.
+    preconditions:
+      - "Content is a JS/TS file with import ... from '...' statements"
+    steps:
+      - "extract(content, 'app.tsx') is called"
+    verify:
+      - "CodeImport entity has language='javascript'"
+      - "Import path is extracted from quotes"
+
+  # ── Worldview ──
+
+  - name: worldview-load-returns-cached
+    description: >
+      SENSE_worldview_load returns the cached worldview JSON when available
+      and refresh is not requested.
+    preconditions:
+      - "cachedWorldview AtomicReference contains a previously materialized worldview JSON"
+    steps:
+      - "Client calls SENSE_worldview_load with no parameters (refresh defaults to false)"
+      - "Handler reads cachedWorldview.get() which returns non-null JSON"
+    verify:
+      - "Response is the cached JSON string directly"
+      - "WorldviewMaterializer.materialize() is NOT called"
+      - "Timeout class is SLOW (120s)"
+
+  - name: worldview-load-materializes-on-demand
+    description: >
+      SENSE_worldview_load materializes a fresh worldview when cache is empty.
+    preconditions:
+      - "cachedWorldview AtomicReference is null (first call or cache cleared)"
+      - "SQLite vault.db exists with sessions data"
+    steps:
+      - "Client calls SENSE_worldview_load"
+      - "Handler sees json == null"
+      - "materializer.materialize() is called"
+      - "L1, L2, L3 layers are materialized sequentially"
+      - "Result is serialized to JSON and stored in cachedWorldview"
+    verify:
+      - "Response contains all three layers (l1, l2, l3) and contradictions"
+      - "cachedWorldview.get() is non-null after the call"
+      - "materializedAt timestamp is present"
+
+  - name: worldview-load-force-refresh
+    description: >
+      SENSE_worldview_load with refresh=true forces re-materialization even when cache exists.
+    preconditions:
+      - "cachedWorldview contains stale data"
+    steps:
+      - "Client calls SENSE_worldview_load with refresh=true"
+      - "Handler ignores cached value and calls materializer.materialize()"
+    verify:
+      - "New worldview has a fresh materializedAt timestamp"
+      - "cachedWorldview is updated with new JSON"
+
+  - name: worldview-l1-from-sqlite-sessions
+    description: >
+      L1 ActiveContext is materialized from the 5 most recent sessions in SQLite.
+      Topics are deduplicated and capped at 10, summaries at 3.
+    preconditions:
+      - "SQLite sessions table has 10+ sessions with summary and topics columns"
+    steps:
+      - "materializeL1() queries: SELECT summary, topics FROM sessions ORDER BY start_time DESC LIMIT 5"
+      - "Topics are split by comma, trimmed, deduplicated"
+      - "depositCountToday is 0 (deposits are in Kafka, not SQLite)"
+    verify:
+      - "recentTopics has at most 10 entries"
+      - "activeSessionSummaries has at most 3 entries"
+      - "depositCountToday is 0"
+
+  - name: worldview-l2-from-memory-md-and-sessions
+    description: >
+      L2 WorkingMemory is materialized from MEMORY.md headings/loose ends
+      and session key_facts from SQLite.
+    preconditions:
+      - "~/.claude/projects/-home-bw/memory/MEMORY.md exists with ## headings and TODO items"
+      - "SQLite sessions table has key_facts with project and question entries"
+    steps:
+      - "materializeL2() reads MEMORY.md"
+      - "Lines starting with '## ' become recurringThemes"
+      - "Lines containing 'Still open', 'TODO', or 'needs' become looseEnds"
+      - "Session key_facts with '?' become openQuestions"
+      - "Session key_facts with 'project' or 'working on' become activeProjects"
+    verify:
+      - "recurringThemes capped at 8"
+      - "activeProjects capped at 5"
+      - "openQuestions capped at 5"
+      - "looseEnds capped at 5"
+
+  - name: worldview-l3-with-ollama-summarization
+    description: >
+      L3 CoreBeliefs uses Ollama (llama3.1:8b-instruct-q8_0) to summarize user's
+      knowledge state when Ollama is connected. Preferences are extracted from CLAUDE.md.
+    preconditions:
+      - "Ollama is connected"
+      - "~/CLAUDE.md exists with lines containing NEVER/ALWAYS/MUST"
+      - "L2 data has been materialized"
+    steps:
+      - "materializeL3() extracts preferences from CLAUDE.md: lines starting with '- ' that contain NEVER/ALWAYS/MUST"
+      - "Length filter: 20 < line.length() < 200"
+      - "ollama.chat() is called with FAST_MODEL, context from L2 themes/projects/questions"
+      - "System prompt instructs: 'Be concise (3-5 sentences). Focus on stable patterns.'"
+    verify:
+      - "summary is LLM-generated text (3-5 sentences)"
+      - "preferences are extracted from CLAUDE.md (capped at 10)"
+      - "identityFacets is empty LinkedHashMap (not yet populated)"
+
+  - name: worldview-l3-without-ollama-fallback
+    description: >
+      L3 CoreBeliefs falls back to a static message when Ollama is unavailable.
+    preconditions:
+      - "Ollama is null or not connected"
+    steps:
+      - "materializeL3() skips LLM summarization"
+    verify:
+      - "summary is 'Worldview L3 summary not yet available (Ollama not connected or no data).'"
+      - "preferences still extracted from CLAUDE.md (rule-based, no LLM needed)"
+
+  - name: worldview-contradiction-detection
+    description: >
+      WorldviewMaterializer uses Ollama to detect contradictions between L3 preferences
+      and L2 loose ends. Returns structured Contradiction records.
+    preconditions:
+      - "Ollama is connected"
+      - "L3 has preferences and L2 has loose ends"
+    steps:
+      - "detectContradictions() sends L3 preferences and L2 loose ends to LLM"
+      - "System prompt asks for JSON array with claim1, claim2, description"
+      - "Response is parsed: extract JSON array from first '[' to last ']'"
+      - "Each JSON object becomes a Contradiction record with source1='preferences', source2='observations'"
+    verify:
+      - "Contradictions list contains Contradiction records"
+      - "Each has claim1, claim2, description, source1, source2"
+
+  - name: worldview-contradiction-detection-skipped-without-ollama
+    description: >
+      Contradiction detection returns empty list when Ollama is unavailable or when
+      both preferences and loose ends are empty.
+    preconditions:
+      - "Ollama is null OR (preferences is empty AND looseEnds is empty)"
+    steps:
+      - "detectContradictions() returns early with empty list"
+    verify:
+      - "contradictions list is empty"
+
+  - name: worldview-token-budget-trimming
+    description: >
+      Worldview.estimateTokens() estimates at ~4 chars per token. When exceeding
+      1400 tokens, the materializer trims progressively from L1 (most ephemeral) to L3.
+    preconditions:
+      - "Materialized worldview exceeds 1400 estimated tokens"
+    steps:
+      - "materialize() calls worldview.estimateTokens()"
+      - "If > MAX_WORLDVIEW_TOKENS (1400), trim() is called"
+      - "trim() reduces L1: topics to 5, summaries to 2"
+      - "trim() reduces L2: themes to 5, projects to 3, questions to 3, looseEnds to 3"
+      - "L3 is preserved (most stable layer)"
+    verify:
+      - "Trimmed worldview has fewer tokens than original"
+      - "L3 content is unchanged"
+      - "Contradictions are preserved"
+
+  - name: worldview-data-model-structure
+    description: >
+      Worldview record has materializedAt timestamp, three nested layer records, and
+      contradictions list. Each layer has specific fields.
+    preconditions: []
+    steps:
+      - "Worldview is constructed with all layers"
+    verify:
+      - "L1ActiveContext has: recentTopics, activeSessionSummaries, depositCountToday"
+      - "L2WorkingMemory has: recurringThemes, activeProjects, openQuestions, looseEnds"
+      - "L3CoreBeliefs has: summary, preferences, stablePatterns, identityFacets (Map<String,String>)"
+      - "Contradiction has: claim1, claim2, source1, source2, description"
+      - "estimateTokens() computes from all text fields at 4 chars/token"
+
+  # ── Chronicle / Deposits ──
+
+  - name: deposits-write-produces-to-kafka
+    description: >
+      ACT_deposits_write creates a Deposit record and produces it to the chronicle.deposits
+      Kafka topic synchronously, returning the deposit_id, topic, partition, and offset.
+    preconditions:
+      - "Kafka is connected and the chronicle.deposits topic exists"
+    steps:
+      - "Client calls ACT_deposits_write with event_type='OBSERVATION', content='User prefers dark themes'"
+      - "Handler verifies kafka.isConnected() is true"
+      - "Deposit.create() generates UUID deposit_id and current Instant timestamp"
+      - "kafka.produceSync() serializes Deposit to JSON and sends to chronicle.deposits topic"
+      - "Metrics.recordDeposit() increments the deposits counter"
+    verify:
+      - "Response contains deposit_id (UUID), topic='chronicle.deposits', partition, offset"
+      - "isError is false"
+      - "Deposit record has session_id, pass_number (default 1), tags, references"
+
+  - name: deposits-write-all-event-types
+    description: >
+      ACT_deposits_write accepts five event types: OBSERVATION, DECISION, ARTIFACT, QUESTION, CORRECTION.
+    preconditions:
+      - "Kafka is connected"
+    steps:
+      - "Client sends deposits with each of the five event types"
+    verify:
+      - "All five types are accepted and produced to Kafka"
+      - "event_type field in the Deposit record matches the input"
+
+  - name: deposits-write-with-optional-fields
+    description: >
+      ACT_deposits_write handles optional pass_number, tags, and references fields.
+    preconditions:
+      - "Kafka is connected"
+    steps:
+      - "Client calls ACT_deposits_write with only required fields (event_type, content)"
+      - "Client calls ACT_deposits_write with pass_number=3, tags=['design','ui'], references=['dep-123']"
+    verify:
+      - "Default pass_number is 1 when not provided"
+      - "Default tags is empty list when not provided"
+      - "Default references is empty list when not provided"
+      - "Provided tags and references are included in the Deposit record"
+
+  - name: deposits-write-kafka-not-connected
+    description: >
+      ACT_deposits_write returns an error when Kafka is not connected.
+    preconditions:
+      - "Kafka client exists but isConnected() returns false"
+    steps:
+      - "Client calls ACT_deposits_write"
+      - "Handler checks kafka.isConnected()"
+    verify:
+      - "Response is isError=true with message 'Kafka not connected - deposits unavailable'"
+      - "No Kafka produce is attempted"
+
+  - name: deposits-write-not-registered-when-kafka-unavailable
+    description: >
+      When Kafka connection fails at startup, ACT_deposits_write is not registered at all.
+    preconditions:
+      - "Kafka is unreachable at bootstrap servers"
+    steps:
+      - "Main.main() catches Kafka connection exception"
+      - "kafka variable is set to null"
+      - "The 'if (kafka != null)' guard around DepositsWrite.register() is false"
+    verify:
+      - "ACT_deposits_write does not appear in the tool list"
+      - "Warning is logged about Kafka unavailability"
+
+  - name: deposit-model-auto-fields
+    description: >
+      Deposit.create() auto-generates UUID deposit_id and current Instant timestamp.
+      Null tags and references default to empty lists.
+    preconditions: []
+    steps:
+      - "Deposit.create(sessionId, 1, 'OBSERVATION', 'content', null, null) is called"
+    verify:
+      - "depositId is a valid UUID string"
+      - "timestamp is approximately Instant.now()"
+      - "tags is List.of() (empty)"
+      - "references is List.of() (empty)"
+
+  # ── Kafka client ──
+
+  - name: kafka-client-ensures-topics-on-connect
+    description: >
+      KafkaClient.connect() uses AdminClient to idempotently create four required topics
+      before initializing the producer.
+    preconditions:
+      - "Kafka broker is running"
+    steps:
+      - "ensureTopics() lists existing topics via AdminClient"
+      - "Creates missing topics from: chronicle.deposits, chronicle.documents, chronicle.sessions"
+      - "Creates sensor.state with cleanup.policy=compact"
+      - "Initializes KafkaProducer with acks=1, linger.ms=5, batch.size=16384, max.block.ms=5000"
+    verify:
+      - "All four topics exist after connect()"
+      - "sensor.state has compact cleanup policy"
+      - "Standard topics have 1 partition, replication factor 1"
+
+  - name: kafka-topic-creation-failure-non-fatal
+    description: >
+      Topic creation failure is non-fatal. A warning is logged suggesting auto.create.topics.enable.
+    preconditions:
+      - "Kafka broker rejects topic creation"
+    steps:
+      - "ensureTopics() catches the exception"
+    verify:
+      - "Warning is logged about topic creation failure"
+      - "connect() continues to create the producer"
+
+  - name: kafka-produce-sync-with-timeout
+    description: >
+      produceSync() calls produce() and blocks up to 10 seconds for acknowledgement.
+    preconditions:
+      - "Kafka producer is connected"
+    steps:
+      - "produceSync(topic, key, value) sends ProducerRecord"
+      - "future.get(10, TimeUnit.SECONDS) waits for ack"
+    verify:
+      - "Returns RecordMetadata with topic, partition, offset"
+      - "Value is JSON-serialized via Jackson ObjectMapper with JavaTimeModule"
+      - "Key is a plain string (not JSON)"
+
+  - name: kafka-client-not-connected-throws
+    description: >
+      produce() throws IllegalStateException when called before connect().
+    preconditions:
+      - "KafkaClient has not had connect() called, or connected is false"
+    steps:
+      - "Client calls produce()"
+    verify:
+      - "IllegalStateException: 'Kafka producer not connected'"
+
+  # ── HTTP server infrastructure ──
+
+  - name: mcp-server-startup-sequence
+    description: >
+      McpServer.startHttp() initializes embedded Jetty with MCP streamable HTTP transport,
+      filters, servlets, and session reaper in correct order.
+    preconditions:
+      - "Config is loaded with server.host and server.port"
+    steps:
+      - "Create JacksonMcpJsonMapper with ObjectMapper"
+      - "Create HttpServletStreamableServerTransportProvider with /mcp endpoint and 120s keepalive"
+      - "Build McpSyncServer with name, version, instructions, tools capability"
+      - "Create Jetty Server with ServerConnector on config host:port"
+      - "Create ServletContextHandler at '/'"
+      - "Add TrafficLogFilter on '/*' (REQUEST dispatch)"
+      - "Add ProtocolVersionFilter on '/*' (REQUEST dispatch)"
+      - "Add transport servlet at '/mcp'"
+      - "Add HealthServlet at '/health'"
+      - "Start Jetty server"
+      - "Start SessionReaper with maxIdle=5min, sweepInterval=1min"
+      - "Log: '[gateway] HTTP server listening on host:port'"
+      - "Block on jettyServer.join()"
+    verify:
+      - "Filters execute in order: TrafficLogFilter then ProtocolVersionFilter"
+      - "MCP endpoint is /mcp"
+      - "Health endpoint is /health"
+      - "Session reaper runs as background virtual thread"
+
+  - name: mcp-server-instructions-describe-awareness
+    description: >
+      The MCP server instructions describe the ambient state header format and three-tier
+      awareness model to the LLM client.
+    preconditions: []
+    steps:
+      - "McpServer sends INSTRUCTIONS string during initialization"
+    verify:
+      - "Instructions mention: 'Gateway is your desktop body'"
+      - "Instructions describe tier 1 (~30 tokens) and tier 2 (~200 tokens)"
+      - "Instructions mention three fundamentals: sense, act, recall"
+
+  - name: mcp-server-close-sequence
+    description: >
+      McpServer.close() shuts down session reaper, MCP server, and Jetty in order.
+    preconditions:
+      - "Server is running"
+    steps:
+      - "sessionReaper.shutdown() sets running=false"
+      - "server.close() closes MCP SDK server"
+      - "jettyServer.stop() stops Jetty"
+    verify:
+      - "All three components are shut down"
+      - "Jetty stop errors are caught and logged (not thrown)"
+
+  - name: health-endpoint-returns-tool-count
+    description: >
+      GET /health returns 200 with JSON containing status and tool count.
+    preconditions:
+      - "Gateway is running with N registered tools"
+    steps:
+      - "HTTP GET /health"
+    verify:
+      - "Status 200"
+      - "Content-Type: application/json"
+      - "Body: {\"status\":\"ready\",\"tools\":N}"
+      - "Tool count matches registry.size() at startup time"
+
+  - name: traffic-log-filter-tracks-session-activity
+    description: >
+      TrafficLogFilter extracts Mcp-Session-Id header, records activity timestamp,
+      and sets SessionState ThreadLocal for downstream handlers.
+    preconditions:
+      - "HTTP request arrives with Mcp-Session-Id header"
+    steps:
+      - "Filter reads header value"
+      - "sessionActivity.put(sessionId, currentTimeMillis)"
+      - "SessionState.setCurrentSession(sessionId)"
+      - "If POST, reads body and logs (truncated to 500 chars)"
+    verify:
+      - "Session activity map updated for SessionReaper"
+      - "SessionState ThreadLocal set for cognitive tools"
+
+  - name: traffic-log-filter-absorbs-response-acks
+    description: >
+      TrafficLogFilter absorbs unsolicited JSON-RPC response acks from Claude Code.
+      These have "result" or "error" but no "method" field.
+    preconditions:
+      - "Claude Code 2025-11-25 sends {\"result\":{}} back for server keep-alive pings"
+    steps:
+      - "POST body contains '\"result\"' but not '\"method\"'"
+      - "isResponseAck() returns true"
+      - "Filter returns 202 without forwarding to MCP SDK"
+    verify:
+      - "SDK does not see the response ack (prevents ERROR log)"
+      - "Response status is 202 Accepted"
+      - "Session activity is still tracked"
+
+  - name: traffic-log-filter-passes-through-normal-requests
+    description: >
+      Normal JSON-RPC requests (with "method" field) are passed through to the MCP SDK
+      via a CachedBodyRequest wrapper that allows the body to be re-read.
+    preconditions:
+      - "POST body contains '\"method\":\"tools/call\"'"
+    steps:
+      - "isResponseAck() returns false (has method)"
+      - "Body is cached in byte array"
+      - "CachedBodyRequest wraps original request with cached body"
+      - "chain.doFilter() passes wrapped request to next filter/servlet"
+    verify:
+      - "MCP SDK can read the request body (not consumed by filter)"
+      - "Request body is logged (truncated to 500 chars)"
+
+  - name: protocol-version-filter-patches-sdk-version
+    description: >
+      ProtocolVersionFilter rewrites the protocolVersion field in MCP responses from
+      the SDK's version to "2025-11-25" required by Claude Code.
+    preconditions:
+      - "MCP SDK 0.17.2 outputs protocolVersion: 2024-11-05 or 2025-06-18"
+    steps:
+      - "Response bytes pass through PatchingOutputStream"
+      - "findPrefix() locates '\"protocolVersion\":\"' in the byte buffer"
+      - "The 10-byte date following the prefix is replaced with '2025-11-25'"
+      - "Same-length replacement preserves Content-Length"
+    verify:
+      - "Response contains '\"protocolVersion\":\"2025-11-25\"'"
+      - "All 10-char date versions are patched (2024-11-05, 2025-06-18, etc.)"
+      - "Non-matching responses pass through unchanged"
+
+  - name: protocol-version-filter-boundary-safety
+    description: >
+      ProtocolVersionFilter only patches when the prefix + date fit within the buffer bounds.
+    preconditions:
+      - "Response contains protocolVersion at the very end of a chunk"
+    steps:
+      - "findPrefix() finds prefix but prefixPos + PREFIX.length + TARGET.length > off + len"
+    verify:
+      - "Response passes through unmodified (no out-of-bounds access)"
+
+  # ── Tool registry ──
+
+  - name: tool-registry-timeout-enforcement
+    description: >
+      ToolRegistry.withTimeout() runs tool handlers on virtual threads with per-class
+      timeout enforcement. Timed-out handlers are cancelled via Future.cancel(true).
+    preconditions:
+      - "Tool is registered with TimeoutClass.FAST (5s)"
+      - "Tool handler takes 10 seconds to complete"
+    steps:
+      - "Tool call is submitted to TOOL_EXECUTOR (virtual thread per task)"
+      - "Session ID is propagated from request thread to virtual thread"
+      - "future.get(5, TimeUnit.SECONDS) throws TimeoutException"
+      - "future.cancel(true) interrupts the virtual thread"
+    verify:
+      - "Response: 'Tool timed out after 5s. Try a simpler query or reduce scope.'"
+      - "isError is true"
+      - "Metrics.recordToolError() is called"
+      - "SessionState.recordToolCall() is called with isError=true"
+
+  - name: tool-registry-caller-requested-shorter-timeout
+    description: >
+      Callers can request a shorter timeout via the 'timeout' argument,
+      but never longer than the class maximum.
+    preconditions:
+      - "Tool has TimeoutClass.STANDARD (25s)"
+    steps:
+      - "Client calls tool with args containing timeout=10"
+      - "effectiveTimeout = min(25, 10) = 10"
+    verify:
+      - "Tool times out after 10 seconds if handler is slow"
+      - "timeout=30 would be ignored (capped at 25)"
+      - "timeout=0 or negative values are ignored"
+
+  - name: tool-registry-response-size-capping
+    description: >
+      Tool responses exceeding MAX_RESPONSE_CHARS (100,000) are truncated.
+      A truncation notice is appended.
+    preconditions:
+      - "Tool returns a response with 150,000 characters of text"
+    steps:
+      - "capResponseSize() counts total chars across all TextContent items"
+      - "Text is truncated at 100,000 chars"
+      - "Truncation notice appended: '[Truncated: response exceeded 100KB. Use a more specific query.]'"
+    verify:
+      - "Response text is at most ~100KB plus the notice"
+      - "Non-text content (images) is preserved without counting"
+
+  - name: tool-registry-default-timeout-is-standard
+    description: >
+      Tools registered without explicit TimeoutClass get STANDARD (25s) by default.
+    preconditions: []
+    steps:
+      - "registry.register(name, desc, schema, handler) is called (4-arg version)"
+    verify:
+      - "Tool uses TimeoutClass.STANDARD (25 seconds)"
+
+  - name: tool-registry-int-arg-parsing
+    description: >
+      ToolRegistry provides helper methods for parsing integer arguments from both
+      Number and String JSON values.
+    preconditions: []
+    steps:
+      - "intArg(args, 'limit', 20) with Number value returns n.intValue()"
+      - "intArg(args, 'limit', 20) with String value returns Integer.parseInt()"
+      - "intArg(args, 'limit', 20) with null returns default 20"
+      - "intArg(args, 'limit') with null throws IllegalArgumentException"
+    verify:
+      - "Number and String types are both handled"
+      - "intArgOrNull returns null when key is absent"
+      - "doubleArg works similarly for double values"
+
+  - name: schema-builder-produces-json-schema
+    description: >
+      SchemaBuilder creates MCP JsonSchema objects with properties, types, and required fields.
+    preconditions: []
+    steps:
+      - "SchemaBuilder.create().property('key', 'string', 'desc').required('key').build()"
+    verify:
+      - "JsonSchema type is 'object'"
+      - "properties map contains 'key' with type and description"
+      - "required list contains 'key'"
+      - "SchemaBuilder.empty() returns object schema with empty properties and null required"
+
+  - name: schema-builder-null-required-when-empty
+    description: >
+      SchemaBuilder.build() passes null for required list when no required fields are set.
+    preconditions: []
+    steps:
+      - "SchemaBuilder.create().property('optional', 'string', 'desc').build()"
+    verify:
+      - "required parameter is null (not empty list)"
+
+  # ── Session reaper ──
+
+  - name: session-reaper-evicts-stale-sessions
+    description: >
+      SessionReaper evicts sessions that have been idle longer than maxIdleMs (5 minutes).
+      Uses reflection to access SDK's private sessions ConcurrentHashMap.
+    preconditions:
+      - "MCP SDK has sessions in its internal map"
+      - "TrafficLogFilter has activity timestamps for sessions"
+      - "A session has been idle for 6 minutes"
+    steps:
+      - "Reaper sweep() gets SDK sessions via reflection (cached after first access)"
+      - "Cross-references with trafficFilter.sessionActivity()"
+      - "now - lastSeen > maxIdleMs for the stale session"
+      - "sessions.remove(id) removes from SDK map"
+      - "session.close() is called on the removed session"
+      - "activity.remove(id) cleans up the filter's map"
+    verify:
+      - "Stale session is removed from SDK's internal map"
+      - "session.close() is called to release resources"
+      - "Log: '[reaper] Evicted stale session <id> (idle Xs)'"
+      - "Active sessions are NOT evicted"
+
+  - name: session-reaper-grace-period-for-new-sessions
+    description: >
+      Sessions in SDK map but not in trafficFilter's activity map get a one-sweep
+      grace period (activity recorded as 'now') before being eligible for eviction.
+    preconditions:
+      - "SDK session exists but trafficFilter has no activity record for it"
+    steps:
+      - "sweep() finds lastSeen == null"
+      - "activity.putIfAbsent(id, now) grants grace period"
+    verify:
+      - "Session is NOT evicted on this sweep"
+      - "Session will be evaluated on the next sweep"
+
+  - name: session-reaper-reflection-failure
+    description: >
+      If reflection fails to access SDK's sessions field, the reaper logs an error
+      and silently does nothing. Gateway continues operating.
+    preconditions:
+      - "SDK internal structure has changed (field renamed or removed)"
+    steps:
+      - "getSdkSessions() catches exception"
+    verify:
+      - "Error logged: '[reaper] Cannot access SDK sessions field: ...'"
+      - "sweep() returns early"
+      - "Gateway is not affected"
+
+  - name: session-reaper-lifecycle
+    description: >
+      SessionReaper starts as a virtual thread, delays first sweep by sweepIntervalMs,
+      then sweeps every sweepIntervalMs until shutdown() sets running=false.
+    preconditions: []
+    steps:
+      - "start() creates virtual thread named 'session-reaper'"
+      - "run() sleeps sweepIntervalMs before first sweep"
+      - "Loop: sweep() + sleep(sweepIntervalMs) while running"
+      - "shutdown() sets running=false"
+    verify:
+      - "First sweep is delayed (lets startup settle)"
+      - "Thread name is 'session-reaper'"
+      - "InterruptedException restores interrupt flag"
+
+  # ── Somatic proxy registration ──
+
+  - name: somatic-proxy-registers-all-sensor-tools
+    description: >
+      SomaticProxyRegistrar queries somatic's tools/list and registers each as a gateway
+      proxy tool with ACT_ or SENSE_ prefix based on verb classification.
+    preconditions:
+      - "Somatic client is started and responding to tools/list"
+      - "Somatic reports 52 tools"
+    steps:
+      - "somatic.listTools() returns JSON with 'tools' array"
+      - "For each tool: name, description, inputSchema are extracted"
+      - "classifyCategory() determines prefix: read-intent verbs → SENSE_, others → ACT_"
+      - "Tool is registered with enricher.wrap() and STANDARD timeout"
+    verify:
+      - "52 proxy tools registered (count returned by register())"
+      - "Tools with get_, read_, is_, check_, subscribe verbs get SENSE_ prefix"
+      - "All other tools get ACT_ prefix"
+      - "Each proxy handler adds display_id=host display as default"
+
+  - name: somatic-proxy-display-routing
+    description: >
+      Somatic proxy tools route to the correct somatic instance based on display_id.
+      Default is host display (:0). Agent displays use their own somatic instance.
+    preconditions:
+      - "Multiple somatic instances running (host + agent displays)"
+    steps:
+      - "If display_id not in args, default to DisplayRouter.HOST_DISPLAY"
+      - "DisplayRouter.chooseSomatic() selects target somatic instance"
+      - "targetSomatic.callTool(name, args) forwards the call"
+    verify:
+      - "Host display tools go to host somatic"
+      - "Agent display tools go to display-specific somatic"
+
+  - name: somatic-proxy-result-conversion
+    description: >
+      SomaticProxyRegistrar.convertResult() converts somatic JSON results to MCP
+      CallToolResult, handling both text and image content types.
+    preconditions:
+      - "Somatic returns result with mixed text and image content"
+    steps:
+      - "Content array items are checked for 'type' field"
+      - "'image' type → ImageContent with data and mimeType"
+      - "Other types → TextContent"
+      - "isError flag is propagated from somatic result"
+    verify:
+      - "Image content is base64-encoded PNG by default"
+      - "Text content is preserved"
+      - "Error state is propagated"
+
+  - name: somatic-proxy-failure-non-fatal
+    description: >
+      If somatic fails to start or list tools, proxy registration returns 0
+      and the gateway continues without somatic-backed tools.
+    preconditions:
+      - "Somatic binary is missing or crashes"
+    steps:
+      - "somatic.listTools() throws exception"
+      - "register() catches it and returns 0"
+    verify:
+      - "Error logged: '[gateway] Failed to register somatic proxies: ...'"
+      - "Gateway continues with native tools only"
+
+  # ── Ambient state and response enrichment ──
+
+  - name: ambient-state-header-reads-shm
+    description: >
+      AmbientStateHeader reads /dev/shm/somatic_ambient and wraps content in [env: ...] format.
+    preconditions:
+      - "somatic_ambient SHM file exists and contains: typing=idle dwell=2340ms focus=0x01a00003"
+    steps:
+      - "ambient.read() checks Files.exists(ambientPath)"
+      - "Reads and strips the file content"
+      - "Wraps in '[env: ' + content + ']'"
+    verify:
+      - "Returns '[env: typing=idle dwell=2340ms focus=0x01a00003]'"
+      - "If file doesn't exist, returns empty string"
+      - "If file is empty, returns empty string"
+      - "IOException (mid-rename) returns empty string"
+
+  - name: ambient-state-display-specific-path
+    description: >
+      When display isolation is enabled, the ambient SHM path is taken from the
+      default display's provideAmbientPath() instead of the config default.
+    preconditions:
+      - "display.enabled=true"
+      - "Default display exists"
+    steps:
+      - "Main.main() checks displayManager.locateDefaultDisplay()"
+      - "If non-null, uses defaultDisplay.provideAmbientPath()"
+    verify:
+      - "AmbientStateHeader reads from display-specific path"
+      - "Falls back to config.ambientShmPath() if no display available"
+
+  - name: response-enricher-appends-both-tiers
+    description: >
+      ResponseEnricher.wrap() appends both ambient (tier 1) and alert (tier 2) lines
+      to every tool response as a final TextContent item.
+    preconditions:
+      - "Ambient SHM file contains state data"
+      - "Focus has changed since last call (triggers alert)"
+    steps:
+      - "Tool handler returns original CallToolResult"
+      - "enricher.wrap() calls ambient.read() → tier 1 line"
+      - "enricher.wrap() calls alert.check(ambientLine) → tier 2 alert"
+      - "Both lines appended as a single TextContent footer"
+    verify:
+      - "Footer format: '\\n[env: ...]\\n[ALERT: focus-changed] ...'"
+      - "Footer is a separate TextContent item in the content list"
+      - "isError flag from original result is preserved"
+
+  - name: response-enricher-skips-when-no-state
+    description: >
+      When both ambient and alert return empty strings, ResponseEnricher returns
+      the original result unmodified.
+    preconditions:
+      - "somatic_ambient SHM file doesn't exist"
+      - "No state transitions detected"
+    steps:
+      - "ambient.read() returns ''"
+      - "alert.check('') returns ''"
+    verify:
+      - "Original CallToolResult is returned unchanged"
+      - "No extra TextContent is added"
+
+  - name: alert-detector-focus-change
+    description: >
+      AlertDetector fires a focus-changed alert when the focus window ID changes
+      between consecutive ambient state snapshots.
+    preconditions:
+      - "focusAlert is true (config: awareness.focus_change_alert=true)"
+      - "Previous ambient had focus=0x01a00003"
+      - "Current ambient has focus=0x01b00004"
+    steps:
+      - "alert.check() extracts focus= field from ambient line"
+      - "Compares with previousFocus"
+      - "Detects change and appends: '[ALERT: focus-changed] Window focus moved from 0x01a00003 to 0x01b00004.'"
+    verify:
+      - "Alert string contains previous and new focus values"
+      - "previousFocus is updated to new value"
+      - "No alert on first call (previousFocus is empty string)"
+
+  - name: alert-detector-typing-state-change
+    description: >
+      AlertDetector fires typing-state-changed alert when typing= field transitions.
+    preconditions:
+      - "typingAlert is true"
+      - "Previous: typing=idle, Current: typing=active"
+    steps:
+      - "alert.check() detects typing state change"
+    verify:
+      - "Alert: '[ALERT: typing-state-changed] User typing state: idle -> active.'"
+
+  - name: alert-detector-clipboard-change
+    description: >
+      AlertDetector fires clipboard-changed alert when clip= field changes.
+    preconditions:
+      - "clipboardAlert is true"
+      - "Previous: clip=text:47b, Current: clip=text:128b"
+    steps:
+      - "alert.check() detects clipboard change"
+    verify:
+      - "Alert: '[ALERT: clipboard-changed] Clipboard updated to text:128b.'"
+
+  - name: alert-detector-multiple-simultaneous-alerts
+    description: >
+      AlertDetector can fire multiple alerts in a single check when multiple
+      state fields change simultaneously.
+    preconditions:
+      - "All three alert types enabled"
+      - "Focus, typing, and clipboard all changed"
+    steps:
+      - "alert.check() builds StringBuilder with all three alerts"
+    verify:
+      - "Alert string contains all three [ALERT: ...] sections"
+      - "All previous values are updated"
+
+  - name: alert-detector-disabled-alerts
+    description: >
+      AlertDetector skips alerts for disabled categories. Config controls each independently.
+    preconditions:
+      - "focusAlert=true, typingAlert=false, clipboardAlert=false"
+    steps:
+      - "Focus, typing, and clipboard all change"
+    verify:
+      - "Only focus-changed alert fires"
+      - "Typing and clipboard changes are ignored"
+
+  - name: alert-detector-field-extraction
+    description: >
+      AlertDetector.extractField() parses key=value pairs from the ambient line,
+      handling trailing ']' characters.
+    preconditions:
+      - "Ambient line: '[env: typing=idle focus=0x01a00003]'"
+    steps:
+      - "extractField(line, 'typing=') returns 'idle'"
+      - "extractField(line, 'focus=') returns '0x01a00003' (trailing ] stripped)"
+      - "extractField(line, 'missing=') returns ''"
+    verify:
+      - "Values delimited by space or end of string"
+      - "Trailing ] is stripped from last field"
+      - "Missing fields return empty string"
+
+  # ── Config ──
+
+  - name: config-loads-toml-with-defaults
+    description: >
+      Config loads from ~/.config/actual-server/gateway.toml via tomlj.
+      All fields have sensible defaults when file is missing or incomplete.
+    preconditions:
+      - "gateway.toml does not exist"
+    steps:
+      - "Config.load() calls Config.load(DEFAULT_PATH)"
+      - "Files.exists returns false"
+      - "Config wraps Toml.parse('') — empty TOML"
+    verify:
+      - "serverName = 'actual-server-gateway'"
+      - "serverVersion = '1.0.0'"
+      - "serverTransport = 'http'"
+      - "serverHost = '127.0.0.1'"
+      - "serverPort = 8372"
+      - "somaticBinary = '/usr/local/bin/somatic'"
+      - "ambientShmPath = '/dev/shm/somatic_ambient'"
+      - "emacsHost = 'localhost', emacsPort = 8585"
+      - "kafkaBootstrapServers = '127.0.0.1:9092'"
+      - "neo4jUri = 'bolt://127.0.0.1:7687'"
+      - "ollamaUrl = 'http://127.0.0.1:11434'"
+      - "All enabled flags default to true (except display.enabled=false)"
+
+  - name: config-toml-parse-errors-reported
+    description: >
+      Config reports TOML parse errors to stderr but still loads what it can.
+    preconditions:
+      - "gateway.toml exists but has syntax errors"
+    steps:
+      - "Toml.parse(path) returns result with hasErrors()=true"
+      - "Each error is logged to stderr"
+    verify:
+      - "Errors are logged: '[gateway] TOML parse errors in <path>:'"
+      - "Config still uses whatever was successfully parsed"
+
+  - name: config-tilde-expansion
+    description: >
+      Config.expandTilde() converts '~/' prefix to user.home for path-type config values.
+    preconditions: []
+    steps:
+      - "vaultDb() defaults to '~/vault/data/vault.db'"
+      - "expandTilde replaces '~/' with System.getProperty('user.home') + '/'"
+    verify:
+      - "Returned Path is absolute"
+      - "Paths not starting with '~/' are returned as-is"
+
+  - name: config-all-sections-covered
+    description: >
+      Config provides accessors for all TOML sections: server, somatic, emacs, qdrant, tei,
+      sqlite, ledger, vault, awareness, resource_scaling, watcher, kafka, temporal, neo4j,
+      ollama, display.
+    preconditions: []
+    steps:
+      - "Each section has typed accessors with defaults"
+    verify:
+      - "[server]: name, version, transport, host, port"
+      - "[somatic]: binary, ambient_shm"
+      - "[emacs]: host, port"
+      - "[qdrant]: host, grpc_port, collection"
+      - "[tei]: url"
+      - "[sqlite]: vault_db (Path)"
+      - "[ledger]: path (Path)"
+      - "[vault]: root (Path)"
+      - "[awareness]: focus_change_alert, typing_state_change_alert, clipboard_change_alert"
+      - "[resource_scaling]: enabled, poll_seconds, aggressive_idle_hours, return_threshold_minutes, target_service"
+      - "[watcher]: enabled, debounce_ms, email_sync_interval_ms, llm_scoring"
+      - "[kafka]: bootstrap_servers, enabled"
+      - "[temporal]: enabled, target, namespace, task_queue"
+      - "[neo4j]: enabled, uri"
+      - "[ollama]: enabled, url"
+      - "[display]: enabled, start_number, default_width/height/depth, panel_height, auto_create, window_manager, xpra_base_port"
+
+  # ── Resource scaler ──
+
+  - name: resource-scaler-conservative-on-startup
+    description: >
+      VaultResourceScaler starts in conservative mode and applies conservative systemd
+      drop-in limits immediately.
+    preconditions:
+      - "resource_scaling.enabled=true"
+    steps:
+      - "Constructor calls applyLimits(CONSERVATIVE_DROPIN, 'conservative')"
+      - "Creates systemd drop-in directory: ~/.config/systemd/user/<service>.service.d/"
+      - "Writes runtime.conf with conservative limits"
+      - "Runs: systemctl --user daemon-reload && systemctl --user restart <service>"
+    verify:
+      - "Conservative limits: MemoryMax=12G, MemoryHigh=8G, CPUQuota=50%, IOWeight=100"
+      - "VAULT_RAG_MAX_MEMORY_MB=8192"
+      - "Service is restarted with new limits"
+
+  - name: resource-scaler-switches-to-aggressive
+    description: >
+      When xprintidle reports idle time exceeding the aggressive threshold (default 6h),
+      the scaler switches to aggressive mode.
+    preconditions:
+      - "Currently in conservative mode"
+      - "xprintidle returns 21600001 (6h + 1ms)"
+    steps:
+      - "poll() reads idle time via xprintidle"
+      - "idleMs >= aggressiveThresholdMs (6 * 3600000 = 21600000)"
+      - "aggressive flag set to true"
+      - "applyLimits(AGGRESSIVE_DROPIN, 'aggressive') called"
+    verify:
+      - "Aggressive limits: MemoryMax=40G, MemoryHigh=32G, CPUQuota=100%, IOWeight=500"
+      - "VAULT_RAG_MAX_MEMORY_MB=32768"
+      - "Log: 'User idle 6.0h - switching to AGGRESSIVE resource limits'"
+
+  - name: resource-scaler-returns-to-conservative
+    description: >
+      When user returns (idle drops below return threshold, default 1 minute),
+      the scaler switches back to conservative mode.
+    preconditions:
+      - "Currently in aggressive mode"
+      - "xprintidle returns 500 (0.5 seconds)"
+    steps:
+      - "idleMs < returnThresholdMs (60000)"
+      - "aggressive flag set to false"
+      - "applyLimits(CONSERVATIVE_DROPIN, 'conservative') called"
+    verify:
+      - "Conservative limits restored"
+      - "Log: 'User returned (idle 500ms) - restoring CONSERVATIVE resource limits'"
+
+  - name: resource-scaler-xprintidle-failure
+    description: >
+      When xprintidle fails (not installed or X11 not available), readIdleMs()
+      returns 999999ms (~16 minutes), which won't trigger aggressive mode.
+    preconditions:
+      - "xprintidle command fails or is not installed"
+    steps:
+      - "readIdleMs() catches exception and returns 999_999L"
+    verify:
+      - "999999ms is less than 6h threshold — stays conservative"
+      - "No crash or error propagation"
+
+  - name: resource-scaler-not-started-when-disabled
+    description: >
+      When resource_scaling.enabled=false, VaultResourceScaler is never created.
+    preconditions:
+      - "Config: resource_scaling.enabled=false"
+    steps:
+      - "Main.main() skips VaultResourceScaler creation"
+    verify:
+      - "No polling, no systemd drop-in, no service restarts"
+
+  # ── Metrics ──
+
+  - name: metrics-otel-instrumentation-points
+    description: >
+      Metrics class exposes OTel counters and histograms for tool calls, errors,
+      deposits, documents, chunks, entities, and knowledge queries.
+    preconditions: []
+    steps:
+      - "OTel Meter obtained via GlobalOpenTelemetry.getMeter('com.bw.actual.gateway')"
+    verify:
+      - "gateway.tool_calls: LongCounter with 'tool' attribute"
+      - "gateway.tool_errors: LongCounter with 'tool' attribute"
+      - "gateway.tool_duration: LongHistogram in ms with 'tool' attribute"
+      - "gateway.deposits: LongCounter (no attributes)"
+      - "gateway.documents_indexed: LongCounter"
+      - "gateway.chunks_indexed: LongCounter"
+      - "gateway.entities_extracted: LongCounter"
+      - "gateway.knowledge_queries: LongCounter with 'type' attribute"
+
+  - name: metrics-tool-call-recording
+    description: >
+      Every tool invocation records call count, error count, and duration.
+    preconditions: []
+    steps:
+      - "ToolRegistry.withTimeout() measures start-to-end nanos"
+      - "On success: Metrics.recordToolCall(toolName, durationMs)"
+      - "On error/timeout: Metrics.recordToolError(toolName, durationMs)"
+    verify:
+      - "recordToolCall increments TOOL_CALLS and records TOOL_DURATION"
+      - "recordToolError increments both TOOL_CALLS and TOOL_ERRORS and records TOOL_DURATION"
+      - "Attributes include tool name"
+
+  # ── Neo4j client ──
+
+  - name: neo4j-client-merge-entity
+    description: >
+      Neo4jClient.mergeEntity() creates or updates a node with a given label and name.
+    preconditions:
+      - "Neo4j is connected"
+    steps:
+      - "mergeEntity('Document', 'README.md', {source_path: '/path'}) is called"
+      - "Cypher: MERGE (n:Document {name: $name}) SET n += $props"
+      - "Label is sanitized: non-alphanumeric/underscore chars replaced with '_'"
+    verify:
+      - "Node is created if it doesn't exist"
+      - "Node is updated if it already exists"
+      - "Properties include name and all additional props"
+
+  - name: neo4j-client-merge-relationship
+    description: >
+      Neo4jClient.mergeRelationship() creates or updates a relationship between two entities.
+    preconditions:
+      - "Neo4j is connected"
+    steps:
+      - "mergeRelationship('Document', 'A.md', 'LINKS_TO', 'Document', 'B.md', {})"
+      - "Both endpoints are MERGE'd (created if absent)"
+      - "Relationship is MERGE'd with type and properties"
+    verify:
+      - "Relationship exists between the two nodes"
+      - "Null properties map treated as empty map"
+
+  - name: neo4j-label-sanitization
+    description: >
+      sanitizeLabel() replaces non-alphanumeric/underscore characters with underscore
+      to prevent Cypher injection.
+    preconditions: []
+    steps:
+      - "sanitizeLabel('My-Type.v2') is called"
+    verify:
+      - "Returns 'My_Type_v2'"
+      - "Alphanumeric and underscore characters preserved"
+
+  - name: neo4j-client-no-auth
+    description: >
+      Neo4jClient uses AuthTokens.none() — no username/password authentication.
+    preconditions: []
+    steps:
+      - "GraphDatabase.driver(uri, AuthTokens.none()) is called"
+    verify:
+      - "Connection uses no authentication"
+      - "Suitable for local-only Neo4j deployments"
+
+  # ── Ollama client ──
+
+  - name: ollama-client-connect-checks-tags
+    description: >
+      OllamaClient.connect() hits /api/tags to check reachability and count available models.
+    preconditions:
+      - "Ollama is running on localhost:11434"
+    steps:
+      - "GET /api/tags with 5s timeout"
+      - "Parse response for models array"
+    verify:
+      - "connected=true on HTTP 200"
+      - "Log: 'Ollama connected: N models available'"
+      - "connected=false on any error"
+
+  - name: ollama-client-generate
+    description: >
+      OllamaClient.generate() sends to /api/generate endpoint with stream=false.
+    preconditions:
+      - "Ollama is connected"
+    steps:
+      - "POST /api/generate with model, prompt, stream=false"
+      - "Optional num_predict option for maxTokens > 0"
+      - "5-minute request timeout"
+    verify:
+      - "Returns response text from JSON 'response' field"
+      - "Returns null on error (non-200 status)"
+
+  - name: ollama-client-chat
+    description: >
+      OllamaClient.chat() sends to /api/chat endpoint with system and user messages.
+    preconditions:
+      - "Ollama is connected"
+    steps:
+      - "POST /api/chat with model, messages array, stream=false"
+      - "System message included if non-null and non-empty"
+    verify:
+      - "Returns message.content from response JSON"
+      - "Returns null on error"
+
+  - name: ollama-unavailable-non-fatal
+    description: >
+      When Ollama fails to connect at startup, ollama is set to null and
+      LLM-dependent features (L3 summarization, contradiction detection) gracefully degrade.
+    preconditions:
+      - "Ollama is not running"
+    steps:
+      - "ollama.connect() returns false"
+      - "ollama variable set to null in Main.main()"
+    verify:
+      - "Warning logged: 'Ollama not available. LLM features will be unavailable.'"
+      - "WorldviewMaterializer still works with null ollama (L3 fallback, no contradictions)"
+      - "Gateway starts normally"
+
+  # ── LLM fact scorer ──
+
+  - name: llm-fact-scorer-combined-call
+    description: >
+      LlmFactScorer.score() uses the Claude CLI (subscription, not API) to classify
+      candidate facts and evaluate session titles in a single LLM call.
+    preconditions:
+      - "LLM scoring is enabled"
+      - "Claude CLI is available at /home/bw/.local/bin/claude"
+    steps:
+      - "score(title, facts, contextLines) builds combined prompt"
+      - "TASK 1: fact classification (KEEP/DROP)"
+      - "TASK 2: title evaluation (specific vs generic)"
+      - "runClaude() spawns claude -p --model haiku"
+      - "Prompt written to stdin, stdout/stderr read on virtual threads"
+      - "30-second timeout for CLI process"
+    verify:
+      - "Response parsed for FACTS: and TITLE: lines"
+      - "FACTS: ALL keeps all, NONE keeps none, numbers keep specific indices"
+      - "TITLE: text replaces original (if valid, <=120 chars)"
+
+  - name: llm-fact-scorer-backoff-on-failure
+    description: >
+      After CLI failure, scorer enters 5-minute backoff period.
+    preconditions:
+      - "Claude CLI fails (exit code != 0 or timeout)"
+    steps:
+      - "cliAvailable set to false"
+      - "lastFailTime set to current time"
+    verify:
+      - "Subsequent calls within 5 minutes return originals without trying CLI"
+      - "After 5 minutes, retry is attempted"
+      - "Successful call resets cliAvailable to true"
+
+  - name: llm-fact-scorer-disabled-passthrough
+    description: >
+      When scoring is disabled, score() returns originals without any processing.
+    preconditions:
+      - "LlmFactScorer.setEnabled(false)"
+    steps:
+      - "score(title, facts, contextLines) checks enabled flag"
+    verify:
+      - "Returns ScoredResult(title, facts) immediately"
+      - "No CLI process spawned"
+
+  # ── Main.java startup sequence ──
+
+  - name: main-startup-full-sequence
+    description: >
+      Main.main() orchestrates the complete startup sequence: config, display, state injection,
+      clients, tools, services, and server.
+    preconditions:
+      - "All services available (somatic, emacs, sqlite, kafka, neo4j, ollama, qdrant, tei, temporal)"
+    steps:
+      - "1. Config.load() — loads gateway.toml"
+      - "2. DisplayManager creation + optional auto-create display + auto-attach viewer"
+      - "3. AmbientStateHeader + AlertDetector + ResponseEnricher setup"
+      - "4. SomaticClient start (with XAUTHORITY detection via DisplayEnvironment)"
+      - "5. EmacsClient, SqliteClient, TeiClient, QdrantVectorClient creation and connection"
+      - "6. KafkaClient creation and connection (if enabled)"
+      - "7. TemporalClient creation, connection, and workflow registration (if enabled)"
+      - "8. Neo4jClient creation and connection (if enabled)"
+      - "9. OllamaClient creation and connection (if enabled)"
+      - "10. WorldviewMaterializer creation with sqlite + ollama"
+      - "11. Tool registration in stages: 1A system, 1B input, 1C sense, 1D somatic, 2 emacs, 3A recall, 3B search, 4 display, 5 cognitive, 6 chronicle, 7 graph, 8 worldview"
+      - "12. SomaticProxyRegistrar registers ~52 proxy tools"
+      - "13. VaultResourceScaler start (if enabled)"
+      - "14. LlmFactScorer.setEnabled()"
+      - "15. VaultWatcher start (if enabled)"
+      - "16. McpServer creation"
+      - "17. Shutdown hook registration"
+      - "18. server.start(config) — blocks on Jetty"
+    verify:
+      - "Log: 'Registered N tools (M somatic proxied)'"
+      - "All optional services gracefully degrade when unavailable"
+      - "Shutdown hook closes resources in correct order"
+
+  - name: main-shutdown-hook-order
+    description: >
+      The shutdown hook closes resources in specific order: shared resources first,
+      then waits for watcher scan, then closes sqlite last.
+    preconditions:
+      - "Gateway is running with all services"
+    steps:
+      - "SIGTERM received or System.exit called"
+      - "1. server.close() — release port for next gateway"
+      - "2. somatic.close()"
+      - "3. displayManager.shutdown()"
+      - "4. qdrant.close(), kafka.close(), temporal.close(), neo4j.close(), resourceScaler.shutdown()"
+      - "5. watcher.awaitInitialScan() — blocks until scan completes"
+      - "6. watcher.shutdown()"
+      - "7. sqlite.close() — LAST because watcher was writing until shutdown()"
+    verify:
+      - "New gateway can start immediately (port released)"
+      - "Long-running watcher scans complete (not interrupted)"
+      - "SQLite closed after all writers stop"
+      - "Log: 'Shutdown complete'"
+
+  - name: main-graceful-degradation-all-optional-services
+    description: >
+      When optional services fail to connect, Main.main() continues startup
+      with reduced functionality. Each service failure is independent.
+    preconditions:
+      - "Some or all optional services unavailable"
+    steps:
+      - "Somatic failure: WARNING logged, proxy tools not registered"
+      - "Kafka failure: WARNING logged, kafka=null, deposits tool not registered"
+      - "Neo4j failure: WARNING logged, neo4j=null, graph tools not registered"
+      - "Ollama failure: WARNING logged, ollama=null, L3/contradictions degrade"
+      - "Qdrant failure: WARNING logged, qdrant=null, semantic search unavailable"
+      - "Temporal failure: WARNING logged, temporal=null, workflow orchestration unavailable"
+      - "Display auto-create failure: WARNING logged, display isolation unavailable"
+    verify:
+      - "Gateway starts and serves MCP requests"
+      - "Available tools still function correctly"
+      - "Tool count reflects what was successfully registered"
+
+  - name: main-xauthority-detection
+    description: >
+      Main.main() detects the live XAUTHORITY for display :0 to prevent stale xauth
+      from previous SDDM sessions from breaking somatic's X11 connection.
+    preconditions:
+      - "X11 is running with XAUTHORITY potentially differing from inherited env"
+    steps:
+      - "DisplayEnvironment.detectUserXauthority() finds live xauth"
+      - "If found, added to hostEnv map passed to SomaticClient"
+    verify:
+      - "Somatic starts with correct XAUTHORITY"
+      - "If detection returns null, inherited env is used (no override)"
+
+enforced_constraints:
+  - name: session-isolation
+    description: >
+      Each MCP session has its own ConcurrentHashMap-backed scratchpad, counters, and
+      deferred task scheduler. Data written in one session is invisible to others.
+    rationale: >
+      Prevents cross-session data leakage and ensures each agent/client has an isolated
+      working memory. Critical for multi-session gateway serving multiple Claude Code instances.
+
+  - name: read-only-cypher-enforcement
+    description: >
+      SENSE_graph_query blocks Cypher queries containing CREATE, DELETE, SET, REMOVE, MERGE,
+      or DROP keywords via upper-case string matching.
+    rationale: >
+      Prevents accidental or malicious modification of the knowledge graph via the read-only
+      sense tool. Write operations must use dedicated ACT_ tools with explicit intent.
+
+  - name: tool-timeout-enforcement
+    description: >
+      Every tool handler runs on a virtual thread with a per-class timeout (FAST=5s,
+      STANDARD=25s, SLOW=120s). Timed-out handlers are interrupted via Future.cancel(true).
+    rationale: >
+      Prevents zombie tool calls from blocking Claude Code's 30s client timeout. Virtual threads
+      ensure timed-out handlers don't starve new tool calls.
+
+  - name: response-size-cap
+    description: >
+      Tool responses exceeding 100,000 characters are truncated with a notice to the LLM.
+    rationale: >
+      Prevents a single tool response from consuming the LLM's entire context window.
+      100KB is generous for data but prevents runaway queries from overwhelming the client.
+
+  - name: protocol-version-patching
+    description: >
+      All MCP responses have their protocolVersion patched from SDK version to 2025-11-25.
+    rationale: >
+      Claude Code requires 2025-11-25 protocol version. SDK ships with older versions.
+      Same-length date replacement ensures no Content-Length mismatch.
+
+  - name: deferred-task-delay-bounds
+    description: >
+      ACT_self_defer delay_seconds must be between 1 and 300 (5 minutes).
+    rationale: >
+      Prevents zero-delay busy loops and excessively long-lived deferred tasks that
+      could outlive the session.
+
+  - name: kafka-disconnection-guard
+    description: >
+      ACT_deposits_write checks kafka.isConnected() before attempting to produce.
+      Returns error immediately if Kafka is not available.
+    rationale: >
+      Prevents blocking on Kafka connection timeout during tool execution.
+      Fast failure allows the LLM to adapt.
+
+  - name: label-sanitization
+    description: >
+      Neo4jClient.sanitizeLabel() replaces non-alphanumeric/underscore characters with
+      underscore before interpolating into Cypher queries.
+    rationale: >
+      Prevents Cypher injection via entity type names. While names use parameterized queries,
+      labels are interpolated (Cypher limitation), requiring sanitization.
+
+  - name: shutdown-order-sqlite-last
+    description: >
+      In the shutdown hook, sqlite.close() is called LAST, after watcher.shutdown(),
+      because the watcher was actively writing to SQLite during its scan.
+    rationale: >
+      Closing SQLite while the watcher is still writing would cause data corruption or
+      loss of index updates from the final watcher scan.
+
+opinionated_constraints:
+  - name: no-auth-neo4j
+    description: >
+      Neo4j connection uses AuthTokens.none() — no authentication.
+    rationale: >
+      Local-only deployment. Adding auth would require credential management infrastructure
+      that doesn't exist yet. Acceptable for single-user desktop gateway.
+
+  - name: ambient-state-shm-file
+    description: >
+      Ambient state is read from /dev/shm (shared memory tmpfs) rather than via socket/API.
+    rationale: >
+      Zero-latency reads. The somatic daemon writes at 30Hz; polling from SHM avoids the
+      overhead of IPC. File-based approach is simple and requires no coordination protocol.
+
+  - name: reflection-for-session-reaper
+    description: >
+      SessionReaper uses reflection to access MCP SDK's private sessions field.
+    rationale: >
+      MCP SDK 0.17.2 has no session idle timeout API. Reflection is a temporary workaround
+      until the SDK provides native session management. The field is cached after first access.
+
+  - name: virtual-threads-everywhere
+    description: >
+      Tool executor, session reaper, deferred scheduler, and resource scaler all use
+      Java virtual threads.
+    rationale: >
+      Prevents thread starvation from slow/timed-out tools. Virtual threads are cheap to
+      create and block without consuming OS threads.
+
+  - name: string-based-write-detection
+    description: >
+      GraphQuery detects write operations via simple string contains() on upper-cased query
+      rather than parsing the Cypher AST.
+    rationale: >
+      AST parsing adds complexity and a dependency. String matching catches all common write
+      keywords. False positives (e.g., WHERE ... SET in a comment) are acceptable — the user
+      can use dedicated ACT_ tools for writes.
+
+  - name: single-kafka-partition
+    description: >
+      All Chronicle topics are created with 1 partition and replication factor 1.
+    rationale: >
+      Single-user desktop deployment. Multiple partitions add complexity without benefit.
+      Can be increased later if throughput becomes an issue.
+
+  - name: worldview-token-budget
+    description: >
+      Worldview is capped at 1400 estimated tokens (~5600 characters).
+    rationale: >
+      The worldview is injected into tool responses as context for the LLM. 1400 tokens
+      provides meaningful context without dominating the tool response. Trimming prioritizes
+      L3 (stable) over L1 (ephemeral).
+
+  - name: fast-model-for-worldview
+    description: >
+      Worldview L3 summarization uses llama3.1:8b-instruct-q8_0, not the reasoning model.
+    rationale: >
+      L3 summarization is simple extraction, not reasoning. The 8B model is fast enough
+      for sub-second materialization. The 32B reasoning model is reserved for complex tasks.
+
+  - name: claude-cli-for-fact-scoring
+    description: >
+      LlmFactScorer uses the Claude CLI binary (subscription-based) rather than API calls.
+    rationale: >
+      Subscription billing means zero marginal cost per call. API billing would add
+      per-token costs for a high-frequency background operation. The CLI is invoked with
+      --model haiku for speed.
