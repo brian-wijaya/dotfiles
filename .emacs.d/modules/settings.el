@@ -15,3 +15,13 @@
 (show-paren-mode 1)
 (setq show-paren-delay 0)
 (global-auto-revert-mode 1)
+
+;; Auto-create parent directories on save
+(defun bw/auto-make-parent-dirs ()
+  "Create parent directories if they don't exist."
+  (when buffer-file-name
+    (let ((dir (file-name-directory buffer-file-name)))
+      (unless (file-exists-p dir)
+        (make-directory dir t)))))
+
+(add-hook 'before-save-hook #'bw/auto-make-parent-dirs)
