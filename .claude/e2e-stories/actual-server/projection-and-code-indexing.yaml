@@ -1,0 +1,828 @@
+vocabulary:
+  search_projection: "Kafka consumer that replays chronicle.events into PostgreSQL context_events table with tsvector full-text indexing. Consumer group: gateway-search."
+  graph_projection: "Kafka consumer that replays chronicle.events into Neo4j knowledge graph via EntityExtractor. Consumer group: gateway-graph."
+  projection_consumer: "A Kafka consumer that materializes an event stream into a read-optimized store (PostgreSQL, Neo4j). Idempotent by design."
+  consumer_group: "Kafka consumer group ID (e.g., gateway-search, gateway-graph). Tracks committed offsets per partition. Only one consumer per group processes each partition."
+  projection_rebuild: "Stop consumer, destroy backing store, reset Kafka offset to 0, restart consumer. Full replay of all events."
+  session_event_store: "In-memory ConcurrentHashMap index from sessionId to List<Event>. Populated by search projection consumer for sub-ms lookups."
+  code_indexer: "Pipeline: source file -> language detection -> SHA-256 hash check -> tree-sitter AST chunking -> PostgreSQL FTS -> optional TEI+Qdrant vectors -> optional Neo4j code graph."
+  ast_chunker: "Tree-sitter based code chunker. Splits at function/class boundaries with ~1600 char budget. Small siblings merged into interstitial chunks."
+  code_graph_extractor: "Extracts File/Class/Function/Variable/Import/Package nodes and CONTAINS/DEFINES/EXTENDS/IMPLEMENTS/CALLS/IMPORTS edges from tree-sitter AST. Upserts to Neo4j."
+  language_config: "Per-language tree-sitter configuration mapping file extensions to AST node type classifications (function, class, interface, import, variable boundaries)."
+  boundary_node: "AST node type that triggers a chunk split: function declarations, class declarations, interface declarations."
+  interstitial_chunk: "Non-boundary AST siblings merged together until they exceed MAX_CHUNK_CHARS (1600). Imports, comments, field declarations."
+  code_vectors_collection: "Qdrant collection for code embeddings, separate from document vault_chunks collection. 768-dim cosine distance."
+  calls_edge: "CALLS relationship in Neo4j code graph. confidence=1.0 for qualified calls (obj.method), 0.5 for unqualified (method), 0.8 for cross-file resolved."
+  protobuf_bytes_consumer: "KafkaConsumerClient.startBytesConsumer() — consumes byte[] records for Protobuf deserialization via ProtoConverter.eventFromBytes()."
+  entity_extraction: "Rule-based extraction from structured Event records. Tag-driven node creation (project:, tool:, lang:, topic:) and event-type-driven relationships."
+  merge_semantics: "Neo4j MERGE — creates node/relationship if not exists, updates properties if exists. Idempotent for replay."
+
+metadata:
+  feature: Projection Consumers and Code Indexing
+  component: datapipeline
+  date: "2026-02-19"
+
+stories:
+  # ── Search Projection Consumer ──
+
+  - name: search-projection-happy-path
+    description: >
+      Event flows from Kafka through Protobuf deserialization into PostgreSQL
+      context_events table with tsvector indexing and in-memory SessionEventStore.
+    preconditions:
+      - "Kafka running with chronicle.events topic containing Protobuf-encoded events"
+      - "PostgreSQL running with context_events table (event_id UNIQUE constraint)"
+      - "SearchProjectionConsumer started with SessionEventStore configured"
+    steps:
+      - "Consumer polls Kafka with 1000ms timeout via bytesPollLoop()"
+      - "Record value deserialized via ProtoConverter.eventFromBytes(record.value())"
+      - "db.insertEvent(event) executes INSERT INTO context_events with ON CONFLICT DO NOTHING"
+      - "PostgreSQL tsvector trigger auto-updates full-text index columns"
+      - "SessionEventStore.index(event) called — event added to ConcurrentHashMap keyed by sessionId"
+      - "SessionEventStore deduplicates by event_id before adding to list"
+      - "bytesConsumer.commitSync() commits offset after batch"
+    verify:
+      - "Event persisted in PostgreSQL context_events table"
+      - "tsvector columns populated by trigger for full-text search"
+      - "Event indexed in SessionEventStore with correct sessionId key"
+      - "Kafka offset committed after successful batch processing"
+      - "Consumer group ID is 'gateway-search'"
+
+  - name: search-projection-duplicate-event
+    description: >
+      Duplicate events (same event_id) are silently absorbed at both the
+      PostgreSQL level (ON CONFLICT DO NOTHING) and the SessionEventStore level
+      (event_id equality check).
+    preconditions:
+      - "PostgreSQL context_events already contains event with event_id='evt-123'"
+      - "SessionEventStore already has event with event_id='evt-123' for session 'sess-1'"
+    steps:
+      - "Consumer receives Kafka record with event_id='evt-123' (replay or duplicate)"
+      - "db.insertEvent(event) executes INSERT with ON CONFLICT(event_id) DO NOTHING"
+      - "PostgreSQL returns without error, no row inserted"
+      - "SessionEventStore.index(event) iterates existing list for sessionId='sess-1'"
+      - "Finds event with matching event_id='evt-123', returns existing list unchanged"
+      - "sessionCounts still incremented (count may drift from actual — known imprecision)"
+    verify:
+      - "No duplicate row in PostgreSQL"
+      - "No duplicate event in SessionEventStore list for the session"
+      - "No exception thrown — consumer continues processing"
+      - "Offset committed normally"
+
+  - name: search-projection-protobuf-deserialization-failure
+    description: >
+      Corrupted Protobuf bytes are caught and logged. The consumer skips the
+      record and continues processing the rest of the batch. No dead letter queue.
+    preconditions:
+      - "Kafka topic contains a record with invalid Protobuf bytes (truncated, wrong schema)"
+    steps:
+      - "Consumer polls batch of 5 records, record at offset 42 has corrupted bytes"
+      - "ProtoConverter.eventFromBytes() throws InvalidProtocolBufferException"
+      - "Exception caught in handler() lambda"
+      - "Logged: '[gateway] Search consumer: failed to process record at offset 42: ...'"
+      - "Remaining 4 records in batch processed normally"
+      - "commitSync() commits offset past the corrupted record"
+    verify:
+      - "Corrupted record skipped, not retried"
+      - "Error logged with offset number for debugging"
+      - "Batch processing continues — records before and after the bad one are processed"
+      - "Offset committed past the bad record (poison pill consumed, not stuck)"
+      - "No dead letter queue — the error is log-and-skip"
+
+  - name: search-projection-rebuild-from-zero
+    description: >
+      Full projection rebuild: stop consumer, TRUNCATE context_events, reset
+      Kafka offset to 0, restart consumer to replay all events.
+    preconditions:
+      - "SearchProjectionConsumer running with committed offset at 5000"
+      - "PostgreSQL context_events contains 5000 rows"
+    steps:
+      - "rebuild() called"
+      - "consumerClient.stopConsumer('gateway-search') — sets running=false, wakeup(), join(10s)"
+      - "destroyStore() executes TRUNCATE context_events CASCADE"
+      - "consumerClient.resetOffset(TOPIC_EVENTS, 'gateway-search') — seekToBeginning + commitSync"
+      - "start() registers new bytes consumer from offset 0"
+      - "Consumer replays all 5000 events from beginning"
+    verify:
+      - "context_events table empty after TRUNCATE, before replay begins"
+      - "Consumer offset reset to 0 for all partitions"
+      - "All events re-inserted during replay"
+      - "ON CONFLICT DO NOTHING makes replay idempotent if interrupted and restarted"
+      - "SessionEventStore NOT cleared by rebuild() — potential stale data in memory"
+
+  - name: search-projection-consumer-group-membership
+    description: >
+      Search consumer uses group ID 'gateway-search' with manual offset commit,
+      earliest auto-offset-reset, and 100 max-poll-records.
+    preconditions:
+      - "Kafka broker running"
+    steps:
+      - "startBytesConsumer() creates KafkaConsumer with bytesConsumerProperties('gateway-search')"
+      - "Properties: bootstrap.servers, group.id=gateway-search, ByteArrayDeserializer for key+value"
+      - "auto.offset.reset=earliest, enable.auto.commit=false, max.poll.records=100"
+      - "Consumer subscribes to chronicle.events topic"
+      - "Virtual thread named 'kafka-consumer-gateway-search' started"
+    verify:
+      - "Group ID is exactly 'gateway-search' (SearchProjectionConsumer.GROUP_ID)"
+      - "Auto-commit disabled — manual commitSync() after each batch"
+      - "Max 100 records per poll (prevents unbounded batch sizes)"
+      - "Auto-offset-reset=earliest — new consumer group starts from beginning"
+      - "Consumer runs on virtual thread, not platform thread"
+
+  - name: search-projection-session-event-store-no-store
+    description: >
+      When SessionEventStore is not configured (null), events are only persisted
+      to PostgreSQL. The volatile eventStore field defaults to null.
+    preconditions:
+      - "SearchProjectionConsumer created without calling setEventStore()"
+    steps:
+      - "handler() processes a record"
+      - "Event deserialized and inserted into PostgreSQL"
+      - "SessionEventStore store = eventStore reads null (volatile read)"
+      - "store != null check fails, no in-memory indexing"
+    verify:
+      - "PostgreSQL insertion succeeds"
+      - "No NullPointerException from SessionEventStore access"
+      - "Consumer operates in degraded mode (no fast session lookups)"
+
+  - name: search-projection-shutdown-graceful
+    description: >
+      Consumer shutdown uses wakeup() to interrupt the blocking poll() call,
+      then joins the virtual thread with a 10-second timeout.
+    preconditions:
+      - "Search consumer running, currently blocked in poll(1000ms)"
+    steps:
+      - "stopConsumer('gateway-search') called"
+      - "ConsumerHandle removed from consumers map"
+      - "handle.running set to false"
+      - "handle.bytesConsumer.wakeup() throws WakeupException in poll loop"
+      - "WakeupException caught — handle.running is false so loop exits"
+      - "Finally block: bytesConsumer.close(Duration.ofSeconds(5))"
+      - "Thread.join(10000) waits for poll loop thread to terminate"
+    verify:
+      - "Poll loop exits cleanly (no stuck consumer)"
+      - "Kafka consumer closed with 5s timeout in finally block"
+      - "Thread join has 10s safety timeout"
+      - "Consumer removed from active consumers map before shutdown begins"
+
+  - name: search-projection-double-start
+    description: >
+      Starting a consumer that is already running stops the existing consumer
+      first, then starts a fresh one. No duplicate consumers for the same group.
+    preconditions:
+      - "Search consumer already running with group 'gateway-search'"
+    steps:
+      - "startBytesConsumer() called again for 'gateway-search'"
+      - "consumers.containsKey('gateway-search') returns true"
+      - "Existing consumer stopped via stopConsumerInternal()"
+      - "New consumer created and started"
+    verify:
+      - "Only one consumer per group ID at any time"
+      - "Old consumer fully stopped before new one starts"
+      - "Logged: '[gateway] Consumer gateway-search already running, stopping first'"
+
+  # ── Graph Projection Consumer ──
+
+  - name: graph-projection-happy-path
+    description: >
+      Event flows from Kafka through Protobuf deserialization, Jackson
+      conversion to Map, EntityExtractor, and into Neo4j as MERGE operations.
+    preconditions:
+      - "Kafka running with chronicle.events topic"
+      - "Neo4j running and connected (neo4j.isConnected() = true)"
+      - "GraphProjectionConsumer started"
+    steps:
+      - "Consumer polls Kafka, receives batch of records"
+      - "ProtoConverter.eventFromBytes(record.value()) deserializes to Event record"
+      - "Jackson MAPPER.convertValue(event, Map) converts Event to Map<String, Object>"
+      - "EntityExtractor.extractFromEventMap(eventMap) produces entities and relationships"
+      - "For each entity: neo4j.mergeEntity(type, name, properties) — MERGE semantics"
+      - "For each relationship: neo4j.mergeRelationship(from, rel, to, props)"
+      - "commitSync() after batch"
+    verify:
+      - "Consumer group ID is 'gateway-graph'"
+      - "Event correctly converted from Protobuf -> Event record -> Map -> ExtractionResult"
+      - "Entities merged into Neo4j (not duplicated on replay)"
+      - "Relationships carry timestamp and source_event_id provenance"
+
+  - name: graph-projection-neo4j-unavailable-skip
+    description: >
+      When Neo4j is unavailable, the graph consumer silently skips records
+      without logging errors. Records are consumed (offset advanced) but not
+      processed. Data loss occurs because offsets advance past unprocessed events.
+    preconditions:
+      - "GraphProjectionConsumer running"
+      - "Neo4j goes down (neo4j.isConnected() returns false)"
+    steps:
+      - "Consumer polls batch of records"
+      - "handler() checks neo4j.isConnected() — returns false"
+      - "Handler returns immediately without processing"
+      - "All records in batch skipped"
+      - "commitSync() commits offsets past skipped records"
+      - "Neo4j comes back up later"
+    verify:
+      - "No exception thrown during Neo4j outage"
+      - "Offsets committed past unprocessed records — these events are LOST for the graph projection"
+      - "Consumer does not retry skipped records"
+      - "Recovery requires full projection rebuild (stop, destroy, reset offset to 0, restart)"
+      - "This is a deliberate design trade-off: availability over completeness"
+
+  - name: graph-projection-entity-extraction-failure
+    description: >
+      If EntityExtractor throws during extraction (malformed event data,
+      unexpected null fields), the record is logged and skipped.
+    preconditions:
+      - "Event with unexpected structure (null tags, malformed references_json)"
+    steps:
+      - "ProtoConverter.eventFromBytes() succeeds"
+      - "MAPPER.convertValue() succeeds"
+      - "EntityExtractor.extractFromEventMap() throws NullPointerException on malformed data"
+      - "Exception caught in handler(): logged with offset"
+      - "Remaining records in batch still processed"
+    verify:
+      - "Error logged: '[gateway] Graph consumer: failed to process record at offset N: ...'"
+      - "One bad event does not crash the consumer"
+      - "Subsequent records processed normally"
+
+  - name: graph-projection-rebuild-clears-all-nodes
+    description: >
+      Graph projection rebuild runs MATCH (n) DETACH DELETE n to remove all
+      nodes and relationships from Neo4j before replaying from offset 0.
+    preconditions:
+      - "Neo4j contains 500 nodes and 1200 relationships from previous projection"
+      - "Graph consumer running with committed offset at 3000"
+    steps:
+      - "rebuild() called"
+      - "consumerClient.stopConsumer('gateway-graph')"
+      - "destroyStore() checks neo4j.isConnected() — true"
+      - "neo4j.query('MATCH (n) DETACH DELETE n', null) — deletes ALL nodes"
+      - "consumerClient.resetOffset() — seek to beginning"
+      - "start() — replays all events from offset 0"
+    verify:
+      - "All Neo4j nodes deleted (DETACH removes relationships first)"
+      - "Full replay reconstructs the graph from event stream"
+      - "MERGE semantics make replay idempotent"
+      - "destroyStore() throws RuntimeException if Neo4j not connected"
+
+  - name: graph-projection-destroy-neo4j-disconnected
+    description: >
+      Attempting to destroy the graph store when Neo4j is disconnected throws
+      a RuntimeException immediately, preventing silent data inconsistency.
+    preconditions:
+      - "Neo4j not connected (neo4j.isConnected() = false)"
+    steps:
+      - "destroyStore() called"
+      - "neo4j.isConnected() returns false"
+      - "RuntimeException thrown: 'Neo4j not connected'"
+    verify:
+      - "No MATCH DETACH DELETE sent to a disconnected Neo4j"
+      - "RuntimeException propagated to caller"
+      - "Logged: '[gateway] Neo4j not connected - cannot destroy graph store'"
+
+  - name: graph-projection-merge-idempotency
+    description: >
+      Replaying the same event twice produces identical graph state due to
+      Neo4j MERGE semantics. Entity properties are updated, not duplicated.
+    preconditions:
+      - "Neo4j has entity 'Project:actual-server' from first processing"
+      - "Same event replayed (e.g., after consumer restart without offset reset)"
+    steps:
+      - "EntityExtractor produces entity: Project, 'actual-server', {}"
+      - "neo4j.mergeEntity('Project', 'actual-server', {}) — MERGE ON name"
+      - "Node already exists — properties updated (SET), no new node created"
+      - "Relationship also MERGE'd — same result"
+    verify:
+      - "No duplicate Project:actual-server nodes in Neo4j"
+      - "Properties may be overwritten with identical values (harmless)"
+      - "Relationship count unchanged after replay"
+
+  # ── Code Indexer Pipeline ──
+
+  - name: code-indexer-happy-path-fts-only
+    description: >
+      Source file indexed through full pipeline: language detection, hash check,
+      AST chunking, PostgreSQL FTS insert. TEI/Qdrant/Neo4j not available.
+    preconditions:
+      - "CodeIndexer created with db only (tei=null, qdrant=null, neo4j=null)"
+      - "Java source file exists at /home/bw/actual/src/main/java/Foo.java"
+      - "File not previously indexed (no matching content_hash in code_documents)"
+    steps:
+      - "indexFile(Path) called"
+      - "LanguageConfig.forFile('Foo.java') returns Java config"
+      - "Files.readString() reads source content"
+      - "sha256(source) computes content hash"
+      - "db.getCodeDocumentHash(filePath) returns null (first time)"
+      - "chunker.chunk(source, filePath, config) produces N CodeChunks"
+      - "Symbol count computed: chunks with non-null symbolName"
+      - "db.upsertCodeDocument(filePath, 'java', hash, lineCount, symbolCount) returns docId"
+      - "db.deleteCodeChunksForDoc(docId) removes any old chunks"
+      - "For each chunk: db.insertCodeChunk(docId, index, content, symbolName, symbolType, ...)"
+      - "tei=null, so embedding step skipped"
+      - "graphExtractor=null (neo4j was null), so graph step skipped"
+    verify:
+      - "Returns true (file was indexed)"
+      - "code_documents row created with file path, language, content hash, line count, symbol count"
+      - "Each chunk stored in code_chunks with full metadata"
+      - "Chunk content hash (SHA-256) stored per chunk"
+      - "No Qdrant or Neo4j calls made"
+
+  - name: code-indexer-unchanged-file-skip
+    description: >
+      Files whose SHA-256 content hash matches the stored hash are skipped
+      entirely, avoiding redundant parsing and database writes.
+    preconditions:
+      - "File previously indexed, content unchanged"
+      - "db.getCodeDocumentHash(path) returns hash matching sha256(currentContent)"
+    steps:
+      - "indexFile(path) called"
+      - "LanguageConfig.forFile() returns config"
+      - "Source read, SHA-256 computed"
+      - "contentHash.equals(storedHash) returns true"
+      - "Return false immediately"
+    verify:
+      - "No tree-sitter parsing"
+      - "No database writes"
+      - "No embedding calls"
+      - "Returns false"
+
+  - name: code-indexer-unsupported-language
+    description: >
+      Files with unsupported extensions (.txt, .csv, .sql, etc.) are silently
+      skipped with no error.
+    preconditions:
+      - "File path: /home/bw/data/report.csv"
+    steps:
+      - "indexFile(path) called"
+      - "LanguageConfig.forFile('report.csv') returns null"
+      - "Return false immediately"
+    verify:
+      - "No file read, no parsing, no database operations"
+      - "Returns false"
+      - "No error logged"
+
+  - name: code-indexer-empty-file-skip
+    description: >
+      Empty files and non-regular files (directories, symlinks) are skipped.
+    preconditions:
+      - "File exists but is empty (0 bytes)"
+    steps:
+      - "indexFile(path) called"
+      - "LanguageConfig.forFile() returns config (e.g., .java)"
+      - "Files.readString() returns empty string"
+      - "source.isEmpty() returns true — return false"
+    verify:
+      - "Empty file not indexed"
+      - "No database operations"
+      - "Returns false"
+
+  - name: code-indexer-full-pipeline-with-vectors-and-graph
+    description: >
+      With all optional services available, a source file is indexed into
+      PostgreSQL, embedded into Qdrant code_vectors, and graph-extracted into Neo4j.
+    preconditions:
+      - "TEI running, Qdrant running with code_vectors collection, Neo4j running"
+      - "CodeIndexer created with all clients non-null"
+      - "Java source file with 3 methods"
+    steps:
+      - "indexFileInternal() runs through steps 1-8 (language, read, hash, chunk, PG insert)"
+      - "tei != null && qdrant != null && !chunks.isEmpty() — embedAndUpsertChunks() called"
+      - "Chunks batched in groups of EMBED_BATCH_SIZE=32"
+      - "tei.embedDocuments(texts) returns List<float[]> with 768-dim vectors"
+      - "Stable point IDs computed: docId * 10_000 + chunkIndex"
+      - "Payload includes file_path, language, chunk_index, line_start, line_end, symbol_name, symbol_type"
+      - "qdrant.upsertToCollection('code_vectors', points)"
+      - "graphExtractor != null — extractAndUpsertGraph() called"
+      - "CodeGraphExtractor.extractGraph() produces FileGraph with nodes and edges"
+      - "graphExtractor.upsertToNeo4j(graph) merges to Neo4j"
+    verify:
+      - "PostgreSQL has code_documents + code_chunks rows"
+      - "Qdrant code_vectors has points with 768-dim embeddings"
+      - "Neo4j has File, Class, Function nodes with CONTAINS/DEFINES edges"
+      - "Point IDs are deterministic (docId * 10000 + index) — enables deletion by range"
+      - "Returns true"
+
+  - name: code-indexer-embedding-failure-graceful
+    description: >
+      When TEI or Qdrant fails during embedding, the error is logged but
+      PostgreSQL FTS indexing is still valid. Partial failure does not corrupt state.
+    preconditions:
+      - "TEI returns HTTP 500 during embedDocuments() call"
+      - "PostgreSQL insert already completed for chunks"
+    steps:
+      - "embedAndUpsertChunks() called"
+      - "tei.embedDocuments(texts) throws RuntimeException: 'TEI embed failed (HTTP 500)'"
+      - "Exception caught in embedAndUpsertChunks() outer try-catch"
+      - "Logged: 'Embedding/Qdrant upsert failed for <path> (fulltext index is still valid): ...'"
+      - "indexFileInternal() continues to graph extraction step"
+    verify:
+      - "PostgreSQL chunks intact and searchable via FTS"
+      - "No Qdrant points created (partial batch not committed)"
+      - "Warning logged with explicit note that 'fulltext index is still valid'"
+      - "Returns true (file was indexed, just without vectors)"
+
+  - name: code-indexer-graph-extraction-failure-graceful
+    description: >
+      When Neo4j graph extraction or upsert fails, it is logged but does not
+      affect the PostgreSQL or Qdrant indexing that already completed.
+    preconditions:
+      - "Neo4j goes down mid-upsert"
+      - "PostgreSQL and Qdrant steps already completed"
+    steps:
+      - "extractAndUpsertGraph() called"
+      - "graphExtractor.extractGraph() succeeds (local tree-sitter operation)"
+      - "graphExtractor.upsertToNeo4j(graph) throws because Neo4j disconnected"
+      - "Exception caught in extractAndUpsertGraph()"
+      - "Logged: 'Graph extraction/upsert failed for <path> (fulltext index is still valid)'"
+    verify:
+      - "PostgreSQL chunks intact"
+      - "Qdrant vectors intact"
+      - "Neo4j may have partial graph (some nodes created before failure)"
+      - "Returns true"
+
+  - name: code-indexer-directory-scan-filters
+    description: >
+      indexDirectory() walks recursively but filters out hidden directories,
+      node_modules, __pycache__, target, build, and .git.
+    preconditions:
+      - "Directory tree: src/main/Foo.java, src/.hidden/Bar.java, node_modules/dep/index.js, build/Main.class"
+    steps:
+      - "indexDirectory(rootDir) called"
+      - "Files.walk() produces stream of all files"
+      - "Filter 1: Files.isRegularFile() — skip directories"
+      - "Filter 2: extension in LanguageConfig.supportedExtensions()"
+      - "Filter 3: path component filter — skip .hidden, node_modules, __pycache__, target, build, .git"
+      - "Each surviving file passed to indexFile()"
+    verify:
+      - "src/main/Foo.java — indexed"
+      - "src/.hidden/Bar.java — SKIPPED (hidden directory)"
+      - "node_modules/dep/index.js — SKIPPED"
+      - "build/Main.class — SKIPPED (.class not in supported extensions, also build dir filtered)"
+      - "Returns count of files that were actually indexed (content changed)"
+
+  - name: code-indexer-ensure-infrastructure
+    description: >
+      ensureInfrastructure() creates the Qdrant code_vectors collection and
+      Neo4j indexes idempotently at startup.
+    preconditions:
+      - "Qdrant running but code_vectors collection does not exist"
+      - "Neo4j running without code graph indexes"
+    steps:
+      - "ensureInfrastructure() called"
+      - "qdrant.ensureNamedCollection('code_vectors', 768) — creates collection"
+      - "graphExtractor.ensureIndexes() — creates 8 Neo4j indexes (IF NOT EXISTS)"
+      - "Indexes: Function.full_name, Class.full_name, Interface.full_name, File.full_name, File.file_path, Variable.full_name, Import.full_name, Package.full_name"
+    verify:
+      - "Qdrant collection created with 768 dimensions"
+      - "All 8 Neo4j indexes created"
+      - "Idempotent — calling twice does not error"
+      - "Failures logged but not propagated (system starts even if infra setup partially fails)"
+
+  # ── AST Chunker ──
+
+  - name: ast-chunker-java-class-with-methods
+    description: >
+      A Java class with 3 methods is chunked at method boundaries. The class
+      header becomes its own chunk, each method becomes a chunk.
+    preconditions:
+      - "Java source with public class Foo containing 3 methods, class body > 1600 chars"
+    steps:
+      - "chunk(source, 'Foo.java', javaConfig) called"
+      - "tree-sitter parses source into AST"
+      - "Root child: class_declaration — isBoundary() returns true"
+      - "Class text > MAX_CHUNK_CHARS (1600) — splitLargeClass() called"
+      - "findBody() locates class_body node"
+      - "Class header (class declaration to body start) emitted as chunk with symbolType='class'"
+      - "Body children: each method_declaration triggers chunkBoundaryNode() with isMethod=true"
+      - "Each method emits a chunk with symbolName, symbolType='function', visibility extracted"
+      - "Non-method body children (field_declaration, etc.) collected as interstitial"
+    verify:
+      - "Class header chunk has symbolName=class name, symbolType='class'"
+      - "Each method chunk has symbolName=method name, symbolType='function', isMethod=true"
+      - "Visibility extracted: 'public', 'private', 'protected' from modifiers node"
+      - "Line numbers are 1-indexed (tree-sitter row + 1)"
+      - "All chunks together cover the entire class"
+
+  - name: ast-chunker-small-class-single-chunk
+    description: >
+      A small class (< 1600 chars total) is emitted as a single chunk without
+      splitting at method boundaries.
+    preconditions:
+      - "Java source with small class (< 1600 chars)"
+    steps:
+      - "chunk() called"
+      - "class_declaration is a boundary node"
+      - "text.length() <= MAX_CHUNK_CHARS — not split"
+      - "isClassNode() returns true but size check passes"
+      - "Single chunk emitted with full class text"
+    verify:
+      - "One chunk for the entire class"
+      - "symbolName = class name"
+      - "symbolType = 'class'"
+      - "No method-level splitting"
+
+  - name: ast-chunker-interstitial-merging
+    description: >
+      Non-boundary nodes (imports, comments, field declarations) between
+      functions are merged into interstitial chunks up to MAX_CHUNK_CHARS.
+    preconditions:
+      - "Python source with 10 import statements followed by a function"
+    steps:
+      - "chunk() walks root children"
+      - "Import statements are NOT boundary nodes (not in Python's function/class sets)"
+      - "Each import added to interstitial list"
+      - "Function definition encountered — flushInterstitial() called"
+      - "Interstitial nodes merged: gap text between nodes preserved"
+      - "If merged text < 1600 chars, single interstitial chunk emitted"
+      - "If merged text would exceed 1600 chars, split into multiple interstitial chunks"
+      - "Each interstitial chunk has symbolName=null, symbolType=null"
+    verify:
+      - "Imports merged into minimal number of chunks"
+      - "Gap whitespace between nodes preserved in chunk text"
+      - "Empty/whitespace-only interstitial chunks filtered (trimmed.isEmpty() check)"
+      - "Interstitial chunks have null symbolName and symbolType"
+
+  - name: ast-chunker-empty-source
+    description: >
+      Empty or null source produces an empty chunk list.
+    preconditions:
+      - "Source string is null or empty"
+    steps:
+      - "chunk(null, path, config) or chunk('', path, config) called"
+      - "Early return: List.of()"
+    verify:
+      - "Empty list returned"
+      - "No tree-sitter parsing attempted"
+      - "No exception"
+
+  - name: ast-chunker-utf8-multibyte
+    description: >
+      Tree-sitter uses UTF-8 byte offsets. Multibyte characters (CJK, emoji,
+      accented) do not cause off-by-one errors in chunk extraction.
+    preconditions:
+      - "Java source with UTF-8 string literals containing multibyte chars"
+    steps:
+      - "Source pre-encoded to UTF-8 byte array"
+      - "Tree-sitter returns byte offsets (startByte, endByte)"
+      - "sliceUtf8(utf8, startByte, endByte) extracts correct substring"
+      - "Bounds clamped: start = max(0, startByte), end = min(utf8.length, endByte)"
+    verify:
+      - "Chunks contain correct text even with multibyte characters"
+      - "No IndexOutOfBoundsException from byte offset arithmetic"
+      - "String constructor with UTF-8 charset correctly decodes multibyte sequences"
+
+  - name: ast-chunker-six-languages
+    description: >
+      AstChunker supports exactly 6 languages via tree-sitter bindings.
+      Unsupported languages throw IllegalArgumentException.
+    preconditions:
+      - "Various language identifiers"
+    steps:
+      - "getLanguage('java') returns TreeSitterJava"
+      - "getLanguage('python') returns TreeSitterPython"
+      - "getLanguage('cpp') returns TreeSitterCpp"
+      - "getLanguage('rust') returns TreeSitterRust"
+      - "getLanguage('typescript') returns TreeSitterTypescript"
+      - "getLanguage('elisp') returns TreeSitterElisp"
+      - "getLanguage('go') throws IllegalArgumentException"
+    verify:
+      - "6 languages supported: java, python, cpp, rust, typescript, elisp"
+      - "Unsupported language throws IllegalArgumentException with message"
+      - "Each language maps to correct tree-sitter grammar"
+
+  # ── Code Graph Extractor ──
+
+  - name: code-graph-extractor-java-class-hierarchy
+    description: >
+      Java class with extends, implements, methods, and fields produces correct
+      graph nodes and edges including EXTENDS, IMPLEMENTS, DEFINES, CONTAINS.
+    preconditions:
+      - "Java source: 'package com.bw; class Foo extends Bar implements Baz { void doStuff() {} int x; }'"
+    steps:
+      - "extractGraph(source, path, javaConfig) called"
+      - "File node created: (File, 'Foo.java', path)"
+      - "Package node created: (Package, 'com.bw', 'com.bw')"
+      - "Edge: File CONTAINS Package"
+      - "Class node: (Class, 'Foo', 'com.bw.Foo')"
+      - "Edge: File CONTAINS Class"
+      - "extractSuperclassEdge: EXTENDS edge from 'com.bw.Foo' to 'com.bw.Bar'"
+      - "extractImplementsEdges: IMPLEMENTS edge from 'com.bw.Foo' to 'com.bw.Baz'"
+      - "Function node: (Function, 'doStuff', 'com.bw.Foo.doStuff', isMethod=true)"
+      - "Edge: Class DEFINES Function"
+      - "Variable node: (Variable, 'x', 'com.bw.Foo.x')"
+      - "Edge: Class DEFINES Variable"
+    verify:
+      - "Fully qualified names include package prefix"
+      - "EXTENDS resolves unqualified superclass name using package prefix"
+      - "IMPLEMENTS resolves interface names using package prefix"
+      - "Methods have isMethod=true, top-level functions have isMethod=false"
+      - "All nodes have file_path, line_start, line_end, language"
+
+  - name: code-graph-extractor-calls-extraction
+    description: >
+      Function bodies are scanned for call expressions. Qualified calls get
+      confidence=1.0, unqualified get confidence=0.5.
+    preconditions:
+      - "Java method body contains: 'this.helper()', 'Utils.format(x)', 'localMethod()'"
+    steps:
+      - "extractCallEdges() called for the method"
+      - "collectCallNodes() recursively finds all method_invocation nodes"
+      - "this.helper() → calledName='this.helper', qualified=true, confidence=1.0"
+      - "Utils.format(x) → calledName='Utils.format', qualified=true, confidence=1.0"
+      - "localMethod() → calledName='localMethod', qualified=false, confidence=0.5"
+      - "Unqualified 'localMethod' resolved to enclosing.localMethod as best guess"
+      - "Each CALLS edge carries line number in properties"
+    verify:
+      - "Qualified calls (containing '.') have confidence=1.0"
+      - "Unqualified calls have confidence=0.5"
+      - "Unqualified calls resolved within enclosing scope (enclosing + '.' + name)"
+      - "Each edge has 'line' property with call site line number"
+
+  - name: code-graph-extractor-cross-file-resolution
+    description: >
+      resolveCallEdges() cross-references unqualified CALLS edges across all
+      extracted file graphs. Unique matches get upgraded to confidence=0.8.
+    preconditions:
+      - "File A has function 'doWork' with CALLS edge to 'helper' (confidence=0.5)"
+      - "File B has exactly one function named 'helper' with fullName='com.bw.util.Helper.helper'"
+    steps:
+      - "resolveCallEdges(allGraphs) called"
+      - "Global function index built: {'helper' -> ['com.bw.util.Helper.helper'], ...}"
+      - "Scan File A edges: CALLS edge to 'helper' with confidence=0.5"
+      - "Lookup 'helper' in index — exactly one candidate"
+      - "MERGE new CALLS edge from caller to 'com.bw.util.Helper.helper' with confidence=0.8"
+      - "Properties include resolved=true"
+    verify:
+      - "Unique match resolved with confidence=0.8"
+      - "Multiple candidates (ambiguous) left at confidence=0.5 — no guess"
+      - "Resolved edge upserted to Neo4j with resolved=true flag"
+      - "Original unresolved edge still exists (both edges present)"
+
+  - name: code-graph-extractor-neo4j-upsert-delete-first
+    description: >
+      upsertToNeo4j() deletes all existing nodes for the file path before
+      inserting new ones. This prevents stale nodes from deleted code.
+    preconditions:
+      - "Neo4j has old graph for /path/Foo.java with 5 nodes"
+      - "New extraction has 3 nodes (2 methods were deleted)"
+    steps:
+      - "upsertToNeo4j(graph) called"
+      - "Step 1: MATCH (n) WHERE n.file_path = $filePath DETACH DELETE n — deletes old 5 nodes"
+      - "Step 2: MERGE for each of 3 new nodes"
+      - "Step 3: MERGE for each new edge"
+    verify:
+      - "Old nodes for deleted methods removed"
+      - "New nodes created with updated properties"
+      - "MERGE prevents duplicates if a node exists from another file's edge"
+      - "indexed_at timestamp updated on all nodes"
+
+  - name: code-graph-extractor-parse-failure-returns-null
+    description: >
+      When tree-sitter fails to parse source (corrupt syntax, null tree),
+      extractGraph returns null instead of throwing.
+    preconditions:
+      - "Source content causes tree-sitter parse failure"
+    steps:
+      - "extractGraph() called"
+      - "parser.parseString(null, source) throws or returns null"
+      - "Null tree logged: 'tree-sitter returned null tree for <path>'"
+      - "Return null"
+    verify:
+      - "Returns null, not empty FileGraph"
+      - "Warning logged"
+      - "No exception propagated"
+      - "Caller (CodeIndexer.extractAndUpsertGraph) handles null gracefully"
+
+  - name: code-graph-extractor-neo4j-disconnected-throws
+    description: >
+      upsertToNeo4j() throws IllegalStateException when Neo4j is not connected,
+      preventing silent data loss.
+    preconditions:
+      - "Neo4j disconnected (neo4j.isConnected() = false)"
+      - "FileGraph with nodes ready to upsert"
+    steps:
+      - "upsertToNeo4j(graph) called"
+      - "neo4j.isConnected() returns false"
+      - "IllegalStateException thrown: 'Neo4j is not connected'"
+    verify:
+      - "No partial writes to Neo4j"
+      - "Exception propagated — caller must handle"
+      - "CodeIndexer catches this in extractAndUpsertGraph() and logs it"
+
+  # ── Kafka Consumer Infrastructure ──
+
+  - name: kafka-consumer-offset-reset-while-running
+    description: >
+      Attempting to reset offsets while a consumer is running throws
+      IllegalStateException to prevent data loss.
+    preconditions:
+      - "Consumer 'gateway-search' is running"
+    steps:
+      - "resetOffset('chronicle.events', 'gateway-search') called"
+      - "consumers.containsKey('gateway-search') returns true"
+      - "IllegalStateException thrown: 'Consumer gateway-search is running. Stop it before resetting offsets.'"
+    verify:
+      - "No offset modification while consumer is active"
+      - "Prevents accidental replay during normal operation"
+      - "Must explicitly stop consumer first"
+
+  - name: kafka-consumer-commit-failure-continues
+    description: >
+      If commitSync() fails after processing a batch, the error is logged
+      but the consumer continues polling. Records may be reprocessed on restart.
+    preconditions:
+      - "Consumer running, Kafka broker temporarily unreachable during commit"
+    steps:
+      - "Batch of records processed successfully"
+      - "commitSync() throws CommitFailedException"
+      - "Exception caught: '[gateway] Consumer gateway-search commit failed: ...'"
+      - "Poll loop continues — next poll() returns next batch"
+    verify:
+      - "Consumer does not crash on commit failure"
+      - "Records may be reprocessed after restart (at-least-once semantics)"
+      - "Both projection consumers are idempotent so reprocessing is safe"
+
+enforced_constraints:
+  - name: protobuf-deserialization-required
+    description: >
+      Both projection consumers use startBytesConsumer() with ByteArrayDeserializer.
+      All events on chronicle.events are Protobuf-encoded and deserialized via
+      ProtoConverter.eventFromBytes(). No raw JSON on the event stream.
+    rationale: >
+      Protobuf provides schema evolution, smaller wire size, and faster
+      deserialization than JSON. Both consumers share the same Kafka topic.
+
+  - name: idempotent-projections
+    description: >
+      Search projection uses ON CONFLICT(event_id) DO NOTHING. Graph projection
+      uses MERGE semantics. Both are safe for replay without data duplication.
+    rationale: >
+      Kafka at-least-once delivery means records may be redelivered. Idempotent
+      writes ensure projection correctness regardless of delivery count.
+
+  - name: manual-offset-commit
+    description: >
+      All consumers use enable.auto.commit=false with explicit commitSync()
+      after each batch. Offsets advance only after successful processing.
+    rationale: >
+      Auto-commit can advance offsets before processing completes, causing
+      data loss. Manual commit ensures at-least-once processing guarantee.
+
+  - name: ast-chunk-budget-1600
+    description: >
+      AstChunker targets ~1600 chars per chunk (MAX_CHUNK_CHARS). Large classes
+      are split at method boundaries. Interstitial nodes are merged until budget.
+    rationale: >
+      1600 chars ≈ 400 tokens for nomic-embed-text-v1.5 embedding model.
+      Matches the document chunker budget for consistent vector quality.
+
+  - name: code-content-hash-dedup
+    description: >
+      CodeIndexer skips files whose SHA-256 content hash matches the stored hash.
+      No tree-sitter parsing, no database writes for unchanged files.
+    rationale: >
+      Tree-sitter parsing is CPU-intensive. SHA-256 comparison is O(n) on file
+      content vs O(n*grammar) for parsing. Avoids redundant work during directory scans.
+
+  - name: graceful-degradation-optional-services
+    description: >
+      TEI, Qdrant, and Neo4j are all nullable in CodeIndexer. The pipeline
+      degrades to PostgreSQL FTS-only when any optional service is unavailable.
+    rationale: >
+      Code search must work even when vector or graph infrastructure is down.
+      FTS is the baseline; vectors and graph are additive quality improvements.
+
+opinionated_constraints:
+  - name: separate-code-vectors-collection
+    description: >
+      Code embeddings go to a separate Qdrant collection 'code_vectors',
+      not the document 'vault_chunks' collection.
+    rationale: >
+      Code and prose have different embedding distributions. Separate collections
+      enable independent tuning of search parameters and prevent code chunks
+      from diluting document search results.
+
+  - name: delete-before-insert-graph
+    description: >
+      upsertToNeo4j() deletes all nodes for a file path before inserting new ones,
+      rather than diffing. Simple but destroys cross-file edges temporarily.
+    rationale: >
+      Diffing AST-level changes is complex and error-prone. Delete+re-insert
+      is simpler and always correct. Cross-file edges are re-established by
+      resolveCallEdges() after all files are processed.
+
+  - name: no-dead-letter-queue
+    description: >
+      Failed records are logged and skipped. No DLQ, no retry mechanism.
+      Recovery is via full projection rebuild (replay from offset 0).
+    rationale: >
+      Single-user system. DLQ infrastructure adds complexity for minimal value.
+      Full rebuild is cheap (minutes for typical event volumes) and always correct.
+
+  - name: graph-consumer-skips-on-neo4j-down
+    description: >
+      When Neo4j is unavailable, the graph consumer skips records and commits offsets.
+      This intentionally loses events. Recovery requires full projection rebuild.
+    rationale: >
+      Blocking the consumer (waiting for Neo4j) would cause consumer lag and
+      potentially trigger Kafka session timeout. Skipping is the simpler design.
+      The graph is always rebuildable from the event stream.
