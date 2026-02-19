@@ -101,14 +101,15 @@ exec_always --no-startup-id bash -c 'i3-msg shmlog off; for f in /dev/shm/i3-log
 # Blank root window
 exec_always --no-startup-id xsetroot -solid "#1a1b26"
 
-# Compositor (for transparency in apps that use it)
-exec_always --no-startup-id pkill picom; pidwait -x picom 2>/dev/null; picom -b
+# Compositor — only kill picom instances on THIS display (avoid killing host :0 picom)
+exec_always --no-startup-id bash -c 'for pid in $(pgrep -x picom); do if grep -qz "DISPLAY=$DISPLAY" /proc/$pid/environ 2>/dev/null; then kill "$pid"; fi; done; sleep 0.5; picom -b'
 
 # Wallpaper
 exec_always --no-startup-id feh --bg-fill ~/.config/wallpaper/current.jpg 2>/dev/null || feh --bg-fill /usr/share/backgrounds/*.jpg 2>/dev/null
 
-# Polybar
-exec_always --no-startup-id ~/.config/polybar/launch.sh
+# Polybar — intentionally omitted. Agent displays don't need a status bar.
+# The previous launch.sh call here ran `killall -q polybar` which killed the
+# host display's polybar, causing issue #9.
 
 # Clipboard sync (needed for cross-display clipboard via sensor)
 exec --no-startup-id autocutsel -selection CLIPBOARD -fork
