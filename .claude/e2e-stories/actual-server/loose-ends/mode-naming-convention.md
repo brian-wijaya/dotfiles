@@ -47,7 +47,7 @@ This is a **naming requirement**, not optional. Every mode must declare its invo
 
 ### Not modes (procedures, utilities — naming convention does not apply)
 - `backup-session-files`, `backup-dotfile`, `backup-vault`, `backup-both-dotfile-and-vault`
-- `keyboard-handoff`, `sense-user`, `somatic-aware`
+- `keyboard-handoff`, `sense-user`, `sensor-aware`
 - `reassemble-loose-threads`, `loose-config-search`
 - `code-glossary`, `workflow-trace`
 - `debug-visual`, `fixed-delay-audit`

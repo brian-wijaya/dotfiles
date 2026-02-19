@@ -1,19 +1,19 @@
-# Somatic Multi-Sensor Data Fusion Server E2E Tests
+# Sensor Multi-Sensor Data Fusion Server E2E Tests
 
-vocabularies: [somatic, services]
+vocabularies: [sensor, services]
 
 metadata:
-  feature: somatic
+  feature: sensor
   component: core-fusion
-  tags: [somatic, core]
+  tags: [sensor, core]
   estimated_duration_ms: 5000
 
 stories:
   - name: fusion-service-running
     description: Data fusion server is active
     steps:
-      - service_active: somatic-fusion
-      - somatic_get_status
+      - service_active: sensor-fusion
+      - sensor_get_status
     verify:
       - Contains: "fusion"
 
@@ -23,21 +23,21 @@ stories:
       - bash: "xdotool type 'test'"
       - bash: "xdotool mousemove 100 100"
       - bash: "sleep 0.3"
-      - bash: "somatic-cli fusion --correlate --json | jq -r '.events | length'"
+      - bash: "sensor-cli fusion --correlate --json | jq -r '.events | length'"
     verify:
       - Greater: 1
 
   - name: temporal-alignment
     description: Events are temporally aligned across sensors
     steps:
-      - bash: "somatic-cli fusion --align --json | jq -r '.aligned'"
+      - bash: "sensor-cli fusion --align --json | jq -r '.aligned'"
     verify:
       - Equals: "true"
 
   - name: state-vector-generation
     description: Unified state vector is generated from sensors
     steps:
-      - somatic_get_state_vector
+      - sensor_get_state_vector
     verify:
       - Contains: "keyboard"
       - Contains: "pointer"
@@ -45,9 +45,9 @@ stories:
   - name: sensor-disagreement-detection
     description: Sensor disagreements are detected
     steps:
-      - somatic_inject_delay
+      - sensor_inject_delay
       - bash: "sleep 0.5"
-      - somatic_get_anomalies
+      - sensor_get_anomalies
     verify:
       - NotEmpty
 
@@ -56,7 +56,7 @@ stories:
     steps:
       - bash: "xdotool type 'test'"
       - bash: "sleep 0.3"
-      - bash: "somatic-cli fusion --latest --json | jq -r '.confidence'"
+      - bash: "sensor-cli fusion --latest --json | jq -r '.confidence'"
     verify:
       - Greater: 0
       - LessOrEqual: 1
@@ -64,14 +64,14 @@ stories:
   - name: sensor-weighting
     description: Sensors can be weighted differently
     steps:
-      - bash: "somatic-cli fusion --set-weight keyboard=0.8 --json"
-      - bash: "somatic-cli fusion --weights --json | jq -r '.keyboard'"
+      - bash: "sensor-cli fusion --set-weight keyboard=0.8 --json"
+      - bash: "sensor-cli fusion --weights --json | jq -r '.keyboard'"
     verify:
       - Contains: "0.8"
 
   - name: fusion-latency-tracking
     description: Fusion latency is tracked
     steps:
-      - somatic_get_timing
+      - sensor_get_timing
     verify:
       - Contains: "fusion_latency_us"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Keystroke sound daemon — plays Material Design tap sounds on every keypress.
 
-Polls somatic-input-capture for new keystrokes and plays audio feedback.
+Polls sensor-input-capture for new keystrokes and plays audio feedback.
 Uses PulseAudio/PipeWire via subprocess paplay.
 
 Usage: keystroke-sound-daemon.py [--virtual-only]
@@ -108,7 +108,7 @@ def sound_for_keysym(keysym):
 
 
 def poll_keystrokes():
-    """Poll somatic-input-capture MCP for keystrokes via its JSONL log."""
+    """Poll sensor-input-capture MCP for keystrokes via its JSONL log."""
     log_path = Path.home() / ".claude/keylog.jsonl"
 
     if not log_path.exists():

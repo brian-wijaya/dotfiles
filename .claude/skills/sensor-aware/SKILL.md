@@ -1,19 +1,19 @@
 ---
-name: somatic-aware
-description: Automatic somatic awareness. Injects current sensor state into context. Use at the start of complex tasks, debugging sessions, or when understanding user state matters.
+name: sensor-aware
+description: Automatic sensor awareness. Injects current sensor state into context. Use at the start of complex tasks, debugging sessions, or when understanding user state matters.
 user-invocable: false
-allowed-tools: mcp__somatic-fusion__read_state_vector, mcp__somatic-fusion__read_status, mcp__somatic-input-timing__read_timing, mcp__somatic-pointer__read_dynamics, mcp__somatic-temporal__now, mcp__somatic-hud__flash_text
+allowed-tools: mcp__gateway__SENSE_read_state_vector, mcp__gateway__SENSE_read_status, mcp__gateway__SENSE_read_timing, mcp__gateway__SENSE_read_dynamics, mcp__gateway__ACT_now, mcp__gateway__ACT_flash_text
 ---
 
-# Somatic Awareness Active
+# Sensor Awareness Active
 
-You have a body. The somatic sensors are online. Use this information to calibrate your response.
+You have a body. The sensors are online. Use this information to calibrate your response.
 
 ## Current State
 
 Query the fusion state vector immediately:
 ```
-mcp__somatic-fusion__read_state_vector
+SENSE_read_state_vector
 ```
 
 Interpret the 14 dimensions:

@@ -101,6 +101,9 @@ degraded functionality, missing data pipelines, stale processes, etc.):
 4. Do NOT ask "should I file an issue?" — just file it. Issues are cheap; lost context is expensive.
 5. Reference the issue number in any subsequent work on that problem.
 6. Delegate the actual `gh issue create` calls to agents (per context_preservation rule).
+7. When completing work that resolves a GitHub issue, close it immediately:
+   `gh issue close <number> --comment "Resolved: <brief description of fix>"`
+   Do NOT leave issues open after the fix is verified.
 </auto_issue_filing>
 
 MCP config: `/home/bw/.claude.json` (user-level, `mcpServers` key). No project-level `.mcp.json`.
@@ -180,8 +183,8 @@ x11_desktop:
   get_focused → SENSE_read_focus
   run_command → ACT_execute_command (shell via bash -c)
   run_privileged → ACT_execute_privileged_command (sudo -n bash -c)
-  overlay_message → ACT_emit_overlay_message (somatic chat overlay)
-  set_attention → ACT_set_attention_target (somatic attention overlay)
+  overlay_message → ACT_emit_overlay_message (sensor chat overlay)
+  set_attention → ACT_set_attention_target (sensor attention overlay)
   dismiss_overlay → ACT_dismiss_overlay
   process_list → SENSE_read_process_list (pgrep/ps)
   accessibility → SENSE_read_accessibility_tree (AT-SPI, experimental)
@@ -218,7 +221,7 @@ filesystem:
   search_names → Glob
   run_command → Bash
 
-somatic:
+sensor:
   timestamp → ACT_now / ACT_delta
   transient_alert → ACT_post_message
   pre_irreversible → SENSE_check_permission

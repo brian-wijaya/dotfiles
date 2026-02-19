@@ -1,5 +1,5 @@
 vocabulary:
-  somatic-daemon: C++ process hosting somatic/ and executive/ modules
+  sensor-daemon: C++ process hosting sensor/ and executive/ modules
   kinetic-jar: Java 25 JVM process hosting kinetic MCP gateway
   fail-stop: both processes restart together on any crash
   consistency-sweep: startup validation of cross-store invariants
@@ -15,14 +15,14 @@ stories:
     tags: [critical, smoke]
     estimated_duration_ms: 35000
     preconditions:
-      - somatic running as systemd user service
+      - sensor running as systemd user service
       - kinetic running as systemd user service
       - services configured with Restart=always
     steps:
-      - bash: "systemctl --user is-active somatic && echo 'active'"
+      - bash: "systemctl --user is-active sensor && echo 'active'"
       # TODO(kinetic): uncomment when kinetic.service exists
       # - bash: "systemctl --user is-active kinetic && echo 'active'"
-      - bash: "kill -9 $(pidof somatic) 2>/dev/null; sleep 5; systemctl --user is-active somatic && echo 'recovered'"
+      - bash: "kill -9 $(pidof sensor) 2>/dev/null; sleep 5; systemctl --user is-active sensor && echo 'recovered'"
       # TODO(kinetic): test kinetic crash recovery
       # - bash: "kill -9 $(pgrep -f kinetic.jar) 2>/dev/null; sleep 5; systemctl --user is-active kinetic && echo 'recovered'"
     verify:
@@ -35,7 +35,7 @@ stories:
     preconditions:
       - systemd user session starts
     steps:
-      - bash: "systemctl --user start somatic && sleep 2 && systemctl --user is-active somatic"
+      - bash: "systemctl --user start sensor && sleep 2 && systemctl --user is-active sensor"
       # TODO(kinetic): uncomment when kinetic.service exists
       # - bash: "systemctl --user start kinetic && sleep 5 && systemctl --user is-active kinetic"
       # TODO(kinetic): verify MCP tools/list responds
@@ -50,15 +50,15 @@ stories:
     tags: [stress]
     estimated_duration_ms: 10000
     preconditions:
-      - somatic running
+      - sensor running
       - ring buffer configured for 60s window
     steps:
       # Generate rapid events to fill ring buffer
       - bash: "for i in $(seq 1 10000); do xdotool key a; done"
       - bash: "sleep 2"
-      # TODO(somatic): verify spill files created and consumed
-      # - bash: "ls /tmp/somatic-spill/ 2>/dev/null | wc -l"
-      - bash: "somatic get_stats | jq -r '.events_dropped // 0'"
+      # TODO(sensor): verify spill files created and consumed
+      # - bash: "ls /tmp/sensor-spill/ 2>/dev/null | wc -l"
+      - bash: "sensor get_stats | jq -r '.events_dropped // 0'"
     verify:
       - Equals: "0"
 

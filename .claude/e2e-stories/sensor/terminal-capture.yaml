@@ -1,32 +1,32 @@
-# Somatic Terminal Capture — Stories and Constraints
-# Always-on terminal output capture as a somatic sensor channel
+# Sensor Terminal Capture — Stories and Constraints
+# Always-on terminal output capture as a sensor sensor channel
 
 vocabulary:
-  terminal-capture: Somatic sensor channel that captures raw terminal output from all PTYs with microsecond timestamps
+  terminal-capture: Sensor sensor channel that captures raw terminal output from all PTYs with microsecond timestamps
   ring-buffer-per-channel: Each sensor channel (terminal, X11 events, keystrokes, pointer, clipboard) gets its own dedicated ring buffer in shared memory
   hot-catalog: Kinetic's indexed, full-text-searchable store of recent terminal output (7-day retention)
   cold-catalog: Kinetic's batch-compressed archive of terminal output (90-day retention)
   unified-timeline: Single chronological table in kinetic with typed entries (source_type discriminator) covering terminal, visual, keystroke, clipboard events
 
 metadata:
-  feature: somatic
+  feature: sensor
   component: terminal-capture
-  tags: [somatic, terminal, capture, sensor, kinetic]
+  tags: [sensor, terminal, capture, sensor, kinetic]
 
 stories:
   # === CAPTURE ===
 
   - name: always-on-pty-capture
     description: >
-      Somatic captures raw byte streams from all active PTYs (tmux panes) with microsecond
+      Sensor captures raw byte streams from all active PTYs (tmux panes) with microsecond
       timestamps. Capture is always on — not pipe-stage, not on-demand. Terminal output is
       a sensor channel like X11 events or keystrokes.
     preconditions:
-      - somatic daemon running
+      - sensor daemon running
       - at least one tmux session with active panes
     steps:
       - bash: "echo 'hello capture test' in any tmux pane"
-      - somatic: read terminal ring buffer
+      - sensor: read terminal ring buffer
     verify:
       - terminal ring buffer contains timestamped 'hello capture test'
       - source attribution identifies the correct tmux pane (session:window.pane)
@@ -41,7 +41,7 @@ stories:
       - two or more active tmux panes producing output
     steps:
       - bash: "echo 'pane-A' in pane 1; echo 'pane-B' in pane 2"
-      - somatic: read terminal ring buffer
+      - sensor: read terminal ring buffer
     verify:
       - 'pane-A' attributed to correct pane identity
       - 'pane-B' attributed to different pane identity
@@ -53,10 +53,10 @@ stories:
       keystrokes, pointer, and clipboard channels. A burst of terminal output cannot evict
       recent keystrokes or X11 events.
     preconditions:
-      - somatic running with multiple sensor channels active
+      - sensor running with multiple sensor channels active
     steps:
       - bash: "generate 50MB of terminal output rapidly"
-      - somatic: read keystroke ring buffer
+      - sensor: read keystroke ring buffer
     verify:
       - keystroke ring buffer retains recent entries despite terminal burst
       - terminal ring buffer contains most recent output (oldest overwritten)
@@ -65,11 +65,11 @@ stories:
 
   - name: kinetic-catalogs-from-ring-buffer
     description: >
-      Kinetic reads from somatic's terminal ring buffer and catalogs entries into
+      Kinetic reads from sensor's terminal ring buffer and catalogs entries into
       persistent SQLite storage with full-text indexing. No truncation at any tier.
     preconditions:
-      - somatic running with terminal capture
-      - kinetic running and connected to somatic
+      - sensor running with terminal capture
+      - kinetic running and connected to sensor
     steps:
       - bash: "echo 'catalog-test-STRING_7742' in a tmux pane"
       - wait for kinetic to catalog

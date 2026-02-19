@@ -1,5 +1,5 @@
 vocabulary:
-  display_session: "An isolated X11 display environment consisting of Xvfb, a window manager (i3), optional per-display somatic, and optional xpra shadow/viewer processes. Identified by display number (e.g. 99)."
+  display_session: "An isolated X11 display environment consisting of Xvfb, a window manager (i3), optional per-display sensor, and optional xpra shadow/viewer processes. Identified by display number (e.g. 99)."
   display_id: "String identifier for a display session, equal to the display number as a string (e.g. '99'). Used by all tool APIs."
   display_number: "Integer X11 display number (e.g. 99 for :99). Assigned sequentially from config.displayStartNumber via AtomicInteger."
   xvfb: "X Virtual Frame Buffer — headless X11 server providing a virtual screen without physical hardware."
@@ -7,10 +7,10 @@ vocabulary:
   xpra_shadow_server: "xpra process running in 'shadow' mode against the Xvfb display, providing remote access to the virtual display content. Runs with --readonly=yes, --opengl=no, --resize-display=no, --daemon=no."
   xpra_viewer_client: "xpra process running in 'attach' mode on the user's real display (:0), rendering the shadow server's content in a window. Runs with autograb disabled."
   autograb: "xpra feature where the viewer calls XGrabKeyboard on mouse-enter in shadow mode, stealing ALL keyboard input from the host WM. Disabled via XPRA_AUTOGRAB_MODES='' and XPRA_AUTOGRAB_WITH_POINTER=0."
-  somatic_shm_suffix: "Per-display suffix for shared memory paths (e.g. '_d99'), ensuring each display's somatic instance uses isolated SHM segments."
-  display_router: "Routing layer that resolves tool call arguments to the correct display's environment and somatic instance. Uses 'host' sentinel for user's real display, falls back to lowest-numbered running display."
+  sensor_shm_suffix: "Per-display suffix for shared memory paths (e.g. '_d99'), ensuring each display's sensor instance uses isolated SHM segments."
+  display_router: "Routing layer that resolves tool call arguments to the correct display's environment and sensor instance. Uses 'host' sentinel for user's real display, falls back to lowest-numbered running display."
   host_display: "Sentinel display_id value 'host' that routes tool calls to the user's real X11 display (:0) instead of any isolated display."
-  stale_processes: "Orphaned Xvfb, xpra, i3, or somatic processes from previous gateway runs that still hold resources on a display number. Cleaned up before each display start."
+  stale_processes: "Orphaned Xvfb, xpra, i3, or sensor processes from previous gateway runs that still hold resources on a display number. Cleaned up before each display start."
   display_environment: "Utility class for detecting the user's real X11 display and XAUTHORITY, shared by DisplayManager and DisplaySession."
   viewer_workspace: "i3 workspace 9, where xpra viewer windows are placed via i3 assign rules. Accessed via Super+9."
   panel_height: "Configurable pixel height subtracted from detected user resolution to account for desktop panels/taskbars when auto-sizing displays."
@@ -26,34 +26,34 @@ stories:
   - name: create-display-with-explicit-geometry
     description: >
       Create an isolated display with explicit width/height/depth parameters via ACT_create_display.
-      Verifies the full startup sequence: stale cleanup → Xvfb → xdpyinfo verification → i3 WM → per-display somatic.
+      Verifies the full startup sequence: stale cleanup → Xvfb → xdpyinfo verification → i3 WM → per-display sensor.
     preconditions:
       - "Gateway is running with display isolation enabled (config.displayEnabled() == true)"
       - "No stale processes exist on the target display number"
-      - "Xvfb, i3, and somatic binaries are available on PATH"
+      - "Xvfb, i3, and sensor binaries are available on PATH"
     steps:
       - "Call ACT_create_display with width=1920, height=1080, depth=24"
       - "DisplayManager.createDisplay(1920, 1080, 24) assigns next display number via AtomicInteger"
-      - "DisplaySession constructor stores displayNumber, width, height, depth, windowManager, somaticBinaryPath, xpraPort"
+      - "DisplaySession constructor stores displayNumber, width, height, depth, windowManager, sensorBinaryPath, xpraPort"
       - "DisplaySession.start() sets state = STARTING"
       - "killStaleProcesses() runs first (xpra stop, pkill patterns, socket/lock cleanup)"
       - "Xvfb launches: Xvfb :N -screen 0 1920x1080x24 -nolisten tcp"
       - "verifyDisplay polls xdpyinfo up to 50 times at 100ms intervals (5s timeout)"
       - "i3 launches with --shmlog-size=0 and DISPLAY=:N in environment"
       - "500ms pause for WM initialization"
-      - "SomaticClient starts with DISPLAY=:N and SOMATIC_SHM_SUFFIX=_dN"
+      - "SensorClient starts with DISPLAY=:N and SENSOR_SHM_SUFFIX=_dN"
       - "State transitions to RUNNING"
     verify:
       - "ACT_create_display returns JSON with display_id, display_number, xpra_port, state='RUNNING', ambient_path"
       - "DisplaySession.state() == RUNNING"
       - "xvfbProcess is alive"
       - "windowManagerProcess is alive"
-      - "somaticClient is non-null and started"
+      - "sensorClient is non-null and started"
       - "sessions ConcurrentHashMap contains the new display"
       - "Display number is sequential from config.displayStartNumber()"
       - "xpraPort == config.displayXpraBasePort() + (number - config.displayStartNumber())"
       - "provideEnvironment() returns Map.of('DISPLAY', ':N')"
-      - "provideAmbientPath() returns '/dev/shm/somatic_ambient_dN'"
+      - "provideAmbientPath() returns '/dev/shm/sensor_ambient_dN'"
 
   - name: create-display-auto-resolution
     description: >
@@ -122,16 +122,16 @@ stories:
       - "DisplaySession.stop() sets state = STOPPING"
       - "Terminates viewerClientProcess (3s grace period)"
       - "Terminates xpraProcess (3s grace period)"
-      - "Closes somaticClient"
+      - "Closes sensorClient"
       - "Terminates windowManagerProcess (3s grace period)"
       - "Terminates xvfbProcess (3s grace period)"
       - "Sets state = STOPPED"
     verify:
       - "ACT_destroy_display returns 'Display <id> destroyed'"
       - "DisplayManager.locateDisplay(displayId) returns null after destroy"
-      - "All process references nulled (xvfb, wm, xpra, viewer, somatic)"
+      - "All process references nulled (xvfb, wm, xpra, viewer, sensor)"
       - "stderr logs 'Display :N stopped'"
-      - "Termination order is reverse of startup: viewer → xpra → somatic → WM → Xvfb"
+      - "Termination order is reverse of startup: viewer → xpra → sensor → WM → Xvfb"
 
   - name: destroy-nonexistent-display
     description: >
@@ -230,41 +230,41 @@ stories:
       - "--shmlog-size=0 prevents shared memory log allocation"
       - "DISPLAY environment points to isolated display, not host"
 
-  # === Per-display somatic ===
+  # === Per-display sensor ===
 
-  - name: per-display-somatic-startup
+  - name: per-display-sensor-startup
     description: >
-      Each display gets its own somatic instance with suffixed SHM paths for isolation.
+      Each display gets its own sensor instance with suffixed SHM paths for isolation.
     preconditions:
       - "Xvfb and i3 are running on :N"
-      - "somaticBinaryPath points to valid somatic binary"
+      - "sensorBinaryPath points to valid sensor binary"
     steps:
       - "SHM suffix computed: '_d' + displayNumber (e.g. '_d99')"
-      - "SomaticClient constructed with environment: DISPLAY=:N, SOMATIC_SHM_SUFFIX=_d99"
-      - "somaticClient.start() launches the per-display somatic process"
+      - "SensorClient constructed with environment: DISPLAY=:N, SENSOR_SHM_SUFFIX=_d99"
+      - "sensorClient.start() launches the per-display sensor process"
     verify:
-      - "SomaticClient receives correct DISPLAY and SOMATIC_SHM_SUFFIX"
-      - "provideSomatic() returns the per-display SomaticClient"
-      - "provideAmbientPath() returns '/dev/shm/somatic_ambient_d99'"
+      - "SensorClient receives correct DISPLAY and SENSOR_SHM_SUFFIX"
+      - "provideSensor() returns the per-display SensorClient"
+      - "provideAmbientPath() returns '/dev/shm/sensor_ambient_d99'"
       - "SHM paths are unique per display (no collisions between displays)"
 
-  - name: per-display-somatic-failure-nonfatal
+  - name: per-display-sensor-failure-nonfatal
     description: >
-      If per-display somatic fails to start, the display still enters RUNNING state.
-      Somatic is optional — the display works without it.
+      If per-display sensor fails to start, the display still enters RUNNING state.
+      Sensor is optional — the display works without it.
     preconditions:
       - "Xvfb and i3 are running on :N"
-      - "somatic binary is missing or fails to start"
+      - "sensor binary is missing or fails to start"
     steps:
-      - "somaticClient.start() throws an exception"
+      - "sensorClient.start() throws an exception"
       - "Exception is caught and logged as WARNING"
-      - "somaticClient set to null"
+      - "sensorClient set to null"
       - "State still transitions to RUNNING"
     verify:
-      - "stderr logs: 'WARNING: Per-display somatic failed for :N: <message>'"
-      - "provideSomatic() returns null"
+      - "stderr logs: 'WARNING: Per-display sensor failed for :N: <message>'"
+      - "provideSensor() returns null"
       - "DisplaySession.state() == RUNNING"
-      - "Display is still usable for X11 operations without somatic"
+      - "Display is still usable for X11 operations without sensor"
 
   # === Stale process cleanup ===
 
@@ -273,12 +273,12 @@ stories:
       Before starting a new display, killStaleProcesses() removes orphaned processes
       from previous gateway runs that still hold resources on the target display number.
     preconditions:
-      - "Previous gateway instance crashed, leaving Xvfb/xpra/i3/somatic processes on :N"
+      - "Previous gateway instance crashed, leaving Xvfb/xpra/i3/sensor processes on :N"
       - "Stale X lock file and socket may exist"
     steps:
       - "killStaleProcesses() runs first in start()"
       - "Runs 'xpra stop :N' (5s timeout) to cleanly stop xpra session"
-      - "Runs pkill -f for patterns: 'Xvfb :N', 'xpra.*:N', 'i3.*:N', 'somatic.*_dN'"
+      - "Runs pkill -f for patterns: 'Xvfb :N', 'xpra.*:N', 'i3.*:N', 'sensor.*_dN'"
       - "1000ms wait for processes to die"
       - "Removes /tmp/.XN-lock if exists"
       - "Removes /tmp/.X11-unix/XN if exists"
@@ -286,7 +286,7 @@ stories:
       - "Removes matching files from /run/user/1000/xpra"
       - "Removes matching files from ~/.xpra"
     verify:
-      - "All stale Xvfb, xpra, i3, and somatic processes are killed"
+      - "All stale Xvfb, xpra, i3, and sensor processes are killed"
       - "Stale X lock file removed, stderr logs removal"
       - "Stale X socket removed, stderr logs removal"
       - "xpra runtime directories cleaned"
@@ -532,17 +532,17 @@ stories:
   - name: display-router-isolation-disabled
     description: >
       When display isolation is disabled (config.displayEnabled() == false), all routing
-      returns empty environment maps and fallback somatic.
+      returns empty environment maps and fallback sensor.
     preconditions:
       - "config.displayEnabled() returns false"
       - "displayManager.isEnabled() returns false"
     steps:
       - "Any tool call, regardless of display_id argument"
       - "DisplayRouter.chooseEnvironment() checks isEnabled(), returns Map.of()"
-      - "DisplayRouter.chooseSomatic() checks isEnabled(), returns fallbackSomatic"
+      - "DisplayRouter.chooseSensor() checks isEnabled(), returns fallbackSensor"
     verify:
       - "chooseEnvironment() returns empty map (inherits process DISPLAY)"
-      - "chooseSomatic() returns the primary/fallback somatic client"
+      - "chooseSensor() returns the primary/fallback sensor client"
       - "No display lookup attempted"
 
   - name: display-router-no-displays-exist
@@ -556,34 +556,34 @@ stories:
       - "locateDefaultDisplay() finds no RUNNING sessions, returns null"
     verify:
       - "chooseEnvironment() returns Map.of()"
-      - "chooseSomatic() returns fallbackSomatic"
+      - "chooseSensor() returns fallbackSensor"
 
-  - name: display-router-somatic-fallback
+  - name: display-router-sensor-fallback
     description: >
-      When a display's per-display somatic is null (failed to start), chooseSomatic
-      falls back to the primary somatic client.
+      When a display's per-display sensor is null (failed to start), chooseSensor
+      falls back to the primary sensor client.
     preconditions:
-      - "Display :N is RUNNING but provideSomatic() returns null"
-      - "Primary somatic client is available"
+      - "Display :N is RUNNING but provideSensor() returns null"
+      - "Primary sensor client is available"
     steps:
       - "Tool call targets display :N"
-      - "DisplayRouter.chooseSomatic() locates the display"
-      - "session.provideSomatic() returns null"
-      - "Falls back to fallbackSomatic parameter"
+      - "DisplayRouter.chooseSensor() locates the display"
+      - "session.provideSensor() returns null"
+      - "Falls back to fallbackSensor parameter"
     verify:
-      - "Returns the primary/fallback somatic client, not null"
-      - "Tool execution proceeds with primary somatic"
+      - "Returns the primary/fallback sensor client, not null"
+      - "Tool execution proceeds with primary sensor"
 
-  - name: display-router-host-somatic
+  - name: display-router-host-sensor
     description: >
-      When display_id='host', chooseSomatic returns the fallback somatic (primary instance).
+      When display_id='host', chooseSensor returns the fallback sensor (primary instance).
     preconditions:
       - "display_id='host' in tool arguments"
     steps:
-      - "DisplayRouter.chooseSomatic() detects HOST_DISPLAY sentinel"
-      - "Returns fallbackSomatic immediately"
+      - "DisplayRouter.chooseSensor() detects HOST_DISPLAY sentinel"
+      - "Returns fallbackSensor immediately"
     verify:
-      - "Primary somatic is used for host display operations"
+      - "Primary sensor is used for host display operations"
       - "No display lookup performed"
 
   # === DisplayEnvironment detection ===
@@ -670,7 +670,7 @@ stories:
       - "display_id is string, display_number is int"
       - "state is enum name (e.g. 'RUNNING')"
       - "has_viewer is true for display with viewer, false for the other"
-      - "ambient_path matches /dev/shm/somatic_ambient_d<N>"
+      - "ambient_path matches /dev/shm/sensor_ambient_d<N>"
       - "LinkedHashMap preserves field insertion order in JSON"
 
   # === Process termination ===
@@ -748,9 +748,9 @@ stories:
       - "Each display has unique display number (AtomicInteger ensures atomicity)"
       - "Each display has unique xpra port"
       - "SHM paths are isolated: _d99, _d100, _d101"
-      - "Ambient paths are isolated: /dev/shm/somatic_ambient_d99, etc."
+      - "Ambient paths are isolated: /dev/shm/sensor_ambient_d99, etc."
       - "ConcurrentHashMap provides thread-safe session registry"
-      - "Each display has independent Xvfb, i3, and somatic processes"
+      - "Each display has independent Xvfb, i3, and sensor processes"
 
   - name: locate-default-display-none-running
     description: >
@@ -772,7 +772,7 @@ enforced_constraints:
       and will pass a file-existence check when the display is actually dead.
     rationale: >
       Stale X11 sockets persist after unclean Xvfb shutdown. File existence checks
-      give false positives, causing i3 and somatic to launch against a dead display.
+      give false positives, causing i3 and sensor to launch against a dead display.
       xdpyinfo actively connects to the X server and will fail if it's not accepting
       connections, providing a reliable liveness check.
 
@@ -801,7 +801,7 @@ enforced_constraints:
   - name: reverse-order-shutdown
     description: >
       Display shutdown MUST terminate processes in reverse startup order:
-      viewer → xpra shadow → somatic → window manager → Xvfb.
+      viewer → xpra shadow → sensor → window manager → Xvfb.
       Each process gets a 3-second grace period before force-kill.
     rationale: >
       Forward-order shutdown (killing Xvfb first) causes cascading failures in
@@ -826,14 +826,14 @@ enforced_constraints:
       display. With multiple isolated displays, this wastes SHM space and can cause
       resource exhaustion. The SHM log is only useful for debugging i3 itself.
 
-  - name: somatic-shm-isolation
+  - name: sensor-shm-isolation
     description: >
-      Each display's somatic instance MUST use a unique SHM suffix (SOMATIC_SHM_SUFFIX=_dN)
+      Each display's sensor instance MUST use a unique SHM suffix (SENSOR_SHM_SUFFIX=_dN)
       to prevent SHM path collisions between displays.
     rationale: >
-      Without per-display suffixes, multiple somatic instances would write to the same
+      Without per-display suffixes, multiple sensor instances would write to the same
       shared memory segments, causing data corruption and cross-display interference.
-      The ambient path /dev/shm/somatic_ambient_dN must be unique per display.
+      The ambient path /dev/shm/sensor_ambient_dN must be unique per display.
 
   - name: thread-safe-session-registry
     description: >
@@ -863,14 +863,14 @@ opinionated_constraints:
       workspace keeps viewer windows out of the user's primary workspaces (1-4) while
       remaining accessible via Super+9. i3 assign rules handle placement automatically.
 
-  - name: somatic-failure-nonfatal
+  - name: sensor-failure-nonfatal
     description: >
-      Per-display somatic failure is non-fatal. The display enters RUNNING state
-      even if somatic fails to start. A WARNING is logged and somaticClient is set to null.
+      Per-display sensor failure is non-fatal. The display enters RUNNING state
+      even if sensor fails to start. A WARNING is logged and sensorClient is set to null.
     rationale: >
-      Somatic provides sensing capabilities but is not required for core display
+      Sensor provides sensing capabilities but is not required for core display
       functionality (X11 operations, window management). Making it fatal would prevent
-      display usage when somatic has transient startup issues or is not installed.
+      display usage when sensor has transient startup issues or is not installed.
 
   - name: xvfb-nolisten-tcp
     description: >

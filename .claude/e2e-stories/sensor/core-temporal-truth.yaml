@@ -1,19 +1,19 @@
-# Somatic Temporal Consistency/Truth Server E2E Tests
+# Sensor Temporal Consistency/Truth Server E2E Tests
 
-vocabularies: [somatic, services]
+vocabularies: [sensor, services]
 
 metadata:
-  feature: somatic
+  feature: sensor
   component: core-temporal-truth
-  tags: [somatic, core]
+  tags: [sensor, core]
   estimated_duration_ms: 5000
 
 stories:
   - name: temporal-truth-service-running
     description: Temporal consistency server is active
     steps:
-      - service_active: somatic-temporal-truth
-      - somatic_get_status
+      - service_active: sensor-temporal-truth
+      - sensor_get_status
     verify:
       - Contains: "temporal"
 
@@ -22,14 +22,14 @@ stories:
     steps:
       - bash: "xdotool type 'abc'"
       - bash: "sleep 0.3"
-      - bash: "somatic-cli temporal --validate-order --json | jq -r '.consistent'"
+      - bash: "sensor-cli temporal --validate-order --json | jq -r '.consistent'"
     verify:
       - Equals: "true"
 
   - name: timestamp-monotonicity
     description: Timestamps are monotonically increasing
     steps:
-      - bash: "somatic-cli temporal --check-monotonic --json | jq -r '.monotonic'"
+      - bash: "sensor-cli temporal --check-monotonic --json | jq -r '.monotonic'"
     verify:
       - Equals: "true"
 
@@ -38,29 +38,29 @@ stories:
     steps:
       - bash: "xdotool type 'test'"
       - bash: "sleep 0.3"
-      - bash: "somatic-cli temporal --causality --json | jq '.chains | length'"
+      - bash: "sensor-cli temporal --causality --json | jq '.chains | length'"
     verify:
       - Greater: 0
 
   - name: time-delta-calculation
     description: Time deltas between events are calculated
     steps:
-      - somatic_delta
+      - sensor_delta
     verify:
       - Contains: "delta_us"
 
   - name: temporal-anomaly-detection
     description: Temporal anomalies are detected
     steps:
-      - somatic_inject_delay
+      - sensor_inject_delay
       - bash: "sleep 0.5"
-      - somatic_get_anomalies
+      - sensor_get_anomalies
     verify:
       - Contains: "temporal"
 
   - name: clock-skew-detection
     description: Clock skew is detected
     steps:
-      - bash: "somatic-cli temporal --check-skew --json | jq -r '.skew_detected'"
+      - bash: "sensor-cli temporal --check-skew --json | jq -r '.skew_detected'"
     verify:
       - NotEmpty

@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS embedding_cache (
 );
 
 -- E2E Test Results Storage (implements SKILL.md specification)
--- Main results table with enriched somatic metrics
+-- Main results table with enriched sensor metrics
 CREATE TABLE IF NOT EXISTS e2e_results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id TEXT NOT NULL,
@@ -256,7 +256,7 @@ CREATE TABLE IF NOT EXISTS e2e_results (
     actual TEXT,
     blocked_reason TEXT,
 
-    -- Somatic differentials (quantitative)
+    -- Sensor differentials (quantitative)
     geometry_anomaly_count INTEGER,
     x11_event_count INTEGER,
     attention_shifts INTEGER,

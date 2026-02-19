@@ -33,10 +33,13 @@
 ;; Global guards (all profiles)
 (load (expand-file-name "modules/memory-protection" user-emacs-directory))
 
-;; Somatic sensor integration (requires somatic-dbus running)
-(require 'somatic nil t)
-(when (featurep 'somatic)
-  (somatic-mode 1))
+;; Sensor integration
+(require 'sensor nil t)
+(when (featurep 'sensor)
+  (sensor-mode 1))
+
+;; Prog-speak: deterministic English normalization
+(load-file "~/.emacs.d/prog-speak/prog-speak.el")
 
 ;; Load profile
 (let ((profile-file (expand-file-name

@@ -3,7 +3,7 @@
 
 Reads the current session transcript from Claude Code's JSONL log,
 extracts a summary, topics, and key facts, then saves to vault-rag.
-Also posts a notification to somatic-hud chat overlay.
+Also posts a notification to sensor-hud chat overlay.
 """
 
 import json
@@ -82,9 +82,9 @@ if not user_messages and not assistant_messages:
 # Extract topics from user messages (simple keyword extraction)
 topics = set()
 topic_keywords = {
-    "emacs": "emacs", "e2e": "e2e-test", "somatic": "somatic",
+    "emacs": "emacs", "e2e": "e2e-test", "sensor": "sensor",
     "vault": "vault-rag", "dotfile": "dotfiles", "backup": "backup",
-    "hud": "somatic-hud", "attention": "somatic-attention",
+    "hud": "sensor-hud", "attention": "sensor-attention",
     "mcp": "mcp", "build": "build", "hook": "hooks",
     "picom": "picom", "i3": "i3", "chrome": "browser",
 }
@@ -126,7 +126,7 @@ try:
         message_count=len(user_messages) + len(assistant_messages)
     )
 
-    # Post to somatic-hud chat overlay via MCP stdin (won't work directly)
+    # Post to sensor-hud chat overlay via MCP stdin (won't work directly)
     # Instead use notify-send as fallback
     fact_count = len(key_facts)
     topic_count = len(topics)

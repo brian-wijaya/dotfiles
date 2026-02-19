@@ -798,7 +798,7 @@ def query_e2e_history(
     and reliability. Returns test results, regressions, and flakiness data.
 
     Args:
-        feature: Filter by feature name (e.g., "somatic", "vault-rag")
+        feature: Filter by feature name (e.g., "sensor", "vault-rag")
         story: Filter by story name (e.g., "core-input-capture")
         since: ISO date string to filter from (e.g., "2026-01-28")
         limit: Maximum test runs to include (default: 20)
@@ -929,7 +929,7 @@ def query_e2e_failures(
     Query e2e test failures with detailed error information.
 
     Args:
-        feature: Filter by feature name (e.g., "somatic")
+        feature: Filter by feature name (e.g., "sensor")
         story: Filter by specific story
         since: ISO date or relative time like '-24 hours'
         limit: Maximum failures to return (default: 50)
@@ -1075,7 +1075,7 @@ def detect_e2e_regressions(
     Detect stories that were PASS but are now FAIL (regressions).
 
     Args:
-        feature: Feature to check (e.g., "somatic")
+        feature: Feature to check (e.g., "sensor")
         lookback_hours: Hours to look back (default: 24)
 
     Returns:
@@ -1132,7 +1132,7 @@ def detect_e2e_flakiness(
     Detect flaky tests (inconsistent results across multiple runs).
 
     Args:
-        feature: Feature to analyze (e.g., "somatic")
+        feature: Feature to analyze (e.g., "sensor")
         min_runs: Minimum runs to consider (default: 5)
         lookback_days: Days to look back (default: 7)
 
@@ -1191,7 +1191,7 @@ def get_e2e_quantitative_trends(
     Get quantitative metrics trends for a specific story (duration, anomalies, events).
 
     Args:
-        feature: Feature name (e.g., "somatic")
+        feature: Feature name (e.g., "sensor")
         story: Story name (e.g., "core-input-capture")
         lookback_days: Days to analyze (default: 30)
 

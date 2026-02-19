@@ -2,21 +2,21 @@ vocabulary:
   xdotool: "X11 automation tool used to simulate keyboard/mouse input via KeyPress/KeyRelease and ButtonPress/ButtonRelease events"
   maim: "Screenshot utility for X11 that captures screen/window/region to PNG"
   i3-msg: "IPC command interface to the i3 tiling window manager"
-  somatic: "C++ sensor-fusion daemon connected via stdio JSON-RPC (MCP protocol). Provides typing rhythm, pointer state, clipboard, events, keystrokes, and fused environment snapshots"
+  sensor: "C++ sensor-fusion daemon connected via stdio JSON-RPC (MCP protocol). Provides typing rhythm, pointer state, clipboard, events, keystrokes, and fused environment snapshots"
   display_id: "Optional tool parameter routing a call to a specific X11 display. 'host' routes to the user's real display (:0). A numeric ID (e.g. '99') routes to an isolated Xvfb display"
   DisplayRouter: "Static utility that resolves display_id to either a hostEnvironment() map or a DisplaySession's provideEnvironment() map"
   DisplayEnvironment: "Utility that detects the user's real DISPLAY (:0) and XAUTHORITY by scanning i3 process /proc/PID/environ"
   X11Client: "Stateless subprocess wrapper. run() throws on non-zero exit; runCapture() returns CommandResult record with exitCode/stdout/stderr without throwing"
-  SomaticClient: "JSON-RPC stdio client to the somatic C++ daemon. Manages child process lifecycle, request/response pairing via ConcurrentHashMap<Integer, CompletableFuture>, ReentrantLock for stdin writes"
+  SensorClient: "JSON-RPC stdio client to the sensor C++ daemon. Manages child process lifecycle, request/response pairing via ConcurrentHashMap<Integer, CompletableFuture>, ReentrantLock for stdin writes"
   virtual_thread_reader: "Pattern used in X11Client: stdout and stderr are read in virtual threads to prevent blocking on inherited file descriptors. After process exit, readers get 2s join + force-close + 500ms join"
   ResponseEnricher: "Wraps every tool handler to append tier 1 ambient state header and tier 2 alert lines to the response"
   AlertDetector: "Tier 2 state-change detector. Compares consecutive ambient snapshots, fires [ALERT: focus-changed], [ALERT: typing-state-changed], [ALERT: clipboard-changed] on transitions"
-  AmbientStateHeader: "Tier 1 reader. Reads /dev/shm/somatic_ambient (or per-display variant) and formats as [env: typing=idle dwell=2340ms focus=0x01a00003 ...] (~30 tokens)"
-  SHM_suffix: "Per-display somatic uses SOMATIC_SHM_SUFFIX=_dN so its SHM files don't collide with the host somatic instance"
+  AmbientStateHeader: "Tier 1 reader. Reads /dev/shm/sensor_ambient (or per-display variant) and formats as [env: typing=idle dwell=2340ms focus=0x01a00003 ...] (~30 tokens)"
+  SHM_suffix: "Per-display sensor uses SENSOR_SHM_SUFFIX=_dN so its SHM files don't collide with the host sensor instance"
   TimeoutClass: "ToolRegistry timeout tiers — FAST(5s) for SENSE reads, STANDARD(25s) for ACT tools, SLOW(120s) for indexing/LLM"
   ppt: "Percentage points, the unit used by i3 resize commands"
   clearmodifiers: "xdotool flag that releases held modifier keys before sending input, preventing interference from stuck modifiers"
-  typing_gate: "Client-side enforcement (keyboard-handoff skill) that checks somatic typing state and rejects X11 input if user is actively typing on the host display. Not enforced in gateway code itself"
+  typing_gate: "Client-side enforcement (keyboard-handoff skill) that checks sensor typing state and rejects X11 input if user is actively typing on the host display. Not enforced in gateway code itself"
 
 metadata:
   feature: actual-server
@@ -693,22 +693,22 @@ stories:
       - "isError is true"
 
   # ═══════════════════════════════════════════════════════════════
-  # Somatic proxy tools — all route through SomaticClient
+  # Sensor proxy tools — all route through SensorClient
   # ═══════════════════════════════════════════════════════════════
   - name: desktop-events-default-host
     description: >
       ReadDesktopEvents defaults display_id to HOST_DISPLAY when not specified,
-      ensuring it reads from the host somatic (user's display), not a virtual display.
+      ensuring it reads from the host sensor (user's display), not a virtual display.
     preconditions:
-      - "Somatic daemon is running on host display"
+      - "Sensor daemon is running on host display"
       - "No display_id provided"
     steps:
       - "Call SENSE_read_desktop_events with no arguments"
       - "Handler injects display_id='host' into args (new HashMap copy)"
-      - "DisplayRouter.chooseSomatic returns fallbackSomatic (host somatic)"
-      - "Calls somatic.callTool('read_events', {})"
+      - "DisplayRouter.chooseSensor returns fallbackSensor (host sensor)"
+      - "Calls sensor.callTool('read_events', {})"
     verify:
-      - "Response contains JSON from somatic's read_events tool"
+      - "Response contains JSON from sensor's read_events tool"
       - "Events are from the host display, not any isolated display"
       - "isError is false"
 
@@ -716,72 +716,72 @@ stories:
     description: >
       Request a specific number of recent events.
     preconditions:
-      - "Somatic daemon is running"
+      - "Sensor daemon is running"
     steps:
       - "Call SENSE_read_desktop_events with count=10"
-      - "Somatic args include {count: 10}"
-      - "Calls somatic.callTool('read_events', {count: 10})"
+      - "Sensor args include {count: 10}"
+      - "Calls sensor.callTool('read_events', {count: 10})"
     verify:
       - "Response contains at most 10 events"
 
   - name: desktop-events-isolated-display
     description: >
-      Read events from an isolated display's per-display somatic instance.
+      Read events from an isolated display's per-display sensor instance.
     preconditions:
-      - "Isolated display '99' has a running per-display somatic (SOMATIC_SHM_SUFFIX=_d99)"
+      - "Isolated display '99' has a running per-display sensor (SENSOR_SHM_SUFFIX=_d99)"
     steps:
       - "Call SENSE_read_desktop_events with display_id='99'"
-      - "DisplayRouter.chooseSomatic finds display session, returns session.provideSomatic()"
-      - "Per-display somatic's read_events called"
+      - "DisplayRouter.chooseSensor finds display session, returns session.provideSensor()"
+      - "Per-display sensor's read_events called"
     verify:
-      - "Events are from display :99's somatic instance"
+      - "Events are from display :99's sensor instance"
       - "SHM paths use _d99 suffix"
 
-  - name: desktop-events-somatic-not-running
+  - name: desktop-events-sensor-not-running
     description: >
-      Somatic daemon is not running or has crashed.
+      Sensor daemon is not running or has crashed.
     preconditions:
-      - "Somatic process is dead"
+      - "Sensor process is dead"
     steps:
       - "Call SENSE_read_desktop_events"
-      - "somatic.callTool throws IOException('No response from somatic')"
+      - "sensor.callTool throws IOException('No response from sensor')"
     verify:
       - "Response text starts with 'Failed:'"
       - "isError is true"
 
   - name: typing-rhythm-host
     description: >
-      Read typing rhythm analysis from host somatic.
+      Read typing rhythm analysis from host sensor.
     preconditions:
-      - "Host somatic is running"
+      - "Host sensor is running"
     steps:
       - "Call SENSE_read_typing_rhythm with no arguments"
       - "Handler injects display_id='host'"
-      - "Calls somatic.callTool('read_timing', {})"
+      - "Calls sensor.callTool('read_timing', {})"
     verify:
       - "Response contains inter-key intervals, burst/pause ratios"
       - "isError is false"
 
   - name: typing-rhythm-isolated-display
     description: >
-      Read typing rhythm from isolated display's somatic.
+      Read typing rhythm from isolated display's sensor.
     preconditions:
-      - "Display '99' has per-display somatic running"
+      - "Display '99' has per-display sensor running"
     steps:
       - "Call SENSE_read_typing_rhythm with display_id='99'"
-      - "Per-display somatic's read_timing called"
+      - "Per-display sensor's read_timing called"
     verify:
       - "Rhythm data is from display :99's input, not host"
 
   - name: pointer-state-host
     description: >
-      Read pointer position, velocity, and dwell time from host somatic.
+      Read pointer position, velocity, and dwell time from host sensor.
     preconditions:
-      - "Host somatic is running"
+      - "Host sensor is running"
     steps:
       - "Call SENSE_read_pointer_state with no arguments"
       - "Handler injects display_id='host'"
-      - "Calls somatic.callTool('read_dynamics', {})"
+      - "Calls sensor.callTool('read_dynamics', {})"
     verify:
       - "Response contains pointer position, velocity, dwell time"
       - "isError is false"
@@ -790,7 +790,7 @@ stories:
     description: >
       Read pointer state from isolated display.
     preconditions:
-      - "Display '99' has per-display somatic"
+      - "Display '99' has per-display sensor"
     steps:
       - "Call SENSE_read_pointer_state with display_id='99'"
     verify:
@@ -798,14 +798,14 @@ stories:
 
   - name: clipboard-metadata-host
     description: >
-      Read clipboard metadata (hash, size, type — never content) from host somatic.
+      Read clipboard metadata (hash, size, type — never content) from host sensor.
     preconditions:
-      - "Host somatic is running"
+      - "Host sensor is running"
       - "Clipboard has content"
     steps:
       - "Call SENSE_read_clipboard_metadata with no arguments"
       - "Handler injects display_id='host'"
-      - "Calls somatic.callTool('read_latest', {})"
+      - "Calls sensor.callTool('read_latest', {})"
     verify:
       - "Response contains clipboard hash, size, and type"
       - "Response does NOT contain clipboard content (privacy by design)"
@@ -814,7 +814,7 @@ stories:
     description: >
       Read clipboard metadata from an isolated display.
     preconditions:
-      - "Display '99' has per-display somatic with clipboard monitoring"
+      - "Display '99' has per-display sensor with clipboard monitoring"
     steps:
       - "Call SENSE_read_clipboard_metadata with display_id='99'"
     verify:
@@ -822,13 +822,13 @@ stories:
 
   - name: input-history-host
     description: >
-      Read recent keystrokes with keycodes and keysyms from host somatic.
+      Read recent keystrokes with keycodes and keysyms from host sensor.
     preconditions:
-      - "Host somatic is running"
+      - "Host sensor is running"
     steps:
       - "Call SENSE_read_input_history with no arguments"
       - "Handler injects display_id='host'"
-      - "Calls somatic.callTool('read_keystrokes', {})"
+      - "Calls sensor.callTool('read_keystrokes', {})"
     verify:
       - "Response contains recent keystrokes"
 
@@ -836,18 +836,18 @@ stories:
     description: >
       Request a specific number of recent keystrokes.
     preconditions:
-      - "Host somatic is running"
+      - "Host sensor is running"
     steps:
       - "Call SENSE_read_input_history with count=20"
-      - "Somatic args include {count: 20}"
+      - "Sensor args include {count: 20}"
     verify:
       - "Response contains at most 20 keystroke entries"
 
   - name: input-history-isolated
     description: >
-      Read input history from isolated display's somatic.
+      Read input history from isolated display's sensor.
     preconditions:
-      - "Display '99' has per-display somatic"
+      - "Display '99' has per-display sensor"
     steps:
       - "Call SENSE_read_input_history with display_id='99', count=5"
     verify:
@@ -855,13 +855,13 @@ stories:
 
   - name: environment-snapshot-host
     description: >
-      Read the full 14-dimensional fused environment state vector from host somatic.
+      Read the full 14-dimensional fused environment state vector from host sensor.
     preconditions:
-      - "Host somatic is running with sensor fusion active"
+      - "Host sensor is running with sensor fusion active"
     steps:
       - "Call SENSE_read_environment_snapshot with no arguments"
       - "Handler injects display_id='host'"
-      - "Calls somatic.callTool('read_snapshot', {})"
+      - "Calls sensor.callTool('read_snapshot', {})"
     verify:
       - "Response contains fused state vector (14 dimensions)"
       - "isError is false"
@@ -870,11 +870,11 @@ stories:
     description: >
       Read environment snapshot from isolated display.
     preconditions:
-      - "Display '99' has per-display somatic"
+      - "Display '99' has per-display sensor"
     steps:
       - "Call SENSE_read_environment_snapshot with display_id='99'"
     verify:
-      - "Snapshot is from display :99's somatic"
+      - "Snapshot is from display :99's sensor"
 
   # ═══════════════════════════════════════════════════════════════
   # X11Client infrastructure
@@ -975,18 +975,18 @@ stories:
       - "No temp files leaked even if maim fails"
 
   # ═══════════════════════════════════════════════════════════════
-  # SomaticClient infrastructure
+  # SensorClient infrastructure
   # ═══════════════════════════════════════════════════════════════
-  - name: somatic-client-lifecycle
+  - name: sensor-client-lifecycle
     description: >
-      SomaticClient manages a child process with bidirectional JSON-RPC stdio.
+      SensorClient manages a child process with bidirectional JSON-RPC stdio.
     preconditions:
-      - "Somatic binary exists at the configured path"
+      - "Sensor binary exists at the configured path"
     steps:
-      - "SomaticClient constructed with binaryPath and optional environment map"
+      - "SensorClient constructed with binaryPath and optional environment map"
       - "start() launches child process via ProcessBuilder"
-      - "Environment map merged into ProcessBuilder environment (e.g. DISPLAY, SOMATIC_SHM_SUFFIX)"
-      - "Virtual thread 'somatic-reader' reads JSON-RPC responses line by line"
+      - "Environment map merged into ProcessBuilder environment (e.g. DISPLAY, SENSOR_SHM_SUFFIX)"
+      - "Virtual thread 'sensor-reader' reads JSON-RPC responses line by line"
       - "Sends 'initialize' request with protocolVersion '2024-11-05'"
       - "Waits for initialize response (30s timeout)"
       - "Sends 'notifications/initialized' notification (no response expected)"
@@ -994,13 +994,13 @@ stories:
       - "Process is running"
       - "Reader thread is active"
       - "Initialize handshake completed"
-      - "Stderr prints '[gateway] Somatic client connected to <path>'"
+      - "Stderr prints '[gateway] Sensor client connected to <path>'"
 
-  - name: somatic-client-call-tool
+  - name: sensor-client-call-tool
     description: >
       callTool dispatches a tools/call JSON-RPC request and extracts the result.
     preconditions:
-      - "SomaticClient is started and initialized"
+      - "SensorClient is started and initialized"
     steps:
       - "callTool('read_snapshot', {}) called"
       - "sendRequest builds JSON: {jsonrpc:'2.0', id:N, method:'tools/call', params:{name:'read_snapshot', arguments:{}}}"
@@ -1013,52 +1013,52 @@ stories:
       - "Returns the 'result' field from the JSON-RPC response"
       - "Pending future removed from map"
 
-  - name: somatic-client-request-timeout
+  - name: sensor-client-request-timeout
     description: >
-      Somatic doesn't respond within 30 seconds.
+      Sensor doesn't respond within 30 seconds.
     preconditions:
-      - "Somatic is started but unresponsive"
+      - "Sensor is started but unresponsive"
     steps:
       - "callTool('read_snapshot', {}) called"
       - "sendRequest puts CompletableFuture in pending map"
       - "future.get(30, SECONDS) throws TimeoutException"
       - "Pending entry removed from map"
-      - "IOException('Somatic request timed out: tools/call') thrown"
+      - "IOException('Sensor request timed out: tools/call') thrown"
     verify:
       - "IOException propagated to tool handler"
       - "Pending map cleaned up"
 
-  - name: somatic-client-error-response
+  - name: sensor-client-error-response
     description: >
-      Somatic returns a JSON-RPC error response.
+      Sensor returns a JSON-RPC error response.
     preconditions:
-      - "Somatic is running but tool doesn't exist"
+      - "Sensor is running but tool doesn't exist"
     steps:
       - "callTool('nonexistent_tool', {}) called"
       - "Response contains {error: {message: 'Unknown tool'}}"
       - "callTool checks response.has('error')"
-      - "Throws IOException('Somatic error: Unknown tool')"
+      - "Throws IOException('Sensor error: Unknown tool')"
     verify:
       - "IOException propagated"
-      - "Error message from somatic preserved"
+      - "Error message from sensor preserved"
 
-  - name: somatic-client-null-response
+  - name: sensor-client-null-response
     description: >
-      No response received (somatic process died mid-request).
+      No response received (sensor process died mid-request).
     preconditions:
-      - "Somatic process crashes after request sent"
+      - "Sensor process crashes after request sent"
     steps:
       - "callTool called"
       - "sendRequest returns null (future completed exceptionally or reader died)"
-      - "callTool throws IOException('No response from somatic for tool: X')"
+      - "callTool throws IOException('No response from sensor for tool: X')"
     verify:
       - "IOException propagated"
 
-  - name: somatic-client-close
+  - name: sensor-client-close
     description: >
-      Graceful shutdown of somatic child process.
+      Graceful shutdown of sensor child process.
     preconditions:
-      - "SomaticClient is running"
+      - "SensorClient is running"
     steps:
       - "close() called"
       - "running set to false (stops reader thread loop)"
@@ -1072,12 +1072,12 @@ stories:
       - "No lingering futures"
       - "Reader thread exits loop"
 
-  - name: somatic-client-concurrent-requests
+  - name: sensor-client-concurrent-requests
     description: >
       Multiple virtual threads call callTool concurrently. ReentrantLock
       serializes stdin writes, but responses can arrive in any order.
     preconditions:
-      - "SomaticClient is running"
+      - "SensorClient is running"
       - "Multiple tool calls arrive simultaneously"
     steps:
       - "Thread A calls callTool('read_timing', {}) — gets ID 5"
@@ -1090,19 +1090,19 @@ stories:
       - "No cross-talk between requests"
       - "AtomicInteger ensures unique IDs"
 
-  - name: somatic-client-shm-suffix-routing
+  - name: sensor-client-shm-suffix-routing
     description: >
-      Per-display somatic instances use SOMATIC_SHM_SUFFIX environment variable
-      to namespace their SHM files, preventing collision with host somatic.
+      Per-display sensor instances use SENSOR_SHM_SUFFIX environment variable
+      to namespace their SHM files, preventing collision with host sensor.
     preconditions:
-      - "DisplaySession starts somatic with SOMATIC_SHM_SUFFIX=_d99"
+      - "DisplaySession starts sensor with SENSOR_SHM_SUFFIX=_d99"
     steps:
-      - "DisplaySession.start() creates SomaticClient with environment {DISPLAY=:99, SOMATIC_SHM_SUFFIX=_d99}"
-      - "Somatic process uses suffix for SHM paths (e.g. /dev/shm/somatic_ambient_d99)"
-      - "DisplaySession.provideAmbientPath() returns '/dev/shm/somatic_ambient_d99'"
+      - "DisplaySession.start() creates SensorClient with environment {DISPLAY=:99, SENSOR_SHM_SUFFIX=_d99}"
+      - "Sensor process uses suffix for SHM paths (e.g. /dev/shm/sensor_ambient_d99)"
+      - "DisplaySession.provideAmbientPath() returns '/dev/shm/sensor_ambient_d99'"
     verify:
-      - "Host somatic uses /dev/shm/somatic_ambient (no suffix)"
-      - "Display 99 somatic uses /dev/shm/somatic_ambient_d99"
+      - "Host sensor uses /dev/shm/sensor_ambient (no suffix)"
+      - "Display 99 sensor uses /dev/shm/sensor_ambient_d99"
       - "No collision between instances"
 
   # ═══════════════════════════════════════════════════════════════
@@ -1111,16 +1111,16 @@ stories:
   - name: display-router-no-display-manager
     description: >
       When DisplayManager is null or disabled, chooseEnvironment returns
-      empty map and chooseSomatic returns the fallback client.
+      empty map and chooseSensor returns the fallback client.
     preconditions:
       - "Display isolation is disabled (displayManager.isEnabled() == false or null)"
     steps:
       - "Call any tool with display_id='99'"
       - "chooseEnvironment: displayManager null or not enabled → return Map.of()"
-      - "chooseSomatic: displayManager null or not enabled → return fallbackSomatic"
+      - "chooseSensor: displayManager null or not enabled → return fallbackSensor"
     verify:
       - "Tool uses gateway's inherited DISPLAY"
-      - "Tool uses primary somatic client"
+      - "Tool uses primary sensor client"
 
   - name: display-router-host-sentinel
     description: >
@@ -1132,10 +1132,10 @@ stories:
       - "Call any tool with display_id='host'"
       - "chooseEnvironment: detects HOST_DISPLAY → hostEnvironment()"
       - "hostEnvironment: DISPLAY from detectUserDisplay(), XAUTHORITY from detectUserXauthority()"
-      - "chooseSomatic: detects HOST_DISPLAY → return fallbackSomatic"
+      - "chooseSensor: detects HOST_DISPLAY → return fallbackSensor"
     verify:
       - "Environment targets user's real display (:0)"
-      - "Somatic is the primary (host) instance"
+      - "Sensor is the primary (host) instance"
 
   - name: display-router-no-display-id-default
     description: >
@@ -1162,24 +1162,24 @@ stories:
       - "Call a tool with display_id='999'"
       - "displayManager.locateDisplay('999') returns null"
       - "chooseEnvironment returns Map.of()"
-      - "chooseSomatic returns fallbackSomatic"
+      - "chooseSensor returns fallbackSensor"
     verify:
       - "Tool falls back to gateway's inherited environment"
       - "No crash — graceful degradation"
 
-  - name: display-router-per-display-somatic-unavailable
+  - name: display-router-per-display-sensor-unavailable
     description: >
-      Display session exists but its per-display somatic failed to start
-      (somaticClient is null).
+      Display session exists but its per-display sensor failed to start
+      (sensorClient is null).
     preconditions:
-      - "Display '99' is RUNNING but somatic launch failed during start()"
+      - "Display '99' is RUNNING but sensor launch failed during start()"
     steps:
-      - "Call a somatic tool with display_id='99'"
-      - "DisplayRouter.chooseSomatic finds session, session.provideSomatic() returns null"
-      - "chooseSomatic returns fallbackSomatic"
+      - "Call a sensor tool with display_id='99'"
+      - "DisplayRouter.chooseSensor finds session, session.provideSensor() returns null"
+      - "chooseSensor returns fallbackSensor"
     verify:
-      - "Falls back to host somatic rather than crashing"
-      - "Somatic data may reflect host display, not isolated display (acceptable degradation)"
+      - "Falls back to host sensor rather than crashing"
+      - "Sensor data may reflect host display, not isolated display (acceptable degradation)"
 
   # ═══════════════════════════════════════════════════════════════
   # DisplayEnvironment detection
@@ -1238,13 +1238,13 @@ stories:
   # ═══════════════════════════════════════════════════════════════
   - name: response-enricher-appends-ambient
     description: >
-      Every tool response is enriched with ambient state from /dev/shm/somatic_ambient.
+      Every tool response is enriched with ambient state from /dev/shm/sensor_ambient.
     preconditions:
-      - "Somatic is writing to /dev/shm/somatic_ambient"
+      - "Sensor is writing to /dev/shm/sensor_ambient"
     steps:
       - "Tool handler returns CallToolResult"
       - "ResponseEnricher.wrap calls ambient.read()"
-      - "AmbientStateHeader reads /dev/shm/somatic_ambient, formats as '[env: typing=idle dwell=2340ms ...]'"
+      - "AmbientStateHeader reads /dev/shm/sensor_ambient, formats as '[env: typing=idle dwell=2340ms ...]'"
       - "AlertDetector.check() compares against previous state"
       - "Appended as TextContent to response"
     verify:
@@ -1294,9 +1294,9 @@ stories:
 
   - name: response-enricher-ambient-unavailable
     description: >
-      Ambient SHM file doesn't exist (somatic not running). Enricher is a no-op.
+      Ambient SHM file doesn't exist (sensor not running). Enricher is a no-op.
     preconditions:
-      - "/dev/shm/somatic_ambient does not exist"
+      - "/dev/shm/sensor_ambient does not exist"
     steps:
       - "ambient.read() returns ''"
       - "alert.check('') returns ''"
@@ -1353,11 +1353,11 @@ stories:
       - "Non-text content (ImageContent) preserved untruncated"
 
   # ═══════════════════════════════════════════════════════════════
-  # Somatic tools — host display default injection
+  # Sensor tools — host display default injection
   # ═══════════════════════════════════════════════════════════════
-  - name: somatic-tool-host-default-injection-pattern
+  - name: sensor-tool-host-default-injection-pattern
     description: >
-      All somatic proxy tools (ReadDesktopEvents, ReadTypingRhythm, ReadPointerState,
+      All sensor proxy tools (ReadDesktopEvents, ReadTypingRhythm, ReadPointerState,
       ReadClipboardMetadata, ReadInputHistory, ReadEnvironmentSnapshot) share a common
       pattern: if no display_id is provided, they inject display_id='host' before routing.
       This ensures they always read from the user's real display by default, not
@@ -1369,9 +1369,9 @@ stories:
       - "Handler checks !args.containsKey('display_id')"
       - "Creates new HashMap copy of args (original may be immutable)"
       - "Inserts display_id='host'"
-      - "DisplayRouter.chooseSomatic sees HOST_DISPLAY → returns fallbackSomatic (host)"
+      - "DisplayRouter.chooseSensor sees HOST_DISPLAY → returns fallbackSensor (host)"
     verify:
-      - "Somatic data is from host display, not gateway's own display"
+      - "Sensor data is from host display, not gateway's own display"
       - "Original args map is not mutated (new HashMap created)"
 
 enforced_constraints:
@@ -1383,7 +1383,7 @@ enforced_constraints:
       streams open even after the intended child exits.
     rationale: >
       The gateway runs as a long-lived JVM process that launches many child
-      processes (xdotool, maim, i3-msg, somatic). Inherited FDs from the JVM
+      processes (xdotool, maim, i3-msg, sensor). Inherited FDs from the JVM
       can keep pipe reads blocked indefinitely. Virtual threads + force-close
       after timeout prevents this class of deadlock.
 
@@ -1395,19 +1395,19 @@ enforced_constraints:
       Screenshots can be large. Leaked temp files in /tmp accumulate quickly
       when an agent takes screenshots every 15 seconds for visual verification.
 
-  - name: somatic-host-display-default
+  - name: sensor-host-display-default
     description: >
-      All somatic proxy SENSE tools MUST inject display_id='host' when no
-      display_id is provided, before calling DisplayRouter.chooseSomatic.
+      All sensor proxy SENSE tools MUST inject display_id='host' when no
+      display_id is provided, before calling DisplayRouter.chooseSensor.
     rationale: >
       The gateway process may run with DISPLAY=:99 (inside an isolated Xvfb).
-      Without this injection, somatic tools would read sensor data from the
+      Without this injection, sensor tools would read sensor data from the
       Xvfb display (no real user activity) instead of the user's actual display.
       This is the single most important routing decision for perception tools.
 
   - name: reentrantlock-not-synchronized
     description: >
-      SomaticClient MUST use ReentrantLock (not synchronized blocks) for
+      SensorClient MUST use ReentrantLock (not synchronized blocks) for
       stdin write serialization.
     rationale: >
       Java synchronized blocks pin the carrier thread when used inside virtual
@@ -1416,12 +1416,12 @@ enforced_constraints:
 
   - name: display-router-graceful-degradation
     description: >
-      DisplayRouter MUST return empty map / fallback somatic when display
-      is not found, display manager is null, or per-display somatic is null.
+      DisplayRouter MUST return empty map / fallback sensor when display
+      is not found, display manager is null, or per-display sensor is null.
       Never throw from routing.
     rationale: >
       Tool calls should degrade gracefully when display isolation is partially
-      broken. A missing display somatic should fall back to host somatic, not
+      broken. A missing display sensor should fall back to host sensor, not
       crash the entire tool call.
 
   - name: process-cleanup-on-timeout
@@ -1482,13 +1482,13 @@ opinionated_constraints:
       At the default 12ms per character delay, typing 1000 characters takes 12
       seconds — well beyond the 10s timeout used for simple keystroke/click commands.
 
-  - name: somatic-tool-name-aliasing
+  - name: sensor-tool-name-aliasing
     description: >
-      Gateway tool names (SENSE_read_*) map to different somatic tool names
+      Gateway tool names (SENSE_read_*) map to different sensor tool names
       (read_events, read_timing, read_dynamics, read_latest, read_keystrokes,
-      read_snapshot). This aliasing insulates the MCP API from somatic internals.
+      read_snapshot). This aliasing insulates the MCP API from sensor internals.
     rationale: >
-      Somatic's internal tool naming convention uses short verbs (read_timing,
+      Sensor's internal tool naming convention uses short verbs (read_timing,
       read_dynamics). The gateway uses descriptive names (SENSE_read_typing_rhythm,
       SENSE_read_pointer_state) that are self-documenting in the MCP tool listing.
 
@@ -1520,10 +1520,10 @@ opinionated_constraints:
 
   - name: ambient-shm-mid-rename-tolerance
     description: >
-      AmbientStateHeader catches IOException when reading /dev/shm/somatic_ambient
+      AmbientStateHeader catches IOException when reading /dev/shm/sensor_ambient
       and silently returns empty string, tolerating the SHM file being mid-rename
       or temporarily unavailable.
     rationale: >
-      The somatic daemon may atomically update the SHM file via rename(2).
+      The sensor daemon may atomically update the SHM file via rename(2).
       During the rename window, the file may not exist momentarily. Missing
       one ambient read cycle is harmless.

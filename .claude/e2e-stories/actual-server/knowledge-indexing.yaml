@@ -3,7 +3,7 @@ vocabulary:
   vault_db: "SQLite database at ~/vault/data/vault.db storing sessions, documents, chunks, emails, and FTS5 indexes."
   fts5: "SQLite Full-Text Search extension version 5. Used for BM25 ranked text search over sessions and chunks."
   bm25: "Best Match 25 ranking function built into FTS5. Returns negative scores where lower (more negative) = better match."
-  wal_mode: "SQLite Write-Ahead Log mode. Enables concurrent reads during writes. Requires periodic checkpointing."
+  wal_mode: "Write-Ahead Log. PostgreSQL uses WAL by default. SQLite WAL mode was previous implementation."
   wal_checkpoint: "Process of moving WAL content back to the main database file. PASSIVE mode avoids blocking readers."
   rrf: "Reciprocal Rank Fusion. Combines rankings from FTS5 and Qdrant by scoring each result as sum(1/(k+rank+1)) across ranking lists, with k=60."
   qdrant: "Vector database for semantic search. Collection vault_chunks stores 768-dim cosine-distance embeddings."
@@ -20,8 +20,7 @@ vocabulary:
   maildir: "Email storage format. Messages as individual files in cur/ (read) and new/ (unread) subdirectories."
   mbsync: "IMAP synchronization tool. Pulls email to ~/Mail/ in Maildir format. 120s timeout."
   reindex_marker: "Sentinel file .reindex-{source_type} in ~/vault/data/. When present, invalidates content hashes for that source type, forcing re-indexing on next scan."
-  write_executor: "Dedicated platform thread for all SQLite write operations. Prevents virtual thread carrier pinning from sqlite-jdbc synchronized blocks."
-  read_executor: "Dedicated platform thread for all SQLite read operations. Tracks active query count for write isolation."
+  connection_pool: "HikariCP connection pool for PostgreSQL. Replaces dedicated write/read executors from SqliteClient era."
   active_query_count: "AtomicInteger tracking in-flight read queries. VaultWatcher calls awaitQueryQuiet() to defer writes when agent reads are active."
 
 metadata:
@@ -42,7 +41,7 @@ stories:
     steps:
       - "Call SENSE_documents_search with query='emacs configuration' and default limit"
       - "SearchHybrid checks qdrant.isAvailable() and tei.isAvailable() — both return false"
-      - "SqliteClient.searchFulltext() runs FTS5 MATCH on chunks_fts with sanitized query"
+      - "DatabaseClient.searchFulltext() runs FTS5 MATCH on chunks_fts with sanitized query"
       - "Query tokens are individually double-quoted: '\"emacs\" \"configuration\"'"
       - "Results joined from chunks_fts → chunks → documents to get doc_id, title, source_path, snippet"
       - "BM25 scores are abs()'d since FTS5 returns negative values"
@@ -81,7 +80,7 @@ stories:
       - "vault.db has >20 matching documents"
     steps:
       - "Call SENSE_documents_search with limit=100"
-      - "SqliteClient.searchFulltext() applies Math.min(limit, MAX_RESULTS) → 20"
+      - "DatabaseClient.searchFulltext() applies Math.min(limit, MAX_RESULTS) → 20"
       - "SQL LIMIT clause set to cappedLimit * 2 = 40 (FTS fetches 2x for RRF merging)"
       - "Final result list truncated to user limit or MAX_RESULTS, whichever is smaller"
     verify:
@@ -145,7 +144,7 @@ stories:
       - "vault.db has sessions spanning multiple weeks with sessions_fts populated"
     steps:
       - "Call SENSE_sessions_search with query='sqlite WAL mode', recency_bias=0.0"
-      - "SqliteClient.searchSessions() sanitizes query tokens"
+      - "DatabaseClient.searchSessions() sanitizes query tokens"
       - "SQL queries sessions_fts MATCH with BM25 ranking, JOINs sessions table"
       - "For each result: score = abs(bm25) * ((1.0 - 0.0) + 0.0 * decay) = abs(bm25)"
       - "Results sorted by score descending in Java (post-query re-ranking)"
@@ -199,7 +198,7 @@ stories:
       - "vault.db has multiple sessions"
     steps:
       - "Call SENSE_sessions_list with default limit (5)"
-      - "SqliteClient.listRecentSessions() queries sessions ORDER BY created_at DESC LIMIT 5"
+      - "DatabaseClient.listRecentSessions() queries sessions ORDER BY created_at DESC LIMIT 5"
       - "Limit capped at MAX_RESULTS=20"
     verify:
       - "Returns up to 5 sessions in reverse chronological order"
@@ -214,7 +213,7 @@ stories:
       - "vault.db has a session with known ID"
     steps:
       - "Call SENSE_sessions_retrieve with session_id=42"
-      - "SqliteClient.fetchSession(42) queries sessions WHERE id=42"
+      - "DatabaseClient.fetchSession(42) queries sessions WHERE id=42"
       - "Returns full session row including key_facts and topics JSON"
     verify:
       - "Response includes all session fields: id, created_at, updated_at, summary, topics, key_facts, word_count, message_count"
@@ -227,7 +226,7 @@ stories:
       - "vault.db exists but has no session with ID 99999"
     steps:
       - "Call SENSE_sessions_retrieve with session_id=99999"
-      - "SqliteClient.fetchSession(99999) returns null"
+      - "DatabaseClient.fetchSession(99999) returns null"
       - "Tool returns isError=true with JSON error message"
     verify:
       - "Response is error with isError=true"
@@ -244,7 +243,7 @@ stories:
       - "The document file exists on disk at vaultRoot/source_path"
     steps:
       - "Call SENSE_documents_retrieve with doc_id=7"
-      - "SqliteClient.fetchDocument(7, null) queries documents WHERE id=7"
+      - "DatabaseClient.fetchDocument(7, null) queries documents WHERE id=7"
       - "Result contains source_path relative to vault root"
       - "Tool resolves vaultRoot.resolve(source_path) and checks Files.exists()"
       - "File content read via Files.readString() and added to result as 'content' field"
@@ -259,7 +258,7 @@ stories:
       - "vault.db has a document with known source_path"
     steps:
       - "Call SENSE_documents_retrieve with source_path='org/projects/actual-server.org'"
-      - "SqliteClient.fetchDocument(null, 'org/projects/actual-server.org') queries WHERE source_path=?"
+      - "DatabaseClient.fetchDocument(null, 'org/projects/actual-server.org') queries WHERE source_path=?"
     verify:
       - "Document found and returned with metadata"
       - "source_path lookup works as alternative to doc_id"
@@ -297,7 +296,7 @@ stories:
       - "vault.db exists but has no matching document"
     steps:
       - "Call SENSE_documents_retrieve with doc_id=99999"
-      - "SqliteClient.fetchDocument(99999, null) returns null"
+      - "DatabaseClient.fetchDocument(99999, null) returns null"
     verify:
       - "Response is error with isError=true"
       - "Error JSON: {error: 'Document not found'}"
@@ -313,7 +312,7 @@ stories:
       - "vault.db has 50+ sessions over the past 10 days"
     steps:
       - "Call SENSE_sessions_reassemble with default lookback_days=10"
-      - "SqliteClient.fetchSessionsSince(10) returns all sessions from last 10 days"
+      - "DatabaseClient.fetchSessionsSince(10) returns all sessions from last 10 days"
       - "For each session: daily rollup counts sessions per date"
       - "Topics JSON parsed, frequencies aggregated into topicCounts map"
       - "Key facts JSON parsed, deduplicated (first 40 chars prefix matching), noise filtered via isNoiseLine()"
@@ -361,7 +360,7 @@ stories:
       - "Call ACT_sessions_save with summary='Configured emacs org-mode workflow', topics=['emacs','org-mode'], key_facts=['Switched to use-package','Enabled org-babel'], word_count=5000, message_count=42"
       - "Topics serialized: JSON=['emacs','org-mode'], text='emacs org-mode'"
       - "Key facts serialized: JSON=['Switched to use-package','Enabled org-babel'], text='Switched to use-package\\nEnabled org-babel'"
-      - "SqliteClient.saveSession(null, summary, topicsJson, keyFactsJson, topicsText, keyFactsText, 5000, 42)"
+      - "DatabaseClient.saveSession(null, summary, topicsJson, keyFactsJson, topicsText, keyFactsText, 5000, 42)"
       - "INSERT INTO sessions with all fields"
       - "last_insert_rowid() returns new session ID"
       - "FTS5 trigger (sessions_fts) auto-inserts summary, topics_text, key_facts_text"
@@ -391,7 +390,7 @@ stories:
     preconditions:
       - "vault.db has an existing session with source_id='claude:abc123'"
     steps:
-      - "SqliteClient.saveSession('claude:abc123', updatedSummary, ...) called"
+      - "DatabaseClient.saveSession('claude:abc123', updatedSummary, ...) called"
       - "ON CONFLICT(source_id) triggers UPDATE of summary, topics, key_facts, updated_at"
       - "Session ID retrieved via SELECT id FROM sessions WHERE source_id = ?"
     verify:
@@ -691,7 +690,7 @@ stories:
       VaultWatcher defers write operations when agent read queries are in flight,
       preventing SQLite contention.
     preconditions:
-      - "Agent is performing a read query via SqliteClient"
+      - "Agent is performing a read query via DatabaseClient"
       - "VaultWatcher needs to index a changed file"
     steps:
       - "handleOrgChange() calls awaitQueryQuiet(5000)"
@@ -1068,85 +1067,46 @@ stories:
       - "Other emails in the same account still indexed"
       - "No error logged for individual malformed files (silently skipped)"
 
-  # ── SqliteClient Infrastructure ──
+  # ── DatabaseClient Infrastructure ──
 
-  - name: sqlite-client-wal-mode
+  - name: database-client-connection-pool
     description: >
-      SqliteClient configures both read and write connections for WAL mode
-      with appropriate busy timeouts.
+      DatabaseClient configures HikariCP connection pool for PostgreSQL
+      with appropriate pool sizing and timeouts.
     preconditions:
-      - "vault.db path configured"
+      - "PostgreSQL connection URL configured"
     steps:
-      - "Write connection: PRAGMA journal_mode=WAL, busy_timeout=30000, foreign_keys=ON"
-      - "Read connection: PRAGMA journal_mode=WAL, busy_timeout=5000, query_only=ON"
-      - "Write connection triggers migrateSchema()"
+      - "HikariCP pool initialized with configured max connections"
+      - "Connection validation on checkout"
+      - "Schema migration runs on startup"
     verify:
-      - "Both connections use WAL mode"
-      - "Write busy timeout: 30 seconds"
-      - "Read busy timeout: 5 seconds"
-      - "Read connection is query_only (prevents accidental writes)"
-      - "Foreign keys enforced on write connection"
+      - "Connection pool active with configured size"
+      - "Connections validated before use"
+      - "Schema migration is idempotent"
 
-  - name: sqlite-client-dedicated-platform-threads
+  - name: database-client-connection-pooling
     description: >
-      All JDBC operations dispatched to dedicated platform threads to prevent
-      virtual thread carrier pinning from sqlite-jdbc synchronized blocks.
+      All JDBC operations use HikariCP connection pool. No dedicated executor
+      threads needed — PostgreSQL JDBC driver is virtual-thread safe.
     preconditions:
-      - "SqliteClient initialized"
+      - "DatabaseClient initialized"
     steps:
-      - "writeExecutor = single-thread executor with platform thread named 'sqlite-write'"
-      - "readExecutor = single-thread executor with platform thread named 'sqlite-read'"
-      - "executeWrite() submits Callable to writeExecutor, caller blocks on Future.get()"
-      - "executeRead() submits Callable to readExecutor, blocks on Future.get()"
-      - "Daemon threads — won't prevent JVM shutdown"
+      - "HikariCP pool manages connection lifecycle"
+      - "Connections acquired per-operation and returned to pool"
+      - "Pool handles concurrent read/write access"
     verify:
-      - "All write operations run on sqlite-write thread"
-      - "All read operations run on sqlite-read thread"
-      - "Virtual threads calling executeWrite/Read block without carrier pinning"
-      - "Both threads are daemon threads"
+      - "Operations use pooled connections"
+      - "Virtual threads can safely use connections without carrier pinning"
+      - "Connection pool handles concurrent access"
 
-  - name: sqlite-client-reentrant-execution
-    description: >
-      executeWrite() and executeRead() support reentrant calls: if already on the
-      correct executor thread, the operation executes directly without deadlock.
-    preconditions:
-      - "Code calls executeWrite() from within another executeWrite() callback"
-    steps:
-      - "Outer executeWrite() runs on sqlite-write thread"
-      - "Inner executeWrite() detects Thread.currentThread() == writeThread"
-      - "Inner operation executes directly (no executor submit)"
-      - "Inner call skips WAL checkpoint (outer call handles it)"
-    verify:
-      - "No deadlock from nested executeWrite() calls"
-      - "No deadlock from nested executeRead() calls"
-      - "Reentrant detection via volatile writeThread/readThread fields"
-
-  - name: sqlite-client-wal-checkpoint-periodic
-    description: >
-      WAL checkpoints run automatically: passive checkpoint every 100 write
-      operations, with additional size-based checkpointing at 50MB WAL.
-    preconditions:
-      - "vault.db with WAL mode"
-    steps:
-      - "Every writeExecutor completion calls maybeCheckpointWal()"
-      - "writeCount incremented atomically"
-      - "Every 100th write: PRAGMA wal_checkpoint(PASSIVE)"
-      - "Every 10th write: check WAL file size, checkpoint if >50MB"
-      - "Checkpoint failures logged but don't block writes"
-    verify:
-      - "Periodic checkpoint at CHECKPOINT_INTERVAL=100 writes"
-      - "WAL size checked every 10 writes against WAL_SIZE_CAP=50MB"
-      - "PASSIVE checkpoint mode (doesn't block readers)"
-      - "Checkpoint failures non-fatal"
-
-  - name: sqlite-client-active-query-tracking
+  - name: database-client-active-query-tracking
     description: >
       Read operations increment/decrement activeQueries counter, enabling
       VaultWatcher to defer writes during agent reads.
     preconditions:
       - "Agent performing a search query"
     steps:
-      - "executeRead() calls activeQueries.incrementAndGet() before submitting"
+      - "Read path calls activeQueries.incrementAndGet() before query"
       - "After read completes (or fails), activeQueries.decrementAndGet() in finally block"
       - "activeQueryCount() returns current count"
     verify:
@@ -1154,7 +1114,7 @@ stories:
       - "Decremented in finally block (even on exception)"
       - "Thread-safe via AtomicInteger"
 
-  - name: sqlite-client-fts5-token-quoting
+  - name: database-client-fts5-token-quoting
     description: >
       sanitizeFts5Query() produces safe FTS5 MATCH expressions by individually
       quoting each whitespace-delimited token.
@@ -1173,7 +1133,7 @@ stories:
       - "Multiple spaces between tokens collapsed"
       - "Empty/null input returns empty string literal"
 
-  - name: sqlite-client-schema-migration
+  - name: database-client-schema-migration
     description: >
       migrateSchema() runs on write connection initialization, adding columns
       and triggers idempotently.
@@ -1190,36 +1150,32 @@ stories:
       - "FTS5 update trigger keeps sessions_fts in sync with sessions table"
       - "Migration is idempotent — safe to run multiple times"
 
-  - name: sqlite-client-knowledge-stats
+  - name: database-client-knowledge-stats
     description: >
       knowledgeStats() returns aggregate statistics about the vault knowledge store.
     preconditions:
       - "vault.db with data"
     steps:
-      - "executeRead() queries: COUNT(*) from sessions, documents, chunks"
+      - "Queries: COUNT(*) from sessions, documents, chunks"
       - "COUNT(*) from documents WHERE source_type='email'"
       - "MIN/MAX created_at from sessions"
-      - "Database size via pragma_page_count * pragma_page_size"
-      - "WAL file size checked if WAL file exists"
-      - "write_ops_total from writeCount counter"
+      - "Database size via pg_database_size()"
     verify:
       - "Returns: sessions, documents, chunks, emails counts"
       - "Returns: oldest_session, newest_session timestamps"
-      - "Returns: db_size_bytes, wal_size_bytes (if WAL exists), write_ops_total"
+      - "Returns: db_size_bytes"
 
-  - name: sqlite-client-close
+  - name: database-client-close
     description: >
-      close() cleanly shuts down both executor threads and closes connections.
+      close() cleanly shuts down the connection pool.
     preconditions:
-      - "SqliteClient with open connections"
+      - "DatabaseClient with active connection pool"
     steps:
-      - "writeExecutor.submit() to close writeConn on write thread"
-      - "readExecutor.submit() to close readConn on read thread"
-      - "Both executors shut down"
+      - "HikariCP pool shutdown initiated"
+      - "Active connections drained and closed"
     verify:
-      - "Connections closed on their owning threads"
+      - "Connection pool fully closed"
       - "Exceptions during close silently ignored"
-      - "Executors shut down after connection close"
 
   # ── QdrantVectorClient ──
 
@@ -1426,22 +1382,20 @@ enforced_constraints:
       Prevents FTS5 syntax injection that could cause query errors or unexpected
       matching behavior. Token-level quoting is the safest approach for untrusted input.
 
-  - name: dedicated-platform-threads
+  - name: connection-pooling
     description: >
-      All SQLite JDBC operations run on dedicated platform threads (sqlite-write,
-      sqlite-read), never on virtual threads. Operations use executor dispatch
-      with Future.get() blocking.
+      All database operations use HikariCP connection pool. No dedicated platform
+      threads needed — PostgreSQL JDBC driver is virtual-thread safe.
     rationale: >
-      sqlite-jdbc uses internal synchronized blocks that pin virtual thread carriers.
-      Dedicated platform threads prevent carrier thread exhaustion that would
-      deadlock the entire virtual thread pool.
+      PostgreSQL JDBC driver does not use synchronized blocks that pin virtual
+      thread carriers. HikariCP manages connection lifecycle efficiently.
 
-  - name: wal-mode-always
+  - name: postgresql-mvcc
     description: >
-      Both read and write connections configure PRAGMA journal_mode=WAL.
-      Read connection uses query_only=ON for additional safety.
+      PostgreSQL uses MVCC (Multi-Version Concurrency Control) for concurrent
+      read/write access. No explicit WAL configuration needed.
     rationale: >
-      WAL mode enables concurrent reads during writes, critical for a system
+      MVCC enables concurrent reads during writes natively, critical for a system
       where background indexing and agent queries happen simultaneously.
 
   - name: single-watcher-file-lock

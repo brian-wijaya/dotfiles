@@ -1,19 +1,19 @@
-# Somatic X11 Event Bus Server E2E Tests
+# Sensor X11 Event Bus Server E2E Tests
 
-vocabularies: [somatic, services]
+vocabularies: [sensor, services]
 
 metadata:
-  feature: somatic
+  feature: sensor
   component: core-x11-bus
-  tags: [somatic, core]
+  tags: [sensor, core]
   estimated_duration_ms: 5000
 
 stories:
   - name: x11-bus-running
     description: X11 event bus server is active
     steps:
-      - service_active: somatic-x11-bus
-      - somatic_get_status
+      - service_active: sensor-x11-bus
+      - sensor_get_status
     verify:
       - Contains: "x11_bus"
 
@@ -22,41 +22,41 @@ stories:
     steps:
       - bash: "xdotool mousemove 300 300"
       - bash: "sleep 0.2"
-      - somatic_get_events
+      - sensor_get_events
     verify:
       - Contains: "MotionNotify"
 
   - name: x11-event-subscription
     description: Clients can subscribe to X11 events
     steps:
-      - somatic_subscribe
+      - sensor_subscribe
       - bash: "xdotool type 'test'"
       - bash: "sleep 0.2"
-      - somatic_get_latest
+      - sensor_get_latest
     verify:
       - Contains: "KeyPress"
 
   - name: x11-change-subscription
     description: Window change events are tracked
     steps:
-      - somatic_subscribe_changes
+      - sensor_subscribe_changes
       - bash: "xdotool search --name 'emacs' windowactivate || true"
       - bash: "sleep 0.3"
-      - somatic_get_latest
+      - sensor_get_latest
     verify:
       - Contains: "FocusIn"
 
   - name: x11-event-filtering
     description: X11 events can be filtered by type
     steps:
-      - bash: "somatic-cli x11-bus --filter KeyPress --json | jq 'length'"
+      - bash: "sensor-cli x11-bus --filter KeyPress --json | jq 'length'"
     verify:
       - Greater: 0
 
   - name: x11-bus-statistics
     description: X11 bus statistics are tracked
     steps:
-      - somatic_get_stats
+      - sensor_get_stats
     verify:
       - Contains: "events_processed"
       - Contains: "subscribers"
@@ -64,6 +64,6 @@ stories:
   - name: x11-connection-health
     description: X11 connection health is monitored
     steps:
-      - bash: "somatic-cli x11-bus --health --json | jq -r '.connected'"
+      - bash: "sensor-cli x11-bus --health --json | jq -r '.connected'"
     verify:
       - Equals: "true"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Flash HUD for every tool action via somatic MCP
+# Flash HUD for every tool action via sensor MCP
 # Called by PostToolUse hooks
 
 DATA=$(cat)
@@ -50,7 +50,7 @@ else
   case "$TOOL" in
     Edit|Write) ~/.claude/hooks/play-sound.sh file-write & ;;
     Grep|Glob)  ~/.claude/hooks/play-sound.sh search-complete & ;;
-    mcp__somatic-hud__post_message|mcp__somatic-hud__flash_text)
+    mcp__gateway__ACT_post_message|mcp__gateway__ACT_flash_text)
                 ~/.claude/hooks/play-sound.sh hud-post & ;;
     *)          ~/.claude/hooks/play-sound.sh tool-complete & ;;
   esac

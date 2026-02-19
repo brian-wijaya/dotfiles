@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Log Bash commands with nanosecond timestamps for somatic correlation."""
+"""Log Bash commands with nanosecond timestamps for sensor correlation."""
 import json
 import sys
 import time

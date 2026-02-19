@@ -1,13 +1,13 @@
 vocabulary:
   qdrant: Vector database for semantic search (Rust-native, runs as Docker container)
   kinetic: Java daemon — MCP gateway, knowledge, editor/desktop interaction (35 tools)
-  somatic: C++ daemon — continuous sensory substrate (X11 events, keystrokes, pointer, clipboard, timing)
+  sensor: C++ daemon — continuous sensory substrate (X11 events, keystrokes, pointer, clipboard, timing)
   time-machine: Java daemon — event-driven file protection (fanotify via Panama FFI, content-addressed versioning, NAS replication)
 
 metadata:
   feature: system
   component: infrastructure-topology
-  tags: [system, topology, qdrant, kinetic, somatic, time-machine]
+  tags: [system, topology, qdrant, kinetic, sensor, time-machine]
   revised: 2026-02-08
   revision-note: >
     Updated tool count 42→35 (coordination excluded from kinetic).
@@ -47,8 +47,8 @@ stories:
       # - Greater: 0
       - Contains: "TODO"
 
-  - name: kinetic-somatic-connection
-    description: Kinetic connects to somatic and proxies sense tools successfully
+  - name: kinetic-sensor-connection
+    description: Kinetic connects to sensor and proxies sense tools successfully
     tags: [smoke, integration]
     estimated_duration_ms: 5000
     steps:
@@ -62,24 +62,24 @@ stories:
       # - Equals: "number"
       - Contains: "TODO"
 
-  - name: kinetic-somatic-unavailable
-    description: Kinetic starts without somatic and degrades gracefully
+  - name: kinetic-sensor-unavailable
+    description: Kinetic starts without sensor and degrades gracefully
     tags: [resilience]
     estimated_duration_ms: 15000
     steps:
       # TODO(kinetic): uncomment when kinetic is operational
-      # - bash: "systemctl --user stop somatic"
+      # - bash: "systemctl --user stop sensor"
       # - bash: "sleep 2"
       # - bash: "kinetic-mcp call act.invoke.editor.elisp '{\"expression\": \"(+ 1 2)\"}' | jq -r '.result'"
       # - bash: "kinetic-mcp call sense.user_state 2>&1 | jq -r '.error // empty'"
-      # - bash: "systemctl --user start somatic"
+      # - bash: "systemctl --user start sensor"
       # - bash: "sleep 3"
       # - bash: "kinetic-mcp call sense.user_state | jq -r '.idle'"
       - bash: "echo 'TODO: kinetic not yet built'"
     verify:
       # TODO(kinetic): replace with actual assertions
       # - Equals: "3"
-      # - Contains: "somatic unavailable"
+      # - Contains: "sensor unavailable"
       # - NotEmpty
       - Contains: "TODO"
 
@@ -126,9 +126,9 @@ stories:
     tags: [gpu, resource-management]
     estimated_duration_ms: 15000
     steps:
-      # TODO(somatic): verify somatic-ctl command exists
-      # - bash: "somatic-ctl vram reserved && sleep 5 && nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits"
-      # - bash: "somatic-ctl vram aggressive && sleep 5 && nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits"
+      # TODO(sensor): verify sensor-ctl command exists
+      # - bash: "sensor-ctl vram reserved && sleep 5 && nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits"
+      # - bash: "sensor-ctl vram aggressive && sleep 5 && nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits"
       - bash: "nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null || echo '0'"
     verify:
       - NotEmpty
@@ -143,7 +143,7 @@ enforced_constraints:
     rationale: Hardware limit; must be explicitly budgeted
 
   - name: two-mcp-entries
-    value: somatic + kinetic only
+    value: sensor + kinetic only
     rationale: Claude Code connects to exactly 2 MCP servers; tool consolidation eliminates the other 5
 
   - name: time-machine-separate-jvm
@@ -163,6 +163,6 @@ opinionated_constraints:
     description: Vector search unavailability falls back to FTS-only, does not crash
     rationale: Partial results better than no results; transient failures should not cascade
 
-  - name: kinetic-somatic-graceful-degradation
-    description: Somatic unavailability does not prevent kinetic from serving act/know tools
+  - name: kinetic-sensor-graceful-degradation
+    description: Sensor unavailability does not prevent kinetic from serving act/know tools
     rationale: Sensing failure should not cascade to action and knowledge; degrade, don't crash

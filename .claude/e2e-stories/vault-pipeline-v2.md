@@ -143,7 +143,7 @@ load_worldview → agent works → deposit_context → ... → next session → 
 ## Enforced Constraints
 
 ### EC-1: SQLite single-writer
-vault.db is WAL mode with a single writer (VaultWatcher). Tag extraction, context deposit insertion, and chunk writes must go through the same write path. No concurrent writes from separate processes. Context deposits from agents go through the MCP tool → SqliteClient write path (single connection, serialized).
+vault.db is WAL mode with a single writer (VaultWatcher). Tag extraction, context deposit insertion, and chunk writes must go through the same write path. No concurrent writes from separate processes. Context deposits from agents go through the MCP tool → DatabaseClient write path (single connection, serialized).
 
 ### EC-2: No GPU, Java-only pipeline
 The machine has no GPU. All extraction must be CPU-only. The kinetic pipeline is Java — no Python subprocess calls for extraction (LlmFactScorer's `claude -p` is the only subprocess call, and it's a CLI tool not a Python library). YAKE implemented natively in Java.
@@ -224,7 +224,7 @@ Level 3 event types (decision, causal_link, outcome, topic_shift, question_open/
 
 | Prefix | Meaning | Examples |
 |--------|---------|----------|
-| `project:` | Named project/system | `project:kinetic`, `project:somatic`, `project:vault-rag` |
+| `project:` | Named project/system | `project:kinetic`, `project:sensor`, `project:vault-rag` |
 | `lang:` | Programming language | `lang:java`, `lang:python`, `lang:elisp` |
 | `tool:` | Software tool/application | `tool:emacs`, `tool:polybar`, `tool:sqlite`, `tool:ghostty` |
 | `activity:` | What's being done | `activity:debugging`, `activity:refactoring`, `activity:design` |
@@ -267,7 +267,7 @@ General rules:
     .el→lang:elisp, .rs→lang:rust, .ts→lang:typescript, .org→skip)
   → Known project directories → project: tag
     (~/vault/programs/kinetic/ → project:kinetic,
-     ~/vault/programs/somatic/ → project:somatic)
+     ~/vault/programs/sensor/ → project:sensor)
   → All tags lowercased
   → Skip noise directories: node_modules, .git, __pycache__, .cache, build, target
 ```

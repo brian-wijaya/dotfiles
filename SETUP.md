@@ -277,15 +277,15 @@ python -m venv .venv
 
 ### Phase 10: Compiled MCP Servers
 
-Somatic perception suite (C++20, requires xcb, cairo, libxxhash, xkbcommon):
+Sensor perception suite (C++20, requires xcb, cairo, libxxhash, xkbcommon):
 ```
-cd ~/vault/programs/bw-mcp-somatic
+cd ~/actual/subsystems/sensor
 meson setup builddir
 meson compile -C builddir
 sudo meson install -C builddir
 ```
 
-This installs `somatic-*` binaries to `/usr/local/bin/`.
+This installs the `sensor` binary to `/usr/local/bin/`.
 
 Claude coordinator (Go):
 ```

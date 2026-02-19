@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Flash somatic HUD for Claude Code notifications."""
+"""Flash sensor HUD for Claude Code notifications."""
 import json
 import sys
 import subprocess
@@ -13,7 +13,7 @@ try:
     # This is a workaround - ideally we'd call MCP directly
     # For now, use notify-send as fallback + a visual cue
 
-    # Flash using the somatic HUD via curl to the MCP socket if available
+    # Flash using the sensor HUD via curl to the MCP socket if available
     # Fallback to notify-send
     subprocess.run([
         'notify-send',

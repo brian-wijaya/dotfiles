@@ -5,7 +5,7 @@ vocabulary:
     tool history deque (capped at 20), start time, and a single-threaded virtual-thread
     ScheduledExecutorService for deferred tasks.
   ambient-state-header: >
-    Tier 1 awareness line (~30 tokens) read from /dev/shm/somatic_ambient on every tool
+    Tier 1 awareness line (~30 tokens) read from /dev/shm/sensor_ambient on every tool
     response. Format: [env: typing=idle dwell=2340ms focus=0x01a00003 clip=text:47b ptr_v=0.0 ...].
     Appended as a TextContent footer by ResponseEnricher.wrap().
   tier-2-alert: >
@@ -36,10 +36,10 @@ vocabulary:
     ConcurrentHashMap<String, McpStreamableServerSession> sessions field, cross-references
     with TrafficLogFilter.sessionActivity() timestamps, and evicts sessions idle > 5 minutes.
     Sweeps every 60 seconds. Delays first sweep by one interval.
-  somatic-proxy: >
-    SomaticProxyRegistrar queries somatic daemon's tools/list, registers each as a
+  sensor-proxy: >
+    SensorProxyRegistrar queries sensor daemon's tools/list, registers each as a
     gateway proxy tool with ACT_ or SENSE_ prefix based on verb classification.
-    Default display_id is host display (:0). DisplayRouter selects target somatic instance.
+    Default display_id is host display (:0). DisplayRouter selects target sensor instance.
   tool-timeout-class: >
     Three tiers: FAST (5s, SENSE reads), STANDARD (25s, ACT operations),
     SLOW (120s, LLM/indexing). Per-call timeout arg can shorten but never exceed class max.
@@ -1051,17 +1051,17 @@ stories:
       - "Thread name is 'session-reaper'"
       - "InterruptedException restores interrupt flag"
 
-  # ── Somatic proxy registration ──
+  # ── Sensor proxy registration ──
 
-  - name: somatic-proxy-registers-all-sensor-tools
+  - name: sensor-proxy-registers-all-sensor-tools
     description: >
-      SomaticProxyRegistrar queries somatic's tools/list and registers each as a gateway
+      SensorProxyRegistrar queries sensor's tools/list and registers each as a gateway
       proxy tool with ACT_ or SENSE_ prefix based on verb classification.
     preconditions:
-      - "Somatic client is started and responding to tools/list"
-      - "Somatic reports 52 tools"
+      - "Sensor client is started and responding to tools/list"
+      - "Sensor reports 52 tools"
     steps:
-      - "somatic.listTools() returns JSON with 'tools' array"
+      - "sensor.listTools() returns JSON with 'tools' array"
       - "For each tool: name, description, inputSchema are extracted"
       - "classifyCategory() determines prefix: read-intent verbs → SENSE_, others → ACT_"
       - "Tool is registered with enricher.wrap() and STANDARD timeout"
@@ -1071,56 +1071,56 @@ stories:
       - "All other tools get ACT_ prefix"
       - "Each proxy handler adds display_id=host display as default"
 
-  - name: somatic-proxy-display-routing
+  - name: sensor-proxy-display-routing
     description: >
-      Somatic proxy tools route to the correct somatic instance based on display_id.
-      Default is host display (:0). Agent displays use their own somatic instance.
+      Sensor proxy tools route to the correct sensor instance based on display_id.
+      Default is host display (:0). Agent displays use their own sensor instance.
     preconditions:
-      - "Multiple somatic instances running (host + agent displays)"
+      - "Multiple sensor instances running (host + agent displays)"
     steps:
       - "If display_id not in args, default to DisplayRouter.HOST_DISPLAY"
-      - "DisplayRouter.chooseSomatic() selects target somatic instance"
-      - "targetSomatic.callTool(name, args) forwards the call"
+      - "DisplayRouter.chooseSensor() selects target sensor instance"
+      - "targetSensor.callTool(name, args) forwards the call"
     verify:
-      - "Host display tools go to host somatic"
-      - "Agent display tools go to display-specific somatic"
+      - "Host display tools go to host sensor"
+      - "Agent display tools go to display-specific sensor"
 
-  - name: somatic-proxy-result-conversion
+  - name: sensor-proxy-result-conversion
     description: >
-      SomaticProxyRegistrar.convertResult() converts somatic JSON results to MCP
+      SensorProxyRegistrar.convertResult() converts sensor JSON results to MCP
       CallToolResult, handling both text and image content types.
     preconditions:
-      - "Somatic returns result with mixed text and image content"
+      - "Sensor returns result with mixed text and image content"
     steps:
       - "Content array items are checked for 'type' field"
       - "'image' type → ImageContent with data and mimeType"
       - "Other types → TextContent"
-      - "isError flag is propagated from somatic result"
+      - "isError flag is propagated from sensor result"
     verify:
       - "Image content is base64-encoded PNG by default"
       - "Text content is preserved"
       - "Error state is propagated"
 
-  - name: somatic-proxy-failure-non-fatal
+  - name: sensor-proxy-failure-non-fatal
     description: >
-      If somatic fails to start or list tools, proxy registration returns 0
-      and the gateway continues without somatic-backed tools.
+      If sensor fails to start or list tools, proxy registration returns 0
+      and the gateway continues without sensor-backed tools.
     preconditions:
-      - "Somatic binary is missing or crashes"
+      - "Sensor binary is missing or crashes"
     steps:
-      - "somatic.listTools() throws exception"
+      - "sensor.listTools() throws exception"
       - "register() catches it and returns 0"
     verify:
-      - "Error logged: '[gateway] Failed to register somatic proxies: ...'"
+      - "Error logged: '[gateway] Failed to register sensor proxies: ...'"
       - "Gateway continues with native tools only"
 
   # ── Ambient state and response enrichment ──
 
   - name: ambient-state-header-reads-shm
     description: >
-      AmbientStateHeader reads /dev/shm/somatic_ambient and wraps content in [env: ...] format.
+      AmbientStateHeader reads /dev/shm/sensor_ambient and wraps content in [env: ...] format.
     preconditions:
-      - "somatic_ambient SHM file exists and contains: typing=idle dwell=2340ms focus=0x01a00003"
+      - "sensor_ambient SHM file exists and contains: typing=idle dwell=2340ms focus=0x01a00003"
     steps:
       - "ambient.read() checks Files.exists(ambientPath)"
       - "Reads and strips the file content"
@@ -1167,7 +1167,7 @@ stories:
       When both ambient and alert return empty strings, ResponseEnricher returns
       the original result unmodified.
     preconditions:
-      - "somatic_ambient SHM file doesn't exist"
+      - "sensor_ambient SHM file doesn't exist"
       - "No state transitions detected"
     steps:
       - "ambient.read() returns ''"
@@ -1272,8 +1272,8 @@ stories:
       - "serverTransport = 'http'"
       - "serverHost = '127.0.0.1'"
       - "serverPort = 8372"
-      - "somaticBinary = '/usr/local/bin/somatic'"
-      - "ambientShmPath = '/dev/shm/somatic_ambient'"
+      - "sensorBinary = '/usr/local/bin/sensor'"
+      - "ambientShmPath = '/dev/shm/sensor_ambient'"
       - "emacsHost = 'localhost', emacsPort = 8585"
       - "kafkaBootstrapServers = '127.0.0.1:9092'"
       - "neo4jUri = 'bolt://127.0.0.1:7687'"
@@ -1305,7 +1305,7 @@ stories:
 
   - name: config-all-sections-covered
     description: >
-      Config provides accessors for all TOML sections: server, somatic, emacs, qdrant, tei,
+      Config provides accessors for all TOML sections: server, sensor, emacs, qdrant, tei,
       sqlite, ledger, vault, awareness, resource_scaling, watcher, kafka, temporal, neo4j,
       ollama, display.
     preconditions: []
@@ -1313,7 +1313,7 @@ stories:
       - "Each section has typed accessors with defaults"
     verify:
       - "[server]: name, version, transport, host, port"
-      - "[somatic]: binary, ambient_shm"
+      - "[sensor]: binary, ambient_shm"
       - "[emacs]: host, port"
       - "[qdrant]: host, grpc_port, collection"
       - "[tei]: url"
@@ -1589,20 +1589,20 @@ stories:
       Main.main() orchestrates the complete startup sequence: config, display, state injection,
       clients, tools, services, and server.
     preconditions:
-      - "All services available (somatic, emacs, sqlite, kafka, neo4j, ollama, qdrant, tei, temporal)"
+      - "All services available (sensor, emacs, sqlite, kafka, neo4j, ollama, qdrant, tei, temporal)"
     steps:
       - "1. Config.load() — loads gateway.toml"
       - "2. DisplayManager creation + optional auto-create display + auto-attach viewer"
       - "3. AmbientStateHeader + AlertDetector + ResponseEnricher setup"
-      - "4. SomaticClient start (with XAUTHORITY detection via DisplayEnvironment)"
-      - "5. EmacsClient, SqliteClient, TeiClient, QdrantVectorClient creation and connection"
+      - "4. SensorClient start (with XAUTHORITY detection via DisplayEnvironment)"
+      - "5. EmacsClient, DatabaseClient, TeiClient, QdrantVectorClient creation and connection"
       - "6. KafkaClient creation and connection (if enabled)"
       - "7. TemporalClient creation, connection, and workflow registration (if enabled)"
       - "8. Neo4jClient creation and connection (if enabled)"
       - "9. OllamaClient creation and connection (if enabled)"
       - "10. WorldviewMaterializer creation with sqlite + ollama"
-      - "11. Tool registration in stages: 1A system, 1B input, 1C sense, 1D somatic, 2 emacs, 3A recall, 3B search, 4 display, 5 cognitive, 6 chronicle, 7 graph, 8 worldview"
-      - "12. SomaticProxyRegistrar registers ~52 proxy tools"
+      - "11. Tool registration in stages: 1A system, 1B input, 1C sense, 1D sensor, 2 emacs, 3A recall, 3B search, 4 display, 5 cognitive, 6 chronicle, 7 graph, 8 worldview"
+      - "12. SensorProxyRegistrar registers ~52 proxy tools"
       - "13. VaultResourceScaler start (if enabled)"
       - "14. LlmFactScorer.setEnabled()"
       - "15. VaultWatcher start (if enabled)"
@@ -1610,7 +1610,7 @@ stories:
       - "17. Shutdown hook registration"
       - "18. server.start(config) — blocks on Jetty"
     verify:
-      - "Log: 'Registered N tools (M somatic proxied)'"
+      - "Log: 'Registered N tools (M sensor proxied)'"
       - "All optional services gracefully degrade when unavailable"
       - "Shutdown hook closes resources in correct order"
 
@@ -1623,7 +1623,7 @@ stories:
     steps:
       - "SIGTERM received or System.exit called"
       - "1. server.close() — release port for next gateway"
-      - "2. somatic.close()"
+      - "2. sensor.close()"
       - "3. displayManager.shutdown()"
       - "4. qdrant.close(), kafka.close(), temporal.close(), neo4j.close(), resourceScaler.shutdown()"
       - "5. watcher.awaitInitialScan() — blocks until scan completes"
@@ -1642,7 +1642,7 @@ stories:
     preconditions:
       - "Some or all optional services unavailable"
     steps:
-      - "Somatic failure: WARNING logged, proxy tools not registered"
+      - "Sensor failure: WARNING logged, proxy tools not registered"
       - "Kafka failure: WARNING logged, kafka=null, deposits tool not registered"
       - "Neo4j failure: WARNING logged, neo4j=null, graph tools not registered"
       - "Ollama failure: WARNING logged, ollama=null, L3/contradictions degrade"
@@ -1657,14 +1657,14 @@ stories:
   - name: main-xauthority-detection
     description: >
       Main.main() detects the live XAUTHORITY for display :0 to prevent stale xauth
-      from previous SDDM sessions from breaking somatic's X11 connection.
+      from previous SDDM sessions from breaking sensor's X11 connection.
     preconditions:
       - "X11 is running with XAUTHORITY potentially differing from inherited env"
     steps:
       - "DisplayEnvironment.detectUserXauthority() finds live xauth"
-      - "If found, added to hostEnv map passed to SomaticClient"
+      - "If found, added to hostEnv map passed to SensorClient"
     verify:
-      - "Somatic starts with correct XAUTHORITY"
+      - "Sensor starts with correct XAUTHORITY"
       - "If detection returns null, inherited env is used (no override)"
 
 enforced_constraints:
@@ -1749,7 +1749,7 @@ opinionated_constraints:
     description: >
       Ambient state is read from /dev/shm (shared memory tmpfs) rather than via socket/API.
     rationale: >
-      Zero-latency reads. The somatic daemon writes at 30Hz; polling from SHM avoids the
+      Zero-latency reads. The sensor daemon writes at 30Hz; polling from SHM avoids the
       overhead of IPC. File-based approach is simple and requires no coordination protocol.
 
   - name: reflection-for-session-reaper

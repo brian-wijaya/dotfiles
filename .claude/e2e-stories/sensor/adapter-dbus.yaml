@@ -1,28 +1,28 @@
-# Somatic D-Bus Adapter E2E Tests
+# Sensor D-Bus Adapter E2E Tests
 
-vocabularies: [somatic, services]
+vocabularies: [sensor, services]
 
 metadata:
-  feature: somatic
+  feature: sensor
   component: adapter-dbus
-  tags: [somatic, core]
+  tags: [sensor, core]
   estimated_duration_ms: 5000
 
 stories:
   - name: dbus-adapter-running
     description: D-Bus adapter service is active
     steps:
-      - service_active: somatic-dbus-adapter
-      - somatic_get_status
+      - service_active: sensor-dbus-adapter
+      - sensor_get_status
     verify:
       - Contains: "dbus"
 
   - name: dbus-message-posting
     description: Messages can be posted to D-Bus
     steps:
-      - somatic_post_message
+      - sensor_post_message
       - bash: "sleep 0.2"
-      - bash: "somatic-cli dbus --list-messages --json | jq 'length'"
+      - bash: "sensor-cli dbus --list-messages --json | jq 'length'"
     verify:
       - Greater: 0
 
@@ -31,27 +31,27 @@ stories:
     steps:
       - bash: "xdotool type 'test'"
       - bash: "sleep 0.3"
-      - bash: "somatic-cli dbus --signals --json | jq '.somatic_events | length'"
+      - bash: "sensor-cli dbus --signals --json | jq '.sensor_events | length'"
     verify:
       - Greater: 0
 
   - name: dbus-method-exposure
-    description: Somatic methods are exposed via D-Bus
+    description: Sensor methods are exposed via D-Bus
     steps:
-      - bash: "dbus-send --session --print-reply --dest=com.somatic / org.freedesktop.DBus.Introspectable.Introspect || true"
+      - bash: "dbus-send --session --print-reply --dest=com.sensor / org.freedesktop.DBus.Introspectable.Introspect || true"
     verify:
       - Contains: "method"
 
   - name: dbus-property-access
-    description: Somatic properties accessible via D-Bus
+    description: Sensor properties accessible via D-Bus
     steps:
-      - bash: "somatic-cli dbus --get-property status --json | jq -r '.value'"
+      - bash: "sensor-cli dbus --get-property status --json | jq -r '.value'"
     verify:
       - NotEmpty
 
   - name: dbus-adapter-status
     description: D-Bus adapter status is queryable
     steps:
-      - bash: "somatic-cli dbus --adapter-status --json | jq -r '.connected'"
+      - bash: "sensor-cli dbus --adapter-status --json | jq -r '.connected'"
     verify:
       - Equals: "true"

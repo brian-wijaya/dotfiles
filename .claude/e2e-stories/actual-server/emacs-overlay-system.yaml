@@ -1,14 +1,14 @@
 vocabulary:
   emacs-mcp-server: "HTTP server running inside Emacs (localhost:8585) that exposes /mcp/eval, /mcp/navigate, /mcp/type, and /mcp/buffer/{name} endpoints for programmatic editor control"
   elisp: "Emacs Lisp — the programming language used to script and extend Emacs"
-  somatic-client: "HTTP client to the somatic HUD service, used for overlay messages, attention targeting, and dismissal"
-  display-router: "Routing layer that directs tool calls to either the host display (:0) or an isolated agent display, choosing the correct environment variables and somatic client"
+  sensor-client: "HTTP client to the sensor HUD service, used for overlay messages, attention targeting, and dismissal"
+  display-router: "Routing layer that directs tool calls to either the host display (:0) or an isolated agent display, choosing the correct environment variables and sensor client"
   host-display: "Sentinel display_id value 'host' that routes to the user's real X11 display (:0), bypassing display isolation"
   display-isolation: "Feature that runs agent tools on a separate Xvfb display, preventing interference with the user's desktop"
   response-enricher: "Wrapper around tool handlers that injects session state annotations into tool responses"
   timeout-class-slow: "ToolRegistry.TimeoutClass.SLOW (120s) — used for command execution tools that may run long processes"
-  overlay-message: "Transient chat-style notification rendered on the desktop HUD via somatic post_message"
-  attention-target: "Somatic overlay that highlights a specific window and optional region (WxH+X+Y geometry) to guide the user's focus"
+  overlay-message: "Transient chat-style notification rendered on the desktop HUD via sensor post_message"
+  attention-target: "Sensor overlay that highlights a specific window and optional region (WxH+X+Y geometry) to guide the user's focus"
   command-result: "Record containing exit_code, stdout, and stderr from a ProcessBuilder-captured shell command"
 
 metadata:
@@ -324,59 +324,59 @@ stories:
     description: >
       When no display_id is provided, EmitOverlayMessage defaults to HOST_DISPLAY
       ("host"), routing the overlay to the user's real X11 display via the
-      fallback somatic client.
+      fallback sensor client.
     preconditions:
-      - "Somatic HUD service is running"
+      - "Sensor HUD service is running"
       - "DisplayManager may or may not be enabled"
     steps:
       - "Call ACT_emit_overlay_message with message: 'Build complete', category: 'info'"
       - "Tool injects display_id='host' into args"
-      - "DisplayRouter.chooseSomatic returns the fallback somatic client"
-      - "SomaticClient.callTool('post_message', {message, category}) is called"
+      - "DisplayRouter.chooseSensor returns the fallback sensor client"
+      - "SensorClient.callTool('post_message', {message, category}) is called"
     verify:
       - "Message appears on the user's desktop overlay"
       - "CallToolResult.isError is false"
 
   - name: overlay-message-with-category
     description: >
-      The optional category parameter is forwarded to the somatic
+      The optional category parameter is forwarded to the sensor
       post_message call as a badge label.
     preconditions:
-      - "Somatic HUD service is running"
+      - "Sensor HUD service is running"
     steps:
       - "Call ACT_emit_overlay_message with message: 'Tests failed', category: 'warn'"
     verify:
-      - "Somatic receives both message and category fields"
+      - "Sensor receives both message and category fields"
       - "CallToolResult.isError is false"
 
   - name: overlay-message-no-category
     description: >
-      When category is omitted, only the message is sent to somatic.
+      When category is omitted, only the message is sent to sensor.
     preconditions:
-      - "Somatic HUD service is running"
+      - "Sensor HUD service is running"
     steps:
       - "Call ACT_emit_overlay_message with message: 'Status update'"
     verify:
-      - "Somatic receives {message: 'Status update'} with no category key"
+      - "Sensor receives {message: 'Status update'} with no category key"
 
   - name: overlay-message-explicit-display-id
     description: >
       When display_id is explicitly provided, DisplayRouter routes to
-      the corresponding display session's somatic client.
+      the corresponding display session's sensor client.
     preconditions:
       - "DisplayManager is enabled with an active display session"
     steps:
       - "Call ACT_emit_overlay_message with message: 'Agent update', display_id: 'display-abc'"
-      - "DisplayRouter.chooseSomatic locates displayManager.locateDisplay('display-abc')"
+      - "DisplayRouter.chooseSensor locates displayManager.locateDisplay('display-abc')"
     verify:
-      - "Message is routed to the display session's somatic instance, not the host"
+      - "Message is routed to the display session's sensor instance, not the host"
 
-  - name: overlay-message-somatic-unavailable
+  - name: overlay-message-sensor-unavailable
     description: >
-      When the somatic service is unreachable, the exception is caught
+      When the sensor service is unreachable, the exception is caught
       and reported as a failure.
     preconditions:
-      - "Somatic HUD service is not running"
+      - "Sensor HUD service is not running"
     steps:
       - "Call ACT_emit_overlay_message with message: 'test'"
     verify:
@@ -388,14 +388,14 @@ stories:
   - name: dismiss-overlay-default-host
     description: >
       DismissOverlay defaults to HOST_DISPLAY when no display_id is provided,
-      calling somatic 'dismiss' with empty args on the fallback client.
+      calling sensor 'dismiss' with empty args on the fallback client.
     preconditions:
-      - "Somatic HUD service is running"
+      - "Sensor HUD service is running"
       - "An overlay is currently displayed"
     steps:
       - "Call ACT_dismiss_overlay with no arguments"
       - "Tool injects display_id='host'"
-      - "SomaticClient.callTool('dismiss', {}) is called"
+      - "SensorClient.callTool('dismiss', {}) is called"
     verify:
       - "All overlays are cleared from the host display"
       - "CallToolResult.isError is false"
@@ -403,20 +403,20 @@ stories:
   - name: dismiss-overlay-explicit-display
     description: >
       When display_id is provided, the dismiss is routed to that
-      display session's somatic instance.
+      display session's sensor instance.
     preconditions:
       - "DisplayManager is enabled with an active session showing overlays"
     steps:
       - "Call ACT_dismiss_overlay with display_id: 'display-xyz'"
     verify:
-      - "Dismiss is sent to the correct display session's somatic"
+      - "Dismiss is sent to the correct display session's sensor"
       - "Host display overlays are not affected"
 
-  - name: dismiss-overlay-somatic-error
+  - name: dismiss-overlay-sensor-error
     description: >
-      When somatic is unreachable, the exception is caught and reported.
+      When sensor is unreachable, the exception is caught and reported.
     preconditions:
-      - "Somatic service is down"
+      - "Sensor service is down"
     steps:
       - "Call ACT_dismiss_overlay"
     verify:
@@ -428,13 +428,13 @@ stories:
   - name: set-attention-window-only
     description: >
       Set attention to a specific window ID without a sub-region.
-      Somatic receives {window_id: ...} and highlights the entire window.
+      Sensor receives {window_id: ...} and highlights the entire window.
     preconditions:
-      - "Somatic HUD service is running"
+      - "Sensor HUD service is running"
     steps:
       - "Call ACT_set_attention_target with window_id: '0x2400007'"
       - "DisplayRouter defaults display_id to 'host'"
-      - "SomaticClient.callTool('set_attention', {window_id: '0x2400007'})"
+      - "SensorClient.callTool('set_attention', {window_id: '0x2400007'})"
     verify:
       - "Attention overlay highlights the target window"
       - "CallToolResult.isError is false"
@@ -443,24 +443,24 @@ stories:
     description: >
       Set attention to a specific region within a window using WxH+X+Y geometry.
     preconditions:
-      - "Somatic HUD service is running"
+      - "Sensor HUD service is running"
     steps:
       - "Call ACT_set_attention_target with window_id: '0x2400007', region: '800x600+100+50'"
     verify:
-      - "Somatic receives both window_id and region"
+      - "Sensor receives both window_id and region"
       - "Attention overlay highlights the specified sub-region"
 
   - name: set-attention-no-params
     description: >
-      When neither window_id nor region is provided, somatic receives
-      an empty args map (behavior depends on somatic implementation).
+      When neither window_id nor region is provided, sensor receives
+      an empty args map (behavior depends on sensor implementation).
     preconditions:
-      - "Somatic HUD service is running"
+      - "Sensor HUD service is running"
     steps:
       - "Call ACT_set_attention_target with no arguments"
     verify:
-      - "SomaticClient.callTool('set_attention', {}) is called"
-      - "CallToolResult.isError is false (somatic handles empty gracefully)"
+      - "SensorClient.callTool('set_attention', {}) is called"
+      - "CallToolResult.isError is false (sensor handles empty gracefully)"
 
   - name: set-attention-explicit-display
     description: >
@@ -472,11 +472,11 @@ stories:
     verify:
       - "Attention is set on the isolated display, not the host"
 
-  - name: set-attention-somatic-error
+  - name: set-attention-sensor-error
     description: >
-      When somatic is unreachable, the error is caught and reported.
+      When sensor is unreachable, the error is caught and reported.
     preconditions:
-      - "Somatic service is down"
+      - "Sensor service is down"
     steps:
       - "Call ACT_set_attention_target with window_id: '0x1'"
     verify:
@@ -703,36 +703,36 @@ stories:
       - "Returned map contains DISPLAY=:0 (or detected value)"
       - "XAUTHORITY is included if detectUserXauthority returns non-null"
 
-  - name: display-router-chooseSomatic-host
+  - name: display-router-chooseSensor-host
     description: >
-      When display_id is 'host', chooseSomatic returns the fallback
-      somatic client directly, bypassing DisplayManager lookup.
+      When display_id is 'host', chooseSensor returns the fallback
+      sensor client directly, bypassing DisplayManager lookup.
     preconditions:
       - "DisplayManager may or may not be enabled"
     steps:
-      - "Call chooseSomatic with display_id='host'"
+      - "Call chooseSensor with display_id='host'"
     verify:
-      - "fallbackSomatic is returned"
+      - "fallbackSensor is returned"
       - "DisplayManager is not consulted"
 
   - name: display-router-isolation-disabled
     description: >
       When DisplayManager is null or not enabled, chooseEnvironment
-      returns Map.of() and chooseSomatic returns fallbackSomatic.
+      returns Map.of() and chooseSensor returns fallbackSensor.
     preconditions:
       - "DisplayManager is null or isEnabled() returns false"
     steps:
       - "Call chooseEnvironment with any display_id (not 'host')"
-      - "Call chooseSomatic with any display_id (not 'host')"
+      - "Call chooseSensor with any display_id (not 'host')"
     verify:
       - "chooseEnvironment returns empty map"
-      - "chooseSomatic returns fallbackSomatic"
+      - "chooseSensor returns fallbackSensor"
 
   - name: display-router-specific-display-session
     description: >
       When display_id is a specific session ID and DisplayManager is enabled,
       the router locates the display session and returns its environment
-      or somatic client.
+      or sensor client.
     preconditions:
       - "DisplayManager is enabled"
       - "Display session 'display-abc' exists"
@@ -746,7 +746,7 @@ stories:
   - name: display-router-no-display-found
     description: >
       When display_id doesn't match any session, chooseEnvironment
-      returns Map.of() and chooseSomatic returns fallbackSomatic.
+      returns Map.of() and chooseSensor returns fallbackSensor.
     preconditions:
       - "DisplayManager is enabled but display_id 'nonexistent' has no session"
     steps:
@@ -778,7 +778,7 @@ stories:
       - "Call any overlay tool without display_id"
     verify:
       - "args map is mutated to include display_id='host'"
-      - "DisplayRouter.chooseSomatic receives 'host' and returns fallbackSomatic"
+      - "DisplayRouter.chooseSensor receives 'host' and returns fallbackSensor"
 
   # ─── ResponseEnricher Integration ──────────────────────────────────
 
@@ -887,14 +887,14 @@ opinionated_constraints:
       and avoids emacsclient's lack of structured output. The tradeoff is
       that Emacs must run the MCP HTTP server package.
 
-  - name: somatic-tool-name-mapping
+  - name: sensor-tool-name-mapping
     description: >
       Gateway tool names (ACT_emit_overlay_message, ACT_dismiss_overlay,
-      ACT_set_attention_target) map to somatic tool names (post_message,
+      ACT_set_attention_target) map to sensor tool names (post_message,
       dismiss, set_attention) via hardcoded strings rather than a registry.
     rationale: >
-      The somatic tool API is small and stable. A dynamic mapping layer would
-      add complexity without proportional benefit. If somatic renames tools,
+      The sensor tool API is small and stable. A dynamic mapping layer would
+      add complexity without proportional benefit. If sensor renames tools,
       a single code change per tool is trivial.
 
   - name: json-string-escaping-manual

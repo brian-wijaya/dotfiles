@@ -66,9 +66,9 @@ struct SessionData {
     std::vector<std::string> extract_topics() const {
         // Simple keyword extraction (matches Python version)
         static const std::unordered_map<std::string, std::string> topic_keywords = {
-            {"emacs", "emacs"}, {"e2e", "e2e-test"}, {"somatic", "somatic"},
+            {"emacs", "emacs"}, {"e2e", "e2e-test"}, {"sensor", "sensor"},
             {"vault", "vault-rag"}, {"dotfile", "dotfiles"}, {"backup", "backup"},
-            {"hud", "somatic-hud"}, {"attention", "somatic-attention"},
+            {"hud", "sensor-hud"}, {"attention", "sensor-attention"},
             {"mcp", "mcp"}, {"build", "build"}, {"hook", "hooks"},
             {"picom", "picom"}, {"i3", "i3"}, {"chrome", "browser"}
         };
