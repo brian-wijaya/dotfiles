@@ -8,7 +8,7 @@ vocabulary:
   tag_classifier: "Conservative per-fact classifier that assigns semantic tags (env:, project:, preference:) and event types (DECISION, BUG_FOUND, etc.) via LLM."
   keyword_gate: "Post-classification regex validation. Each env:/preference: tag must pass a keyword check against the original statement. Catches 7B model over-tagging."
   entity_extractor: "Four extraction paths (document, event, email, conversation). Conversation path uses LLM to identify decisions, topics, tools, files."
-  sub_agent_session: "A .jsonl conversation created by gateway's own claude -p invocations (LlmFactScorer, TagClassifier, EntityExtractor). Detected by 17 prompt prefix patterns."
+  sub_agent_session: "A .jsonl conversation created by gateway's own claude -p invocations (LlmFactScorer, TagClassifier, EntityExtractor). Detected by 16 prompt prefix patterns."
   extraction_prompt_prefix: "Known prompt patterns that identify gateway self-generated sessions. Matched case-insensitively against first user message."
   content_hash: "SHA-256 of size:mtime for conversations. Used to skip re-indexing unchanged files."
   noise_line: "System boilerplate, XML tags, code fences, subagent prompts filtered by isNoiseLine(). >50 patterns."
@@ -229,7 +229,11 @@ stories:
   - name: claude-code-client-not-connected-guard
     description: >
       All generate/chat methods immediately return null if connect() was never
-      called or returned false.
+      called or returned false. Note: connected is a one-way latch — once set
+      true by connect(), it is never reset to false. The guard only protects
+      against the never-connected state, not subsequent failures. The backoff
+      mechanism (lastFailTime + consecutiveFailures) is the actual health signal
+      after initial connection.
     preconditions:
       - "ClaudeCodeClient created but connect() not called"
     steps:
@@ -240,6 +244,8 @@ stories:
       - "No process spawned"
       - "No semaphore acquired"
       - "Stderr: 'not connected'"
+      - "connected is a one-way flag — after successful connect(), stays true even if claude binary becomes unreachable"
+      - "Backoff mechanism (lastFailTime + consecutiveFailures) is the actual health signal post-connect"
 
   - name: claude-code-client-interrupted-thread
     description: >
@@ -260,12 +266,15 @@ stories:
 
   - name: claude-code-client-stream-drain-cascade
     description: >
-      After process exits, stdout/stderr reader threads get 2s to finish.
+      After process exits normally (not timeout), stdout/stderr reader threads get 2s to finish.
       If still alive, streams are force-closed, then 500ms final join.
+      On timeout path, destroyForcibly() is called and method returns null at line 170
+      before reaching the drain code.
     preconditions:
-      - "claude -p process completed but produced large output"
+      - "claude -p process completed normally (exit code 0 or non-zero) but produced large output"
+      - "NOT the timeout path — on timeout, return null exits before drain cascade"
     steps:
-      - "proc.waitFor() returns true (process exited)"
+      - "proc.waitFor() returns true (process exited normally)"
       - "stdoutThread.join(2000) — wait 2s for reader to finish"
       - "stderrThread.join(2000)"
       - "If stdoutThread.isAlive(): proc.getInputStream().close() — forces reader to unblock"
@@ -275,6 +284,8 @@ stories:
       - "No hung virtual threads from slow stream reads"
       - "Stream close forces readAllBytes() to complete or throw"
       - "Total drain timeout: 2s + 0.5s = 2.5s maximum"
+      - "On timeout path, destroyForcibly() is called and method returns null before drain cascade executes"
+      - "Drain cascade only executes on normal process exit (waitFor returns true)"
 
   - name: claude-code-client-stdin-broken-pipe
     description: >
@@ -487,7 +498,7 @@ stories:
   - name: sub-agent-detection-extraction-prompts
     description: >
       isSubAgentConversation detects sessions created by gateway's own LLM
-      pipeline by matching first user message against 17 extraction prompt prefixes.
+      pipeline by matching first user message against 16 extraction prompt prefixes.
       Each prefix must be tested individually to prevent regressions.
     preconditions:
       - ".jsonl file where first user message starts with a known extraction prefix"
@@ -499,7 +510,7 @@ stories:
       - "Match found (e.g., 'task 1: classify', 'analyze this conversation transcript')"
       - "Returns true"
     verify:
-      - "All 17 prefixes detected individually — each prefix tested with a message starting with that exact prefix:"
+      - "All 16 prefixes detected individually — each prefix tested with a message starting with that exact prefix:"
       - "  1. 'task 1: classify...' → true"
       - "  2. 'task 2: evaluate...' → true"
       - "  3. 'task 3: generate...' → true"
@@ -516,8 +527,7 @@ stories:
       - "  14. 'you are a summary...' → true"
       - "  15. 'you are processing metadata...' → true"
       - "  16. 'you are classifying...' → true"
-      - "  17. (17th prefix per EXTRACTION_PROMPT_PREFIXES array) → true"
-      - "All 17 return true — current format allows 16 to be broken while a single-prefix test passes"
+      - "All 16 return true — current format allows 15 to be broken while a single-prefix test passes"
       - "Case-insensitive matching (lowercased)"
       - "No message-count gate — prompt pattern match is sufficient"
       - "Only first 3 messages read (performance optimization)"
@@ -1372,8 +1382,206 @@ stories:
       - "Returns true → file skipped"
     verify:
       - "No infinite loop: extraction sessions don't get extracted"
-      - "All known gateway prompt patterns covered by 17 prefixes"
+      - "All known gateway prompt patterns covered by 16 prefixes"
       - "New extraction prompts need to be added to EXTRACTION_PROMPT_PREFIXES"
+
+  # ── SilentBehavior: Dead Code & Interface Mismatches ──
+
+  - name: claude-code-client-model-param-ignored
+    description: >
+      ClaudeCodeClient.java line 131 always uses defaultModel (set at construction)
+      regardless of what model parameter is passed to generate/chat. The model param
+      in the LlmClient interface is dead code in this implementation. OllamaClient
+      correctly passes the model parameter through to its HTTP calls.
+    preconditions:
+      - "ClaudeCodeClient constructed with defaultModel='sonnet'"
+    steps:
+      - "generate(model='haiku', prompt, timeout) called"
+      - "callClaude() builds command: claude -p --model <defaultModel>"
+      - "defaultModel='sonnet' used, 'haiku' parameter silently ignored"
+    verify:
+      - "Command line always contains '--model sonnet' regardless of model parameter"
+      - "Passing model='haiku' to generate() has no effect on which model is used"
+      - "OllamaClient correctly passes model param to /api/generate endpoint"
+      - "LlmClient interface declares model param but ClaudeCodeClient ignores it"
+
+  - name: claude-code-client-maxtokens-dead-code
+    description: >
+      ClaudeCodeClient never passes maxTokens to claude -p. The parameter flows
+      through generate/chat into callClaude but is never used in the command
+      construction. OllamaClient uses it via num_predict.
+    preconditions:
+      - "ClaudeCodeClient connected"
+    steps:
+      - "chat(model, systemPrompt, userMessage, maxTokens=200) called"
+      - "callClaude(prompt, timeout) receives the prompt but maxTokens is not forwarded"
+      - "ProcessBuilder command: claude -p --output-format text --model <default> --no-session-persistence --tools ''"
+      - "No --max-tokens flag in command"
+    verify:
+      - "maxTokens parameter has no effect on ClaudeCodeClient output length"
+      - "claude -p uses its own default token limit"
+      - "OllamaClient correctly maps maxTokens to num_predict in request body"
+      - "LlmClient.chat() signature includes maxTokens but ClaudeCodeClient discards it"
+
+  - name: ollama-client-connected-not-volatile
+    description: >
+      OllamaClient.connected field is plain boolean, not volatile. In a multi-threaded
+      pipeline, connect() on thread A may not be visible to isConnected() on thread B
+      due to Java Memory Model visibility rules. ClaudeCodeClient correctly uses
+      volatile boolean.
+    preconditions:
+      - "OllamaClient used from multiple threads (e.g., VaultWatcher thread pool)"
+    steps:
+      - "Thread A: connect() sets connected=true"
+      - "Thread B: isConnected() may read stale false value (no happens-before edge)"
+      - "Thread B: generate() proceeds without connect() check (see ollama-client-no-isconnected-guard)"
+    verify:
+      - "OllamaClient.connected is plain boolean (missing volatile keyword)"
+      - "ClaudeCodeClient.connected is volatile boolean (correct)"
+      - "In practice, may not cause issues if connect() is called early in single-threaded init"
+      - "Risk: if connect() called lazily from one thread, other threads may not see the update"
+
+  - name: ollama-client-chat-nested-json-npe
+    description: >
+      OllamaClient.chat() does json.get("message").get("content").asText() without
+      null-safe navigation. If the "message" field is null or not an object,
+      get("content") is called on null, causing a NullPointerException. Should use
+      path() for safe traversal.
+    preconditions:
+      - "OllamaClient connected to Ollama server"
+      - "Ollama returns unexpected response format (missing 'message' field)"
+    steps:
+      - "chat() sends POST to /api/chat"
+      - "Response JSON: {\"model\": \"qwen2.5-coder:7b\", \"done\": true} (no 'message' field)"
+      - "MAPPER.readTree(body) succeeds"
+      - "json.get(\"message\") returns null (field missing)"
+      - "null.get(\"content\") throws NullPointerException"
+    verify:
+      - "NPE thrown from chat() on missing 'message' field"
+      - "Exception propagates to caller (not caught internally)"
+      - "Safe alternative: json.path(\"message\").path(\"content\").asText(\"\") returns empty string on missing fields"
+      - "generate() has same pattern: json.get(\"response\").asText() — but 'response' is top-level so less likely to be missing"
+
+  - name: ollama-client-no-isconnected-guard
+    description: >
+      OllamaClient.generate() and chat() never check isConnected() before making
+      HTTP calls. They proceed directly to HttpClient requests even if connect()
+      was never called or returned false. Contrast with ClaudeCodeClient which
+      returns null immediately when not connected.
+    preconditions:
+      - "OllamaClient created but connect() never called"
+    steps:
+      - "generate(model, prompt, timeout) called"
+      - "No connected check at entry"
+      - "HttpClient.send() called directly with baseUrl + /api/generate"
+      - "If Ollama is running: succeeds despite no connect() call"
+      - "If Ollama is not running: HttpClient throws ConnectException"
+    verify:
+      - "generate() and chat() have no isConnected() guard"
+      - "ClaudeCodeClient.callClaude() checks connected=false and returns null immediately"
+      - "OllamaClient relies on HTTP errors for failure detection instead of connection state"
+      - "connect() only serves as a health check + version log, not a gate for subsequent calls"
+
+  # ── SilentBehavior: Dead Code & Prompt Discrepancies ──
+
+  - name: noise-titles-dead-code
+    description: >
+      LlmFactScorer.NOISE_TITLES array (14 strings) at lines 23-26 is defined but
+      never referenced anywhere in the codebase. needsTitleScoring() was rewritten
+      to always return true (except for null and "Untitled conversation"). The
+      NOISE_TITLES array is dead code from a previous implementation that filtered
+      common noise titles before scoring.
+    preconditions:
+      - "LlmFactScorer class loaded"
+    steps:
+      - "NOISE_TITLES = {\"New conversation\", \"Chat\", \"Untitled\", ...} defined at class level"
+      - "needsTitleScoring(title) checks: title==null → false, title='Untitled conversation' → false"
+      - "All other titles → true (NOISE_TITLES never consulted)"
+    verify:
+      - "NOISE_TITLES array has 14 entries but is never read"
+      - "needsTitleScoring() does not reference NOISE_TITLES"
+      - "Dead code — safe to remove without behavior change"
+      - "Only null and exact 'Untitled conversation' match bypass scoring"
+
+  - name: tag-classifier-prompt-event-type-discrepancy
+    description: >
+      TagClassifier's LLM prompt describes 5 event types (DECISION, BUG_FOUND,
+      VERIFICATION, OUTCOME, OBSERVATION) but VALID_EVENT_TYPES accepts 10 types.
+      The 5 extra types (HYPOTHESIS, CAUSAL_LINK, QUESTION_OPEN, QUESTION_RESOLVED,
+      TOPIC_SHIFT) are validated as legal but never mentioned in the prompt, so the
+      7B model will never produce them unless it hallucinates a match.
+    preconditions:
+      - "TagClassifier loaded"
+    steps:
+      - "LLM prompt says: 'event_type: DECISION, BUG_FOUND, VERIFICATION, OUTCOME, or OBSERVATION'"
+      - "VALID_EVENT_TYPES = {DECISION, OBSERVATION, BUG_FOUND, VERIFICATION, OUTCOME, HYPOTHESIS, CAUSAL_LINK, QUESTION_OPEN, QUESTION_RESOLVED, TOPIC_SHIFT}"
+      - "LLM returns event_type='HYPOTHESIS'"
+      - "VALID_EVENT_TYPES.contains('HYPOTHESIS') → true (accepted)"
+    verify:
+      - "Prompt describes 5 event types, VALID_EVENT_TYPES accepts 10"
+      - "Extra 5 types: HYPOTHESIS, CAUSAL_LINK, QUESTION_OPEN, QUESTION_RESOLVED, TOPIC_SHIFT"
+      - "7B model has no prompt guidance for when to use the extra 5 types"
+      - "Extra types only produced if: frontier model pre-classified (deterministic ID), or 7B model guesses"
+      - "Not a bug per se — the extra types exist for frontier model compatibility via ACT_sessions_save"
+
+  - name: entity-extractor-email-node-before-llm
+    description: >
+      In EntityExtractor.extractFromEmail(), the Email entity and SENT_BY
+      relationship are created BEFORE the LLM call, using structured email metadata
+      (from, subject, date). If the LLM call fails, the Email node and SENT_BY
+      relationship are preserved in the result. This is a regression test for a
+      previous bug where email entities were lost on LLM failure.
+    preconditions:
+      - "Email with structured metadata: from='user@example.com', subject='Status update'"
+      - "LlmClient connected but will fail during extraction"
+    steps:
+      - "Email entity created: Entity('Email', subject, {from, date, subject})"
+      - "Person entity created: Entity('Person', senderName, {email: from})"
+      - "Relationship created: Person->SENT_BY->Email"
+      - "LLM called for content extraction (additional entities like topics, mentions)"
+      - "LLM call fails (null response, timeout, malformed JSON)"
+      - "Exception caught — Email and Person entities already in result list"
+    verify:
+      - "Email node and SENT_BY relationship survive LLM failure"
+      - "Person entity created from email 'from' field before LLM call"
+      - "LLM failure only loses content-derived entities (topics, mentions, etc.)"
+      - "Regression test: previously Email node was created after LLM, lost on failure"
+
+  - name: indexer-content-extraction-skips-thinking-blocks
+    description: >
+      ClaudeConversationIndexer's extractContent method only processes text-type
+      items from content arrays. Thinking blocks, tool_use, tool_result, and image
+      content blocks are silently skipped. Only items where type="text" have their
+      text field extracted.
+    preconditions:
+      - ".jsonl message with mixed content array: [{type: 'thinking', thinking: '...'}, {type: 'text', text: 'Hello'}, {type: 'tool_use', ...}]"
+    steps:
+      - "extractContent(contentArray) iterates over array items"
+      - "Item type='thinking': not type='text' → skipped"
+      - "Item type='text': text field extracted → 'Hello'"
+      - "Item type='tool_use': not type='text' → skipped"
+      - "Item type='tool_result': not type='text' → skipped"
+      - "Item type='image': not type='text' → skipped"
+    verify:
+      - "Only type='text' items contribute to extracted content"
+      - "Thinking blocks (Claude's chain-of-thought) excluded from session content"
+      - "Tool use/result blocks excluded — tool interactions not in searchable text"
+      - "Image blocks excluded (no OCR or description extraction)"
+      - "This means session search cannot find content mentioned only in thinking blocks"
+
+  - name: indexer-prefix-count-16
+    description: >
+      EXTRACTION_PROMPT_PREFIXES array contains exactly 16 entries. This is the
+      authoritative count used for sub-agent session detection.
+    preconditions:
+      - "ClaudeConversationIndexer class loaded"
+    steps:
+      - "EXTRACTION_PROMPT_PREFIXES array initialized at class load"
+      - "Array contains 16 string prefixes"
+    verify:
+      - "EXTRACTION_PROMPT_PREFIXES.length == 16"
+      - "Prefixes (lowercased): task 1:, task 2:, task 3:, classify this fact, analyze this conversation transcript, you are an entity extractor, you are a conversation analyzer, you are a conservative tag classifier, you are a metadata classifier, you are a fact, you are a knowledge, you are a tag, you are a session, you are a summary, you are processing metadata, you are classifying"
+      - "Adding a new LLM extraction prompt requires adding its prefix here"
 
 enforced_constraints:
   - name: semaphore-always-released
