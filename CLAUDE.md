@@ -273,3 +273,62 @@ CRITICAL: `rm` is aliased to trash. Use `rm-real` or `/usr/bin/rm` for permanent
 Exclusions: .cache, .git, node_modules, .venv, >100MB files
 Storage: ~/.local/share/{file-versions/,Trash/}, 90-day retention, content-deduplicated
 </file_protection_system>
+
+<boardroom>
+Proactive teaching protocol. The frontier model detects knowledge gaps and teaches via
+a persistent visual surface ("the board") without polluting conversation context.
+
+Components:
+- **Board**: ~/vault/org/btw/board.html — a single persistent HTML document open in Chrome.
+  Accumulates timestamped cards during a conversation. Auto-scrolls to latest card.
+  Resets per session (old boards archive to ~/vault/org/btw/boards/ as timestamped HTML).
+- **Card**: One screen-height content block. CST timestamp, title, dense whiteboard-style content.
+  Inline SVG when helpful. ~1 page, not 15. Whiteboard density, not textbook density.
+- **Presenter**: A subagent (Task tool, general-purpose) dispatched to write a card.
+  Gets a narrow prompt: "explain X in one card, whiteboard density, for this context."
+  Returns an HTML fragment. Injected into board DOM via Chrome javascript_tool — no reload,
+  no window switching, no user interaction. Presenters may spawn their own sub-agents.
+- **Director**: The frontier model's judgment about when to create a card.
+  Fires proactively when a user message reveals unfamiliarity with a domain concept
+  relevant to the current work. Also fires on explicit /btw-what-is invocation.
+
+Behavior:
+- When a card is warranted, spawn Presenter agent in background, say "on the board" in chat,
+  and continue with opinionated conclusion. The board is supporting material; chat is the
+  decision thread. Do NOT block the conversation waiting for the card.
+- Assume the user reads each card. If a follow-up shows continued confusion, dispatch another
+  card with a different angle — don't re-explain in chat.
+- Detection threshold: only fire when the gap is relevant to current work AND non-trivial.
+  Never patronize. When uncertain, don't fire — let /btw-what-is handle explicit requests.
+
+Layout ownership — the teaching surface:
+- Teaching assistants own the right 2/3 of the current workspace. Full autonomy over layout.
+- Default: chat left 1/3 | Chrome (board) middle 1/3 | Emacs right 1/3
+- Chrome: reuse existing instance. Create tab groups, don't open new windows.
+  Use tabs_context_mcp to discover, navigate to manage. Organize tabs into groups by purpose.
+- Emacs: for formulas (LaTeX/org), code practice, configuration syntax — anything hands-on.
+- Teaching assistants may dynamically reshape the right 2/3 at their discretion:
+  wide Chrome for comparison tables, split Chrome+Emacs for theory+practice,
+  full 2/3 Chrome for API docs alongside the board, etc.
+- The user does not touch or manage these windows. Scroll, focus, and layout are agent-controlled.
+
+Card injection mechanics (fallback chain):
+- Board template has a #cards container div and global addCard(title, html) + scrollToLatest().
+- **Primary: Chrome extension** — javascript_tool to call addCard() directly in the DOM.
+  Zero file I/O, zero reload, instant.
+- **Fallback: Gateway X11** — if Chrome extension is unavailable, use gateway tools:
+  1. Edit board.html to append card HTML before the closing </div> of #cards
+  2. ACT_send_keystroke to send F5 (reload) to the Chrome window
+  3. ACT_send_keystroke to send End (scroll to bottom)
+  Gateway is ALWAYS available (per <gateway_connectivity>). This fallback always works.
+- **Last resort: Bash** — DISPLAY=:0 xdotool for keystrokes if gateway is also down.
+  If gateway is down, stop per <gateway_connectivity> rules.
+- NEVER declare "can't inject cards" if gateway is connected. Gateway = X11 control = full capability.
+- Card HTML structure: <div class="card"><div class="card-header">...</div>
+  <div class="card-body">{content}</div></div>
+- Presenter agent writes the card-body innerHTML. Director injects it.
+
+CST timestamps:
+- Every card gets a CST timestamp in its header.
+- Chat responses: prefix with CST time (Central Standard Time, America/Chicago).
+</boardroom>

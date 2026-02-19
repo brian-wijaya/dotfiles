@@ -1,0 +1,30 @@
+#!/bin/bash
+# Equalize the width of all windows in the current workspace.
+# Uses i3-msg to find tiling containers at the top split level,
+# then resizes each to (100/N) ppt.
+
+set -euo pipefail
+
+# Get the focused workspace name
+workspace=$(i3-msg -t get_workspaces | jq -r '.[] | select(.focused) | .name')
+
+# Get the tree, find the workspace node, then get its top-level tiling children.
+# We look for the workspace content node (nodes inside the workspace, excluding
+# dockarea/floating).  i3 tree: output -> workspace -> containers.
+# The workspace "nodes" array holds the tiling children at the top split level.
+container_ids=$(i3-msg -t get_tree | jq -r --arg ws "$workspace" '
+  .. | objects | select(.type == "workspace" and .name == $ws) |
+  .nodes[] | select(.type == "con") | .id
+')
+
+count=$(echo "$container_ids" | grep -c .)
+
+if [ "$count" -le 1 ]; then
+  exit 0
+fi
+
+ppt=$((100 / count))
+
+for id in $container_ids; do
+  i3-msg "[con_id=$id] resize set width ${ppt} ppt" >/dev/null 2>&1
+done
