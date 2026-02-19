@@ -1,0 +1,128 @@
+# i3 config for agent virtual displays (Xvfb :99 etc.)
+# Minimal — no idle lock, no clipboard daemons, no user-facing services.
+# See config for the full host-display version.
+
+set $mod Mod4
+
+# Font
+font pango:JetBrainsMono Nerd Font 13
+
+# Tokyo Night colors
+set $bg #1a1b26
+set $fg #c0caf5
+set $border #33ccff
+set $inactive #565f89
+set $urgent #f7768e
+
+# Window colors
+#                       border    bg   text indicator child_border
+client.focused          $border   $bg  $fg  $border   $border
+client.focused_inactive $inactive $bg  $fg  $inactive $inactive
+client.unfocused        $inactive $bg  $fg  $inactive $inactive
+client.urgent           $urgent   $bg  $fg  $urgent   $urgent
+
+# Gaps
+gaps inner 10
+gaps outer 10
+
+# Borders
+default_border pixel 2
+default_floating_border pixel 2
+hide_edge_borders none
+for_window [class=".*"] border pixel 2
+
+# Mouse
+floating_modifier $mod
+focus_follows_mouse no
+mouse_warping output
+
+# Window management (agents may use i3-msg)
+bindsym $mod+w kill
+bindsym $mod+f fullscreen toggle
+bindsym $mod+t floating toggle
+bindsym $mod+j split toggle
+bindsym $mod+Left focus left
+bindsym $mod+Right focus right
+bindsym $mod+Up focus up
+bindsym $mod+Down focus down
+bindsym $mod+Shift+Left move left
+bindsym $mod+Shift+Right move right
+bindsym $mod+Shift+Up move up
+bindsym $mod+Shift+Down move down
+bindsym $mod+g layout toggle tabbed split
+
+# Resize (proportional)
+bindsym $mod+Ctrl+1 resize set width 10 ppt
+bindsym $mod+Ctrl+2 resize set width 20 ppt
+bindsym $mod+Ctrl+3 resize set width 33 ppt
+bindsym $mod+Ctrl+4 resize set width 40 ppt
+bindsym $mod+Ctrl+5 resize set width 50 ppt
+bindsym $mod+Ctrl+6 resize set width 60 ppt
+bindsym $mod+Ctrl+7 resize set width 66 ppt
+bindsym $mod+Ctrl+8 resize set width 80 ppt
+bindsym $mod+Ctrl+9 resize set width 90 ppt
+
+# Workspaces
+bindsym $mod+1 workspace number 1
+bindsym $mod+2 workspace number 2
+bindsym $mod+3 workspace number 3
+bindsym $mod+4 workspace number 4
+bindsym $mod+5 workspace number 5
+bindsym $mod+Shift+1 move container to workspace number 1
+bindsym $mod+Shift+2 move container to workspace number 2
+bindsym $mod+Shift+3 move container to workspace number 3
+bindsym $mod+Shift+4 move container to workspace number 4
+bindsym $mod+Shift+5 move container to workspace number 5
+
+# Window rules
+for_window [window_role="pop-up"] floating enable
+for_window [window_role="dialog"] floating enable
+for_window [window_type="dialog"] floating enable
+
+# Sensor attention overlays
+for_window [class="sensor-attention"] floating enable, border none, sticky enable
+no_focus [class="sensor-attention"]
+
+# Screensaver (should not run here but just in case)
+for_window [class="org.bw.screensaver"] fullscreen enable, border none
+
+# Bar (disabled — using polybar)
+bar {
+    mode invisible
+}
+
+# ============================================
+# AUTOSTART (minimal for virtual display)
+# ============================================
+
+# Disable SHM logging
+exec_always --no-startup-id bash -c 'i3-msg shmlog off; for f in /dev/shm/i3-log-*; do pid="${f##*-}"; comm=$(cat /proc/$pid/comm 2>/dev/null); [[ "$comm" == i3* ]] || /usr/bin/rm -f "$f"; done'
+
+# Blank root window
+exec_always --no-startup-id xsetroot -solid "#1a1b26"
+
+# Compositor (for transparency in apps that use it)
+exec_always --no-startup-id pkill picom; pidwait -x picom 2>/dev/null; picom -b
+
+# Wallpaper
+exec_always --no-startup-id feh --bg-fill ~/.config/wallpaper/current.jpg 2>/dev/null || feh --bg-fill /usr/share/backgrounds/*.jpg 2>/dev/null
+
+# Polybar
+exec_always --no-startup-id ~/.config/polybar/launch.sh
+
+# Clipboard sync (needed for cross-display clipboard via sensor)
+exec --no-startup-id autocutsel -selection CLIPBOARD -fork
+
+# --- INTENTIONALLY OMITTED ---
+# xidlehook (idle lock/screensaver — no human to lock out)
+# dunst (notifications — no human watching)
+# clipmenud (clipboard menu — no human selecting)
+# clipboard-daemon (clipboard notifications — no human)
+# xbindkeys (mouse button bindings — no human clicking)
+# polkit-gnome (auth dialogs — no human to auth)
+# gnome-keyring-daemon (secrets — not needed for agent work)
+# i3-center-single (window centering — agent controls layout directly)
+# concierge (agent lifecycle — would recurse)
+# unlock-detector (screen unlock detection — no lock screen)
+# xset s off (screensaver disable — no screensaver to disable)
+# setxkbmap compose (compose key — no human typing)

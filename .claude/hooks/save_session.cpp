@@ -2,7 +2,7 @@
 // Fires on: Stop (every response), PreCompact (before compaction)
 // Target latency: <5ms (vs Python 22ms)
 //
-// Reads session transcript, extracts summary/topics/facts, saves to vault-rag DB
+// Reads session transcript, extracts summary/topics/facts, saves to gateway DB
 
 #include <iostream>
 #include <fstream>
@@ -67,7 +67,7 @@ struct SessionData {
         // Simple keyword extraction (matches Python version)
         static const std::unordered_map<std::string, std::string> topic_keywords = {
             {"emacs", "emacs"}, {"e2e", "e2e-test"}, {"sensor", "sensor"},
-            {"vault", "vault-rag"}, {"dotfile", "dotfiles"}, {"backup", "backup"},
+            {"vault", "vault"}, {"dotfile", "dotfiles"}, {"backup", "backup"},
             {"hud", "sensor-hud"}, {"attention", "sensor-attention"},
             {"mcp", "mcp"}, {"build", "build"}, {"hook", "hooks"},
             {"picom", "picom"}, {"i3", "i3"}, {"chrome", "browser"}
@@ -175,8 +175,8 @@ SessionData parse_transcript(const std::string& transcript_path) {
     return data;
 }
 
-// Save session to vault-rag SQLite DB
-int save_to_vault_rag(const SessionData& data) {
+// Save session to gateway SQLite DB
+int save_to_gateway(const SessionData& data) {
     const char* vault_root = std::getenv("VAULT_ROOT");
     std::string db_path = vault_root ? std::string(vault_root) + "/data/vault.db"
                                      : std::string(std::getenv("HOME")) + "/vault/data/vault.db";
@@ -278,7 +278,7 @@ int main() {
     // Skip if stop_hook_active to prevent infinite loops
     // But still show confirmation for user reassurance
     if (stop_hook_active) {
-        std::cout << R"({"systemMessage": "✓ Session saved to vault-rag"})" << std::endl;
+        std::cout << R"({"systemMessage": "✓ Session saved to gateway"})" << std::endl;
         std::exit(0);
     }
 
@@ -290,8 +290,8 @@ int main() {
         std::exit(0);
     }
 
-    // Save to vault-rag
-    int saved_id = save_to_vault_rag(data);
+    // Save to gateway
+    int saved_id = save_to_gateway(data);
 
     if (saved_id > 0) {
         std::cerr << "[save-session] Saved session #" << saved_id
@@ -299,7 +299,7 @@ int main() {
                   << data.extract_key_facts().size() << " facts)" << std::endl;
 
         // Output visible confirmation to user
-        std::cout << R"({"systemMessage": "✓ Session saved to vault-rag"})" << std::endl;
+        std::cout << R"({"systemMessage": "✓ Session saved to gateway"})" << std::endl;
     }
 
     return 0;
