@@ -79,11 +79,21 @@ stories:
       - "Actual Dictation POSTs to /voice with confidence: 0.31"
       - "Gateway creates Turn event with the low confidence"
       - "Agent retrieves the turn and inspects confidence"
+      - "Test confidence threshold boundary values: POST with confidence=0.0, 0.49, 0.5 (at threshold), 0.51, 1.0"
+      - "POST with confidence=-0.1 (invalid: below range)"
+      - "POST with confidence=2.0 (invalid: above range)"
     verify:
       - "Turn event stored with confidence: 0.31 — not silently dropped"
       - "Agent can read the confidence field from the Turn metadata"
       - "Agent asks 'I heard X — is that right?' rather than acting on low-confidence input"
       - "If user confirms, agent proceeds. If user corrects, corrected text becomes a new Turn"
+      - "confidence=0.0: Turn stored, agent treats as zero-confidence — always clarifies"
+      - "confidence=0.49: Turn stored, agent clarifies (below 0.5 threshold)"
+      - "confidence=0.5: Turn stored, agent behavior at exact threshold is deterministic (clarifies OR accepts, not random)"
+      - "confidence=0.51: Turn stored, agent accepts without clarification"
+      - "confidence=1.0: Turn stored, agent accepts with full confidence"
+      - "confidence=-0.1: rejected with HTTP 400 (out of valid range 0.0-1.0)"
+      - "confidence=2.0: rejected with HTTP 400 (out of valid range 0.0-1.0)"
 
   - name: voice_endpoint_rejects_malformed_payload
     status: NOT_IMPLEMENTED
@@ -105,6 +115,38 @@ stories:
       - "chronicle.turns table unchanged after all malformed POSTs"
       - "Gateway logs the rejection reason at WARN level"
       - "Gateway does not crash or enter error state from any malformed input"
+
+  - name: voice_endpoint_validates_exact_payload_schema
+    status: NOT_IMPLEMENTED
+    description: >
+      Define and enforce the exact JSON schema for the /voice endpoint.
+      Required fields: text (string, non-empty), timestamp (ISO-8601).
+      Optional fields: confidence (float 0.0-1.0, defaults to 1.0 if absent),
+      duration_ms (integer >= 0). Extra fields are ignored (forward compatibility).
+      Each field type is validated strictly.
+    preconditions:
+      - "Gateway /voice endpoint active"
+    steps:
+      - "POST valid payload: {\"text\": \"hello\", \"timestamp\": \"2026-02-19T12:00:00Z\"} — minimal required fields"
+      - "POST with optional fields: {\"text\": \"hello\", \"timestamp\": \"2026-02-19T12:00:00Z\", \"confidence\": 0.85, \"duration_ms\": 1200}"
+      - "POST with extra field: {\"text\": \"hello\", \"timestamp\": \"2026-02-19T12:00:00Z\", \"model_version\": \"v3\"} — extra field ignored"
+      - "POST with wrong type for text: {\"text\": 42, \"timestamp\": \"2026-02-19T12:00:00Z\"}"
+      - "POST with wrong type for confidence: {\"text\": \"hello\", \"timestamp\": \"2026-02-19T12:00:00Z\", \"confidence\": \"high\"}"
+      - "POST with wrong type for duration_ms: {\"text\": \"hello\", \"timestamp\": \"2026-02-19T12:00:00Z\", \"duration_ms\": -5}"
+      - "POST with invalid timestamp: {\"text\": \"hello\", \"timestamp\": \"not-a-date\"}"
+      - "POST with missing timestamp: {\"text\": \"hello\"}"
+      - "POST with confidence absent — verify default applied"
+    verify:
+      - "Minimal valid payload (text + timestamp) succeeds with HTTP 200, Turn created"
+      - "Full valid payload succeeds, all fields stored in Turn metadata"
+      - "Extra fields are silently ignored — not rejected, not stored (forward compatibility)"
+      - "text as integer → HTTP 400 with error: 'text must be a non-empty string'"
+      - "confidence as string → HTTP 400 with error: 'confidence must be a float between 0.0 and 1.0'"
+      - "duration_ms negative → HTTP 400 with error: 'duration_ms must be an integer >= 0'"
+      - "Invalid timestamp → HTTP 400 with error: 'timestamp must be ISO-8601 format'"
+      - "Missing timestamp → HTTP 400 with error: 'timestamp is required'"
+      - "Missing confidence → Turn created with confidence defaulting to 1.0"
+      - "Missing duration_ms → Turn created with duration_ms absent (null, not 0)"
 
   - name: rapid_sequential_dictations
     status: NOT_IMPLEMENTED
@@ -198,6 +240,32 @@ stories:
       - "Input executes after voice transitions to idle"
       - "Gate only fires in collaborative mode — does NOT fire for display_id: 99"
 
+  - name: voice_gate_timeout_prevents_indefinite_block
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: User speaks continuously for 30 minutes during a long dictation
+      or phone call. The voice gate blocks agent input for the entire duration.
+      The gate must have a maximum wait time (e.g. 30s) and return an error rather
+      than blocking indefinitely. If no timeout exists, this is a design requirement.
+    preconditions:
+      - "Agent targeting display_id: host (collaborative mode)"
+      - "Voice sensor active, user speaking continuously"
+      - "Input gate enabled"
+    steps:
+      - "Agent calls ACT_send_keystroke targeting host display"
+      - "Gateway checks ambient state: voice=active"
+      - "Gateway blocks the X11 input (voice gate)"
+      - "User continues speaking for 30 minutes (e.g., phone call, extended dictation)"
+      - "Gate wait time reaches maximum (e.g. 30s)"
+      - "Gateway returns timeout error to agent rather than continuing to block"
+    verify:
+      - "Gate does NOT block indefinitely — maximum wait time is enforced"
+      - "Maximum wait time is configurable (default: 30s) in gateway config"
+      - "After timeout, agent receives a clear error: 'Input gate timeout — user has been active for 30s'"
+      - "Agent can decide to retry or proceed with non-display work"
+      - "If user stops speaking during the wait, gate releases normally before timeout"
+      - "If no timeout mechanism exists, this story FAILS and documents the requirement"
+
   - name: voice_gate_does_not_fire_in_autonomous_mode
     status: NOT_IMPLEMENTED
     description: >
@@ -264,6 +332,35 @@ stories:
       - "Speech at -15dB DOES trigger voice_state=active"
       - "No jitter between active/idle from noise near threshold (debounce)"
       - "Threshold is configurable in sensor config"
+
+  - name: voice_debounce_prevents_rapid_toggling
+    status: NOT_IMPLEMENTED
+    description: >
+      Voice sensor signal oscillates rapidly around the silence threshold
+      (e.g., background noise near boundary). The debounce mechanism prevents
+      the voice_state from toggling between active/idle on every sample.
+      Debounce duration must be defined in the vocabulary.
+    preconditions:
+      - "Sensor daemon monitoring PulseAudio input"
+      - "Silence threshold set to -30dB"
+      - "Debounce duration defined (e.g., 200ms)"
+    steps:
+      - "Signal oscillates: -31dB, -29dB, -31dB, -29dB in 50ms intervals (crosses threshold 4 times in 200ms)"
+      - "Sensor reads each sample and compares against threshold"
+      - "Debounce logic prevents state transitions faster than debounce period"
+      - "Signal settles above threshold at -25dB for 500ms"
+      - "Sensor transitions voice_state from idle to active"
+      - "Signal settles below threshold at -35dB for 500ms"
+      - "Sensor transitions voice_state from active to idle"
+    verify:
+      - "During 200ms oscillation, voice_state does NOT toggle — remains in previous state (idle)"
+      - "No rapid active→idle→active→idle sequence written to SHM"
+      - "Voice gate (if blocking) does not flicker on/off during oscillation"
+      - "After signal settles above threshold for longer than debounce period, transition to active occurs"
+      - "After signal settles below threshold for longer than debounce period, transition to idle occurs"
+      - "Test at exactly debounce period boundary: signal above threshold for exactly debounce_ms — transition fires"
+      - "Signal above threshold for debounce_ms - 1ms — transition does NOT fire"
+      - "Debounce duration is configurable in sensor config and documented in vocabulary"
 
   - name: no_microphone_degrades_gracefully
     status: NOT_IMPLEMENTED

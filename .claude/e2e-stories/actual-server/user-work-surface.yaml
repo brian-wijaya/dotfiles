@@ -164,11 +164,20 @@ stories:
       - "Off-diagonal states show clear left/right color difference"
       - "Maximum off-diagonal states (e.g., User:High/Agent:Deferred) show maximum contrast"
       - "No two states produce the same rendered output at domain zoom"
+      - "Quantitative: CIE Delta-E >= 10 between non-adjacent knowledge states"
+      - "Quantitative: CIE Delta-E >= 5 between adjacent knowledge states (e.g., H/M vs H/L)"
+      - "120 pairwise comparisons verified (16 choose 2 = 120 state pairs)"
+      - "Color-blindness filter test: protanopia simulation — all 16 states still distinguishable"
+      - "Color-blindness filter test: deuteranopia simulation — all 16 states still distinguishable"
+      - "If any pair fails Delta-E threshold under color-blindness filter, add a secondary encoding (pattern, border style, icon) to disambiguate"
 
   - name: display_mode_switching_preserves_spatial_layout
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS2, UWS-DS5
-    description: "Switching between display modes changes only color encoding, not item positions, sizes, or spatial arrangement."
+    description: >
+      Switching between display modes changes only color encoding, not item positions,
+      sizes, or spatial arrangement. Display mode is orthogonal to color presets —
+      switching display mode must not reset the active color preset.
     preconditions:
       - "Data Models tab active with multiple domain boxes populated"
     steps:
@@ -176,17 +185,23 @@ stories:
       - "Switch to Agent view"
       - "Switch to Both view"
       - "Switch back to User view"
+      - "Set color preset to '3' (Trust), then switch display modes through all three"
     verify:
       - "Domain box positions identical across all three modes"
       - "Item positions within domain boxes identical"
       - "Item sizes unchanged"
       - "Only fill colors / split-element encoding changed"
       - "No layout reflow, no jitter, no animation artifacts during mode switch"
+      - "Color preset remains '3' (Trust) after cycling through all display modes — not reset to default"
 
   - name: color_presets_switch_encoding_not_layout
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS5
-    description: "Pressing 1/2/3/4 switches color presets (Health/Activity/Trust/Novelty). Spatial layout must remain pixel-identical."
+    description: >
+      Pressing 1/2/3/4 switches color presets (Health/Activity/Trust/Novelty).
+      Spatial layout must remain pixel-identical. Color presets and display modes
+      (User/Agent/Both) are orthogonal dimensions — switching one must not reset
+      the other.
     preconditions:
       - "Data Models tab active, items populated"
     steps:
@@ -195,12 +210,19 @@ stories:
       - "Press '3' (Trust preset): items vary opacity by fidelity pass rate"
       - "Press '4' (Novelty preset): items bright/dim by changes since last session"
       - "Press '1' to return to Health"
+      - "Orthogonality test: set display mode to 'Both view', set preset to '3' (Trust)"
+      - "Switch preset to '2' (Activity) — verify display mode remains 'Both view'"
+      - "Switch display mode to 'User view' — verify preset remains '2' (Activity)"
+      - "Switch display mode to 'Agent view' — verify preset remains '2' (Activity)"
+      - "Switch preset to '4' (Novelty) — verify display mode remains 'Agent view'"
     verify:
       - "Each preset produces a visibly different color mapping"
       - "Spatial layout (positions, sizes) unchanged across all presets"
       - "Preset indicator in status bar updates on each switch"
       - "Transition between presets completes in < 100ms (no perceptible lag)"
-      - "Color preset and display mode (User/Agent/Both) are orthogonal — switching one does not reset the other"
+      - "Color preset and display mode are fully orthogonal — switching one NEVER resets the other"
+      - "All 12 combinations (3 display modes × 4 color presets) are reachable and render correctly"
+      - "Status bar shows both current display mode AND current color preset simultaneously"
 
   # ── Data Models Tab: Semantic Zoom ──
 
@@ -481,6 +503,36 @@ stories:
       - "If the item has graph neighbors, those are shown as context"
       - "'q' returns to spatial view normally"
 
+  - name: thread_pull_with_500_deposits_paginates
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS4, UWS-DS8
+    description: >
+      An item has accumulated 500 deposits over months of agent and user activity.
+      The first pull level (deposit timeline) must paginate or virtualize the
+      timeline. Rendering and navigation must remain responsive. Memory must
+      be bounded.
+    preconditions:
+      - "Data Models tab active"
+      - "Item 'Y' has exactly 500 deposits in its Chronicle thread"
+    steps:
+      - "Select item Y"
+      - "Press 'p' to pull thread — first pull level (deposit timeline)"
+      - "Timeline renders showing deposits"
+      - "Navigate with j/k through the deposit list"
+      - "Scroll rapidly from first deposit to last (Home to End or equivalent)"
+      - "Press 'p' on a deposit near the end of the list to pull second level"
+      - "Press 'q' to return to timeline"
+      - "Monitor memory usage throughout"
+    verify:
+      - "First pull level renders within 500ms (not all 500 deposits rendered at once)"
+      - "Timeline is paginated or virtualized — only visible deposits are in the DOM/render tree"
+      - "j/k navigation responds within 100ms per keystroke"
+      - "Rapid scroll (Home to End) does not freeze the UI — virtualized rendering handles it"
+      - "Memory usage bounded: < 50MB increase from opening the thread pull (not O(n) with deposit count)"
+      - "Deposit order is chronological — oldest first, newest last (or configurable)"
+      - "If timeline is paginated: page indicators visible, page navigation keyboard-accessible"
+      - "If timeline is virtualized: scroll position preserved when switching pull levels"
+
   - name: unified_search_across_chronicle_worldview
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS4
@@ -686,6 +738,35 @@ stories:
       - "If user was zoomed into project A, they see the new deposits appear in the timeline"
       - "Deposit timestamps are displayed in correct chronological order despite near-simultaneous arrival"
 
+  - name: worldview_poll_detects_changes_within_interval
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS2
+    description: >
+      Define the poll interval for SENSE_worldview_load in the vocabulary (e.g. 5s).
+      An agent deposit at T=0 must be visible in the UI by T=poll_interval.
+      Test overlap: if SENSE_worldview_load takes 4s and poll interval is 5s,
+      does the next poll overlap or wait?
+    preconditions:
+      - "App connected, Data Models tab active"
+      - "Poll interval defined (e.g. 5s)"
+      - "Agent is about to write a deposit"
+    steps:
+      - "Record timestamp T=0"
+      - "Agent writes OBSERVATION deposit at T=0 via ACT_deposits_write"
+      - "App's poll cycle fires SENSE_worldview_load at next interval (worst case T=poll_interval)"
+      - "SENSE_worldview_load returns updated Worldview including the new deposit"
+      - "UI renders the updated item"
+      - "Record timestamp T_visible when UI reflects the change"
+      - "Simulate slow response: SENSE_worldview_load takes 4s to respond (poll_interval is 5s)"
+      - "Next poll fires at T=10s (not T=9s — interval measured from response, not request)"
+    verify:
+      - "Deposit visible in UI within one poll interval after it was written (T_visible <= T=0 + poll_interval + response_time)"
+      - "Poll interval is documented in vocabulary (e.g. 'worldview_poll_interval: 5s')"
+      - "No poll overlap: if previous poll is still in-flight (slow response), next poll does NOT fire concurrently"
+      - "Poll timer resets from response completion, not from request start — prevents request pileup"
+      - "If SENSE_worldview_load returns unchanged data, UI does not re-render (no-op update)"
+      - "If SENSE_worldview_load errors, poll retries with backoff — does not stop polling permanently"
+
   - name: rapid_knowledge_state_transitions
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS2
@@ -765,6 +846,37 @@ stories:
       - "After expansion, full layout restored with no glitches"
       - "Font sizes remain >= 14px even at narrow width"
 
+  - name: layout_at_minimum_supported_width
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1, UWS-DS8
+    description: >
+      UI is forced to its minimum supported width (define: 640px? 800px?).
+      All content remains usable, font size floor is still respected, and
+      no content is truncated or hidden behind overflow. Also test on :99
+      display dimensions.
+    preconditions:
+      - "App running on 3440x1440 display"
+      - "Minimum supported width defined in vocabulary"
+    steps:
+      - "Resize app window to minimum supported width via i3 IPC"
+      - "Navigate Data Models tab: observe domain boxes, labels, status bar"
+      - "Navigate Decision Inbox tab: observe item list, detail view"
+      - "Navigate Processes tab: observe all sections"
+      - "Open which-key panel"
+      - "Open search (/) and type a query"
+      - "Resize to even narrower (below minimum) — verify behavior"
+      - "Test on :99 display (3440x1400) — verify layout works at display edge sizes"
+    verify:
+      - "At minimum supported width: all tabs render without horizontal overflow"
+      - "No text truncated with ellipsis unless explicitly designed to truncate (e.g., long titles)"
+      - "Font size floor (14px minimum, 16px body) still enforced — text is NOT shrunk to fit"
+      - "Status bar remains fully readable"
+      - "Which-key panel fits within the narrow width (may reduce columns)"
+      - "Search results fit within narrow width"
+      - "Below minimum width: app either enforces minimum (resize snaps back) or shows graceful degradation message"
+      - "On :99 display: layout renders correctly at 3440x1400 (full width minus polybar)"
+      - "Minimum supported width is documented in vocabulary"
+
   # ── Error States ──
 
   - name: stale_worldview_data_clearly_marked
@@ -819,6 +931,37 @@ stories:
       - "Write operations (deposit, triage) are queued with pending indicator"
       - "Status bar shows: 'Offline — using cached data from [timestamp]'"
       - "When gateway becomes reachable again, queued writes are replayed"
+
+  - name: offline_queued_write_conflicts_with_server_state
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1, UWS-DS3
+    description: >
+      User goes offline, queues a triage action (resolve item X). While offline,
+      an agent independently resolves item X server-side. When the user comes
+      back online and the queue replays, the queued action conflicts with the
+      current server state. Verify: does it fail gracefully, show a conflict,
+      or silently create a duplicate?
+    preconditions:
+      - "App was connected and has cached data"
+      - "Item X is untriaged in the Decision Inbox"
+      - "Gateway goes unreachable (user offline)"
+    steps:
+      - "User resolves item X in the Decision Inbox while offline"
+      - "App queues a DECISION deposit for item X (resolve) in local write queue"
+      - "Meanwhile, an agent writes a VERIFICATION deposit server-side resolving item X"
+      - "Item X is now 'resolved' on the server (agent resolved it)"
+      - "User comes back online — gateway is reachable"
+      - "App detects reconnection, begins replaying queued writes"
+      - "App attempts ACT_deposits_write for the queued DECISION deposit on item X"
+    verify:
+      - "One of three acceptable outcomes:"
+      - "  (a) Conflict detection: App detects item X was already resolved. Shows dialog: 'Item X was resolved by [agent] while you were offline. Submit your resolution anyway?'"
+      - "  (b) Graceful merge: Both deposits are recorded (user's DECISION + agent's VERIFICATION). Item shows dual provenance. No error."
+      - "  (c) Idempotent resolve: User's deposit is recorded but item stays in 'resolved' state. No duplicate status transition."
+      - "NOT acceptable: silent failure where user's deposit is dropped without notification"
+      - "NOT acceptable: unhandled error / crash during queue replay"
+      - "NOT acceptable: silent duplicate where item appears resolved twice in the timeline"
+      - "Queue replay status is visible to user: 'Replaying 1 queued action... done (conflict detected)'"
 
   # ── Window Management / i3 Integration ──
 

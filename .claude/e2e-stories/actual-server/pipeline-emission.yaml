@@ -82,7 +82,8 @@ stories:
   - name: contradiction-heuristic-compatible-merge
     description: >
       heuristicResolver merges two compatible beliefs — same domain,
-      no negation markers, complementary content.
+      no negation markers, complementary content. The merge result must
+      preserve both original belief texts verbatim.
     preconditions:
       - "Belief A: 'PostgreSQL connection pooling improves throughput under concurrent load'"
       - "Belief B: 'PostgreSQL connection pooling benefits from tuning pool size to match CPU cores'"
@@ -92,9 +93,12 @@ stories:
       - "Negation marker scan finds no markers in either belief"
       - "Shared term analysis finds 'PostgreSQL', 'connection', 'pooling' (3 terms > 4 chars)"
       - ">=2 shared terms + no negation = compatible, triggers MERGE"
+      - "Inspect the merged result content"
     verify:
       - "Result action is MERGE"
       - "Both beliefs are retained and combined"
+      - "Merged result contains belief A text verbatim — no paraphrasing or summarization"
+      - "Merged result contains belief B text verbatim — neither content lost"
       - "Explanation event describes the merge rationale"
       - "No manual review flagged"
 
@@ -134,6 +138,28 @@ stories:
       - "Result action is MERGE (not conflict)"
       - "Beliefs treated as addressing different domains"
       - "Negation marker alone is insufficient without shared-term threshold"
+
+  - name: contradiction-heuristic-word-length-boundary
+    description: >
+      heuristicResolver counts shared terms with >4 characters (strictly greater
+      than, not >=4). Words of exactly 4 chars must NOT count as significant.
+      This tests the off-by-one boundary between 4 and 5 character words.
+    preconditions:
+      - "Belief A: 'The data pool uses fast sync mode for safe writes'"
+      - "Belief B: 'The data pool uses fast sync mode but never for bulk imports'"
+      - "Category: 'heuristics.storage'"
+      - "Shared words: 'data' (4 chars), 'pool' (4 chars), 'uses' (4 chars), 'fast' (4 chars), 'sync' (4 chars), 'mode' (4 chars)"
+    steps:
+      - "Dispatch selects heuristicResolver for 'heuristics' prefix"
+      - "Shared term analysis identifies words appearing in both beliefs"
+      - "Filter by length: 'data' (4) excluded, 'pool' (4) excluded, 'uses' (4) excluded, 'fast' (4) excluded, 'sync' (4) excluded, 'mode' (4) excluded"
+      - "All shared words are exactly 4 chars — none exceed the >4 threshold"
+      - "Qualifying shared term count is 0 (< 2 required)"
+    verify:
+      - "Result action is MERGE (insufficient shared terms for conflict detection)"
+      - "Words of exactly 4 characters are NOT counted as significant (>4, not >=4)"
+      - "Despite 'never' negation marker in belief B, insufficient overlap means no conflict"
+      - "Changing 'sync' to 'syncs' (5 chars) and 'data' to 'datas' (5 chars) in both beliefs would yield 2 qualifying terms and trigger conflict detection"
 
   - name: contradiction-preference-user-mediated
     description: >
@@ -210,18 +236,22 @@ stories:
   - name: bootstrap-content-max-1500-chars
     description: >
       Event content from CLAUDE.md/MEMORY.md is capped at 1500 characters.
-      Oversized sections are truncated, not rejected.
+      Oversized sections are truncated, not rejected. Tests the exact
+      boundary at 1500 and 1501 characters.
     preconditions:
       - "CLAUDE.md contains a section with >1500 characters of continuous content"
     steps:
-      - "BootstrapEvents processes the oversized section"
-      - "Content is truncated to 1500 characters"
-      - "SHA-256 ID is computed from the truncated content"
-      - "Event is inserted with truncated content"
+      - "BootstrapEvents processes content of exactly 1500 characters"
+      - "BootstrapEvents processes content of exactly 1501 characters"
+      - "BootstrapEvents processes content of 3000 characters"
+      - "SHA-256 IDs are computed for each"
     verify:
-      - "No event in the database has content exceeding 1500 characters"
-      - "Truncated content preserves the first 1500 chars (not random selection)"
-      - "Event ID is hash of the truncated content (not original)"
+      - "Content at exactly 1500 chars is stored as-is (no truncation applied)"
+      - "Content at exactly 1501 chars is truncated to 1500 chars"
+      - "Content at 3000 chars is truncated to 1500 chars"
+      - "Truncated content preserves the first 1500 chars (prefix, not random selection)"
+      - "Event ID for 1500-char content is SHA-256 of the full 1500 chars"
+      - "Event ID for 1501-char content is SHA-256 of the truncated 1500 chars (not original 1501)"
       - "No error or warning for oversized content — silent truncation"
 
   - name: bootstrap-fact-minimum-30-chars
@@ -370,18 +400,24 @@ stories:
     description: >
       Each emit() spawns a virtual thread that completes independently.
       Virtual threads are not pooled — each emission gets a fresh thread.
+      Measured with a constrained carrier pool to detect pinning.
     preconditions:
       - "PostgreSQL is available"
       - "JDK 25 runtime with virtual thread support"
+      - "JVM started with -Djdk.tracePinnedThreads=full"
+      - "Carrier thread pool size is 2 (-Djdk.virtualThreadScheduler.parallelism=2)"
     steps:
       - "Call EventEmitter.emit() 100 times in rapid succession"
       - "Each call spawns a virtual thread"
-      - "Virtual threads execute concurrently"
+      - "Virtual threads execute concurrently on 2 carrier threads"
+      - "Monitor stderr for jdk.tracePinnedThreads warnings"
+      - "Record wall-clock time from first emit() to last event persisted"
       - "All threads complete and are garbage collected"
     verify:
       - "All 100 events are persisted in PostgreSQL"
-      - "No thread starvation or carrier pinning (no synchronized blocks)"
-      - "Caller returns immediately for each emit() call"
+      - "Zero carrier pinning warnings in stderr (no synchronized blocks in emit path)"
+      - "100 events complete within 5000ms with carrier pool size of 2"
+      - "Caller returns immediately for each emit() call (< 10ms per emit)"
       - "No thread pool exhaustion — virtual threads are lightweight"
 
   - name: emitter-system-origin-enforced
@@ -398,6 +434,29 @@ stories:
       - "Persisted event has origin = 'SYSTEM'"
       - "Caller-provided origin is ignored/overridden"
       - "All events from EventEmitter are indistinguishable as SYSTEM-originated"
+
+  - name: emitter-backpressure-under-burst
+    description: >
+      Under extreme burst (10,000 concurrent emit() calls), all events
+      eventually persist and emit() remains non-blocking for the caller
+      even when the connection pool (5 connections) is saturated.
+    preconditions:
+      - "PostgreSQL is available with a 5-connection pool (HikariCP or equivalent)"
+      - "Kafka is available"
+      - "JDK 25 runtime with virtual thread support"
+    steps:
+      - "Spawn 10,000 virtual threads, each calling EventEmitter.emit() simultaneously"
+      - "Record wall-clock time for each emit() call (time from call to return)"
+      - "Monitor connection pool: active connections, pending acquisitions, timeouts"
+      - "Wait for all virtual threads to complete (with a generous timeout, e.g., 60s)"
+      - "Count events persisted in PostgreSQL"
+    verify:
+      - "All 10,000 events are eventually persisted in PostgreSQL (zero loss)"
+      - "Every emit() call returns within 10ms (non-blocking for caller)"
+      - "Connection pool may saturate (5 active connections) but virtual threads yield, not block carriers"
+      - "No ConnectionPoolExhausted or timeout exceptions propagated to callers"
+      - "Total wall-clock time for all 10,000 events to persist is bounded (< 60s with 5 connections)"
+      - "Fire-and-forget contract: callers are decoupled from persistence latency"
 
   - name: emitter-nonblocking-caller-verification
     description: >
@@ -416,6 +475,34 @@ stories:
       - "T1 - T0 < 10ms (caller not blocked by DB latency)"
       - "Event eventually appears in PostgreSQL (after virtual thread completes)"
       - "No caller-visible delay regardless of backend latency"
+
+  - name: bootstrap-postgres-unavailable
+    description: >
+      When PostgreSQL is unreachable during gateway startup, the bootstrap
+      process must not prevent the gateway from starting. Bootstrap is
+      best-effort — failure is logged and retried on next restart.
+    preconditions:
+      - "Gateway is configured with PostgreSQL connection details"
+      - "PostgreSQL is down or unreachable (connection refused, timeout, etc.)"
+      - "CLAUDE.md and MEMORY.md exist with valid content"
+    steps:
+      - "Start the gateway"
+      - "BootstrapEvents attempts to connect to PostgreSQL"
+      - "Connection fails (timeout or refused)"
+      - "BootstrapEvents logs a WARNING with connection details"
+      - "Gateway continues startup (HTTP daemon, MCP tools, display management)"
+      - "Gateway reaches healthy state and serves requests"
+      - "PostgreSQL comes back online"
+      - "Gateway is restarted"
+      - "BootstrapEvents runs again and succeeds"
+    verify:
+      - "Gateway startup is not blocked by PostgreSQL unavailability"
+      - "WARNING (not ERROR) is logged for bootstrap failure with connection details"
+      - "All non-PostgreSQL gateway functionality works (MCP tools, display, sensor proxy)"
+      - "No uncaught exception propagates from bootstrap to crash the JVM"
+      - "On next restart with PostgreSQL available, bootstrap completes successfully"
+      - "Events from the successful bootstrap are identical to what would have been created on first attempt"
+      - "Idempotency holds — partial bootstrap followed by full bootstrap produces correct state"
 
   # ── TurnCapture: Conversation Turn Recording ──
 

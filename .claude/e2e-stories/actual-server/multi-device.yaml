@@ -39,6 +39,34 @@ stories:
       - "Same MCP endpoint serves desktop and mobile clients"
       - "Session context isolated per client"
 
+  - name: openclaw_rate_limits_telegram_messages
+    status: NOT_IMPLEMENTED
+    description: >
+      OpenClaw enforces per-user rate limiting on Telegram messages to prevent
+      the gateway from being overwhelmed by rapid MCP request bursts. A user
+      sending messages faster than the limit receives a "slow down" response
+      rather than queuing unbounded requests.
+    preconditions:
+      - "OpenClaw Telegram bot deployed"
+      - "Gateway HTTP endpoint operational on Tailscale network"
+      - "Rate limit configured (e.g., 10 messages per minute per user)"
+    steps:
+      - "User sends 10 messages in rapid succession (< 30s) via Telegram"
+      - "OpenClaw processes first 10 messages, forwarding each to gateway as MCP request"
+      - "User sends 11th message within the same minute"
+      - "OpenClaw detects rate limit exceeded for this user"
+      - "OpenClaw responds with 'Slow down — maximum 10 messages per minute. Try again in Xs.'"
+      - "11th message is NOT forwarded to gateway"
+      - "After rate window resets, user can send messages again"
+    verify:
+      - "First 10 messages within the window are processed normally"
+      - "11th message receives a user-friendly rate limit response via Telegram"
+      - "Gateway does NOT receive the rate-limited message — OpenClaw blocks at the edge"
+      - "Rate limiting is per-user, not global — other users are unaffected"
+      - "Rate limit response includes time until window reset"
+      - "If user is in a back-and-forth conversation (normal pace), rate limit is never hit"
+      - "Gateway is not overwhelmed by MCP request burst even if rate limiting fails (gateway has its own request timeout)"
+
   - name: nas_hosts_stateful_services
     status: NOT_IMPLEMENTED
     description: "Stateful services migrate from desktop Docker to NAS K3s pods."
@@ -125,6 +153,59 @@ stories:
       - "Until mitigated, any device on the LAN can reach the gateway without Tailscale membership"
       - "This is the single biggest security gap in the current design"
 
+  - name: gateway_binds_tailscale_interface_only
+    status: NOT_IMPLEMENTED
+    description: >
+      Gateway binds to 127.0.0.1 and the Tailscale interface IP only (not 0.0.0.0).
+      LAN devices that are not on the Tailscale network cannot reach port 8372.
+      This is the primary mitigation for the gap exposed in
+      unauthorized_device_rejected_at_network_layer.
+    preconditions:
+      - "Gateway configured with bind addresses: 127.0.0.1, 100.x.y.z (Tailscale IP)"
+      - "Attacker machine on same LAN but NOT in Tailscale network"
+      - "Tailscale is running and has assigned a stable IP"
+    steps:
+      - "Gateway starts and binds to 127.0.0.1:8372 and 100.x.y.z:8372"
+      - "Local Claude Code connects to 127.0.0.1:8372 — succeeds"
+      - "Mac Pro connects to 100.x.y.z:8372 via Tailscale — succeeds"
+      - "Attacker attempts TCP connection to desktop's LAN IP (192.168.x.y:8372)"
+      - "Connection refused — gateway is not listening on LAN interface"
+      - "Attacker attempts TCP connection to desktop's LAN IP on other ports"
+    verify:
+      - "LAN connection to port 8372 is refused (not timeout — refused, because not bound)"
+      - "Loopback connection succeeds (local Claude Code)"
+      - "Tailscale IP connection succeeds (remote fleet devices)"
+      - "Gateway config specifies bind addresses explicitly — no 0.0.0.0"
+      - "If Tailscale is not running at gateway startup, gateway binds only to 127.0.0.1 and logs warning"
+      - "At least one of this story or gateway_firewall_restricts_port_8372 must pass before multi-device is implementable"
+
+  - name: gateway_firewall_restricts_port_8372
+    status: NOT_IMPLEMENTED
+    description: >
+      nftables or iptables rules restrict port 8372 to Tailscale subnet
+      (100.64.0.0/10) and loopback. All other source IPs are rejected at
+      the kernel level. This is the defense-in-depth layer complementing
+      bind-address restriction.
+    preconditions:
+      - "nftables or iptables is configured on the desktop"
+      - "Gateway is running (bind address is irrelevant — firewall enforces)"
+      - "Attacker machine on same LAN but NOT in Tailscale network"
+    steps:
+      - "Verify firewall rules: nft list ruleset | grep 8372 (or iptables -L)"
+      - "Rule allows: src 127.0.0.0/8 dst port 8372 ACCEPT"
+      - "Rule allows: src 100.64.0.0/10 dst port 8372 ACCEPT"
+      - "Rule drops: all other src dst port 8372 DROP"
+      - "Attacker attempts TCP connection to desktop's LAN IP on port 8372"
+      - "Packet dropped by firewall — connection times out (DROP) or refused (REJECT)"
+      - "Mac Pro (Tailscale IP 100.x.y.z) connects to 100.x.y.z:8372 — firewall allows"
+    verify:
+      - "Firewall rules exist and are active for port 8372"
+      - "LAN attacker cannot reach gateway — packet dropped at kernel level"
+      - "Tailscale clients can reach gateway through firewall"
+      - "Loopback traffic unaffected"
+      - "Firewall rules survive reboot (nftables.conf or iptables-persistent)"
+      - "At least one of this story or gateway_binds_tailscale_interface_only must pass before multi-device is implementable"
+
   # ── Session Isolation & Handoff ──
 
   - name: session_isolation_prevents_cross_device_interference
@@ -201,6 +282,38 @@ stories:
       - "When NAS returns, gateway reconnects automatically — no manual restart"
       - "Buffered events (if any) are flushed to Kafka on reconnection"
       - "No data loss: local SQLite state is authoritative for session/document indexes"
+
+  - name: split_brain_local_writes_during_partition_reconciled
+    status: NOT_IMPLEMENTED
+    description: >
+      Desktop and NAS are connected with consistent state. A network partition
+      occurs (Tailscale tunnel drops). Desktop writes 5 events to local SQLite
+      during the partition. When the partition heals, the events must be
+      reconciled with NAS projections. If no reconciliation mechanism exists,
+      document as accepted risk with manual-rebuild recovery.
+    preconditions:
+      - "Desktop and NAS connected, Chronicle projections consistent"
+      - "Gateway running on desktop with local SQLite and remote NAS services"
+      - "All services healthy before partition"
+    steps:
+      - "Verify initial consistent state: local FTS5 index matches NAS PostgreSQL projections"
+      - "Simulate network partition: disconnect Tailscale tunnel to NAS"
+      - "Agent writes 5 events via ACT_events_write during partition"
+      - "Events land in local SQLite (gateway buffers locally or writes succeed to local store)"
+      - "NAS has no knowledge of these 5 events (partition is active)"
+      - "Heal partition: restore Tailscale tunnel to NAS"
+      - "Gateway detects NAS connectivity restored"
+      - "Reconciliation mechanism activates (if one exists)"
+    verify:
+      - "During partition: local SQLite has all 5 events, NAS PostgreSQL has 0 of the 5"
+      - "After partition heals: one of the following outcomes:"
+      - "  (a) Automatic reconciliation: gateway replays buffered events to Kafka → NAS projections updated within 60s"
+      - "  (b) Manual reconciliation: user runs a rebuild command (ACT_rebuild_projection) that replays local events"
+      - "  (c) Accepted risk: NAS projections are stale until next full rebuild. Documented explicitly."
+      - "Whichever outcome, SENSE_sessions_search on local SQLite returns all 5 events immediately"
+      - "If outcome (a): NAS-backed queries (semantic search, graph) eventually include the 5 events"
+      - "If outcome (c): NAS queries are stale — user understands this limitation"
+      - "No data loss: local SQLite is the source of truth during partition"
 
   - name: desktop_offline_nas_still_serves_mobile
     status: NOT_IMPLEMENTED
@@ -296,6 +409,35 @@ stories:
       - "Cross-session event ordering is by timestamp, not by Kafka offset (timestamps may have clock skew)"
       - "Projection does not assume global ordering — it handles interleaved multi-session events"
       - "No duplicate events — Kafka consumer commits offsets after projection write"
+
+  - name: cross_device_clock_skew_5_minutes
+    status: NOT_IMPLEMENTED
+    description: >
+      Two devices emit events with significant clock skew. Desktop emits at
+      T=10:05 (correct), Mac Pro emits at T=10:00 (5 minutes behind due to
+      NTP drift or misconfiguration). Both events land in Kafka. The system
+      must handle ordering correctly despite skew.
+    preconditions:
+      - "Desktop and Mac Pro both connected to gateway"
+      - "Mac Pro's system clock is 5 minutes behind desktop's"
+      - "Kafka running on NAS with multi-partition topic"
+      - "PostgreSQL projection consumer running"
+    steps:
+      - "Desktop emits DECISION event with timestamp T=10:05:00"
+      - "Mac Pro emits OBSERVATION event with timestamp T=10:00:00 (5 min behind)"
+      - "Desktop event arrives at Kafka first (Mac Pro's event arrives 2s later in wall time)"
+      - "Both events have Kafka offsets: desktop=100, macpro=101"
+      - "Projection consumer processes both events"
+      - "User queries SENSE_sessions_search for recent events"
+      - "Materializer processes events into Worldview projection"
+    verify:
+      - "Both events are stored — neither is dropped due to timestamp anomaly"
+      - "SENSE_sessions_search ordering: events ordered by event timestamp, so Mac Pro's event (T=10:00) appears BEFORE desktop's (T=10:05) despite arriving later"
+      - "Materializer window handling: if materializer uses tumbling time windows, Mac Pro's event may land in a different window than expected — verify it is not lost"
+      - "If materializer uses Kafka offset ordering (not timestamp), events are correctly ordered by arrival — but search results may show counterintuitive chronological order"
+      - "Projection does not reject events with 'stale' timestamps (5 min skew is within tolerance)"
+      - "Design question: is NTP enforcement required across fleet devices? If yes, document as enforced constraint. If no, document accepted skew tolerance (e.g., 10 minutes)"
+      - "Cross-session event ordering explicitly documents which ordering is authoritative: event timestamp vs Kafka offset vs wall clock arrival"
 
   # ── K3s Migration & Service Resilience ──
 

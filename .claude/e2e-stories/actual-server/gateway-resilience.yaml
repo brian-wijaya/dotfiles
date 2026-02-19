@@ -139,17 +139,19 @@ stories:
 
   - name: auto-transition-to-half-open-after-120s
     description: >
-      After OPEN_DURATION_MS (120s) elapses, the next allowRequest() call
+      After OPEN_DURATION_MS (120,000ms) elapses, the next allowRequest() call
       transitions the breaker to HALF_OPEN and returns true to allow a probe.
+      Tests the exact millisecond boundary to verify >= vs > comparison.
     preconditions:
       - "Breaker for 'ACT_send_keystroke:host' is OPEN, tripped at T+0"
     steps:
-      - "At T+119s: allowRequest() — still within open duration"
-      - "At T+120s: allowRequest() — open duration has elapsed"
+      - "At T+119,999ms: allowRequest() — 1ms before open duration expires"
+      - "At T+120,000ms: allowRequest() — exact boundary of open duration"
     verify:
-      - "T+119s: returns false, state == OPEN"
-      - "T+120s: returns true, state == HALF_OPEN"
-      - "Only one probe request is permitted (the first caller at or after 120s)"
+      - "T+119,999ms: returns false, state == OPEN (elapsed < OPEN_DURATION_MS)"
+      - "T+120,000ms: returns true, state == HALF_OPEN (elapsed >= OPEN_DURATION_MS)"
+      - "Confirms >= comparison (not >) — T+120,000ms is the first moment transition is allowed"
+      - "Only one probe request is permitted (the first caller at or after 120,000ms)"
 
   # ── CircuitBreaker: HALF_OPEN Resolution ──
 
@@ -272,6 +274,32 @@ stories:
       - "Failure recorded via A is visible via B's getState()"
       - "Internal ConcurrentHashMap is shared, not duplicated"
 
+  # ── CircuitBreaker: Map Growth ──
+
+  - name: circuit-breaker-map-unbounded-growth
+    description: >
+      The ConcurrentHashMap<String, BreakerState> inside CircuitBreaker grows
+      by one entry per unique breaker key (toolName:displayId). When displays
+      are created and destroyed, old keys are never evicted. Document whether
+      this is accepted as unbounded or whether a cleanup mechanism exists.
+    preconditions:
+      - "Gateway is running with CircuitBreaker singleton"
+      - "Breaker map starts empty"
+    steps:
+      - "Create display '100', record 3 failures for 'ACT_send_keystroke:100' (trips breaker)"
+      - "Destroy display '100' (display no longer exists)"
+      - "Create display '101', record 3 failures for 'ACT_send_keystroke:101' (trips breaker)"
+      - "Destroy display '101'"
+      - "Repeat for displays 102-199 (100 displays total, all destroyed)"
+      - "Inspect CircuitBreaker's internal ConcurrentHashMap size"
+    verify:
+      - "Map contains entries for all 100 destroyed displays (keys :100 through :199)"
+      - "No entry was evicted when the corresponding display was destroyed"
+      - "getState('ACT_send_keystroke:100') returns OPEN (stale entry persists)"
+      - "getAllStates() returns all 100 entries (dead displays pollute the dashboard)"
+      - "Map growth is monotonic — size never decreases without JVM restart"
+      - "Document: accepted as unbounded (low cardinality in practice) OR needs eviction hook on display destroy"
+
   # ── CircuitBreaker: Edge Cases ──
 
   - name: rapid-fire-failures-exact-threshold
@@ -291,16 +319,19 @@ stories:
     description: >
       When multiple threads call allowRequest() at the moment the breaker
       transitions to HALF_OPEN, only one thread receives true. The rest
-      receive false, preventing probe stampede.
+      receive false, preventing probe stampede. Losing threads must not
+      block indefinitely waiting for the lock.
     preconditions:
       - "Breaker for 'ACT_execute_command:99' is OPEN, tripped at T+0"
       - "5 threads waiting to call allowRequest() at T+120s"
     steps:
       - "At T+120s, all 5 threads call allowRequest() concurrently"
+      - "Record wall-clock time for each thread from call to return"
     verify:
       - "Exactly one thread receives true (the probe)"
       - "Remaining 4 threads receive false"
       - "State is HALF_OPEN, not flickering between states"
+      - "All 5 threads return within 100ms (no indefinite blocking for losing threads)"
 
   # ══════════════════════════════════════════════════════
   # ── SessionResurrectionFilter ──
@@ -356,6 +387,33 @@ stories:
     verify:
       - "Response status is 404, passed through as-is"
       - "No resurrection attempted"
+
+  - name: resurrection-only-triggers-on-post
+    description: >
+      Session resurrection is only triggered for POST /mcp requests, not
+      GET (SSE stream) or DELETE (session termination). The filter must
+      check the HTTP request method before attempting resurrection.
+    preconditions:
+      - "Gateway HTTP daemon is running"
+      - "Session 'session-old-040' has expired"
+      - "No cached mapping exists for 'session-old-040'"
+    steps:
+      - "Client sends GET /mcp with Mcp-Session-Id: session-old-040 (SSE stream)"
+      - "Downstream returns 404 'Session not found'"
+      - "Observe: filter does NOT attempt resurrection for GET"
+      - "Client sends DELETE /mcp with Mcp-Session-Id: session-old-040 (session termination)"
+      - "Downstream returns 404 'Session not found'"
+      - "Observe: filter does NOT attempt resurrection for DELETE"
+      - "Client sends POST /mcp with Mcp-Session-Id: session-old-040 (tool call)"
+      - "Downstream returns 404 'Session not found'"
+      - "Observe: filter DOES attempt resurrection for POST"
+    verify:
+      - "GET /mcp with expired session: 404 passed through, no resurrection handshake"
+      - "DELETE /mcp with expired session: 404 passed through, no resurrection handshake"
+      - "POST /mcp with expired session: resurrection handshake triggered"
+      - "No resurrectionLock acquired for GET or DELETE requests"
+      - "Resurrecting on GET would be nonsensical — SSE stream requires client-initiated reconnect"
+      - "Resurrecting on DELETE would be counterproductive — client wants to end the session"
 
   # ── Resurrection Handshake ──
 
@@ -584,7 +642,8 @@ stories:
     description: >
       If an unexpected exception occurs during the resurrection handshake
       (e.g., IOException during HTTP call), the per-session lock is released
-      and no stale lock entry blocks future attempts.
+      and no stale lock entry blocks future attempts. The resurrectionLocks
+      map entry behavior (removed vs persisted as sentinel) must be documented.
     preconditions:
       - "Session 'session-old-030' has expired"
       - "Network error will occur during initialize request"
@@ -594,11 +653,35 @@ stories:
       - "Filter acquires lock for session-old-030"
       - "Initialize HTTP call throws IOException"
       - "Exception propagates through finally block"
+      - "Inspect resurrectionLocks map after exception"
     verify:
       - "Lock for session-old-030 is released (finally block)"
       - "A subsequent request for session-old-030 can acquire the lock and retry"
       - "No deadlock state — lock is not held permanently"
       - "Client receives an error response (404 or 500 depending on exception handling)"
+      - "resurrectionLocks map entry for session-old-030 is either removed in finally block OR documented as persisting (sentinel lock for fast re-acquire)"
+
+  - name: resurrection-lock-map-unbounded-growth-under-churn
+    description: >
+      The resurrectionLocks ConcurrentHashMap grows by one entry per unique
+      stale session ID. Under session churn (many sessions created and expired),
+      the map grows without bound. Document whether entries are ever evicted
+      and quantify memory impact.
+    preconditions:
+      - "Gateway HTTP daemon is running"
+      - "Sessions are being created and expired rapidly (churn scenario)"
+      - "resurrectionLocks map starts empty"
+    steps:
+      - "Generate 10,000 unique stale session IDs"
+      - "For each session ID, trigger one resurrection (acquire lock, resurrect, release)"
+      - "After all resurrections complete, inspect resurrectionLocks map size"
+      - "Wait 10 minutes and inspect map size again"
+    verify:
+      - "resurrectionLocks map contains 10,000 entries after processing"
+      - "No eviction mechanism exists — map grows monotonically (or document eviction if implemented)"
+      - "Each entry is a ReentrantLock (~48 bytes) — 10,000 entries ≈ 480KB (acceptable)"
+      - "At 1M entries (~48MB), memory pressure becomes non-trivial — document upper bound"
+      - "Map size does not decrease over time without explicit cleanup"
 
   - name: filter-ordering-runs-before-mcp-handler
     description: >

@@ -110,6 +110,35 @@ stories:
       - "ON CONFLICT DO NOTHING makes replay idempotent if interrupted and restarted"
       - "SessionEventStore NOT cleared by rebuild() — potential stale data in memory"
 
+  - name: search-projection-rebuild-session-store-stale-window
+    description: >
+      During a search projection rebuild, there is a window where PostgreSQL has been
+      TRUNCATED and replay has not yet completed. Queries during this window return
+      incomplete results. Additionally, SessionEventStore is NOT cleared by rebuild(),
+      creating a divergence between the in-memory index and the PostgreSQL state.
+    preconditions:
+      - "SearchProjectionConsumer running with 100 events in PostgreSQL and SessionEventStore"
+      - "rebuild() triggered"
+    steps:
+      - "rebuild() stops consumer"
+      - "destroyStore() executes TRUNCATE context_events CASCADE — PostgreSQL now empty"
+      - "SessionEventStore still contains all 100 events in memory (NOT cleared by rebuild)"
+      - "resetOffset() sets Kafka consumer to beginning"
+      - "start() begins replay from offset 0"
+      - "During replay (events 1-50 replayed so far): query arrives"
+      - "PostgreSQL query returns only 50 events (partial replay)"
+      - "SessionEventStore query returns all 100 events (stale, never cleared)"
+      - "After replay completes (all 100 events replayed):"
+      - "PostgreSQL returns 100 events (correct, ON CONFLICT DO NOTHING handles duplicates)"
+      - "SessionEventStore also returns 100 events (correct by coincidence — was never cleared)"
+    verify:
+      - "During rebuild window: PostgreSQL and SessionEventStore are inconsistent"
+      - "After rebuild completes: both stores are consistent (idempotent replay restores PG to same state)"
+      - "SessionEventStore NOT cleared during rebuild — document whether this is intentional"
+      - "If new events arrived during rebuild that change an event's content (not possible with immutable events, but worth noting), SessionEventStore would have stale data"
+      - "For immutable event streams: the stale window is transient and self-healing after replay"
+      - "Document: is there a lock or flag to reject queries during rebuild? (likely no — accept stale reads)"
+
   - name: search-projection-consumer-group-membership
     description: >
       Search consumer uses group ID 'gateway-search' with manual offset commit,
@@ -128,6 +157,34 @@ stories:
       - "Max 100 records per poll (prevents unbounded batch sizes)"
       - "Auto-offset-reset=earliest — new consumer group starts from beginning"
       - "Consumer runs on virtual thread, not platform thread"
+
+  - name: search-projection-partition-rebalance-no-data-loss
+    description: >
+      Kafka partition rebalance occurs when a consumer joins or leaves the consumer
+      group. Verify no events are lost or double-processed during rebalance.
+      In a single-consumer setup (typical for this system), rebalances happen on
+      consumer restart, group rejoin after session timeout, or if a second consumer
+      instance is accidentally started.
+    preconditions:
+      - "Search consumer running in group 'gateway-search', single consumer owning all partitions"
+      - "chronicle.events topic has 1 partition (typical single-user config)"
+      - "Consumer has committed offset at 500, currently processing batch at offsets 500-510"
+    steps:
+      - "Rebalance triggered (e.g., consumer session timeout due to long GC pause)"
+      - "Kafka revokes partition assignment from the consumer"
+      - "Consumer's poll() call returns empty or throws during rebalance"
+      - "After rebalance settles, partition re-assigned to the same consumer (single consumer group)"
+      - "Consumer resumes from last committed offset (500)"
+      - "Events 500-510 re-delivered (were processing during rebalance, offset not yet committed)"
+      - "db.insertEvent() with ON CONFLICT DO NOTHING — re-processed events silently absorbed"
+      - "SessionEventStore.index() deduplicates by event_id — no duplicate in-memory entries"
+    verify:
+      - "No events lost: last committed offset (500) is the resume point, not the in-progress offset"
+      - "Events 500-510 reprocessed but idempotent writes prevent duplication"
+      - "No double counting in SessionEventStore (event_id equality check)"
+      - "sessionCounts may be incremented again for duplicates (known imprecision from search-projection-duplicate-event)"
+      - "At-least-once semantics preserved: manual commit means uncommitted batch is replayed"
+      - "Single-partition topic simplifies: no cross-partition ordering concerns"
 
   - name: search-projection-session-event-store-no-store
     description: >
@@ -279,6 +336,32 @@ stories:
       - "RuntimeException propagated to caller"
       - "Logged: '[gateway] Neo4j not connected - cannot destroy graph store'"
 
+  - name: graph-projection-rebuild-after-outage-recovers-all-events
+    description: >
+      Neo4j goes down during normal operation, graph consumer skips 50 events
+      (offsets committed past them), Neo4j comes back. Trigger rebuild to verify
+      all events — including the 50 skipped during outage — are recovered.
+    preconditions:
+      - "Graph consumer running, has processed 100 events successfully into Neo4j"
+      - "Neo4j goes down — neo4j.isConnected() returns false"
+      - "50 more events arrive on Kafka while Neo4j is down"
+      - "Graph consumer skips all 50, commits offsets past them (by design — see graph-consumer-skips-on-neo4j-down)"
+      - "Neo4j comes back up"
+    steps:
+      - "After Neo4j recovery, consumer resumes processing new events (offset 150+)"
+      - "But events 101-150 are permanently skipped — offsets already committed past them"
+      - "Operator triggers rebuild(): stop consumer, MATCH (n) DETACH DELETE n, reset offset to 0"
+      - "Consumer restarts from offset 0, replays all 150 events"
+      - "Events 1-100: re-inserted via MERGE (idempotent — same result as before)"
+      - "Events 101-150: inserted for the first time (were skipped during outage)"
+      - "Events 151+: also replayed (some may be re-processed, MERGE handles this)"
+    verify:
+      - "After rebuild completes, all 150 events are reflected in Neo4j graph"
+      - "No duplicate nodes thanks to MERGE semantics"
+      - "Events skipped during outage are now present (the gap is filled)"
+      - "This is the documented recovery path: rebuild is the only way to recover skipped events"
+      - "Rebuild time scales with total event count, not just the gap — acceptable for single-user volumes"
+
   - name: graph-projection-merge-idempotency
     description: >
       Replaying the same event twice produces identical graph state due to
@@ -400,6 +483,36 @@ stories:
       - "Neo4j has File, Class, Function nodes with CONTAINS/DEFINES edges"
       - "Point IDs are deterministic (docId * 10000 + index) — enables deletion by range"
       - "Returns true"
+
+  - name: code-indexer-point-id-boundary
+    description: >
+      Test the Qdrant point ID formula docId * 10_000 + chunkIndex at boundary
+      conditions. Two failure modes: (1) docId near Integer.MAX_VALUE/10_000 causes
+      integer overflow, and (2) a document with >10,000 chunks causes range overlap
+      with the next docId's range.
+    preconditions:
+      - "TEI and Qdrant available"
+      - "CodeIndexer operational"
+    steps:
+      - "Test 1 — Overflow: docId = Integer.MAX_VALUE / 10_000 + 1 = 214749"
+      - "  Point ID = 214749 * 10_000 + 0 = 2_147_490_000 (fits in int)"
+      - "  But docId = 214749 * 10_000 = 2_147_490_000, chunkIndex = 9999 → 2_147_499_999 (fits)"
+      - "  docId = 214750: 214750 * 10_000 = 2_147_500_000 (fits in int, max is 2_147_483_647... OVERFLOW)"
+      - "  Actually 214750 * 10000 = 2_147_500_000 > Integer.MAX_VALUE (2_147_483_647) — overflow"
+      - "  If using long: no overflow. If using int: wraps negative"
+      - "Test 2 — Range overlap: docId=1 with 10_001 chunks"
+      - "  Chunk 0: point_id = 1 * 10_000 + 0 = 10_000"
+      - "  Chunk 10_000: point_id = 1 * 10_000 + 10_000 = 20_000"
+      - "  docId=2, chunk 0: point_id = 2 * 10_000 + 0 = 20_000 — COLLISION with docId=1 chunk 10_000"
+      - "  Qdrant upsert with same point_id overwrites the previous point"
+    verify:
+      - "Document whether point ID is computed as int or long (Java type matters for overflow)"
+      - "If int: overflow occurs at docId >= 214749 — any project with >214K indexed files hits this"
+      - "If long: overflow is not a practical concern"
+      - "Documents with >10,000 chunks cause silent range overlap and data loss in Qdrant"
+      - "10,000 chunks at 1600 chars each = 16MB source file — unlikely for most source files but possible for generated code, large data files"
+      - "Mitigation: add a chunk count check before embedding, log warning if > 10_000"
+      - "Alternative: use a different ID scheme (hash-based, UUID) to avoid both issues"
 
   - name: code-indexer-embedding-failure-graceful
     description: >
@@ -656,6 +769,35 @@ stories:
       - "Multiple candidates (ambiguous) left at confidence=0.5 — no guess"
       - "Resolved edge upserted to Neo4j with resolved=true flag"
       - "Original unresolved edge still exists (both edges present)"
+
+  - name: code-graph-extractor-ambiguous-call-not-resolved
+    description: >
+      When an unqualified function call has multiple candidates across files,
+      resolveCallEdges() does NOT resolve it — the CALLS edge stays at confidence=0.5.
+      No resolved edge is created. A mutation that resolves to the first candidate
+      (or any arbitrary candidate) would fail this test.
+    preconditions:
+      - "File A has function 'process()' which calls 'helper()' — unqualified, confidence=0.5"
+      - "File B defines function 'helper()' with fullName='com.bw.util.Helper.helper'"
+      - "File C defines function 'helper()' with fullName='com.bw.service.Service.helper'"
+      - "Global function index: {'helper' -> ['com.bw.util.Helper.helper', 'com.bw.service.Service.helper']}"
+    steps:
+      - "resolveCallEdges(allGraphs) called after all files extracted"
+      - "Global function index built from all FileGraph nodes"
+      - "Scan File A edges: CALLS edge from 'process' to 'helper' with confidence=0.5"
+      - "Lookup 'helper' in index — 2 candidates found"
+      - "candidates.size() != 1 — ambiguous, skip resolution"
+      - "No MERGE of a resolved CALLS edge"
+      - "Original unresolved edge remains at confidence=0.5"
+    verify:
+      - "No resolved edge created for ambiguous 'helper' call"
+      - "CALLS edge from process to helper stays at confidence=0.5"
+      - "No confidence=0.8 edge exists for this call"
+      - "resolved=true flag NOT set on any edge for this call"
+      - "Mutation test: code that resolves to candidates.get(0) would incorrectly create a 0.8 edge to Helper.helper"
+      - "Mutation test: code that resolves to a random candidate would be non-deterministic"
+      - "The ambiguity is correct behavior — without type information, the call target is genuinely unknown"
+      - "Future improvement: use import statements to narrow candidates (e.g., File A imports com.bw.util.Helper)"
 
   - name: code-graph-extractor-neo4j-upsert-delete-first
     description: >

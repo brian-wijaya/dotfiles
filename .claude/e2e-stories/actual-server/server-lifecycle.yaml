@@ -65,6 +65,8 @@ stories:
       - "registry.size() == 100 (48 native + 52 sensor proxy)"
       - "SessionReaper virtual thread is alive and named 'session-reaper'"
       - "Shutdown hook is registered in Runtime"
+      - "Ordered verification from stderr logs: Config → Display → Sensor → PostgreSQL → [optional services] → Bootstrap → Watcher → HTTP. Any deviation from this order = startup regression."
+      - "Each phase logs to stderr before the next begins — order is verifiable from log timestamps"
 
   - name: startup-degraded-optional-services-down
     description: >
@@ -226,6 +228,8 @@ stories:
       The ProtocolVersionFilter correctly rewrites the protocol version string
       in response bodies regardless of the SDK's native version. The replacement
       is same-length (YYYY-MM-DD format), avoiding Content-Length mismatch.
+      Handles edge cases: SDK natively speaking target version (no-op) and
+      unknown version formats (passthrough).
     preconditions:
       - "Gateway HTTP server is running"
       - "SDK transport speaks protocolVersion '2025-06-18'"
@@ -240,6 +244,8 @@ stories:
       - "Total response byte length is unchanged (same-length replacement)"
       - "JSON remains valid after patching"
       - "Non-initialize responses (tool results) pass through unmodified"
+      - "SDK natively speaks target version '2025-11-25': filter is a no-op — response already contains target version, patching overwrites with same bytes, response is valid"
+      - "SDK speaks unknown version format (e.g., '2026-01-15'): filter doesn't find the expected source prefix pattern, response passes through unmodified — client may reject if it doesn't support that version"
 
   - name: traffic-filter-absorbs-response-acks
     description: >
@@ -388,7 +394,8 @@ stories:
     description: >
       Sessions that never opened an SSE stream (or where disconnect was not
       detected) are evicted based on idle timeout from TrafficLogFilter activity
-      timestamps. Default 24h.
+      timestamps. Default 24h. Exact boundary: idle for exactly 86400s is evicted;
+      idle for 86399s is NOT evicted.
     preconditions:
       - "Session 'session-idle-001' exists in SDK sessions map"
       - "Last activity was 25 hours ago"
@@ -404,6 +411,8 @@ stories:
       - "Session removed from SDK map"
       - "SessionState cleaned up"
       - "stderr shows idle time in eviction message"
+      - "Exact boundary: session idle for exactly 86400s (86400000ms) — evicted (idleMs >= maxIdleMs)"
+      - "Exact boundary: session idle for 86399s (86399000ms) — NOT evicted (idleMs < maxIdleMs)"
 
   - name: reaper-injects-fallback-event-for-silent-sessions
     description: >
@@ -463,6 +472,32 @@ stories:
       - "sessionActivity now contains an entry for session-unknown-001"
       - "Session will be evicted only after maxIdleMs elapses from the seeded timestamp"
 
+  - name: session-reaper-reflection-failure
+    description: >
+      SessionReaper accesses the SDK's internal sessions ConcurrentHashMap via
+      reflection. If the field is renamed in an SDK upgrade, reflection fails.
+      The reaper logs an ERROR but continues sweeping without evicting.
+      Memory growth is a concern since sessions accumulate indefinitely.
+    preconditions:
+      - "SDK upgraded to a new version that renamed the sessions field"
+      - "SessionReaper attempts to access the old field name via reflection"
+    steps:
+      - "Reaper sweep fires"
+      - "getDeclaredField(oldFieldName) throws NoSuchFieldException"
+      - "Exception caught in reaper sweep method"
+      - "ERROR logged: '[reaper] Cannot access SDK sessions map — field <oldFieldName> not found in SDK <version>'"
+      - "Sweep completes without evicting any sessions"
+      - "Reaper does NOT crash — continues scheduling future sweeps"
+      - "Next sweep: same reflection failure, same ERROR log"
+    verify:
+      - "NoSuchFieldException does not crash the reaper thread"
+      - "ERROR log includes the field name attempted and SDK version for debugging"
+      - "Sweep completes (no partial state corruption)"
+      - "Reaper continues running (virtual thread stays alive)"
+      - "Sessions accumulate in SDK map indefinitely (memory growth concern)"
+      - "Known design gap: no circuit breaker to stop logging the same error every 60s"
+      - "Mitigation: monitor /health or stderr for reaper reflection errors after SDK upgrades"
+
   - name: session-state-threadlocal-propagation
     description: >
       The TrafficLogFilter sets SessionState.currentSession via ThreadLocal on every
@@ -487,7 +522,7 @@ stories:
     description: >
       SessionState tracks last 20 tool calls and computes a loop score (ratio of
       most-repeated tool in last 10 calls). High loop score indicates potential
-      agent stuck-in-loop condition.
+      agent stuck-in-loop condition. Document behavioral consequence of high score.
     preconditions:
       - "Session 'session-loop-001' is active"
       - "Agent has called ACT_send_keystroke 8 times and SENSE_read_window_layout 2 times in last 10 calls"
@@ -501,6 +536,8 @@ stories:
       - "tool_call_count reflects total calls"
       - "last_tools contains the full history (up to 20)"
       - "session_elapsed_ms is positive"
+      - "Behavioral consequence of loop_score > 0.7: either (a) triggers a warning message injected into tool response text visible to the agent, OR (b) is informational only — surfaced via /health or SENSE_self_inspect endpoint but does NOT actively intervene. Document which behavior applies."
+      - "If informational only: loop_score is visible in inspect() output and /health session details but has no side effects on tool execution"
 
   # ═══════════════════════════════════════════════
   # ── Shutdown ──
@@ -560,6 +597,64 @@ stories:
       - "All 100 files were indexed before db.close()"
       - "New gateway instance can start immediately (port freed by server.close())"
       - "New gateway's watcher skips initial scan (can't get lock from old instance)"
+
+  - name: shutdown-watcher-await-timeout
+    description: >
+      Watcher initial scan is processing files with LLM scoring when SIGTERM
+      arrives. The shutdown hook blocks on awaitInitialScan(). If no timeout
+      exists, shutdown could block indefinitely. Document the timeout behavior
+      or flag as a known design gap.
+    preconditions:
+      - "VaultWatcher initial scan is in progress with LLM scoring"
+      - "LLM scoring is slow (each file takes 30-60s for extraction + classification)"
+      - "50 files remaining in scan"
+      - "SIGTERM received"
+    steps:
+      - "Shutdown hook fires"
+      - "server.close(), sensor.close(), displayManager.shutdown() complete"
+      - "watcherRef.awaitInitialScan() blocks shutdown hook thread"
+      - "Case A (timeout exists): awaitInitialScan blocks for at most 5 minutes"
+      - "  If exceeded: awaitInitialScan returns/throws, shutdown proceeds"
+      - "  Log message: '[gateway] Watcher scan await timed out after 300s, proceeding with shutdown'"
+      - "  Remaining files not indexed — watcher scan interrupted"
+      - "Case B (no timeout): awaitInitialScan blocks indefinitely"
+      - "  Shutdown hook never completes until scan finishes"
+      - "  If 50 files × 60s each = 50 minutes of blocking"
+      - "  systemd may SIGKILL after TimeoutStopSec (default 90s)"
+    verify:
+      - "Document which case applies (A or B)"
+      - "If Case A: timeout duration documented, log message emitted, shutdown completes within timeout"
+      - "If Case B: mark as known design gap — file GitHub issue for adding awaitInitialScan timeout"
+      - "Database is NOT closed until awaitInitialScan returns (prevents writes to closed DB)"
+      - "systemd TimeoutStopSec is the backstop if no application-level timeout exists"
+
+  - name: shutdown-hook-exception-resilience
+    description: >
+      During shutdown, if sensor.close() throws a RuntimeException, the shutdown
+      hook catches the exception and continues executing all subsequent close()
+      calls. Database is closed last despite any earlier errors.
+    preconditions:
+      - "Gateway is fully running"
+      - "sensor.close() will throw RuntimeException"
+      - "SIGTERM received"
+    steps:
+      - "Shutdown hook thread starts"
+      - "server.close() — succeeds"
+      - "sensor.close() — throws RuntimeException"
+      - "Exception caught by try-catch within shutdown hook (not propagated)"
+      - "Error logged: '[gateway] Error closing sensor: <message>'"
+      - "displayManager.shutdown() — executes normally despite prior error"
+      - "kafkaConsumerRef.shutdown() — executes normally"
+      - "qdrantRef.close(), kafkaRef.close(), temporalRef.close(), neo4jRef.close() — all execute"
+      - "watcherRef.awaitInitialScan() + shutdown() — executes"
+      - "db.close() — executes LAST despite sensor error"
+    verify:
+      - "RuntimeException from sensor.close() does NOT abort shutdown hook"
+      - "All subsequent close() calls execute despite prior exception"
+      - "Database closed last — no writes to a closed database"
+      - "stderr contains error message for the failed close"
+      - "JVM exits cleanly (shutdown hook completes)"
+      - "Each close() call is wrapped in its own try-catch (exception in one does not skip others)"
 
   - name: shutdown-releases-port-immediately
     description: >

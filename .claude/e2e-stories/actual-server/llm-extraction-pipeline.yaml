@@ -276,6 +276,50 @@ stories:
       - "Stream close forces readAllBytes() to complete or throw"
       - "Total drain timeout: 2s + 0.5s = 2.5s maximum"
 
+  - name: claude-code-client-stdin-broken-pipe
+    description: >
+      claude -p crashes immediately after spawn before stdin write completes.
+      The IOException from OutputStream.write() is caught, failure state updated,
+      semaphore released, null returned.
+    preconditions:
+      - "ClaudeCodeClient connected, semaphore available"
+      - "claude -p process exits/crashes immediately upon spawn (before stdin is written)"
+    steps:
+      - "ProcessBuilder launches claude -p"
+      - "Process exits or crashes before stdin write"
+      - "proc.getOutputStream().write(prompt) throws IOException (broken pipe)"
+      - "IOException caught in outer catch block"
+      - "consecutiveFailures incremented"
+      - "lastFailTime set to current time"
+      - "Returns null"
+    verify:
+      - "IOException from OutputStream.write() does not propagate to caller"
+      - "consecutiveFailures incremented by 1 (triggers backoff on subsequent calls)"
+      - "Semaphore released in finally block (no permit leak)"
+      - "Returns null, not empty string or exception"
+      - "Stderr logged with exception message"
+
+  - name: claude-code-client-semaphore-zero-permits
+    description: >
+      ClaudeCodeClient constructed with maxConcurrent=0. Semaphore(0) is valid
+      Java — tryAcquire always returns false immediately. Either constructor
+      validates and throws IllegalArgumentException, or all calls return null
+      with "semaphore timeout" message.
+    preconditions:
+      - "ClaudeCodeClient constructed with maxConcurrent=0"
+    steps:
+      - "new Semaphore(0) created — valid Java, zero permits available"
+      - "callClaude() called"
+      - "semaphore.tryAcquire(timeout, MILLISECONDS) returns false immediately (no permits exist)"
+      - "Logged: 'semaphore timeout, all slots busy'"
+      - "Returns null"
+    verify:
+      - "Semaphore(0) does not throw — it is valid Java"
+      - "Every call returns null with 'semaphore timeout' log message"
+      - "No process is ever spawned (acquire always fails)"
+      - "If constructor should validate maxConcurrent > 0 and throw IllegalArgumentException, document that as expected behavior instead"
+      - "Semaphore NOT released in finally (acquired=false)"
+
   # ── ClaudeConversationIndexer: LLM Extraction Path ──
 
   - name: llm-extraction-happy-path
@@ -393,19 +437,31 @@ stories:
   - name: llm-extraction-truncation-boundary
     description: >
       Conversations exceeding MAX_LLM_CHARS=16000 are truncated mid-message.
-      The truncation appends '...' and sends whatever fit.
+      The truncation appends '...' and sends whatever fit. Conversations exactly
+      at 16000 chars are NOT truncated.
     preconditions:
-      - "Conversation with total text > 16000 chars"
+      - "Conversation with total text >= 16000 chars"
     steps:
       - "StringBuilder accumulates [role]\\ncontent\\n\\n per message"
       - "Loop breaks when sb.length() >= MAX_LLM_CHARS"
       - "If sb.length() > MAX_LLM_CHARS: substring(0, 16000) + '...'"
-      - "Truncated text sent to LLM"
+      - "If sb.length() == MAX_LLM_CHARS: no substring applied, no '...' suffix"
+      - "Truncated (or exact) text sent to LLM"
+      - "Concrete example: conversation at 15,800 chars, next message 500 chars → total 16,300"
+      - "  Loop appends message (sb.length()=16300), breaks (>= 16000)"
+      - "  16300 > 16000 → substring(0, 16000) applied → cuts 300 chars from last message"
+      - "  '...' appended → final text is 16003 chars"
+      - "Exact boundary example: conversation accumulates to exactly 16000 chars"
+      - "  Loop breaks (16000 >= 16000)"
+      - "  16000 > 16000 is FALSE → substring NOT applied"
+      - "  No '...' suffix appended → final text is exactly 16000 chars"
     verify:
       - "Text sent to LLM never exceeds 16003 chars (16000 + '...')"
+      - "Text exactly at 16000 chars is sent as-is without truncation or '...' suffix"
       - "Later messages in long conversations are silently dropped"
       - "The break happens after the message that pushes past the limit (not before)"
       - "Partial messages possible at the boundary"
+      - "The >= check in the loop condition means exactly-16000 also breaks the loop"
 
   - name: llm-extraction-then-fact-scorer
     description: >
@@ -432,6 +488,7 @@ stories:
     description: >
       isSubAgentConversation detects sessions created by gateway's own LLM
       pipeline by matching first user message against 17 extraction prompt prefixes.
+      Each prefix must be tested individually to prevent regressions.
     preconditions:
       - ".jsonl file where first user message starts with a known extraction prefix"
     steps:
@@ -442,7 +499,25 @@ stories:
       - "Match found (e.g., 'task 1: classify', 'analyze this conversation transcript')"
       - "Returns true"
     verify:
-      - "All 17 prefixes detected: task 1/2/3, classify this fact, analyze this conversation transcript, you are an entity extractor, you are a conversation analyzer, you are a conservative tag classifier, you are a metadata classifier, you are a fact/knowledge/tag/session/summary, you are processing metadata, you are classifying"
+      - "All 17 prefixes detected individually — each prefix tested with a message starting with that exact prefix:"
+      - "  1. 'task 1: classify...' → true"
+      - "  2. 'task 2: evaluate...' → true"
+      - "  3. 'task 3: generate...' → true"
+      - "  4. 'classify this fact...' → true"
+      - "  5. 'analyze this conversation transcript...' → true"
+      - "  6. 'you are an entity extractor...' → true"
+      - "  7. 'you are a conversation analyzer...' → true"
+      - "  8. 'you are a conservative tag classifier...' → true"
+      - "  9. 'you are a metadata classifier...' → true"
+      - "  10. 'you are a fact...' → true"
+      - "  11. 'you are a knowledge...' → true"
+      - "  12. 'you are a tag...' → true"
+      - "  13. 'you are a session...' → true"
+      - "  14. 'you are a summary...' → true"
+      - "  15. 'you are processing metadata...' → true"
+      - "  16. 'you are classifying...' → true"
+      - "  17. (17th prefix per EXTRACTION_PROMPT_PREFIXES array) → true"
+      - "All 17 return true — current format allows 16 to be broken while a single-prefix test passes"
       - "Case-insensitive matching (lowercased)"
       - "No message-count gate — prompt pattern match is sufficient"
       - "Only first 3 messages read (performance optimization)"
@@ -580,6 +655,31 @@ stories:
       - "Changed file fully re-indexed"
       - "Old chunks deleted before new chunks inserted"
       - "Session record updated via upsert (ON CONFLICT source_id)"
+
+  - name: concurrent-index-if-changed-same-file
+    description: >
+      WatchService fires ENTRY_MODIFY for file X while initial scan is already
+      processing the same file. The db.executeWrite lock serializes the transactions.
+      The second caller finds the content hash already matches and skips re-indexing.
+    preconditions:
+      - "VaultWatcher initial scan is processing file X in indexIfChanged()"
+      - "WatchService fires ENTRY_MODIFY for file X concurrently"
+      - "db.executeWrite uses a lock (ReentrantLock or synchronized) to serialize transactions"
+    steps:
+      - "Thread A (initial scan): enters db.executeWrite for file X"
+      - "Thread A: computes contentHash, checks existing → hash mismatch → full pipeline executes"
+      - "Thread A: saveSession, upsertDocument, deleteChunks, insertChunks → commits"
+      - "Thread A: releases write lock"
+      - "Thread B (watch event): enters db.executeWrite for file X (was blocked on lock)"
+      - "Thread B: computes contentHash (same size:mtime as Thread A just wrote)"
+      - "Thread B: db.fetchDocument(null, sourcePath) returns doc with matching content_hash"
+      - "Thread B: existing.content_hash == contentHash → returns false (no re-indexing needed)"
+    verify:
+      - "No duplicate DB writes — second caller sees hash match and skips"
+      - "db.executeWrite lock serializes the transactions (no interleaved writes)"
+      - "No constraint violations from concurrent inserts"
+      - "Second call is cheap — only hash comparison, no LLM calls"
+      - "File is indexed exactly once despite two concurrent triggers"
 
   - name: transaction-rollback-on-failure
     description: >
@@ -1233,6 +1333,27 @@ stories:
       - "XML-like lines always noise (could miss legitimate '<' use)"
       - "Numbered list detection: digit followed by period"
       - "Two-digit numbered lists: '12.' also detected"
+
+  - name: noise-line-regex-catastrophic-backtracking
+    description: >
+      isNoiseLine handles adversarial input strings without catastrophic regex
+      backtracking. Even with 100KB strings designed to maximize backtracking,
+      the function returns within 10ms.
+    preconditions:
+      - "isNoiseLine called with a 100KB adversarial string (e.g., repeated pattern designed to trigger exponential backtracking)"
+    steps:
+      - "isNoiseLine(adversarialString) called"
+      - "Function checks length < 3 (false for 100KB)"
+      - "Function checks startsWith patterns: '<', '{', '[', 'i\\'ll ', etc."
+      - "Patterns are simple starts-with checks, not complex regex — no nested quantifiers"
+      - "Numbered list check: charAt(0) is digit, followed by dot — O(1) character check"
+      - "No pattern in isNoiseLine uses .* or nested groups that could backtrack"
+      - "Function returns false (no pattern matches) or true (first match found)"
+    verify:
+      - "100KB adversarial string processed in < 10ms"
+      - "Patterns are simple starts-with checks and character comparisons, not complex regex"
+      - "No catastrophic backtracking possible — all checks are O(1) or O(n) linear"
+      - "Function is safe to call in hot loops (once per message line during extraction)"
 
   - name: pipeline-session-extraction-self-contamination-guard
     description: >
