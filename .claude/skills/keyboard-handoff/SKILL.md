@@ -2,7 +2,7 @@
 name: keyboard-handoff
 description: Coordinate keyboard access with user before sending X11 keystrokes. Detects typing activity, notifies user, waits for idle, then sends keys. Use BEFORE any x11_key sequence during interactive testing.
 user-invocable: false
-allowed-tools: mcp__somatic__is_typing, mcp__somatic__post_message, mcp__x11__notify, mcp__x11__x11_key, mcp__x11__x11_get_active_window, mcp__x11__i3_command
+allowed-tools: mcp__gateway__SENSE_is_typing, mcp__gateway__SENSE_post_message, mcp__x11__notify, mcp__x11__x11_key, mcp__x11__x11_get_active_window, mcp__x11__i3_command
 ---
 
 # Keyboard Handoff Protocol
@@ -20,7 +20,7 @@ BEFORE sending any `x11_key` calls **that target the user's live display (:0)** 
 
 ### 1. Check if user is typing
 ```
-mcp__somatic__is_typing → {typing: bool, last_key_age_ms: int}
+mcp__gateway__SENSE_is_typing → {typing: bool, last_key_age_ms: int}
 ```
 If `typing: true` or `last_key_age_ms < 3000`:
 - Post overlay: "⌨ Waiting for keyboard idle..."
@@ -28,7 +28,7 @@ If `typing: true` or `last_key_age_ms < 3000`:
 
 ### 2. Notify user
 ```
-mcp__somatic__post_message(text="⌨ KEYBOARD SEIZED — ~5s for testing", category="warn", ttl_ms=15000)
+mcp__gateway__SENSE_post_message(text="⌨ KEYBOARD SEIZED — ~5s for testing", category="warn", ttl_ms=15000)
 ```
 - Include estimated duration in the message
 - Wait 1.5 seconds after notification before sending keys
@@ -44,7 +44,7 @@ mcp__somatic__post_message(text="⌨ KEYBOARD SEIZED — ~5s for testing", categ
 
 ### 5. Release
 ```
-mcp__somatic__post_message(text="⌨ Keyboard released", category="info", ttl_ms=4000)
+mcp__gateway__SENSE_post_message(text="⌨ Keyboard released", category="info", ttl_ms=4000)
 ```
 
 ## Prefer elisp

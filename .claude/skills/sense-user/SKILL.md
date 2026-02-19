@@ -2,16 +2,16 @@
 name: sense-user
 description: Sense user's current state (typing rhythm, mouse activity, engagement level) before taking significant actions. Use before complex operations, large refactors, or when user seems uncertain.
 user-invocable: false
-allowed-tools: mcp__somatic-fusion__read_state_vector, mcp__somatic-input-timing__read_timing, mcp__somatic-pointer__read_dynamics
+allowed-tools: mcp__gateway__SENSE_read_state_vector, mcp__gateway__SENSE_read_timing, mcp__gateway__SENSE_read_dynamics
 ---
 
 # Sense User State
 
-Query somatic sensors to understand user's current cognitive state before proceeding.
+Query sensor sensors to understand user's current cognitive state before proceeding.
 
 ## Quick Check
 
-Use `mcp__somatic-fusion__read_state_vector` for a compact 14-dimension state:
+Use `mcp__gateway__SENSE_read_state_vector` for a compact 14-dimension state:
 
 | Dimension | Meaning | High Value Means |
 |-----------|---------|------------------|

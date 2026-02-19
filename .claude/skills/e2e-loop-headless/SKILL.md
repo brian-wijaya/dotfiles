@@ -6,9 +6,9 @@ argument-hint: [story-file or feature-name] [--spectate]
 
 # E2E Loop — Headless
 
-Isolated end-to-end testing in a dedicated Xvfb display. Creates a headless X11 environment, runs stories with full somatic instrumentation, and tears it down when done. The user's desktop is never touched.
+Isolated end-to-end testing in a dedicated Xvfb display. Creates a headless X11 environment, runs stories with full sensor instrumentation, and tears it down when done. The user's desktop is never touched.
 
-**Display isolation is the default.** With `display.enabled = true` in `~/.config/kinetic/kinetic.toml`, kinetic auto-creates display :99 on startup and auto-attaches an xpra viewer window (tiled on a separate workspace, read-only). All display-routed tools (X11 input, screenshots, somatic sensors) automatically target :99. The user can observe the agent's display via the xpra viewer. The polybar agent module (robot icon) shows activity state: cyan=idle, orange=active, green=done.
+**Display isolation is the default.** With `display.enabled = true` in `~/.config/kinetic/kinetic.toml`, kinetic auto-creates display :99 on startup and auto-attaches an xpra viewer window (tiled on a separate workspace, read-only). All display-routed tools (X11 input, screenshots, sensor sensors) automatically target :99. The user can observe the agent's display via the xpra viewer. The polybar agent module (robot icon) shows activity state: cyan=idle, orange=active, green=done.
 
 ## Arguments
 
@@ -72,7 +72,7 @@ Store display_id for all subsequent tool calls.
 This starts:
   - Xvfb on a free display number
   - i3 window manager inside the Xvfb
-  - Per-display somatic instance (via SOMATIC_SHM_SUFFIX)
+  - Per-display sensor instance (via SENSOR_SHM_SUFFIX)
 ```
 
 All subsequent X11 tool calls MUST pass `display_id` parameter to target the isolated display, not the user's real display.
@@ -198,7 +198,7 @@ IF spectate mode:
   ACT_detach_viewer(display_id=display_id)
 
 ACT_destroy_display(display_id=display_id)
-  → Stops Xvfb, i3, somatic, xpra
+  → Stops Xvfb, i3, sensor, xpra
   → Cleans up all resources
 ```
 
@@ -234,7 +234,7 @@ Spectate: yes/no
 **Preconditions**: condition -> status
 **Steps**: step sequence
 **Expectations**: each expect with actual value
-**Somatic**: anomaly count, event diff
+**Sensor**: anomaly count, event diff
 **Screenshots**: [baseline](path) | [result](path)
 ```
 
@@ -287,7 +287,7 @@ RECALL_save_session(
 | Display | Agent's own display :99 (user watches via xpra viewer) | Isolated Xvfb (same :99, auto-created) |
 | User interaction | User observes via xpra viewer on separate workspace | None (spectate is read-only) |
 | Input speed | Human-paced (50 WPM, thinking tax) | Fast (20ms between keys) |
-| Keystroke display | screenkey / somatic-attention | Not needed (spectate optional) |
+| Keystroke display | screenkey / sensor-attention | Not needed (spectate optional) |
 | Process launch | Human keybindings only (no magic) | Direct launch allowed |
 | Pedagogical value | High (user learns by watching) | None (purely functional) |
 | Desktop interference | Temporary workspace ownership | Zero (completely isolated) |
@@ -322,7 +322,7 @@ RECALL_save_session(
 | Type | Behavior |
 |------|----------|
 | `screenshot` | SENSE_capture_screen_region with display_id |
-| `somatic_clean` | Zero geometry anomalies since baseline |
+| `sensor_clean` | Zero geometry anomalies since baseline |
 | `window_count` | Windows matching class/title via SENSE_read_window_layout with display_id |
 | `window_title` | Window title matches pattern |
 | `file` | Path exists, optionally contains pattern |
@@ -353,5 +353,5 @@ stories:
     expect:
       - screenshot: "basic-result"
       - app_status: { match: "running" }
-      - somatic_clean: true
+      - sensor_clean: true
 ```

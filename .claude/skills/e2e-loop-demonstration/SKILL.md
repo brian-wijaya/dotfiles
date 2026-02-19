@@ -6,7 +6,7 @@ argument-hint: [story-file or feature-name]
 
 # E2E Loop — Demonstration
 
-Live-display end-to-end testing with human-emulated X11 input, somatic differential QA, cohabitation protocol, keystroke visualization, and structured reporting.
+Live-display end-to-end testing with human-emulated X11 input, sensor differential QA, cohabitation protocol, keystroke visualization, and structured reporting.
 
 **Display isolation note**: Demonstrations run on the agent's own isolated display (:99), NOT on the user's live display (:0). The user observes the demonstration through the xpra viewer window, which is auto-attached by kinetic on startup and tiled on a separate workspace (read-only). The polybar agent module (robot icon) shows activity state: cyan=idle, orange=active, green=done. For Emacs testing, launch a separate daemon on :99 (e.g., `DISPLAY=:99 emacs --daemon=claude-test`) — do NOT connect to the user's Emacs at localhost:8585.
 
@@ -66,12 +66,12 @@ IDENTIFY CONTEXT (read-only queries are allowed)
   x11_get_active_window → identify terminal window ID (Claude's "body")
   This is reconnaissance, not action. No state changes yet.
 
-REGISTER BODY (if somatic-attention is available)
-  somatic-attention register_body(terminal_window_id)
+REGISTER BODY (if sensor-attention is available)
+  sensor-attention register_body(terminal_window_id)
   This anchors all visual overlays to Claude's terminal window.
   Keystroke echo activates automatically.
 
-START KEYSTROKE DISPLAY (if somatic-attention is NOT available)
+START KEYSTROKE DISPLAY (if sensor-attention is NOT available)
   If screenkey is not running, start it via its keybinding (super+F11)
   All subsequent keystrokes will be visible on screen
 
@@ -126,7 +126,7 @@ SHARED SPACE RULES:
    - The user may move, resize, or focus any window at any time
    - The user may switch to the test workspace and interact with the test subject
    - The user may be using their own Emacs instance on another workspace
-   - Query window geometry (somatic-geometry, i3_windows) before every action
+   - Query window geometry (sensor-geometry, i3_windows) before every action
      that depends on window position
 
 2. ADAPT TO ENVIRONMENTAL CHANGES
@@ -138,13 +138,13 @@ SHARED SPACE RULES:
 
 3. NEVER KILL PROCESSES
    - If a process conflict arises (e.g., two Emacs instances), do NOT pkill
-   - Instead: pause execution, notify the user via somatic-hud post_message
+   - Instead: pause execution, notify the user via sensor-hud post_message
      AND output a message in the conversation (the user may be on another workspace)
    - Wait for user response — do not block the conversation while waiting
    - The user decides what to do with their processes
 
 4. USER INPUT PRIORITY
-   - If somatic-input-capture detects physical keyboard input (source_id
+   - If sensor-input-capture detects physical keyboard input (source_id
      matches a physical device, not xdotool's virtual device), pause for 2s
    - This means the user is actively typing somewhere — don't compete
    - Resume automatically after 2s of physical input silence
@@ -158,7 +158,7 @@ SHARED SPACE RULES:
 
 6. PROCESS SAFETY ESCALATION
    When a process conflict requires user attention:
-     a. Flash warning via somatic-hud (red, 300ms)
+     a. Flash warning via sensor-hud (red, 300ms)
      b. Output message in conversation: describe the conflict, what you need
      c. Continue processing other non-conflicting stories if possible
      d. Return to blocked stories after user responds
@@ -166,7 +166,7 @@ SHARED SPACE RULES:
    and asks for help asynchronously.
 ```
 
-**Input source differentiation**: XI2 source tagging (via `source_id` in KeyEvent) distinguishes physical keyboard input (user) from virtual input (xdotool/agent). Physical device IDs are typically low numbers (3-12); xdotool creates virtual devices with higher IDs. The agent can detect user activity by filtering for physical source IDs in the somatic-input-capture stream.
+**Input source differentiation**: XI2 source tagging (via `source_id` in KeyEvent) distinguishes physical keyboard input (user) from virtual input (xdotool/agent). Physical device IDs are typically low numbers (3-12); xdotool creates virtual devices with higher IDs. The agent can detect user activity by filtering for physical source IDs in the sensor-input-capture stream.
 
 ## Human Emulation Presentation
 
@@ -222,10 +222,10 @@ The user watching should be able to replicate every action by pressing the same 
 
 A keystroke visualizer MUST be running during e2e tests. Two options:
 
-**Preferred: somatic-attention** (if available)
+**Preferred: sensor-attention** (if available)
 ```
 BEFORE TESTING:
-  register_body(terminal_window_id) via somatic-attention MCP
+  register_body(terminal_window_id) via sensor-attention MCP
   Keystroke echo activates automatically, anchored to terminal
   set_attention(target_window_id) before each story's steps
 ```
@@ -324,7 +324,7 @@ During e2e execution, all keystrokes produce audio feedback:
 - **Escape**: Cancel/dismiss sound
 - **Backspace**: Error-correction sound
 
-Audio is provided by the keystroke sound daemon (somatic-input-capture based).
+Audio is provided by the keystroke sound daemon (sensor-input-capture based).
 If the daemon is not running, note in the report that keystroke audio was unavailable.
 
 ### Principles
@@ -389,12 +389,12 @@ For each story, execute:
 
 ```
 ANNOUNCE
-  somatic-hud post_message(story.name, x=50, y=50, color="#FFFF00", duration_ms=200)
+  sensor-hud post_message(story.name, x=50, y=50, color="#FFFF00", duration_ms=200)
 
 BASELINE
-  somatic-temporal now → start_ns
-  somatic-fusion read_snapshot
-  somatic-x11-bus read_events(100)
+  sensor-temporal now → start_ns
+  sensor-fusion read_snapshot
+  sensor-x11-bus read_events(100)
   x11_screenshot → "baseline-{story-name}"
 
 PRECONDITIONS
@@ -402,22 +402,22 @@ PRECONDITIONS
     Check condition using appropriate tool
     If fail → mark BLOCKED:{reason}, skip to next story
 
-ATTENTION (if somatic-attention registered)
+ATTENTION (if sensor-attention registered)
   Determine target window for this story's steps
-  somatic-attention set_attention(target_window_id, label=story.name)
-  somatic-attention set_status("executing", message=story.name)
+  sensor-attention set_attention(target_window_id, label=story.name)
+  sensor-attention set_status("executing", message=story.name)
 
 EXECUTE
   For each step:
-    somatic-temporal now → step_start_ns
+    sensor-temporal now → step_start_ns
     Execute via X11 tools (x11_key, x11_type, x11_click)
-    somatic-temporal delta(step_start_ns) → step_duration
+    sensor-temporal delta(step_start_ns) → step_duration
 
 VERIFY
   For each expect:
     Check condition → pass/fail with actual value
-  somatic-geometry read_anomalies → diff against baseline
-  somatic-x11-bus read_events → diff against baseline
+  sensor-geometry read_anomalies → diff against baseline
+  sensor-x11-bus read_events → diff against baseline
   x11_screenshot → "result-{story-name}"
 
 RESULT
@@ -473,7 +473,7 @@ Duration: {total}s
 **Preconditions**: condition → status
 **Steps**: step sequence
 **Expectations**: each expect with actual value
-**Somatic**: anomaly count, event diff
+**Sensor**: anomaly count, event diff
 **Screenshots**: [baseline](path) | [result](path)
 ```
 
@@ -566,7 +566,7 @@ vault-rag save_session(
 | Type | Behavior |
 |------|----------|
 | `screenshot` | Named screenshot saved to report |
-| `somatic_clean` | Zero geometry anomalies since baseline |
+| `sensor_clean` | Zero geometry anomalies since baseline |
 | `window_count` | Windows matching class/title, min/max |
 | `window_title` | Window title matches pattern |
 | `file` | Path exists, optionally contains pattern |
@@ -596,5 +596,5 @@ stories:
     expect:
       - screenshot: "basic-result"
       - app_status: { match: "running" }
-      - somatic_clean: true
+      - sensor_clean: true
 ```

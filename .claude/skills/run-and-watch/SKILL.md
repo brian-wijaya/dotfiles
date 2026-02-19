@@ -2,10 +2,10 @@
 name: run-and-watch
 description: Run a command while watching X11 events and timing. Use for testing, debugging, or when you need to correlate a command's execution with desktop side effects.
 disable-model-invocation: true
-allowed-tools: mcp__somatic-temporal__now, mcp__somatic-temporal__delta, mcp__somatic-x11-bus__read_events, mcp__somatic-hud__flash_text, Bash
+allowed-tools: mcp__gateway__ACT_now, mcp__gateway__ACT_delta, mcp__gateway__SENSE_read_events, mcp__gateway__ACT_flash_text, Bash
 ---
 
-# Run Command with Somatic Observation
+# Run Command with Sensor Observation
 
 Execute a command while capturing timing and X11 events to understand its side effects.
 
@@ -17,12 +17,12 @@ Execute a command while capturing timing and X11 events to understand its side e
 
 1. **Flash start indicator**:
    ```
-   mcp__somatic-hud__flash_text(text="WATCHING", x=50, y=50, color="#FFFF00", duration_ms=200)
+   mcp__gateway__ACT_flash_text(text="WATCHING", x=50, y=50, color="#FFFF00", duration_ms=200)
    ```
 
 2. **Mark start time**:
    ```
-   mcp__somatic-temporal__now → start_ns
+   mcp__gateway__ACT_now → start_ns
    ```
 
 3. **Run the command**:
@@ -32,12 +32,12 @@ Execute a command while capturing timing and X11 events to understand its side e
 
 4. **Mark end time and calculate duration**:
    ```
-   mcp__somatic-temporal__delta(from_ns=start_ns)
+   mcp__gateway__ACT_delta(from_ns=start_ns)
    ```
 
 5. **Query X11 events during execution**:
    ```
-   mcp__somatic-x11-bus__read_events(count=200)
+   mcp__gateway__SENSE_read_events(count=200)
    Filter to events with timestamp >= start_ns
    ```
 
@@ -49,7 +49,7 @@ Execute a command while capturing timing and X11 events to understand its side e
 
 7. **Flash completion**:
    ```
-   mcp__somatic-hud__flash_text(text="DONE", x=50, y=50, color="#00FF00", duration_ms=200)
+   mcp__gateway__ACT_flash_text(text="DONE", x=50, y=50, color="#00FF00", duration_ms=200)
    ```
 
 ## Example Output

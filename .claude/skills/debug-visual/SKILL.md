@@ -1,10 +1,10 @@
 ---
 name: debug-visual
-description: Debug visual issues (flickering, focus stealing, layout glitches) using somatic X11 perception. Use when something looks wrong on screen.
-allowed-tools: mcp__somatic-temporal__now, mcp__somatic-temporal__delta, mcp__somatic-x11-bus__read_events, mcp__somatic-x11-bus__read_focus, mcp__somatic-hud__flash_text
+description: Debug visual issues (flickering, focus stealing, layout glitches) using sensor X11 perception. Use when something looks wrong on screen.
+allowed-tools: mcp__gateway__ACT_now, mcp__gateway__ACT_delta, mcp__gateway__SENSE_read_events, mcp__gateway__SENSE_read_focus, mcp__gateway__ACT_flash_text
 ---
 
-# Debug Visual Issue with Somatic Perception
+# Debug Visual Issue with Sensor Perception
 
 You have access to the X11 sensory bus which captures all desktop events with nanosecond timestamps.
 
@@ -14,14 +14,14 @@ You have access to the X11 sensory bus which captures all desktop events with na
 
 1. **Mark time** before reproduction:
    ```
-   mcp__somatic-temporal__now → note the timestamp
+   mcp__gateway__ACT_now → note the timestamp
    ```
 
 2. **Ask user to reproduce** the visual issue
 
 3. **Query X11 events** that occurred:
    ```
-   mcp__somatic-x11-bus__read_events(count=100)
+   mcp__gateway__SENSE_read_events(count=100)
    ```
 
 4. **Analyze for patterns**:
@@ -31,14 +31,14 @@ You have access to the X11 sensory bus which captures all desktop events with na
    - **Layout thrashing**: Multiple ConfigureNotify with changing x,y,w,h
 
 5. **Report findings** with:
-   - Exact timestamps (use `mcp__somatic-temporal__delta` to show human-readable intervals)
+   - Exact timestamps (use `mcp__gateway__ACT_delta` to show human-readable intervals)
    - Window IDs involved
    - Event sequence that caused the issue
    - Likely culprit
 
 6. **Flash confirmation** when done:
    ```
-   mcp__somatic-hud__flash_text(text="DEBUG COMPLETE", x=100, y=100, color="#00FF00")
+   mcp__gateway__ACT_flash_text(text="DEBUG COMPLETE", x=100, y=100, color="#00FF00")
    ```
 
 ## Event Types to Watch

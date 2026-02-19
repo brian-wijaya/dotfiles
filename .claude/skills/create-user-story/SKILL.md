@@ -96,7 +96,7 @@ stories:
    - `emacs_mode: { match: "pattern" }` — mode check
    - `window_count: { class: "...", min: N }` — window count
    - `bash: { cmd: "...", match: "pattern" }` — command output
-   - `somatic_clean: true` — no visual anomalies
+   - `sensor_clean: true` — no visual anomalies
 
 6. **Key naming:** Use xdotool names for special keys:
    - `space` not `SPC`, `Return` not `RET`, `Escape` not `ESC`
