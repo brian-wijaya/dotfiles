@@ -1,0 +1,618 @@
+vocabulary:
+  circuit_breaker: "Per-tool-per-display state machine that prevents repeated invocation of a failing tool. Three states: CLOSED (healthy, requests pass), OPEN (tripped, requests rejected), HALF_OPEN (probing, one request allowed). Singleton instance keyed by 'toolName:displayId'."
+  failure_threshold: "Number of failures (3) within the failure window required to trip the breaker from CLOSED to OPEN."
+  failure_window_ms: "Sliding time window (60,000ms / 60s) within which failures are counted. Failures older than this are evicted before threshold comparison."
+  open_duration_ms: "Duration (120,000ms / 120s) a breaker remains OPEN before auto-transitioning to HALF_OPEN to allow a probe request."
+  half_open_probe: "The single request allowed through when a breaker enters HALF_OPEN. Success resets to CLOSED; failure re-trips to OPEN."
+  breaker_key: "Composite key 'toolName:displayId' identifying a unique circuit breaker instance. Ensures per-tool-per-display isolation."
+  reentrant_lock: "java.util.concurrent.locks.ReentrantLock guarding each breaker's state transitions. One lock per breaker key. Prevents concurrent mutation of failure list, state, and timestamps."
+  session_resurrection: "Process of transparently creating a new MCP session when a request targets a stale/expired session, then replaying the original request against the new session."
+  session_resurrection_filter: "Jakarta Servlet Filter in the gateway's HTTP pipeline that intercepts 404 'Session not found' responses, performs an initialize+notifications/initialized handshake to obtain a new session, caches the old→new mapping, and replays the original request."
+  resurrection_lock: "Per-old-session-ID lock (ConcurrentHashMap of ReentrantLocks) ensuring only one thread performs the resurrection handshake for a given stale session. Other threads for the same session block until the mapping is cached."
+  resurrected_sessions: "Cache mapping old session IDs to new session IDs. Provides fast-path bypass of the full resurrection handshake on subsequent requests."
+  initialize_handshake: "Two-phase MCP session creation: POST initialize (returns new session ID + capabilities), then POST notifications/initialized (confirms readiness). Protocol version '2025-03-26'."
+  request_replay: "After resurrection, the original HTTP request body is replayed against the new session ID. The response is returned to the caller as if the original session were still alive."
+
+metadata:
+  feature: Gateway Resilience
+  component: gateway/server
+  date: "2026-02-19"
+
+stories:
+  # ── CircuitBreaker: Normal Operation ──
+
+  - name: closed-state-allows-requests
+    description: >
+      A fresh circuit breaker in CLOSED state allows all requests through.
+      No failures have been recorded; allowRequest() returns true unconditionally.
+    preconditions:
+      - "Gateway is running"
+      - "No prior failures recorded for tool 'ACT_send_keystroke' on display '99'"
+    steps:
+      - "Call allowRequest('ACT_send_keystroke:99')"
+      - "Breaker has no failure history for this key"
+      - "State is CLOSED (default)"
+    verify:
+      - "allowRequest() returns true"
+      - "getState('ACT_send_keystroke:99') == CLOSED"
+      - "No lock contention — lock is acquired and released cleanly"
+
+  - name: closed-state-tolerates-failures-below-threshold
+    description: >
+      Two failures within the 60s window do not trip the breaker.
+      The breaker remains CLOSED and continues allowing requests.
+    preconditions:
+      - "Breaker for 'SENSE_capture_screen_region:99' is in CLOSED state"
+      - "No prior failures"
+    steps:
+      - "recordFailure('SENSE_capture_screen_region:99') — failure 1"
+      - "recordFailure('SENSE_capture_screen_region:99') — failure 2, within 60s of failure 1"
+      - "Call allowRequest('SENSE_capture_screen_region:99')"
+    verify:
+      - "getState() == CLOSED (2 < FAILURE_THRESHOLD of 3)"
+      - "allowRequest() returns true"
+      - "Failure list contains exactly 2 timestamps"
+
+  - name: record-success-resets-failure-count
+    description: >
+      A successful invocation after partial failures resets the failure list,
+      preventing accumulation toward the threshold across intermittent errors.
+    preconditions:
+      - "Breaker for 'ACT_evaluate_elisp:99' is CLOSED with 2 recorded failures"
+    steps:
+      - "recordSuccess('ACT_evaluate_elisp:99')"
+      - "recordFailure('ACT_evaluate_elisp:99') — new failure 1"
+      - "recordFailure('ACT_evaluate_elisp:99') — new failure 2"
+      - "Call allowRequest('ACT_evaluate_elisp:99')"
+    verify:
+      - "getState() == CLOSED — the success cleared the slate, so only 2 new failures exist"
+      - "allowRequest() returns true"
+      - "Failure list contains exactly 2 timestamps (post-reset)"
+
+  # ── CircuitBreaker: Trip to OPEN ──
+
+  - name: trip-open-on-third-failure-within-window
+    description: >
+      Three failures within the 60s sliding window trip the breaker to OPEN.
+      Subsequent requests are rejected immediately without invoking the tool.
+    preconditions:
+      - "Breaker for 'ACT_send_click:99' is CLOSED, no prior failures"
+    steps:
+      - "recordFailure('ACT_send_click:99') at T+0s"
+      - "recordFailure('ACT_send_click:99') at T+20s"
+      - "recordFailure('ACT_send_click:99') at T+40s (all within 60s window)"
+      - "Call allowRequest('ACT_send_click:99')"
+    verify:
+      - "getState() == OPEN"
+      - "allowRequest() returns false"
+      - "openedAt timestamp is approximately T+40s (time of third failure)"
+
+  - name: open-state-rejects-all-requests
+    description: >
+      While OPEN and before OPEN_DURATION_MS elapses, every call to
+      allowRequest() returns false. No probe is attempted.
+    preconditions:
+      - "Breaker for 'ACT_insert_text:99' is OPEN, tripped at T+0"
+    steps:
+      - "At T+30s: allowRequest('ACT_insert_text:99')"
+      - "At T+60s: allowRequest('ACT_insert_text:99')"
+      - "At T+119s: allowRequest('ACT_insert_text:99')"
+    verify:
+      - "All three calls return false"
+      - "getState() == OPEN at each check"
+      - "No state transition occurs before 120s"
+
+  # ── CircuitBreaker: Sliding Window Eviction ──
+
+  - name: failures-outside-window-do-not-count
+    description: >
+      Failures older than FAILURE_WINDOW_MS (60s) are evicted from the list
+      before threshold comparison. Three failures spread over >60s don't trip.
+    preconditions:
+      - "Breaker for 'ACT_navigate_buffer:99' is CLOSED, no prior failures"
+    steps:
+      - "recordFailure at T+0s"
+      - "recordFailure at T+30s"
+      - "Wait until T+61s (first failure is now >60s old)"
+      - "recordFailure at T+61s"
+      - "Call allowRequest('ACT_navigate_buffer:99')"
+    verify:
+      - "getState() == CLOSED — the T+0 failure was evicted, leaving only 2 within window"
+      - "allowRequest() returns true"
+      - "Failure list contains 2 timestamps: T+30s and T+61s"
+
+  - name: all-failures-expire-breaker-stays-closed
+    description: >
+      If all failures age out past the 60s window without reaching threshold,
+      the breaker remains CLOSED as if no failures occurred.
+    preconditions:
+      - "Breaker for 'SENSE_read_buffer:99' is CLOSED with 2 failures recorded at T+0"
+    steps:
+      - "Wait until T+61s (both failures are now outside the window)"
+      - "Call allowRequest('SENSE_read_buffer:99')"
+    verify:
+      - "getState() == CLOSED"
+      - "allowRequest() returns true"
+      - "After eviction, failure list is empty"
+
+  # ── CircuitBreaker: OPEN → HALF_OPEN Transition ──
+
+  - name: auto-transition-to-half-open-after-120s
+    description: >
+      After OPEN_DURATION_MS (120s) elapses, the next allowRequest() call
+      transitions the breaker to HALF_OPEN and returns true to allow a probe.
+    preconditions:
+      - "Breaker for 'ACT_send_keystroke:host' is OPEN, tripped at T+0"
+    steps:
+      - "At T+119s: allowRequest() — still within open duration"
+      - "At T+120s: allowRequest() — open duration has elapsed"
+    verify:
+      - "T+119s: returns false, state == OPEN"
+      - "T+120s: returns true, state == HALF_OPEN"
+      - "Only one probe request is permitted (the first caller at or after 120s)"
+
+  # ── CircuitBreaker: HALF_OPEN Resolution ──
+
+  - name: half-open-success-resets-to-closed
+    description: >
+      A successful probe in HALF_OPEN state resets the breaker to CLOSED.
+      The failure list is cleared. Normal traffic resumes.
+    preconditions:
+      - "Breaker for 'ACT_execute_command:99' is in HALF_OPEN state"
+    steps:
+      - "Tool invocation succeeds"
+      - "recordSuccess('ACT_execute_command:99')"
+      - "Call allowRequest('ACT_execute_command:99')"
+    verify:
+      - "getState() == CLOSED"
+      - "allowRequest() returns true"
+      - "Failure list is empty"
+      - "openedAt is cleared/reset"
+
+  - name: half-open-failure-retrips-to-open
+    description: >
+      A failed probe in HALF_OPEN state immediately re-trips the breaker
+      to OPEN. Another 120s cooldown begins from the re-trip time.
+    preconditions:
+      - "Breaker for 'ACT_execute_command:99' entered HALF_OPEN at T+120s"
+    steps:
+      - "Tool invocation fails at T+121s"
+      - "recordFailure('ACT_execute_command:99') at T+121s"
+      - "Call allowRequest('ACT_execute_command:99') at T+122s"
+    verify:
+      - "getState() == OPEN"
+      - "allowRequest() returns false"
+      - "openedAt is approximately T+121s (re-trip time, not original trip time)"
+      - "Must wait until T+241s (121+120) for next HALF_OPEN transition"
+
+  # ── CircuitBreaker: Isolation ──
+
+  - name: per-tool-per-display-isolation
+    description: >
+      Circuit breakers are keyed by 'toolName:displayId'. Tripping the breaker
+      for one tool on one display has no effect on other tools or other displays.
+    preconditions:
+      - "Gateway running with displays '99' and 'host'"
+      - "All breakers in CLOSED state"
+    steps:
+      - "Trip breaker for 'ACT_send_keystroke:99' (3 failures within 60s)"
+      - "Call allowRequest('ACT_send_keystroke:host') — same tool, different display"
+      - "Call allowRequest('ACT_send_click:99') — different tool, same display"
+      - "Call allowRequest('ACT_evaluate_elisp:99') — different tool, same display"
+    verify:
+      - "getState('ACT_send_keystroke:99') == OPEN"
+      - "getState('ACT_send_keystroke:host') == CLOSED"
+      - "getState('ACT_send_click:99') == CLOSED"
+      - "getState('ACT_evaluate_elisp:99') == CLOSED"
+      - "allowRequest returns false only for 'ACT_send_keystroke:99'"
+
+  - name: get-all-states-returns-only-non-closed
+    description: >
+      getAllStates() returns a map of all breaker keys that are NOT in CLOSED state,
+      providing an operational dashboard of degraded tools.
+    preconditions:
+      - "Breaker 'ACT_send_click:99' is OPEN"
+      - "Breaker 'ACT_insert_text:host' is HALF_OPEN"
+      - "Breaker 'SENSE_read_buffer:99' is CLOSED (healthy)"
+    steps:
+      - "Call getAllStates()"
+    verify:
+      - "Result map contains 'ACT_send_click:99' → OPEN"
+      - "Result map contains 'ACT_insert_text:host' → HALF_OPEN"
+      - "Result map does NOT contain 'SENSE_read_buffer:99' (CLOSED breakers omitted)"
+
+  # ── CircuitBreaker: Concurrency ──
+
+  - name: concurrent-failures-under-reentrant-lock
+    description: >
+      Multiple threads recording failures concurrently for the same breaker key
+      do not corrupt state. ReentrantLock serializes access to the failure list
+      and state transitions.
+    preconditions:
+      - "Breaker for 'ACT_send_keystroke:99' is CLOSED"
+      - "10 concurrent threads ready to call recordFailure simultaneously"
+    steps:
+      - "All 10 threads call recordFailure('ACT_send_keystroke:99') concurrently"
+      - "Some threads may also call allowRequest() concurrently"
+    verify:
+      - "No ConcurrentModificationException or data corruption"
+      - "getState() is deterministically OPEN (>=3 failures within window)"
+      - "Failure list size is consistent (no lost or duplicated entries)"
+      - "No thread deadlocks — ReentrantLock is non-recursive per key, one lock per key"
+
+  - name: concurrent-different-keys-no-contention
+    description: >
+      Operations on different breaker keys acquire different locks and never
+      contend with each other. Parallelism is preserved across tools/displays.
+    preconditions:
+      - "Two threads: T1 targets 'ACT_send_click:99', T2 targets 'ACT_send_click:host'"
+    steps:
+      - "T1 calls recordFailure('ACT_send_click:99') — acquires lock for key ':99'"
+      - "T2 calls recordFailure('ACT_send_click:host') simultaneously — acquires lock for key ':host'"
+    verify:
+      - "Both threads complete without blocking on each other"
+      - "Each breaker's failure list is independent"
+      - "No cross-contamination between keys"
+
+  # ── CircuitBreaker: Singleton ──
+
+  - name: singleton-instance-identity
+    description: >
+      CircuitBreaker.getInstance() always returns the same instance.
+      All tool handlers share one breaker registry.
+    preconditions:
+      - "Gateway JVM is running"
+    steps:
+      - "Call CircuitBreaker.getInstance() from thread A"
+      - "Call CircuitBreaker.getInstance() from thread B"
+      - "Record a failure via instance A"
+      - "Query state via instance B"
+    verify:
+      - "instanceA == instanceB (reference equality)"
+      - "Failure recorded via A is visible via B's getState()"
+      - "Internal ConcurrentHashMap is shared, not duplicated"
+
+  # ── CircuitBreaker: Edge Cases ──
+
+  - name: rapid-fire-failures-exact-threshold
+    description: >
+      Exactly 3 failures at near-identical timestamps (sub-millisecond apart)
+      correctly trip the breaker. No off-by-one on threshold comparison.
+    preconditions:
+      - "Breaker for 'ACT_send_click:99' is CLOSED"
+    steps:
+      - "recordFailure() three times in a tight loop (< 1ms total)"
+    verify:
+      - "getState() == OPEN"
+      - "Failure list contains exactly 3 entries"
+      - "allowRequest() returns false"
+
+  - name: half-open-allows-exactly-one-probe
+    description: >
+      When multiple threads call allowRequest() at the moment the breaker
+      transitions to HALF_OPEN, only one thread receives true. The rest
+      receive false, preventing probe stampede.
+    preconditions:
+      - "Breaker for 'ACT_execute_command:99' is OPEN, tripped at T+0"
+      - "5 threads waiting to call allowRequest() at T+120s"
+    steps:
+      - "At T+120s, all 5 threads call allowRequest() concurrently"
+    verify:
+      - "Exactly one thread receives true (the probe)"
+      - "Remaining 4 threads receive false"
+      - "State is HALF_OPEN, not flickering between states"
+
+  # ══════════════════════════════════════════════════════
+  # ── SessionResurrectionFilter ──
+  # ══════════════════════════════════════════════════════
+
+  # ── Normal Pass-Through ──
+
+  - name: fresh-session-passes-through-unmodified
+    description: >
+      A request targeting a valid, active MCP session receives a normal
+      response. The filter does not intercept or modify anything.
+    preconditions:
+      - "Gateway HTTP daemon is running on 127.0.0.1:8372"
+      - "Active MCP session exists with ID 'session-abc-123'"
+      - "SessionResurrectionFilter is installed in the servlet filter chain"
+    steps:
+      - "Client sends POST /mcp with Mcp-Session-Id: session-abc-123"
+      - "Request body contains a valid tools/call JSON-RPC payload"
+      - "Downstream handler processes normally and returns 200"
+    verify:
+      - "Response status is 200"
+      - "Response body is the tool result, unmodified"
+      - "No resurrection handshake was attempted"
+      - "resurrectedSessions cache was not consulted for this session ID"
+      - "No resurrection lock was acquired"
+
+  - name: non-404-error-passes-through-unmodified
+    description: >
+      Errors other than 404 (e.g., 500 Internal Server Error, 400 Bad Request)
+      are passed through without triggering resurrection logic.
+    preconditions:
+      - "Gateway HTTP daemon is running"
+      - "Request will trigger a 500 error from the downstream handler"
+    steps:
+      - "Client sends malformed JSON-RPC to /mcp with Mcp-Session-Id: session-xyz"
+      - "Downstream handler returns 500"
+    verify:
+      - "Response status is 500 (not intercepted)"
+      - "No resurrection handshake was attempted"
+      - "resurrectionLocks map has no entry for 'session-xyz'"
+
+  - name: 404-without-session-not-found-passes-through
+    description: >
+      A 404 response that does NOT contain the 'Session not found' marker
+      passes through unmodified. The filter only triggers on the specific
+      MCP session expiration message.
+    preconditions:
+      - "Gateway HTTP daemon is running"
+      - "Request targets a non-existent endpoint"
+    steps:
+      - "Client sends GET /nonexistent with Mcp-Session-Id: session-valid"
+      - "Server returns 404 with body 'Not Found' (no 'Session not found' substring)"
+    verify:
+      - "Response status is 404, passed through as-is"
+      - "No resurrection attempted"
+
+  # ── Resurrection Handshake ──
+
+  - name: stale-session-triggers-resurrection
+    description: >
+      When a request receives 404 'Session not found', the filter performs
+      the full initialize + notifications/initialized handshake, caches the
+      mapping, and replays the original request against the new session.
+    preconditions:
+      - "Gateway HTTP daemon is running"
+      - "Session 'session-old-001' has expired on the server"
+      - "No cached mapping exists for 'session-old-001'"
+    steps:
+      - "Client sends POST /mcp with Mcp-Session-Id: session-old-001"
+      - "Request body: {jsonrpc: '2.0', method: 'tools/call', params: {...}, id: 1}"
+      - "Downstream returns 404 with body containing 'Session not found'"
+      - "Filter initiates resurrection:"
+      - "  1. POST /mcp with initialize payload (protocolVersion: '2025-03-26', capabilities, clientInfo)"
+      - "  2. Server returns 200 with new Mcp-Session-Id header: 'session-new-002'"
+      - "  3. POST /mcp with notifications/initialized payload using session-new-002"
+      - "  4. Server returns 200 (handshake complete)"
+      - "Filter caches mapping: session-old-001 → session-new-002"
+      - "Filter replays original request body against session-new-002"
+    verify:
+      - "Client receives the replayed response (200 with tool result)"
+      - "Response includes new Mcp-Session-Id header: 'session-new-002'"
+      - "resurrectedSessions cache contains session-old-001 → session-new-002"
+      - "Original request body was preserved byte-for-byte in the replay"
+      - "Protocol version in initialize payload is '2025-03-26'"
+
+  - name: request-body-preserved-through-resurrection
+    description: >
+      The filter must buffer and replay the original request body exactly.
+      Large payloads, binary content, and multi-byte UTF-8 sequences survive
+      the buffer-replay cycle without corruption.
+    preconditions:
+      - "Session 'session-old-003' has expired"
+      - "No cached mapping exists"
+    steps:
+      - "Client sends POST /mcp with a large JSON-RPC body (e.g., 50KB base64 image in params)"
+      - "Mcp-Session-Id: session-old-003"
+      - "Downstream returns 404 'Session not found'"
+      - "Filter resurrects and replays"
+    verify:
+      - "Replayed request body is byte-identical to original"
+      - "Content-Length header in replay matches original"
+      - "No truncation, no double-encoding, no charset mangling"
+      - "Tool call succeeds with the full payload"
+
+  # ── Cached Mapping Fast Path ──
+
+  - name: cached-mapping-skips-handshake
+    description: >
+      When a second request arrives for an already-resurrected session,
+      the cached old→new mapping is used immediately. No initialize
+      handshake is performed; the request is rewritten and forwarded.
+    preconditions:
+      - "resurrectedSessions cache contains session-old-001 → session-new-002"
+      - "session-new-002 is active on the server"
+    steps:
+      - "Client sends POST /mcp with Mcp-Session-Id: session-old-001"
+      - "Filter checks resurrectedSessions cache — hit"
+      - "Filter rewrites session ID to session-new-002 and forwards"
+    verify:
+      - "Response is 200 (tool result from session-new-002)"
+      - "No POST to initialize endpoint was made"
+      - "No resurrection lock was acquired"
+      - "Latency is near-zero overhead (cache lookup only)"
+
+  - name: cached-mapping-target-expired-triggers-re-resurrection
+    description: >
+      If the cached new session has also expired, the filter must detect
+      the second 404 and perform a fresh resurrection, updating the cache.
+    preconditions:
+      - "resurrectedSessions cache contains session-old-001 → session-new-002"
+      - "session-new-002 has also expired"
+    steps:
+      - "Client sends POST /mcp with Mcp-Session-Id: session-old-001"
+      - "Filter rewrites to session-new-002, forwards"
+      - "Downstream returns 404 'Session not found' for session-new-002"
+      - "Filter performs fresh resurrection handshake"
+      - "New session-new-003 is created"
+    verify:
+      - "Client receives successful response from session-new-003"
+      - "resurrectedSessions cache now maps session-old-001 → session-new-003"
+      - "Old mapping to session-new-002 is overwritten"
+
+  # ── Concurrent Resurrection ──
+
+  - name: concurrent-resurrection-serialized-by-lock
+    description: >
+      When multiple requests for the same stale session arrive simultaneously,
+      only one thread performs the resurrection handshake. Others block on
+      the per-session lock and use the cached mapping once available.
+    preconditions:
+      - "Session 'session-old-005' has expired"
+      - "No cached mapping exists"
+      - "5 concurrent requests arrive with Mcp-Session-Id: session-old-005"
+    steps:
+      - "Thread T1 acquires resurrectionLock for 'session-old-005'"
+      - "T1 performs initialize + notifications/initialized handshake"
+      - "Threads T2-T5 block on resurrectionLock for 'session-old-005'"
+      - "T1 caches mapping: session-old-005 → session-new-006"
+      - "T1 releases lock"
+      - "T2-T5 acquire lock, find cached mapping, use it directly"
+    verify:
+      - "Exactly one initialize handshake was performed (not 5)"
+      - "All 5 requests receive responses from session-new-006"
+      - "No race condition in cache writes"
+      - "resurrectionLocks map contains entry for 'session-old-005'"
+
+  - name: concurrent-different-sessions-no-contention
+    description: >
+      Resurrection of different stale sessions proceeds in parallel.
+      Per-session locks do not interfere across session IDs.
+    preconditions:
+      - "Sessions 'session-A' and 'session-B' have both expired"
+      - "No cached mappings exist"
+    steps:
+      - "Thread T1 sends request with Mcp-Session-Id: session-A"
+      - "Thread T2 sends request with Mcp-Session-Id: session-B simultaneously"
+      - "T1 acquires lock for 'session-A', T2 acquires lock for 'session-B'"
+      - "Both perform resurrection handshakes in parallel"
+    verify:
+      - "Two separate initialize handshakes complete"
+      - "Neither thread blocks on the other's lock"
+      - "Both mappings are cached independently"
+      - "Total time is approximately one handshake duration (parallel), not two (serial)"
+
+  # ── Resurrection Failure ──
+
+  - name: resurrection-init-returns-non-200-passes-through-404
+    description: >
+      If the initialize request during resurrection returns a non-200 status
+      (e.g., 503 Service Unavailable), the filter gives up and passes through
+      the original 404 to the client.
+    preconditions:
+      - "Session 'session-old-010' has expired"
+      - "The MCP server is in a degraded state, returning 503 for new sessions"
+    steps:
+      - "Client sends POST /mcp with Mcp-Session-Id: session-old-010"
+      - "Downstream returns 404 'Session not found'"
+      - "Filter attempts initialize handshake"
+      - "Initialize POST returns 503"
+      - "Filter abandons resurrection"
+    verify:
+      - "Client receives the original 404 response"
+      - "No mapping is cached for session-old-010"
+      - "resurrectionLock for session-old-010 is released (no lock leak)"
+      - "No notifications/initialized request was sent"
+
+  - name: resurrection-notification-fails-passes-through-404
+    description: >
+      If initialize succeeds (200) but notifications/initialized fails,
+      the resurrection is considered incomplete. The original 404 is returned.
+    preconditions:
+      - "Session 'session-old-011' has expired"
+      - "Server accepts initialize but rejects notifications/initialized"
+    steps:
+      - "Client sends POST /mcp with Mcp-Session-Id: session-old-011"
+      - "Downstream returns 404 'Session not found'"
+      - "Filter sends initialize — server returns 200 with new session ID"
+      - "Filter sends notifications/initialized — server returns 500"
+      - "Filter abandons resurrection"
+    verify:
+      - "Client receives the original 404"
+      - "No mapping is cached (partial resurrection is not cached)"
+      - "Lock is released cleanly"
+      - "The orphaned new session may exist server-side but is not tracked"
+
+  - name: resurrection-replay-fails-returns-replay-error
+    description: >
+      If resurrection succeeds but the replayed request itself fails (e.g.,
+      tool execution error returning 500), that error is returned to the client
+      rather than the original 404.
+    preconditions:
+      - "Session 'session-old-012' has expired"
+      - "Resurrection will succeed, but the tool call will fail server-side"
+    steps:
+      - "Client sends POST /mcp with Mcp-Session-Id: session-old-012"
+      - "Downstream returns 404 'Session not found'"
+      - "Filter completes resurrection successfully — new session-new-013"
+      - "Filter replays request against session-new-013"
+      - "Replayed request returns 500 (tool execution error)"
+    verify:
+      - "Client receives 500 from the replay, not the original 404"
+      - "Mapping session-old-012 → session-new-013 IS cached (resurrection succeeded)"
+      - "Subsequent requests for session-old-012 use cached mapping"
+
+  # ── Response Header ──
+
+  - name: new-session-id-in-response-header
+    description: >
+      After successful resurrection, the response includes the new session ID
+      in the Mcp-Session-Id header so the client can update its records.
+    preconditions:
+      - "Session 'session-old-020' has expired"
+    steps:
+      - "Client sends POST /mcp with Mcp-Session-Id: session-old-020"
+      - "Resurrection succeeds, new session is 'session-new-021'"
+      - "Replay succeeds with 200"
+    verify:
+      - "Response contains header Mcp-Session-Id: session-new-021"
+      - "Client can use session-new-021 for future requests directly"
+      - "Using session-new-021 directly bypasses resurrection entirely"
+
+  # ── Edge Cases ──
+
+  - name: request-without-session-header-passes-through
+    description: >
+      A request with no Mcp-Session-Id header (e.g., the initial initialize
+      request itself) passes through the filter untouched.
+    preconditions:
+      - "Gateway HTTP daemon is running"
+      - "SessionResurrectionFilter is installed"
+    steps:
+      - "Client sends POST /mcp with no Mcp-Session-Id header"
+      - "Body is an initialize request"
+    verify:
+      - "Request passes through to downstream handler unmodified"
+      - "Response is the normal initialize response"
+      - "No resurrection logic is triggered"
+      - "No locks acquired, no cache consulted"
+
+  - name: resurrection-lock-released-on-exception
+    description: >
+      If an unexpected exception occurs during the resurrection handshake
+      (e.g., IOException during HTTP call), the per-session lock is released
+      and no stale lock entry blocks future attempts.
+    preconditions:
+      - "Session 'session-old-030' has expired"
+      - "Network error will occur during initialize request"
+    steps:
+      - "Client sends request with Mcp-Session-Id: session-old-030"
+      - "Downstream returns 404"
+      - "Filter acquires lock for session-old-030"
+      - "Initialize HTTP call throws IOException"
+      - "Exception propagates through finally block"
+    verify:
+      - "Lock for session-old-030 is released (finally block)"
+      - "A subsequent request for session-old-030 can acquire the lock and retry"
+      - "No deadlock state — lock is not held permanently"
+      - "Client receives an error response (404 or 500 depending on exception handling)"
+
+  - name: filter-ordering-runs-before-mcp-handler
+    description: >
+      The SessionResurrectionFilter is positioned in the filter chain to
+      intercept responses AFTER the MCP handler runs, allowing it to inspect
+      the 404 status. It wraps the response, not the request.
+    preconditions:
+      - "Gateway servlet filter chain is configured"
+      - "SessionResurrectionFilter is registered"
+    steps:
+      - "Inspect filter chain ordering"
+      - "Send request through the full pipeline"
+    verify:
+      - "SessionResurrectionFilter.doFilter() calls chain.doFilter() to invoke downstream"
+      - "Response status is captured via response wrapper after downstream returns"
+      - "Filter can read and modify the response before it reaches the client"
+      - "Request body is buffered before chain.doFilter() (consumed by downstream, needed for replay)"

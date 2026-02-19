@@ -1,0 +1,1148 @@
+vocabulary:
+  worldview: >
+    Four-layer compressed representation of user knowledge state.
+    L1 Environmental: env/preference key-value pairs (~200 tokens, rule-based).
+    L2 Project: per-project decision/outcome summaries (~400 tokens, rule-based).
+    L3 Narrative: LLM-summarized active threads, open questions, loose ends (~800 tokens).
+    L4 History: on-demand replay, not materialized.
+    Token budget: MAX_WORLDVIEW_TOKENS = 1400.
+  agm-belief-revision: >
+    Alchourrón–Gärdenfors–Makinson framework for rational belief change.
+    Levi Identity: contract (remove old belief) then expand (add new assertion).
+    Applied per ontology category: beliefs.constraints (high scrutiny),
+    beliefs.preferences (user-mediated), models.* (last-write-wins),
+    heuristics.* (merge if compatible, flag if conflicting).
+  contradiction: >
+    Record with existingBelief, newAssertion, sourceEventId, ontologyCategory,
+    description. Detected by rule-based env key conflicts + LLM-enhanced comparison
+    of recent DECISION events against established L2/L3 patterns.
+  resolution-result: >
+    Record with action (description), eventsCreated (list of Event), manualReviewNeeded,
+    contracted (old belief removed), expanded (new assertion added).
+    Auto-resolved contradictions (models.*) are filtered out of final worldview.
+  domain-freshness: >
+    Classification of a knowledge domain based on recent event activity and drift.
+    STABLE: >=2 events in 7 days, drift ratio < 0.3.
+    ACTIVE: any event count, drift ratio >= 0.3 OR has DECISION/OUTCOME events.
+    STALE: <2 events in 7 days, low drift.
+    Drift = ratio of unique sub-tags to total events.
+  specificity-scoring: >
+    Heuristic for selecting the best env/preference event from multiple candidates.
+    Env: +2 for numbers in statement, +1 for length 30-150, +1 for most recent.
+    Preference: +2 for action words (always/never/chose/prefer), +1 for length 30-150, +1 for most recent.
+  materialization-event: >
+    OBSERVATION event emitted after each materialization cycle recording which events
+    were consumed. Session ID "worldview-materializer", tags topic:worldview + topic:materialization.
+    References all consumed event IDs. Closes the Fragment-to-Patch lifecycle.
+  bootstrap-fallback: >
+    When no events exist in the chronicle, layers fall back to file-based extraction.
+    L1: CLAUDE.md (env facts + strong preferences with NEVER/ALWAYS/MUST).
+    L2: MEMORY.md (## headings + project-related bold entries).
+    L3: Session summaries from SQLite + MEMORY.md loose ends.
+  trim-order: >
+    When worldview exceeds 1400 tokens, layers are trimmed progressively:
+    L3 first (summary to 3200 chars, threads to 8, questions/looseEnds to 3),
+    then L2 (max 5 projects, 5 decisions each),
+    then L1 (max 15 env, 10 preferences).
+
+metadata:
+  feature: Worldview Materialization
+  component: datapipeline/projection
+  date: 2026-02-19
+
+stories:
+  # ── L1: Environmental Layer ──
+
+  - name: l1-happy-path-env-and-preferences
+    description: >
+      L1 materialization extracts env: and preference: tagged events from SQLite,
+      groups by sub-key, scores candidates, and returns an L1Environmental record
+      with both environment and preferences maps populated.
+    preconditions:
+      - "SQLite contains env: tagged events for keys 'display', 'java-version', 'cpu'"
+      - "SQLite contains preference: tagged events for keys 'workflow', 'tooling'"
+      - "Multiple events exist per key (candidates to score)"
+    steps:
+      - "materializeL1() calls sqlite.queryEventsByTag('env:', 50) returning events ordered by timestamp DESC"
+      - "Events are grouped by sub-key into envCandidates LinkedHashMap"
+      - "selectBestEnvEvent() scores each candidate and picks highest score"
+      - "sqlite.queryEventsByTag('preference:', 50) returns preference events"
+      - "selectBestPreferenceEvent() scores and picks best per sub-key"
+      - "Values are truncated to 200 chars via truncate()"
+    verify:
+      - "L1Environmental.environment() contains entries for 'display', 'java-version', 'cpu'"
+      - "L1Environmental.preferences() contains entries for 'workflow', 'tooling'"
+      - "Each key maps to the statement of the highest-scoring candidate, not just the most recent"
+      - "All values are <= 200 characters"
+
+  - name: l1-specificity-scoring-env-numbers-win
+    description: >
+      Env specificity scoring awards +2 for numeric content, causing a statement
+      with numbers to beat a newer but vague statement without numbers.
+    preconditions:
+      - "Two env:display events exist (timestamp DESC order):"
+      - "  [0] Most recent: 'Updated display configuration' (no numbers, 33 chars)"
+      - "  [1] Older: 'Display is 3440x1440 ultrawide at 144Hz' (has numbers, 41 chars)"
+    steps:
+      - "selectBestEnvEvent() scores event[0]: +0 (no numbers) +1 (30-150 chars) +1 (most recent) = 2"
+      - "selectBestEnvEvent() scores event[1]: +2 (has numbers) +1 (30-150 chars) +0 (not most recent) = 3"
+    verify:
+      - "Older event with numbers is selected (score 3 > 2)"
+      - "env.get('display') contains '3440x1440'"
+
+  - name: l1-specificity-scoring-preference-action-words
+    description: >
+      Preference specificity scoring awards +2 for action words (always, never,
+      chose, prefer), overriding recency when the newer statement is vague.
+    preconditions:
+      - "Two preference:tooling events exist (timestamp DESC order):"
+      - "  [0] Most recent: 'Tooling preferences noted' (15 chars, no action words)"
+      - "  [1] Older: 'Always prefer Emacs over VS Code for Lisp editing' (51 chars, has 'prefer')"
+    steps:
+      - "selectBestPreferenceEvent() scores event[0]: +0 (no action words) +0 (< 30 chars) +1 (most recent) = 1"
+      - "selectBestPreferenceEvent() scores event[1]: +2 (has 'prefer') +1 (30-150 chars) +0 (not most recent) = 3"
+    verify:
+      - "Older event with action word is selected (score 3 > 1)"
+
+  - name: l1-latest-wins-when-scores-tied
+    description: >
+      When two candidates have the same specificity score, the most recent event
+      wins because it was encountered first in the scoring loop and the comparison
+      uses strict greater-than.
+    preconditions:
+      - "Two env:cpu events with identical scoring characteristics (both have numbers, both in 30-150 range)"
+      - "  [0] Most recent: 'AMD Ryzen 9 7950X with 32 cores' (score: +2 numbers +1 length +1 recent = 4)"
+      - "  [1] Older: 'Intel i9-13900K with 24 cores' (score: +2 numbers +1 length +0 = 3)"
+    steps:
+      - "selectBestEnvEvent() iterates candidates"
+      - "Event[0] gets +1 recency bonus, breaking the tie"
+    verify:
+      - "Most recent event wins due to recency bonus (+1)"
+
+  - name: l1-single-candidate-returned-directly
+    description: >
+      When only one candidate exists for a sub-key, it is returned without scoring.
+    preconditions:
+      - "Exactly one env:ram event exists"
+    steps:
+      - "selectBestEnvEvent() checks candidates.size() == 1"
+    verify:
+      - "Returns candidates.get(0) immediately without scoring"
+      - "No score computation overhead"
+
+  - name: l1-fallback-to-claude-md-when-no-events
+    description: >
+      When no env: events exist in SQLite (bootstrap period), L1 falls back to
+      extracting environmental constants from ~/CLAUDE.md.
+    preconditions:
+      - "SQLite queryEventsByTag('env:', 50) returns empty list"
+      - "~/CLAUDE.md exists and contains '3440', 'JDK 25', 'Plain CSS'"
+      - "~/CLAUDE.md contains lines with NEVER/ALWAYS/MUST markers"
+    steps:
+      - "materializeL1() finds env map is empty after event processing"
+      - "extractEnvironmentFromClaudeMd(env, prefs) is called"
+      - "Extracts hardcoded patterns: '3440' -> display, 'JDK 25' -> java-version, 'Plain CSS' -> css-framework"
+      - "Lines starting with '- ' containing NEVER/ALWAYS/MUST (length 20-200) become preference entries"
+      - "Preference keys are 'claude-md-' + hash code modulo 10000"
+    verify:
+      - "env contains 'display' -> '3440x1440 ultrawide'"
+      - "env contains 'java-version' -> 'JDK 25'"
+      - "env contains 'css-framework' -> 'Plain CSS (no Tailwind)'"
+      - "prefs contain entries from NEVER/ALWAYS/MUST lines"
+      - "putIfAbsent prevents overwriting existing entries"
+
+  - name: l1-db-failure-triggers-fallback
+    description: >
+      When SQLite throws during env event query, L1 catches the exception,
+      logs the error, and attempts the CLAUDE.md fallback.
+    preconditions:
+      - "sqlite.queryEventsByTag('env:', 50) throws SQLException"
+      - "~/CLAUDE.md exists"
+    steps:
+      - "materializeL1() catches Exception in outer try block"
+      - "Logs: '[gateway] L1 materialization failed: <message>'"
+      - "Calls extractEnvironmentFromClaudeMd(env, prefs) in the catch block"
+    verify:
+      - "L1Environmental is returned with CLAUDE.md-derived content"
+      - "No exception propagated to caller"
+
+  - name: l1-db-failure-and-fallback-failure-returns-empty
+    description: >
+      When both the DB query and the CLAUDE.md fallback fail, L1 returns empty maps.
+    preconditions:
+      - "sqlite.queryEventsByTag throws"
+      - "~/CLAUDE.md does not exist or is unreadable"
+    steps:
+      - "materializeL1() catches outer exception"
+      - "extractEnvironmentFromClaudeMd catches inner exception (silently)"
+    verify:
+      - "L1Environmental has empty environment and empty preferences maps"
+      - "No exception propagated"
+
+  - name: l1-null-statement-in-candidate
+    description: >
+      When a candidate event has a null statement field, scoring treats it as
+      empty string, scoring 0 for both number check and length check.
+    preconditions:
+      - "An env:display event has statement=null"
+      - "Another env:display event has statement='3440x1440 ultrawide' (score 3)"
+    steps:
+      - "selectBestEnvEvent() encounters null statement, assigns empty string"
+      - "Regex match fails, length < 30, scores only recency bonus"
+    verify:
+      - "Event with actual content is selected over null-statement event"
+
+  # ── L2: Project Layer ──
+
+  - name: l2-decisions-grouped-by-project
+    description: >
+      L2 materialization groups project: tagged events by project name, prioritizing
+      DECISION and OUTCOME event types over OBSERVATION.
+    preconditions:
+      - "SQLite contains events tagged project:actual-server with types DECISION (3), OUTCOME (1), OBSERVATION (5)"
+      - "SQLite contains events tagged project:emacs-config with types OBSERVATION (4) only"
+    steps:
+      - "materializeL2() calls sqlite.queryEventsByTag('project:', 100)"
+      - "Events are split into projectDecisionEvents (DECISION/OUTCOME) and projectObservationEvents (OBSERVATION)"
+      - "For 'actual-server': 4 DECISION/OUTCOME events exist, takes up to 5 most recent"
+      - "For 'emacs-config': no DECISION/OUTCOME events, falls back to up to 3 OBSERVATION events"
+    verify:
+      - "projectDecisions.get('actual-server') has 4 entries (all DECISION/OUTCOME)"
+      - "projectDecisions.get('emacs-config') has 3 entries (OBSERVATION fallback, capped at 3)"
+      - "Statements are truncated to 150 chars"
+      - "OBSERVATION events for 'actual-server' are NOT included (DECISION/OUTCOME exists)"
+
+  - name: l2-max-five-decisions-per-project
+    description: >
+      L2 takes at most 5 DECISION/OUTCOME events per project from the most recent
+      (already DESC-ordered from the query).
+    preconditions:
+      - "project:actual-server has 8 DECISION events"
+    steps:
+      - "decisionList.subList(0, Math.min(5, decisionList.size())) caps at 5"
+    verify:
+      - "projectDecisions.get('actual-server') has exactly 5 entries"
+      - "The 5 most recent are kept (first 5 in DESC order)"
+
+  - name: l2-global-cap-at-eight-per-project
+    description: >
+      After all projects are processed, a global cap of 8 decisions per project is
+      enforced. This is a safety net above the per-type caps of 5/3.
+    preconditions:
+      - "A project somehow accumulates more than 8 decision entries (possible if both DECISION and OBSERVATION contribute)"
+    steps:
+      - "Post-processing loop checks decisions.size() > 8"
+      - "Trims to first 8 entries via subList(0, 8)"
+    verify:
+      - "No project has more than 8 decision summaries"
+
+  - name: l2-fallback-to-memory-md
+    description: >
+      When no project: tagged events exist, L2 falls back to extracting project
+      information from MEMORY.md section headings and bold entries.
+    preconditions:
+      - "sqlite.queryEventsByTag('project:', 100) returns empty list"
+      - "MEMORY.md exists with '## Gateway project status' section containing '- **FORKED to actual-server**: ...'"
+    steps:
+      - "projectDecisions is empty after event processing"
+      - "extractProjectsFromMemoryMd(projectDecisions) is called"
+      - "Parses lines starting with '- **' under ## headings"
+      - "Bold label must contain 'project', 'repo', 'forked', or 'production'"
+      - "Detail text (after **: ) becomes a decision entry under the section heading key"
+    verify:
+      - "projectDecisions contains entries keyed by section heading (e.g., 'Gateway project status')"
+      - "Each entry's detail is truncated to 150 chars"
+
+  - name: l2-db-failure-triggers-memory-md-fallback
+    description: >
+      When SQLite throws during project event query, L2 catches and falls back to MEMORY.md.
+    preconditions:
+      - "sqlite.queryEventsByTag('project:', 100) throws"
+      - "MEMORY.md exists"
+    steps:
+      - "materializeL2() catches Exception"
+      - "Logs error"
+      - "Calls extractProjectsFromMemoryMd()"
+    verify:
+      - "Returns L2Project with MEMORY.md-derived content"
+      - "No exception propagated"
+
+  # ── L3: Narrative Layer ──
+
+  - name: l3-llm-summary-happy-path
+    description: >
+      L3 materializes from recent events (last 7 days), groups by topic: tag,
+      excludes system/meta topics, and uses Ollama for summarization.
+    preconditions:
+      - "SQLite has 50 events in last 7 days across topics 'openclaw-setup', 'emacs-config', 'general'"
+      - "Ollama is connected"
+      - "Sessions table has summaries for activeThreads"
+    steps:
+      - "sqlite.queryEventsSince(since, 200) returns 50 events"
+      - "worldview-materializer session events are filtered out"
+      - "VERIFICATION events are filtered out"
+      - "Events grouped by topic: tag into threadGroups"
+      - "SYSTEM_TOPIC_EXCLUDES filters out 'worldview', 'materialization', etc."
+      - "ollama.chat(fastModel, systemPrompt, formatEventsForLlm(threadGroups), 300)"
+      - "buildActiveThreadsFromSessions() extracts human-readable thread descriptions"
+      - "findUnresolvedQuestions() identifies QUESTION_OPEN without QUESTION_RESOLVED"
+      - "extractLooseEndsFromSessions() pulls 'Still open'/'TODO'/'needs' lines from MEMORY.md"
+      - "findStaleDomains() appends stale domain warnings"
+      - "queryRecentAmbientInsights() appends ambient analysis insights"
+    verify:
+      - "L3Narrative.summary() is LLM-generated text"
+      - "activeThreads are human-readable (from session summaries), not raw slugs"
+      - "openQuestions capped at 5"
+      - "looseEnds include MEMORY.md items + stale domain warnings + ambient insights"
+      - "System topics (worldview, materialization, contradiction, verification, etc.) excluded from threadGroups"
+
+  - name: l3-meta-topic-exclusion
+    description: >
+      L3 excludes all topics in SYSTEM_TOPIC_EXCLUDES from event grouping, preventing
+      self-referential materialization noise from polluting the narrative.
+    preconditions:
+      - "Events exist with tags: topic:worldview, topic:materialization, topic:contradiction, topic:verification"
+      - "Events exist with tags: topic:sessions, topic:autonomous-execution, topic:tool-dispatch"
+      - "Events exist with tag: topic:actual-project (legitimate user topic)"
+    steps:
+      - "For each event, topic: tags are checked against SYSTEM_TOPIC_EXCLUDES set"
+      - "Tags starting with 'topic:system:' are also excluded"
+    verify:
+      - "threadGroups does NOT contain keys: worldview, materialization, contradiction, verification, sessions, etc."
+      - "threadGroups DOES contain key: actual-project"
+      - "18 system topics are excluded (full set in SYSTEM_TOPIC_EXCLUDES)"
+
+  - name: l3-session-fallback-when-no-events
+    description: >
+      When no recent events exist, L3 falls back to session-based materialization
+      using session summaries, topics, and MEMORY.md loose ends.
+    preconditions:
+      - "sqlite.queryEventsSince returns empty list"
+      - "Sessions table has 5 recent sessions with summaries and topics"
+      - "MEMORY.md has 'TODO' and 'Still open' lines"
+      - "Ollama is connected"
+    steps:
+      - "materializeL3() detects empty recentEvents, calls materializeL3FromSessions()"
+      - "Queries 5 most recent non-agent sessions for topics (JSON arrays)"
+      - "Topics are deduplicated and added to activeThreads (max 10)"
+      - "MEMORY.md loose ends extracted"
+      - "Ollama generates summary from active topics + loose ends"
+    verify:
+      - "L3Narrative returned from session fallback path"
+      - "activeThreads from session topics, capped at 10"
+      - "openQuestions capped at 5"
+      - "looseEnds from MEMORY.md, capped at 5"
+      - "summary is LLM-generated or static fallback"
+
+  - name: l3-session-fallback-without-ollama
+    description: >
+      When no events exist AND Ollama is unavailable, L3 produces a static
+      session-count summary without LLM involvement.
+    preconditions:
+      - "No recent events"
+      - "Ollama is null or not connected"
+      - "Sessions have 3 active topics and 2 loose ends"
+    steps:
+      - "materializeL3FromSessions() skips LLM chat"
+      - "summary is set to 'Session-based summary (no events yet): 3 active topics, 2 open items.'"
+    verify:
+      - "Static summary with accurate topic and item counts"
+      - "No LLM call attempted"
+
+  - name: l3-llm-failure-produces-rule-based-summary
+    description: >
+      When Ollama chat fails during L3 summarization, the system falls back to
+      a rule-based summary listing topic counts and thread names.
+    preconditions:
+      - "Events exist grouped into 4 topic threads with 30 total events"
+      - "ollama.chat() throws RuntimeException"
+    steps:
+      - "materializeL3() catches LLM exception, logs it"
+      - "generateRuleBasedSummary(threadGroups) is called"
+      - "Produces: 'Active work across 4 threads (topic1, topic2, ...), 30 events in last 7 days.'"
+    verify:
+      - "summary is rule-based, not null"
+      - "Thread names listed (up to 5)"
+      - "Total event count is correct"
+
+  - name: l3-untagged-events-grouped-as-general
+    description: >
+      Events without any topic: tag are collected and grouped under the 'general'
+      key in threadGroups.
+    preconditions:
+      - "5 events have topic: tags"
+      - "3 events have no topic: tags at all"
+    steps:
+      - "Events without topic: tags set hasTopicTag=false"
+      - "Added to untaggedEvents list"
+      - "threadGroups.put('general', untaggedEvents)"
+    verify:
+      - "threadGroups contains 'general' key with 3 events"
+      - "'general' topic is skipped when supplementing activeThreads from topics"
+
+  - name: l3-active-threads-from-sessions-supplemented-by-topics
+    description: >
+      Active threads are primarily built from session summaries. If fewer than 3
+      sessions yield threads, topic groups are supplemented by activity count.
+    preconditions:
+      - "Only 1 session has a summary > 40 chars"
+      - "threadGroups has 5 topics with varying event counts"
+    steps:
+      - "buildActiveThreadsFromSessions() returns 1 thread"
+      - "Since activeThreads.size() < 3, topic supplementation kicks in"
+      - "Topics sorted by event count descending"
+      - "slugToReadable() converts 'openclaw-setup' -> 'Openclaw Setup'"
+      - "Added to activeThreads until size >= 10"
+    verify:
+      - "activeThreads has >= 3 entries (1 from sessions + topics)"
+      - "'general' topic is skipped during supplementation"
+      - "No duplicate entries"
+      - "Max 10 threads"
+
+  - name: l3-open-questions-from-unresolved-question-events
+    description: >
+      L3 identifies QUESTION_OPEN events that lack a matching QUESTION_RESOLVED
+      event referencing them.
+    preconditions:
+      - "3 QUESTION_OPEN events exist: Q1, Q2, Q3"
+      - "1 QUESTION_RESOLVED event exists referencing Q2"
+    steps:
+      - "findUnresolvedQuestions() first collects resolved IDs from QUESTION_RESOLVED reference targets"
+      - "Then collects QUESTION_OPEN events whose event_id is NOT in resolvedIds"
+    verify:
+      - "openQuestions contains Q1 and Q3 statements (truncated to 150 chars)"
+      - "Q2 is NOT in openQuestions (resolved)"
+      - "Max 5 open questions returned"
+
+  - name: l3-stale-domains-appended-to-loose-ends
+    description: >
+      Stale domains (domains with < 2 events in 7 days) are detected and appended
+      to L3 loose ends and narrative summary.
+    preconditions:
+      - "Domain 'project:old-project' has 0 events in last 7 days"
+      - "Domain 'project:active-project' has 10 events with high drift"
+    steps:
+      - "findStaleDomains() calls allDomainFreshness()"
+      - "Filters for STALE entries"
+      - "Returns formatted strings like 'Domain 'project:old-project' appears stale -- no events in 7+ days'"
+      - "Appended to looseEnds and summary text"
+    verify:
+      - "looseEnds contains stale domain warning"
+      - "summary ends with 'Stale domains: ...'"
+      - "Active domains NOT flagged as stale"
+
+  - name: l3-ambient-insights-injected
+    description: >
+      Recent ambient analysis OBSERVATION events with tag trigger:ambient-analysis
+      are injected into L3 loose ends and narrative summary.
+    preconditions:
+      - "2 OBSERVATION events exist with tag 'trigger:ambient-analysis' within 7 days"
+      - "Statements start with 'Ambient insight: X appears related to Y'"
+    steps:
+      - "queryRecentAmbientInsights() queries events by tag"
+      - "Filters for OBSERVATION type within freshness window"
+      - "Prefixes with 'Recent' (lowercasing first char after 'Ambient')"
+      - "Max 3 insights returned"
+    verify:
+      - "looseEnds includes ambient insight strings"
+      - "summary includes 'Ambient insights: ...'"
+      - "Max 2 insights appended to summary"
+
+  # ── Contradiction Detection and Resolution ──
+
+  - name: contradiction-env-key-conflict-detection
+    description: >
+      Rule-based contradiction detection finds env: events where the newest and
+      oldest statements for the same sub-key differ.
+    preconditions:
+      - "env:java-version has two events (DESC order):"
+      - "  newest: 'JDK 25 with virtual threads' (event-id: ev1)"
+      - "  oldest: 'JDK 21 LTS' (event-id: ev2)"
+    steps:
+      - "detectEnvContradictions() queries env: events ordered DESC"
+      - "Tracks newestStatement and oldestStatement per key"
+      - "First encounter = newest, last encounter = oldest"
+      - "Compares oldest vs newest for each key"
+    verify:
+      - "Contradiction created with existingBelief='JDK 21 LTS', newAssertion='JDK 25 with virtual threads'"
+      - "sourceEventId is ev1 (newest event's ID)"
+      - "ontologyCategory is 'beliefs.constraints'"
+      - "description is 'Conflicting env:java-version values'"
+
+  - name: contradiction-no-conflict-when-values-match
+    description: >
+      When newest and oldest statements for an env key are identical, no
+      contradiction is emitted.
+    preconditions:
+      - "env:display has 3 events, all with statement '3440x1440 ultrawide'"
+    steps:
+      - "detectEnvContradictions() compares oldest.equals(newest)"
+    verify:
+      - "No contradiction created for this key"
+
+  - name: contradiction-llm-detection-from-decisions
+    description: >
+      LLM-enhanced contradiction detection sends recent DECISION events plus
+      L2 and L3 context to Ollama, which returns JSON array of contradictions.
+    preconditions:
+      - "Ollama is connected"
+      - "L2 has project decisions for 'actual-server'"
+      - "L3 has a narrative summary"
+      - "Recent DECISION events include one that contradicts an L2 entry"
+    steps:
+      - "detectLlmContradictions() builds context string from L2 decisions + L3 summary + recent DECISIONs"
+      - "ollama.chat() returns JSON array with existingBelief, newAssertion, sourceEventId, ontologyCategory, description"
+      - "JSON is parsed from first '[' to last ']'"
+      - "Each JSON object becomes a Contradiction record"
+    verify:
+      - "Contradictions list grows with LLM-detected items"
+      - "Each has all 5 fields populated from JSON"
+      - "Missing JSON fields default to empty string"
+
+  - name: contradiction-llm-returns-malformed-json
+    description: >
+      When LLM returns text that doesn't contain valid JSON array, no contradictions
+      are added and no exception propagates.
+    preconditions:
+      - "Ollama returns 'I found no contradictions in the data.'"
+    steps:
+      - "detectLlmContradictions() checks result.contains('[')"
+      - "No '[' found, method returns without parsing"
+    verify:
+      - "contradictions list unchanged"
+      - "No parse exception"
+
+  - name: contradiction-resolution-by-ontology-category
+    description: >
+      ContradictionResolver.forCategory() dispatches to the correct resolver
+      based on ontology category prefix.
+    preconditions:
+      - "Contradictions exist with categories: beliefs.constraints.jdk, beliefs.preferences.tooling, models.architecture, heuristics.diagnostics"
+    steps:
+      - "resolveContradictions() iterates each contradiction"
+      - "ContradictionResolver.forCategory(category) dispatches:"
+      - "  beliefs.constraints.* -> constraintResolver() (VERIFICATION event, manualReview=true)"
+      - "  beliefs.preferences.* -> preferenceResolver() (QUESTION_OPEN event, manualReview=true)"
+      - "  models.* -> modelResolver() (OBSERVATION event, contracted=true, expanded=true, manualReview=false)"
+      - "  heuristics.* -> heuristicResolver() (merge or flag based on compatibility)"
+      - "Events created by resolvers are persisted via sqlite.insertEvent()"
+    verify:
+      - "Results list is parallel to contradictions list (same size)"
+      - "Constraint resolution emits VERIFICATION event"
+      - "Preference resolution emits QUESTION_OPEN event"
+      - "Model resolution emits OBSERVATION event with contracted=true, expanded=true"
+      - "All resolution events have session_id 'worldview-materializer'"
+
+  - name: contradiction-resolution-unknown-category-defaults-to-constraint
+    description: >
+      Unknown or null ontology categories default to the constraintResolver
+      (most conservative — high scrutiny, manual review).
+    preconditions:
+      - "Contradiction has ontologyCategory=null"
+      - "Another has ontologyCategory='unknown.category'"
+    steps:
+      - "ContradictionResolver.forCategory(null) returns constraintResolver()"
+      - "ContradictionResolver.forCategory('unknown.category') falls through to constraintResolver()"
+    verify:
+      - "Both produce VERIFICATION events with manualReviewNeeded=true"
+      - "Conservative default prevents auto-resolving unknown categories"
+
+  - name: contradiction-heuristic-compatible-merge
+    description: >
+      When heuristic contradictions are compatible (no negation markers referencing
+      shared terms), both heuristics are merged and retained.
+    preconditions:
+      - "Existing: 'Run tests before deployment'"
+      - "New: 'Also run integration tests in staging environment'"
+    steps:
+      - "areHeuristicsCompatible() checks new assertion for negation markers"
+      - "No negation markers found ('not', 'don't', 'never', etc.)"
+      - "Returns true (compatible)"
+    verify:
+      - "ResolutionResult: action='Merged (heuristics -- compatible, both retained)'"
+      - "manualReviewNeeded=false, contracted=false, expanded=true"
+      - "OBSERVATION event with topic:heuristic-merge tag"
+
+  - name: contradiction-heuristic-incompatible-flagged
+    description: >
+      When heuristic contradictions contain negation markers referencing key terms
+      from the existing belief (>= 2 shared terms with length > 4), they are flagged
+      as incompatible.
+    preconditions:
+      - "Existing: 'Always prefer synchronous blocking operations for database calls'"
+      - "New: 'Never use synchronous blocking for database calls, replacing with async'"
+    steps:
+      - "areHeuristicsCompatible() finds 'never' negation marker"
+      - "Extracts significant words (>4 chars) from existing: 'always', 'prefer', 'synchronous', 'blocking', 'operations', 'database'"
+      - "Counts shared terms in new assertion: 'synchronous' and 'blocking' and 'database' = 3"
+      - "sharedTerms >= 2, returns false (incompatible)"
+    verify:
+      - "ResolutionResult: action='Flagged as conflicting (heuristics -- incompatible, needs review)'"
+      - "manualReviewNeeded=true, contracted=false, expanded=false"
+
+  - name: contradiction-resolution-failure-produces-fallback-result
+    description: >
+      When a resolver throws an exception, resolveContradictions() creates a
+      fallback ResolutionResult with manualReviewNeeded=true.
+    preconditions:
+      - "ContradictionResolver.forCategory() returns a resolver that throws during resolve()"
+    steps:
+      - "resolveContradictions() catches exception for this contradiction"
+      - "Creates ResolutionResult with action='Resolution failed: <message>'"
+    verify:
+      - "Result has manualReviewNeeded=true, contracted=false, expanded=false"
+      - "eventsCreated is empty list"
+      - "Results list stays parallel to contradictions list"
+
+  - name: contradiction-auto-resolved-filtered-from-final-worldview
+    description: >
+      After resolution, contradictions where modelResolver auto-resolved (contracted=true
+      AND expanded=true) are filtered out of the final worldview contradictions list.
+    preconditions:
+      - "3 contradictions: 1 models.* (auto-resolved), 1 beliefs.constraints (manual), 1 beliefs.preferences (manual)"
+    steps:
+      - "filterUnresolved() iterates contradictions paired with resolutions"
+      - "Models contradiction: contracted=true, expanded=true, manualReviewNeeded=false -> filtered OUT"
+      - "Constraints contradiction: manualReviewNeeded=true -> KEPT"
+      - "Preferences contradiction: manualReviewNeeded=true -> KEPT"
+    verify:
+      - "Final worldview.contradictions() has 2 entries (manual review ones)"
+      - "Auto-resolved model contradiction is not in the list"
+
+  - name: contradiction-narrative-augmentation
+    description: >
+      After resolution, the L3 narrative is augmented: manual-review items become
+      open questions, auto-resolved items become loose ends.
+    preconditions:
+      - "L3 has 1 existing open question and 2 loose ends"
+      - "1 beliefs.constraints contradiction (manual review)"
+      - "1 models.* contradiction (auto-resolved)"
+    steps:
+      - "augmentNarrativeWithResolutions() iterates paired contradictions and resolutions"
+      - "Manual review: action + description added to augmentedQuestions"
+      - "Auto-resolved: action added to augmentedLooseEnds"
+      - "Summary gets 'Contradictions: ...' suffix"
+    verify:
+      - "L3 openQuestions now has 2 entries (1 original + 1 from constraint contradiction)"
+      - "L3 looseEnds now has 3 entries (2 original + 1 from model resolution)"
+      - "L3 summary ends with 'Contradictions: ...'"
+      - "openQuestions capped at 8, looseEnds capped at 8"
+
+  # ── Token Budget and Trimming ──
+
+  - name: token-budget-no-trim-under-1400
+    description: >
+      When the materialized worldview estimates under 1400 tokens, trim() is not called.
+    preconditions:
+      - "Worldview has small L1 (3 env, 2 prefs), L2 (2 projects, 3 decisions each), L3 (short summary)"
+      - "estimateTokens() returns 800"
+    steps:
+      - "materialize() checks worldview.estimateTokens() > MAX_WORLDVIEW_TOKENS"
+      - "800 <= 1400, trim not called"
+    verify:
+      - "Returned worldview is unmodified"
+      - "All layer data preserved exactly"
+
+  - name: token-budget-trim-l3-first
+    description: >
+      When worldview exceeds 1400 tokens, L3 is trimmed first: summary capped at
+      3200 chars, activeThreads at 8, openQuestions at 3, looseEnds at 3.
+    preconditions:
+      - "L3 summary is 5000 chars"
+      - "L3 has 12 activeThreads, 6 openQuestions, 7 looseEnds"
+      - "estimateTokens() returns 2000"
+    steps:
+      - "trim() checks l3 != null"
+      - "summary truncated to 3200 chars + '...'"
+      - "activeThreads subList(0, 8)"
+      - "openQuestions subList(0, 3)"
+      - "looseEnds subList(0, 3)"
+    verify:
+      - "L3 summary is 3203 chars (3200 + '...')"
+      - "L3 activeThreads has 8 entries"
+      - "L3 openQuestions has 3 entries"
+      - "L3 looseEnds has 3 entries"
+      - "L1 and L2 may also be trimmed in the same pass"
+
+  - name: token-budget-trim-l2-after-l3
+    description: >
+      L2 is trimmed by capping at 5 projects and 5 decisions per project.
+    preconditions:
+      - "L2 has 8 projects with up to 8 decisions each"
+    steps:
+      - "trim() iterates L2 projectDecisions"
+      - "Stops after 5 projects (projectCount >= 5 break)"
+      - "Each project's decisions capped at subList(0, 5)"
+    verify:
+      - "L2 has exactly 5 projects (first 5 in insertion order)"
+      - "Each project has at most 5 decisions"
+      - "Projects 6-8 are dropped entirely"
+
+  - name: token-budget-trim-l1-last
+    description: >
+      L1 is trimmed last by capping environment at 15 entries and preferences at 10.
+      Entries are removed from the end of the LinkedHashMap (insertion order).
+    preconditions:
+      - "L1 has 20 env entries and 15 preference entries"
+    steps:
+      - "trim() removes from end of LinkedHashMap using stream().reduce((a,b)->b)"
+      - "Loops while env.size() > 15, removing last key each iteration"
+      - "Loops while prefs.size() > 10, removing last key each iteration"
+    verify:
+      - "L1 env has 15 entries (last 5 removed)"
+      - "L1 prefs has 10 entries (last 5 removed)"
+      - "Earliest-inserted entries (most established) are preserved"
+
+  # ── Domain Freshness Classification ──
+
+  - name: domain-freshness-stable
+    description: >
+      A domain with >= 2 events in the freshness window and drift ratio < 0.3
+      is classified as STABLE.
+    preconditions:
+      - "Domain 'project:actual-server' has 10 events in last 7 days"
+      - "All events share the same tag (1 unique sub-tag / 10 events = 0.1 drift)"
+      - "No DECISION or OUTCOME events"
+    steps:
+      - "domainFreshness('project:actual-server') queries events by tag"
+      - "Filters to recent events within freshness window"
+      - "tagDiversity = 1/10 = 0.1"
+      - "hasDecisionOrOutcome = false"
+      - "highDrift = false (0.1 < 0.3 and no decisions)"
+      - "eventRate = 10 >= ACTIVE_EVENT_THRESHOLD (2)"
+    verify:
+      - "Returns DomainFreshness.STABLE"
+
+  - name: domain-freshness-active-by-drift
+    description: >
+      A domain with high tag diversity (drift ratio >= 0.3) is classified as ACTIVE
+      regardless of event count.
+    preconditions:
+      - "Domain 'project:new-feature' has 3 events with 3 different sub-tags"
+      - "No DECISION or OUTCOME events"
+    steps:
+      - "tagDiversity = 3/3 = 1.0"
+      - "highDrift = true (1.0 > 0.3)"
+    verify:
+      - "Returns DomainFreshness.ACTIVE"
+
+  - name: domain-freshness-active-by-decision-events
+    description: >
+      A domain containing any DECISION or OUTCOME event is classified as ACTIVE
+      even if tag diversity is low.
+    preconditions:
+      - "Domain has 5 events with 1 unique sub-tag (drift = 0.2)"
+      - "One event has event_type = DECISION"
+    steps:
+      - "hasDecisionOrOutcome = true (eventTypes contains 'DECISION')"
+      - "highDrift = true (hasDecisionOrOutcome overrides tagDiversity check)"
+    verify:
+      - "Returns DomainFreshness.ACTIVE"
+      - "DECISION/OUTCOME presence is a strong drift signal"
+
+  - name: domain-freshness-stale
+    description: >
+      A domain with fewer than 2 events in the freshness window and low drift
+      is classified as STALE.
+    preconditions:
+      - "Domain 'project:archived' has 1 event in last 7 days with 1 unique tag"
+      - "No DECISION or OUTCOME events"
+    steps:
+      - "eventRate = 1"
+      - "tagDiversity = 1/1 = 1.0 but... wait: highDrift = true because 1.0 > 0.3"
+      - "Actually: highDrift check happens first, so 1 event with 1 tag = 1.0 drift -> ACTIVE"
+    verify:
+      - "NOTE: A single event with 1 unique tag gives drift 1.0 -> classified as ACTIVE, not STALE"
+      - "STALE only occurs with 0 events (eventRate=0) or exactly 1 event with many other events diluting the ratio"
+      - "To get STALE: either 0 events in window, or eventRate < 2 with low tagDiversity"
+
+  - name: domain-freshness-null-or-blank-domain
+    description: >
+      Null or blank domain strings immediately return STALE.
+    preconditions:
+      - "Domain is null or blank string"
+    steps:
+      - "domainFreshness(null) checks domain == null || domain.isBlank()"
+    verify:
+      - "Returns DomainFreshness.STALE immediately"
+      - "No database query executed"
+
+  - name: domain-freshness-db-failure-returns-stale
+    description: >
+      When SQLite throws during domain freshness query, the exception is caught
+      and STALE is returned as fail-safe.
+    preconditions:
+      - "sqlite.queryEventsByTag throws for this domain"
+    steps:
+      - "domainFreshness() catches Exception in outer try"
+      - "Logs error message"
+    verify:
+      - "Returns DomainFreshness.STALE"
+      - "Error logged with domain name"
+
+  # ── Neo4j Graph Confidence ──
+
+  - name: neo4j-confidence-refresh-on-materialize
+    description: >
+      During materialization, Neo4j graph confidence is refreshed (decays edges
+      not reinforced in 30+ days) when Neo4j is connected.
+    preconditions:
+      - "neo4j is set and isConnected() returns true"
+    steps:
+      - "materialize() calls neo4j.refreshConfidence()"
+      - "Stage 16C: decays edge confidence by 0.1/month, floor 0.1"
+    verify:
+      - "refreshConfidence() called before layer materialization"
+      - "Graph edges not reinforced in 30+ days have reduced confidence"
+
+  - name: neo4j-confidence-refresh-skipped-when-disconnected
+    description: >
+      When Neo4j is null or not connected, confidence refresh is silently skipped.
+    preconditions:
+      - "neo4j is null OR neo4j.isConnected() returns false"
+    steps:
+      - "materialize() checks neo4j != null && neo4j.isConnected()"
+      - "Condition is false, skips refreshConfidence()"
+    verify:
+      - "No Neo4j call attempted"
+      - "Materialization continues normally"
+
+  - name: neo4j-confidence-refresh-failure-non-fatal
+    description: >
+      When neo4j.refreshConfidence() throws, the exception is caught and logged.
+      Materialization continues.
+    preconditions:
+      - "Neo4j is connected but refreshConfidence() throws"
+    steps:
+      - "materialize() catches Exception from refreshConfidence()"
+      - "Logs: '[gateway] Graph confidence refresh failed: <message>'"
+    verify:
+      - "Materialization proceeds with L1, L2, L3"
+      - "No exception propagated"
+
+  # ── Materialization Event Emission ──
+
+  - name: materialization-event-emitted-with-references
+    description: >
+      After materialization, an OBSERVATION event is emitted recording which events
+      were consumed, with references to each consumed event ID.
+    preconditions:
+      - "Last materialization was 1 hour ago"
+      - "15 new events exist since last materialization (3 DECISION, 12 OBSERVATION)"
+      - "Events include project:actual-server (8) and project:emacs (4) tags"
+      - "3 events are from session 'worldview-materializer' (self-referencing, should be excluded)"
+    steps:
+      - "emitMaterializationEvent() queries events since last materialization timestamp"
+      - "Filters out events with session_id 'worldview-materializer'"
+      - "12 events remain after filtering"
+      - "Builds type counts: {DECISION: 3, OBSERVATION: 9}"
+      - "Builds project counts: {actual-server: 8, emacs: 4}"
+      - "Statement: 'Integrated 12 events into Worldview: actual-server (8), emacs (4). Types: 3 DECISION, 9 OBSERVATION.'"
+      - "References: EVENT references to each consumed event_id"
+      - "Event tags: [topic:worldview, topic:materialization]"
+    verify:
+      - "Materialization event inserted into SQLite"
+      - "session_id is 'worldview-materializer'"
+      - "event_type is OBSERVATION"
+      - "origin is SYSTEM"
+      - "References list has 12 entries (one per consumed event)"
+      - "Self-referencing events excluded from count"
+
+  - name: materialization-event-first-time-queries-all
+    description: >
+      On first materialization (no previous timestamp), all events are queried.
+    preconditions:
+      - "sqlite.getLastMaterializationTimestamp() returns null"
+    steps:
+      - "sinceTimestamp is null"
+      - "emitMaterializationEvent() calls sqlite.queryAllEvents(200)"
+    verify:
+      - "All events up to 200 are included as consumed"
+
+  - name: materialization-event-skipped-when-no-new-events
+    description: >
+      When no new events exist since last materialization (after filtering self-references),
+      no materialization event is emitted.
+    preconditions:
+      - "All events since last timestamp are from session 'worldview-materializer'"
+    steps:
+      - "After filtering, newEvents is empty"
+      - "Method returns early without inserting"
+    verify:
+      - "No OBSERVATION event created"
+      - "No sqlite.insertEvent() call"
+
+  - name: materialization-event-statement-padding
+    description: >
+      Short materialization statements are padded to meet the 50-character minimum
+      for event statements.
+    preconditions:
+      - "Only 1 new event without project tags"
+      - "Statement would be: 'Integrated 1 events into Worldview. Types: 1 OBSERVATION.' (55 chars — fine)"
+    steps:
+      - "If statement.length() < 50, padding appended"
+    verify:
+      - "Statement is always >= 50 characters"
+      - "Padding includes timestamp for uniqueness"
+
+  - name: materialization-event-emission-failure-non-fatal
+    description: >
+      If materialization event emission fails (DB error), it does not break the
+      materialization. The worldview is still returned.
+    preconditions:
+      - "sqlite.insertEvent() throws for the materialization event"
+    steps:
+      - "emitMaterializationEvent() catches Exception"
+      - "Logs: '[gateway] Failed to emit materialization event: <message>'"
+    verify:
+      - "Worldview is still returned from materialize()"
+      - "No exception propagated"
+
+  # ── Full End-to-End Flow ──
+
+  - name: e2e-full-materialization-cycle
+    description: >
+      Complete materialization flow from timestamp query through event emission,
+      exercising all layers, contradiction detection, resolution, trimming.
+    preconditions:
+      - "SQLite has events: env:display (2), preference:workflow (1), project:actual-server (5 DECISION), project:emacs (3 OBSERVATION)"
+      - "SQLite has events from last 7 days with topic:gateway-setup, topic:emacs-config"
+      - "Last materialization was 2 hours ago"
+      - "Neo4j is connected"
+      - "Ollama is connected"
+      - "env:display has conflicting oldest/newest values"
+    steps:
+      - "1. sqlite.getLastMaterializationTimestamp() returns 2h-ago timestamp"
+      - "2. neo4j.refreshConfidence() decays stale edges"
+      - "3. materializeL1() -> L1Environmental with display, workflow entries"
+      - "4. materializeL2() -> L2Project with actual-server (5 DECISION) and emacs (3 OBSERVATION)"
+      - "5. materializeL3() -> L3Narrative with LLM summary, session-based threads, open questions"
+      - "6. detectContradictions() -> finds env:display conflict + optional LLM contradictions"
+      - "7. resolveContradictions() -> dispatches each to appropriate resolver, persists events"
+      - "8. augmentNarrativeWithResolutions() -> updates L3 with resolution info"
+      - "9. filterUnresolved() -> removes auto-resolved from final list"
+      - "10. Worldview constructed with all layers + unresolved contradictions"
+      - "11. estimateTokens() checked against 1400 budget"
+      - "12. trim() if over budget"
+      - "13. emitMaterializationEvent() records consumed events"
+    verify:
+      - "Returned Worldview has materializedAt ~ now"
+      - "L1 has scored env/preference entries"
+      - "L2 has project-grouped decisions"
+      - "L3 has LLM summary + augmented open questions and loose ends"
+      - "contradictions list contains only unresolved items"
+      - "Token budget <= 1400"
+      - "Materialization OBSERVATION event persisted in SQLite"
+
+  - name: e2e-total-db-failure-returns-partial
+    description: >
+      When SQLite is completely unavailable, each layer catches its exceptions
+      independently and returns partial results with fallback content.
+    preconditions:
+      - "sqlite.queryEventsByTag always throws"
+      - "sqlite.queryEventsSince always throws"
+      - "sqlite.getLastMaterializationTimestamp throws"
+      - "~/CLAUDE.md and MEMORY.md exist"
+    steps:
+      - "materialize() catches timestamp query exception"
+      - "L1 catches, falls back to CLAUDE.md"
+      - "L2 catches, falls back to MEMORY.md"
+      - "L3 catches, returns error message in summary"
+      - "Contradiction detection catches, returns empty list"
+      - "Materialization event emission catches, logs, continues"
+    verify:
+      - "Worldview is returned (not null)"
+      - "L1 has CLAUDE.md-derived content"
+      - "L2 has MEMORY.md-derived content"
+      - "L3 summary contains error message"
+      - "contradictions is empty"
+      - "System is resilient to total DB failure"
+
+  - name: e2e-ollama-unavailable-degrades-gracefully
+    description: >
+      When Ollama is null or disconnected, all LLM-dependent features degrade:
+      L3 uses rule-based summary, contradiction detection skips LLM path,
+      only rule-based env contradictions are detected.
+    preconditions:
+      - "Ollama is null"
+      - "Events exist for L1, L2, L3"
+      - "env:display has conflicting values (rule-based detection still works)"
+    steps:
+      - "materializeL3(): ollama is null, generateRuleBasedSummary() used"
+      - "detectContradictions(): LLM path skipped (ollama null check)"
+      - "detectEnvContradictions(): still runs (pure rule-based)"
+    verify:
+      - "L3 summary is rule-based (topic count + thread names)"
+      - "Only rule-based env contradictions detected"
+      - "No LLM contradictions (would need Ollama)"
+      - "No exceptions from null Ollama"
+
+  # ── Viewing Activity Tracking ──
+
+  - name: worldview-load-timestamp-tracking
+    description: >
+      recordWorldviewLoad() captures the timestamp when SENSE_worldview_load is called,
+      enabling downstream components to know when the worldview was last viewed.
+    preconditions:
+      - "WorldviewMaterializer instance exists"
+      - "lastWorldviewLoadAt is null (never loaded)"
+    steps:
+      - "recordWorldviewLoad() sets lastWorldviewLoadAt = Instant.now()"
+      - "getLastWorldviewLoadAt() returns the timestamp"
+    verify:
+      - "Timestamp is approximately now"
+      - "Volatile field ensures visibility across threads"
+      - "Subsequent calls update the timestamp"
+
+  # ── Helper Methods Edge Cases ──
+
+  - name: parse-tags-handles-invalid-json
+    description: >
+      parseTags() gracefully handles null, blank, and malformed JSON tag strings,
+      returning empty list without throwing.
+    preconditions:
+      - "Events exist with tags=null, tags='', tags='not-json', tags='[\"valid\"]'"
+    steps:
+      - "parseTags(null) returns List.of()"
+      - "parseTags('') returns List.of()"
+      - "parseTags('not-json') returns List.of() (doesn't start with '[')"
+      - "parseTags('[\"valid\"]') returns ['valid']"
+    verify:
+      - "No exceptions thrown for any input"
+      - "Only valid JSON arrays starting with '[' are parsed"
+
+  - name: slug-to-readable-conversion
+    description: >
+      slugToReadable() converts hyphen-separated topic slugs to title-case
+      human-readable strings.
+    preconditions: []
+    steps:
+      - "slugToReadable('openclaw-setup') -> 'Openclaw Setup'"
+      - "slugToReadable('emacs-config') -> 'Emacs Config'"
+      - "slugToReadable(null) -> ''"
+      - "slugToReadable('') -> ''"
+      - "slugToReadable('single') -> 'Single'"
+    verify:
+      - "Each word capitalized (first letter only)"
+      - "Hyphens replaced with spaces"
+      - "Null/blank return empty string"
+
+enforced_constraints:
+  - name: token-budget-ceiling
+    description: >
+      MAX_WORLDVIEW_TOKENS = 1400. The worldview is trimmed progressively (L3 -> L2 -> L1)
+      if estimateTokens() exceeds this ceiling. estimateTokens() uses ~4 chars/token heuristic.
+    rationale: >
+      The worldview is injected into LLM context. Exceeding the budget would consume
+      too much of the model's attention, degrading tool response quality.
+
+  - name: trim-order-l3-l2-l1
+    description: >
+      Trimming always proceeds L3 first (most compressible), then L2, then L1 (most stable).
+      L3 summary is capped at 3200 chars, threads at 8, questions/looseEnds at 3.
+      L2 capped at 5 projects with 5 decisions each.
+      L1 capped at 15 env entries and 10 preference entries.
+    rationale: >
+      L1 environmental constants are the most stable and hardest to re-derive.
+      L3 narrative is regenerated every cycle and can be re-summarized.
+      This ordering preserves the most durable knowledge.
+
+  - name: self-reference-exclusion
+    description: >
+      Materialization events (session_id='worldview-materializer') are filtered out from
+      both L3 event grouping and materialization event consumption counting.
+    rationale: >
+      Prevents recursive self-amplification where the materializer's own OBSERVATION events
+      become input to future materializations, creating a feedback loop.
+
+  - name: system-topic-exclusion
+    description: >
+      18 system/meta topics are excluded from L3 narrative grouping via SYSTEM_TOPIC_EXCLUDES.
+      Additionally, any tag starting with 'topic:system:' is excluded.
+    rationale: >
+      System topics (worldview, materialization, contradiction, verification, sessions, etc.)
+      are internal machinery. Including them would pollute the user-facing narrative with
+      meta-operational noise.
+
+  - name: contradiction-resolution-parallel-lists
+    description: >
+      The contradictions and resolutions lists are maintained in parallel (same size, same index).
+      Resolution failures produce a fallback ResolutionResult rather than removing the entry.
+    rationale: >
+      Parallel list invariant ensures filterUnresolved() and augmentNarrativeWithResolutions()
+      can safely zip the two lists. Skipping entries would desync indices.
+
+  - name: agm-conservative-default
+    description: >
+      Unknown or null ontology categories default to constraintResolver (highest scrutiny,
+      manual review required). The system never auto-resolves an unrecognized contradiction type.
+    rationale: >
+      Follows the AGM principle of minimal change. When uncertain about the nature of
+      a contradiction, the safest action is to flag for human review rather than risk
+      silently accepting or rejecting a belief.
+
+  - name: layer-fault-isolation
+    description: >
+      Each layer (L1, L2, L3) and each post-processing step (contradictions, event emission,
+      Neo4j refresh) catches its own exceptions independently. A failure in one layer does not
+      prevent other layers from materializing.
+    rationale: >
+      Maximizes partial information availability. Even if the DB fails mid-cycle, the system
+      returns whatever was successfully materialized rather than failing entirely.
+
+opinionated_constraints:
+  - name: specificity-over-recency-for-env
+    description: >
+      Env event selection prefers specificity (numbers, moderate length) over pure recency.
+      Recency is only a +1 tiebreaker, while numeric content is +2.
+    rationale: >
+      Environment facts with concrete values ("3440x1440", "JDK 25", "port 8372") are
+      more useful in context than vague recent statements. A specific older event is
+      better than a vague newer one for environmental constants.
+
+  - name: action-words-over-recency-for-preferences
+    description: >
+      Preference event selection prefers action words (always/never/chose/prefer) over
+      pure recency, mirroring the env scoring but with preference-relevant signals.
+    rationale: >
+      Preferences expressed with conviction ("NEVER use symlinks", "ALWAYS prefer Emacs")
+      are stronger signals than hedged observations. The action word heuristic approximates
+      conviction strength.
+
+  - name: decision-priority-in-l2
+    description: >
+      L2 prioritizes DECISION and OUTCOME events over OBSERVATION for project summaries.
+      OBSERVATION events are only used as fallback when no DECISION/OUTCOME events exist.
+    rationale: >
+      Decisions represent explicit choices; observations are contextual notes. A project's
+      worldview entry should surface what was decided, not what was observed, to give
+      the LLM actionable context about established patterns.
+
+  - name: models-last-write-wins
+    description: >
+      Contradictions in the models.* ontology category are auto-resolved via last-write-wins.
+      This is the only category where automatic resolution occurs.
+    rationale: >
+      Model knowledge (architectures, rationales, trajectories) evolves naturally. The newest
+      assertion is typically the most accurate. Unlike constraints (which may be data errors)
+      or preferences (which require user consent), model updates are expected and benign.
+
+  - name: heuristic-compatibility-check
+    description: >
+      Heuristic contradictions use a conservative compatibility check: negation markers
+      + shared key terms (>= 2 words > 4 chars). Compatible heuristics are merged;
+      incompatible ones are flagged.
+    rationale: >
+      Heuristics are often additive (new diagnostic procedure alongside old one). The
+      negation marker check prevents silently merging contradictory instructions while
+      allowing genuinely complementary heuristics to coexist.
+
+  - name: freshness-window-14-days-for-discovery
+    description: >
+      allDomainFreshness() looks back 14 days (2x FRESHNESS_WINDOW_DAYS) to discover
+      domain prefixes, but domainFreshness() only classifies based on the 7-day window.
+    rationale: >
+      The wider discovery window ensures recently-stale domains are still discovered
+      and classified. A domain with events 8 days ago but none in the last 7 would be
+      missed by a 7-day discovery window but correctly classified as STALE with the
+      14-day discovery + 7-day classification approach.
