@@ -9,14 +9,22 @@ vocabulary:
   companion_app: "Emacs (text editing) or Krita (image markup) opened from the UI via i3 IPC for side-by-side work."
   triage_status: "untriaged → investigating → resolved/dismissed/deferred"
   which_key_panel: "Context-sensitive popup showing available keyboard actions, grouped by context."
+  semantic_zoom: "Content changes representation at different scales. Overview = colored boxes. Domain = item detail. Item = deposit history."
+  color_preset: "Single-keypress color scheme switch: Health (1), Activity (2), Trust (3), Novelty (4). Spatial layout unchanged."
+  domain_box: "Named spatial region grouping related knowledge items by project/topic. Stable position across sessions."
+  split_element: "Visual encoding for Both view: item box split vertically — left = user level, right = agent level."
+  deposit: "Chronicle event recording a user or agent action: DECISION, OBSERVATION, VERIFICATION, etc."
 
 metadata:
   feature: user-work-surface
   project: actual-server
-  date: "2026-02-15"
+  date: "2026-02-19"
   status: NOT_IMPLEMENTED
 
 stories:
+
+  # ── Launch & Connection ──
+
   - name: app_launches_and_connects
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS1
@@ -36,6 +44,87 @@ stories:
       - "Gateway logs show new MCP session from UI client"
       - "Data Models tab populated with items from Worldview"
       - "Connection indicator shows 'connected'"
+
+  - name: launch_without_gateway
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1
+    description: "App launches when the gateway is not running. Must show a clear error state, not crash or hang."
+    preconditions:
+      - "Gateway is NOT running (port 8372 not listening)"
+      - "Tauri app is installed"
+    steps:
+      - "User launches Actual Server UI"
+      - "Rust backend attempts HTTP connection to 127.0.0.1:8372/mcp"
+      - "Connection times out after configurable interval (default 5s)"
+      - "App enters disconnected state"
+    verify:
+      - "App window appears (not a crash, not a blank screen)"
+      - "Status bar shows 'disconnected' with red indicator"
+      - "Data Models tab shows empty state with message: 'Not connected to gateway'"
+      - "App retries connection periodically (every 10s)"
+      - "No unhandled panic in Rust backend — error is caught and displayed"
+      - "When gateway later starts, app reconnects automatically within 10s"
+
+  - name: gateway_disconnects_mid_session
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1
+    description: "Gateway goes down while the app is running. Stale data must be clearly marked, not silently displayed as current."
+    preconditions:
+      - "App is connected and Data Models tab is populated"
+      - "User has been interacting for several minutes"
+    steps:
+      - "Gateway process is killed (systemctl stop actual-gateway)"
+      - "App's next MCP call fails with connection refused"
+      - "App transitions to disconnected state"
+      - "User continues navigating existing data"
+    verify:
+      - "Status bar transitions from 'connected' to 'disconnected' within 5s"
+      - "All existing data remains visible but marked as stale (visual indicator — desaturated, timestamp badge)"
+      - "Triage actions (resolve, dismiss) are queued locally, not silently dropped"
+      - "When gateway restarts, queued actions replay in order"
+      - "No data loss from actions taken during disconnection"
+
+  # ── Tab Navigation & State Persistence ──
+
+  - name: tab_switching_preserves_scroll_and_selection
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "Switching tabs and returning preserves exact scroll position, zoom level, and selected item."
+    preconditions:
+      - "App is connected with Data Models tab active"
+      - "User has scrolled to a specific domain and selected an item"
+    steps:
+      - "User notes current scroll position, zoom level, and selected item in Data Models tab"
+      - "User switches to Decision Inbox tab (keyboard shortcut)"
+      - "User interacts with inbox (selects an item, scrolls)"
+      - "User switches to Processes tab"
+      - "User switches back to Data Models tab"
+    verify:
+      - "Data Models tab shows exact same scroll position as before switching"
+      - "Same zoom level is restored"
+      - "Same item is selected (selection highlight visible)"
+      - "Decision Inbox tab also preserves its own scroll/selection when returned to"
+      - "No flash of default state before restoration"
+
+  - name: tab_keyboard_shortcuts_no_conflicts
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3, UWS-DS4
+    description: "Tab-specific keyboard shortcuts do not fire when a different tab is active. Data Models 'p' (pull thread) must not trigger anything in Decision Inbox."
+    preconditions:
+      - "App is connected"
+    steps:
+      - "Switch to Decision Inbox tab"
+      - "Press 'p' (thread-pull key from Data Models tab)"
+      - "Verify no action occurs (no thread pull, no crash, no stale handler)"
+      - "Switch to Data Models tab"
+      - "Press 'r' (resolve key from Decision Inbox tab)"
+      - "Verify no action occurs"
+    verify:
+      - "No cross-tab keyboard shortcut bleeding"
+      - "Which-key panel shows only keys valid for the active tab"
+      - "Status bar does not flash error messages for unbound keys"
+
+  # ── Data Models Tab: Knowledge State Visualization ──
 
   - name: view_knowledge_state_user_mode
     status: NOT_IMPLEMENTED
@@ -57,6 +146,64 @@ stories:
       - "In Both view, off-diagonal items (divergent knowledge) show split colors"
       - "In Both view, diagonal items (same level) show solid color"
 
+  - name: all_16_knowledge_states_render_distinctly
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS2, UWS-DS5
+    description: "In Both view, all 16 knowledge state combinations render with visually distinct split-element encodings. No two states are confusable."
+    preconditions:
+      - "App is connected, Data Models tab active, Both view mode"
+      - "Test data includes items at all 16 (user_level, agent_level) combinations"
+    steps:
+      - "Load test dataset with exactly 16 items, one per knowledge state"
+      - "Switch to Both view"
+      - "Visually inspect all 16 items at domain zoom level"
+      - "Screenshot and compare each pair for discriminability"
+    verify:
+      - "All 16 split-element boxes have distinct visual signatures"
+      - "Diagonal states (H/H, M/M, L/L, D/D) show solid colors — no visible split seam"
+      - "Off-diagonal states show clear left/right color difference"
+      - "Maximum off-diagonal states (e.g., User:High/Agent:Deferred) show maximum contrast"
+      - "No two states produce the same rendered output at domain zoom"
+
+  - name: display_mode_switching_preserves_spatial_layout
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS2, UWS-DS5
+    description: "Switching between display modes changes only color encoding, not item positions, sizes, or spatial arrangement."
+    preconditions:
+      - "Data Models tab active with multiple domain boxes populated"
+    steps:
+      - "In User view, note exact positions and sizes of all domain boxes and items"
+      - "Switch to Agent view"
+      - "Switch to Both view"
+      - "Switch back to User view"
+    verify:
+      - "Domain box positions identical across all three modes"
+      - "Item positions within domain boxes identical"
+      - "Item sizes unchanged"
+      - "Only fill colors / split-element encoding changed"
+      - "No layout reflow, no jitter, no animation artifacts during mode switch"
+
+  - name: color_presets_switch_encoding_not_layout
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS5
+    description: "Pressing 1/2/3/4 switches color presets (Health/Activity/Trust/Novelty). Spatial layout must remain pixel-identical."
+    preconditions:
+      - "Data Models tab active, items populated"
+    steps:
+      - "Press '1' (Health preset): items colored green/yellow/red by confidence+recency"
+      - "Press '2' (Activity preset): items colored hot/cold by recent deposit count"
+      - "Press '3' (Trust preset): items vary opacity by fidelity pass rate"
+      - "Press '4' (Novelty preset): items bright/dim by changes since last session"
+      - "Press '1' to return to Health"
+    verify:
+      - "Each preset produces a visibly different color mapping"
+      - "Spatial layout (positions, sizes) unchanged across all presets"
+      - "Preset indicator in status bar updates on each switch"
+      - "Transition between presets completes in < 100ms (no perceptible lag)"
+      - "Color preset and display mode (User/Agent/Both) are orthogonal — switching one does not reset the other"
+
+  # ── Data Models Tab: Semantic Zoom ──
+
   - name: navigate_data_models_semantic_zoom
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS3
@@ -77,6 +224,77 @@ stories:
       - "Zoom transitions smoothly between levels"
       - "Item detail shows deposits, assumptions, and provenance"
       - "q returns to previous zoom level"
+
+  - name: semantic_zoom_overview_hides_item_labels
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS8
+    description: "At overview zoom, item labels are hidden because they would be sub-14px. Only domain labels visible."
+    preconditions:
+      - "Data Models tab at overview zoom with 15+ domain boxes"
+    steps:
+      - "Observe the overview layout"
+      - "Count visible text elements"
+    verify:
+      - "Domain box labels are visible and >= 14px"
+      - "Individual item labels are NOT rendered (would be illegible at overview scale)"
+      - "Domain boxes show aggregate counts instead: '12 items (3H / 5M / 2L / 2D)'"
+      - "No text element in the viewport is below 14px"
+      - "Domain box interior shows colored rectangles (items) without text labels"
+
+  - name: semantic_zoom_domain_shows_item_detail
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3, UWS-DS8
+    description: "At domain zoom, items show titles and knowledge state. Content representation changes qualitatively from overview — not just bigger boxes."
+    preconditions:
+      - "Data Models tab, zoomed into a single domain with 8+ items"
+    steps:
+      - "Observe items at domain zoom level"
+      - "Compare to what was visible at overview zoom"
+    verify:
+      - "Item titles visible at >= 16px"
+      - "Knowledge state color clearly visible per-item"
+      - "Brief summary text (1-2 lines) visible for each item"
+      - "Assumption count badge visible (e.g., '3 assumptions')"
+      - "Content is qualitatively different from overview — not just scaled-up colored rectangles"
+      - "Deposit count or recency indicator visible per item"
+
+  # ── Data Models Tab: Stable Spatial Layout ──
+
+  - name: domain_positions_persist_across_sessions
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "Domain box positions are stable between app restarts. The user's spatial mental map is never disrupted."
+    preconditions:
+      - "App has been used in a previous session with domains positioned by user"
+    steps:
+      - "Launch app, note domain positions"
+      - "Close app completely (not just minimize)"
+      - "Relaunch app"
+      - "Compare domain positions"
+    verify:
+      - "Every domain box is in the exact same position as before shutdown"
+      - "No 'unsorted' region placement for previously-positioned domains"
+      - "Zoom level restored to previous session's zoom level"
+      - "Layout persists even if Worldview data has changed (new items, not new domains)"
+
+  - name: new_domain_appears_in_unsorted_region
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "A brand-new domain (first deposit for a new project) appears in the unsorted region, not displacing existing domains."
+    preconditions:
+      - "App running with established domain layout"
+      - "Agent creates a deposit for project 'brand-new-project' that has no prior domain box"
+    steps:
+      - "Agent writes OBSERVATION deposit tagged project:brand-new-project"
+      - "App receives update via next SENSE_worldview_load poll"
+      - "New domain box appears"
+    verify:
+      - "Existing domain positions are unchanged"
+      - "New domain appears in designated 'unsorted' region (not overlapping existing domains)"
+      - "New domain box is visually distinct (e.g., dashed border) until user places it"
+      - "User can drag or keyboard-move the domain to a permanent position"
+
+  # ── Decision Inbox Tab ──
 
   - name: triage_decision_inbox_item
     status: NOT_IMPLEMENTED
@@ -102,6 +320,80 @@ stories:
       - "Item no longer appears in active inbox"
       - "Knowledge state updated for the resolved topic"
 
+  - name: triage_dismiss_records_rationale
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "Dismissing an item records the dismissal as a deposit, not a silent deletion. Future queries can find why this was dismissed."
+    preconditions:
+      - "Decision Inbox has an untriaged contradiction"
+    steps:
+      - "User selects the contradiction"
+      - "User presses 'x' (dismiss)"
+      - "App prompts for brief rationale (inline text input, not modal)"
+      - "User types: 'Not a real contradiction — different contexts'"
+      - "User presses Enter to confirm"
+    verify:
+      - "Item moves to 'dismissed' status"
+      - "A DECISION deposit is written with: dismissed=true, rationale text, reference to dismissed item"
+      - "Item disappears from active inbox but is findable via search with status:dismissed"
+      - "The rationale is retrievable: SENSE_documents_search('dismissed contradiction') returns it"
+
+  - name: triage_defer_sets_reminder_timestamp
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "Deferring an item keeps it in the inbox with a deferred timestamp. It resurfaces when the timestamp passes."
+    preconditions:
+      - "Decision Inbox has untriaged items"
+    steps:
+      - "User selects an item"
+      - "User presses 'D' (defer — capital D, not 'd' for deposit)"
+      - "App prompts for deferral period (1h, 1d, 1w, custom)"
+      - "User selects '1d'"
+      - "Item moves to 'deferred' status with timestamp = now + 24h"
+    verify:
+      - "Item disappears from the default inbox view (which shows untriaged + investigating)"
+      - "Item appears in a 'Deferred' section or filter"
+      - "Deferred timestamp is stored and visible"
+      - "After 24h, item reappears in the active inbox as untriaged (re-surfaced)"
+      - "If the underlying issue was resolved by agent action in the meantime, the item shows 'auto-resolved' indicator"
+
+  - name: inbox_empty_state_is_healthy
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "An empty Decision Inbox is the normal state, not an error. The UI communicates this clearly."
+    preconditions:
+      - "All inbox items have been triaged"
+    steps:
+      - "User resolves/dismisses/defers the last inbox item"
+      - "Inbox becomes empty"
+    verify:
+      - "Empty state shows a clear message: 'No items require attention' (not 'Error: no data')"
+      - "No loading spinners, no skeleton placeholders"
+      - "Tab badge (if any) shows 0 or disappears"
+      - "The empty state is visually distinct from 'loading' and 'disconnected'"
+
+  - name: inbox_items_dual_existence_data_models
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "Triage items appear simultaneously in Decision Inbox and as attention markers in Data Models. Resolving in one updates both."
+    preconditions:
+      - "A contradiction exists for project 'actual-server'"
+      - "Both tabs accessible"
+    steps:
+      - "Open Data Models tab, zoom to actual-server domain"
+      - "Observe attention marker on the contradicted item (colored indicator)"
+      - "Switch to Decision Inbox tab"
+      - "Same item appears in the inbox list"
+      - "Resolve the item in the inbox"
+      - "Switch back to Data Models tab"
+    verify:
+      - "Attention marker is removed from the Data Models item"
+      - "Item knowledge state updated in the spatial view"
+      - "No ghost markers, no stale indicators"
+      - "If user had zoomed into the item in Data Models, the detail view also reflects resolution"
+
+  # ── Processes Tab ──
+
   - name: view_processes_tab
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS3
@@ -120,6 +412,39 @@ stories:
       - "All sections populated with live data from gateway"
       - "Workflow status reflects actual Temporal state"
       - "No time-series graphs (that's Grafana's job)"
+
+  - name: processes_tab_failed_workflow_visibility
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "A failed Temporal workflow is prominently visible, not buried in a collapsed section."
+    preconditions:
+      - "A Temporal workflow has failed (exceeded retry limit)"
+    steps:
+      - "Switch to Processes tab"
+      - "Observe workflow sections"
+    verify:
+      - "Failed workflow appears at the top of the Workflows section, not sorted by time"
+      - "Red/error visual indicator on the failed workflow"
+      - "Failure reason visible without expanding detail: 'Timeout after 3 retries'"
+      - "Failed workflow count appears as a badge on the Processes tab label"
+      - "If all workflows are healthy, no error badge is shown"
+
+  - name: processes_tab_no_agents_running
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "When no agents are running (idle system), the Processes tab shows clean empty states per section, not errors."
+    preconditions:
+      - "No Temporal workflows, no Kafka consumers, no active sessions"
+    steps:
+      - "Switch to Processes tab"
+    verify:
+      - "Executive section: 'No active session'"
+      - "Analysts section: 'No active workflows'"
+      - "Clerks section: 'No active consumers'"
+      - "Workflows section: 'No workflows'"
+      - "Each section clearly distinguishes 'idle' from 'error/disconnected'"
+
+  # ── Thread Pulling / Chronicle-Worldview Navigation ──
 
   - name: thread_pulling_navigation
     status: NOT_IMPLEMENTED
@@ -141,6 +466,21 @@ stories:
       - "Raw content includes session ID, timestamp, agent identity"
       - "q collapses levels in reverse order"
 
+  - name: thread_pull_on_item_with_no_chronicle_history
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS4
+    description: "Pulling on an item that has no Chronicle deposits (e.g., imported from external source) shows an informative empty state."
+    preconditions:
+      - "Data Models tab has an item with no deposits (imported reference data)"
+    steps:
+      - "Select the item"
+      - "Press 'p' to pull"
+    verify:
+      - "Pull view opens (not a crash, not a no-op)"
+      - "Message: 'No Chronicle deposits for this item. Origin: [import source]'"
+      - "If the item has graph neighbors, those are shown as context"
+      - "'q' returns to spatial view normally"
+
   - name: unified_search_across_chronicle_worldview
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS4
@@ -158,6 +498,27 @@ stories:
       - "Search results include both Worldview beliefs and Chronicle deposits"
       - "Results are ranked by relevance (hybrid FTS5 + semantic)"
       - "Selecting a result navigates to the item in context"
+
+  - name: search_with_jql_syntax
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS4
+    description: "Structured query syntax (project:gateway AND type:contradiction) works alongside free-text search."
+    preconditions:
+      - "App connected with data spanning multiple projects"
+    steps:
+      - "Press '/' to open search"
+      - "Type: project:gateway AND type:contradiction AND status:untriaged"
+      - "Results filtered to only matching items"
+      - "Clear search, type free-text: 'virtual thread pinning'"
+      - "Results include FTS5 + semantic matches across all projects"
+    verify:
+      - "JQL-style filters produce precise results"
+      - "Boolean operators (AND, OR, NOT) work correctly"
+      - "Field auto-suggestions appear as user types 'project:'"
+      - "Free-text search returns broader results than structured query"
+      - "Malformed JQL (e.g., 'project:') shows helpful error, not crash"
+
+  # ── Companion App Integration ──
 
   - name: open_emacs_companion_for_deposit
     status: NOT_IMPLEMENTED
@@ -181,6 +542,24 @@ stories:
       - "Deposit recorded in Chronicle after save"
       - "UI reflects updated knowledge state"
 
+  - name: emacs_companion_crash_does_not_kill_app
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS6
+    description: "If Emacs crashes or the daemon is not running, the UI recovers gracefully instead of hanging."
+    preconditions:
+      - "Emacs daemon is NOT running (or crashes mid-edit)"
+      - "User triggers deposit composition"
+    steps:
+      - "User presses 'd' to compose deposit"
+      - "UI sends emacsclient command"
+      - "emacsclient fails (connection refused / daemon not running)"
+    verify:
+      - "UI does not hang or crash"
+      - "Error message displayed: 'Could not open Emacs — daemon not running'"
+      - "UI remains at full width (did not contract for a companion that never opened)"
+      - "User can retry after starting Emacs daemon"
+      - "If Emacs crashes mid-edit, UI detects the closed window via i3 IPC and restores full width"
+
   - name: open_krita_for_image_markup
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS6
@@ -203,26 +582,28 @@ stories:
       - "UI shows updated image after Krita save"
       - "Deposit attachment contains the annotated image"
 
-  - name: chat_with_analyst_agent
+  - name: companion_layout_respects_i3_splits
     status: NOT_IMPLEMENTED
-    ds_ref: UWS-DS7
-    description: "User directs an analyst agent via the chat surface in the UI."
+    ds_ref: UWS-DS1, UWS-DS6
+    description: "Companion apps open in correct i3 split positions. The UI does not end up behind the companion or in the wrong container."
     preconditions:
-      - "Analyst agent available (Ollama with 32B model running)"
-      - "UI is on Worldview workspace"
+      - "UI is running full-width on Worldview workspace"
+      - "Emacs daemon is running"
     steps:
-      - "User opens analyst chat panel (keyboard shortcut)"
-      - "Chat panel appears as a sidebar in the UI"
-      - "User types: 'Focus on the dependency changes in project X'"
-      - "Message sent to gateway, routed to analyst agent"
-      - "Analyst responds with investigation plan"
-      - "Analyst produces OBSERVATION deposit as it finds results"
-      - "User sees deposit appear in Data Models tab in real time"
+      - "User triggers deposit composition (opens Emacs companion)"
+      - "UI should be left 1/3, Emacs right 2/3"
+      - "User finishes deposit, companion closes"
+      - "UI restores to full width"
+      - "User triggers image annotation (opens Krita companion)"
+      - "UI should be left 1/3, Krita right 2/3"
     verify:
-      - "Chat messages delivered to analyst via gateway"
-      - "Analyst response appears in chat panel"
-      - "OBSERVATION deposits from analyst visible in Data Models tab"
-      - "Executive agent (Claude Code TTY) is NOT affected"
+      - "i3 tree shows correct container hierarchy: H[UI | Companion]"
+      - "UI window retains focus after companion opens (user types in companion, not UI)"
+      - "Wait — actually companion should have focus for editing. Verify companion gets focus."
+      - "After companion closes, UI regains focus"
+      - "If user manually rearranges i3 layout, UI does not fight the user's arrangement"
+
+  # ── Which-Key Discovery ──
 
   - name: which_key_discovery_panels
     status: NOT_IMPLEMENTED
@@ -244,3 +625,307 @@ stories:
       - "Panel content changes based on active tab and selection context"
       - "All actions shown in panel are functional when pressed"
       - "Escape dismisses the panel without action"
+
+  - name: which_key_shows_only_valid_actions_for_selection
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS4
+    description: "When an item is selected, which-key shows actions valid for that item type. An item with no image attachment does not show 'annotate in Krita'."
+    preconditions:
+      - "Data Models tab, item selected that has NO image attachment"
+    steps:
+      - "Press leader key"
+      - "Observe action groups"
+      - "Note whether 'a (annotate)' appears"
+    verify:
+      - "'a (annotate in Krita)' is NOT shown for items without images"
+      - "'d (compose deposit)' IS shown (valid for all items)"
+      - "'p (pull thread)' IS shown (valid for all items with Chronicle history)"
+      - "Actions are context-filtered, not just grayed out — absent means unavailable"
+
+  # ── Chat Surfaces ──
+
+  - name: chat_with_analyst_agent
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS7
+    description: "User directs an analyst agent via the chat surface in the UI."
+    preconditions:
+      - "Analyst agent available (Ollama with 32B model running)"
+      - "UI is on Worldview workspace"
+    steps:
+      - "User opens analyst chat panel (keyboard shortcut)"
+      - "Chat panel appears as a sidebar in the UI"
+      - "User types: 'Focus on the dependency changes in project X'"
+      - "Message sent to gateway, routed to analyst agent"
+      - "Analyst responds with investigation plan"
+      - "Analyst produces OBSERVATION deposit as it finds results"
+      - "User sees deposit appear in Data Models tab in real time"
+    verify:
+      - "Chat messages delivered to analyst via gateway"
+      - "Analyst response appears in chat panel"
+      - "OBSERVATION deposits from analyst visible in Data Models tab"
+      - "Executive agent (Claude Code TTY) is NOT affected"
+
+  # ── Concurrent Updates from Multiple Agents ──
+
+  - name: concurrent_agent_deposits_update_incrementally
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS2, UWS-DS3
+    description: "Multiple agents writing deposits simultaneously cause incremental UI updates, not a full re-render stampede."
+    preconditions:
+      - "App connected, Data Models tab active"
+      - "Executive (Claude Code) and Analyst are both running"
+    steps:
+      - "Executive writes DECISION deposit for project A"
+      - "Analyst writes OBSERVATION deposit for project B within same second"
+      - "Clerk writes enrichment deposit for project A 200ms later"
+      - "App polls SENSE_worldview_load and detects 3 new deposits"
+    verify:
+      - "All three deposits reflected in the UI"
+      - "Only affected domain boxes re-render (project A and project B), not the entire canvas"
+      - "No flickering, no z-order changes, no selection loss"
+      - "If user was zoomed into project A, they see the new deposits appear in the timeline"
+      - "Deposit timestamps are displayed in correct chronological order despite near-simultaneous arrival"
+
+  - name: rapid_knowledge_state_transitions
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS2
+    description: "An item's knowledge state changes multiple times in quick succession (agent writes deposit, then user triages, then agent verifies). Each transition renders correctly."
+    preconditions:
+      - "Item 'X' is at (User: Deferred, Agent: Low)"
+    steps:
+      - "Agent writes OBSERVATION deposit → Agent level becomes Medium"
+      - "User reads the observation → User level becomes Low (seen but not confirmed)"
+      - "User resolves with DECISION deposit → User level becomes High"
+      - "Agent writes VERIFICATION deposit → Agent level becomes High"
+    verify:
+      - "Four state transitions: (D,L) → (D,M) → (L,M) → (H,M) → (H,H)"
+      - "Each transition is visually reflected (color change in Both view)"
+      - "No intermediate state is skipped in the rendering"
+      - "Final state (H,H) shows solid color (diagonal — both verified)"
+      - "If user was watching the item, transitions animate smoothly rather than snapping"
+
+  # ── Font Size Legibility ──
+
+  - name: font_size_floor_enforced_everywhere
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS8
+    description: "No text element anywhere in the UI is below 14px. Body text is >= 16px. This applies to all tabs, panels, status bar, which-key, and search."
+    preconditions:
+      - "App is running with all tabs accessible"
+    steps:
+      - "Inspect every text element in Data Models tab (domain labels, item titles, status bar)"
+      - "Inspect Decision Inbox tab (item titles, status badges, timestamps)"
+      - "Inspect Processes tab (section headers, workflow names, status text)"
+      - "Inspect which-key panel (key labels, action descriptions)"
+      - "Inspect search results"
+      - "Inspect chat panel"
+    verify:
+      - "No text element has computed font-size < 14px"
+      - "Body text (deposit content, item descriptions) is >= 16px"
+      - "Status bar text >= 14px"
+      - "Which-key panel key labels >= 14px"
+      - "Timestamps, badges, and metadata labels >= 14px"
+      - "If canvas-rendered text exists, it also respects 14px floor (measure in canvas coordinates)"
+
+  - name: font_legibility_at_3440x1440_screenshot
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS8
+    description: "Screenshot of the UI at 3440x1440 is legible when viewed at Claude's 0.495x downscale. All text readable at effective ~7px+."
+    preconditions:
+      - "App running on 3440x1440 display"
+    steps:
+      - "Take screenshot of Data Models tab with items visible"
+      - "Downscale screenshot to 1703x713 (0.495x)"
+      - "Examine text legibility at downscaled resolution"
+    verify:
+      - "Domain labels readable at 0.495x"
+      - "Status bar readable at 0.495x"
+      - "No text is an unreadable blob at downscaled resolution"
+      - "14px source text → ~6.9px effective — at threshold but still readable as text"
+      - "16px source text → ~7.9px effective — clearly readable"
+
+  # ── Responsive Layout ──
+
+  - name: layout_adapts_to_companion_split
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1, UWS-DS6
+    description: "When the UI contracts to 1/3 width for a companion app, content reflows without data loss."
+    preconditions:
+      - "App running full-width (3440px) on 3440x1440 display"
+    steps:
+      - "Trigger companion open (Emacs) — UI contracts to ~1147px"
+      - "Observe Data Models tab at narrow width"
+      - "Observe Decision Inbox at narrow width"
+      - "Close companion — UI expands back to full width"
+    verify:
+      - "At 1/3 width, Data Models tab still shows navigable content (may reduce to single-column domain list)"
+      - "No horizontal overflow, no cut-off text, no overlapping elements"
+      - "Decision Inbox items remain readable at narrow width"
+      - "Status bar wraps or abbreviates gracefully"
+      - "After expansion, full layout restored with no glitches"
+      - "Font sizes remain >= 14px even at narrow width"
+
+  # ── Error States ──
+
+  - name: stale_worldview_data_clearly_marked
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS2
+    description: "When SENSE_worldview_load returns data older than a threshold, the UI marks items as potentially stale."
+    preconditions:
+      - "Gateway connected but Worldview materialization has not run in 24+ hours"
+    steps:
+      - "App polls SENSE_worldview_load"
+      - "Response includes last_materialized timestamp from 24h ago"
+      - "UI renders the data"
+    verify:
+      - "Global staleness warning visible: 'Worldview last updated 24h ago'"
+      - "Items are not silently presented as current"
+      - "Colors are slightly desaturated or have a staleness overlay"
+      - "User can trigger manual refresh if the tool supports it"
+
+  - name: mcp_tool_returns_error
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1
+    description: "An MCP tool call returns an error (e.g., SENSE_graph_neighbors with invalid node ID). The error is surfaced, not swallowed."
+    preconditions:
+      - "App connected to gateway"
+    steps:
+      - "User navigates to an item and pulls thread"
+      - "Thread pull calls SENSE_graph_neighbors with the item's node ID"
+      - "Gateway returns an error: 'Node not found in graph'"
+    verify:
+      - "Error message displayed inline (not a modal, not a crash)"
+      - "User can dismiss the error and continue navigating"
+      - "The error is logged (viewable in a debug/log panel if one exists)"
+      - "No partial/corrupt data rendered from the failed call"
+
+  # ── Offline / Degraded Mode ──
+
+  - name: offline_mode_with_cached_data
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1
+    description: "When gateway is unreachable, the app operates on locally cached data with clear degraded-mode indicators."
+    preconditions:
+      - "App was previously connected and has cached Worldview data"
+      - "Gateway is now unreachable (network down, service stopped)"
+    steps:
+      - "App detects gateway unreachable"
+      - "App falls back to cached data"
+      - "User navigates Data Models tab"
+      - "User attempts to compose a deposit"
+    verify:
+      - "Cached data is displayed with staleness indicator (last sync timestamp)"
+      - "Read-only navigation works (zoom, scroll, search cached data)"
+      - "Write operations (deposit, triage) are queued with pending indicator"
+      - "Status bar shows: 'Offline — using cached data from [timestamp]'"
+      - "When gateway becomes reachable again, queued writes are replayed"
+
+  # ── Window Management / i3 Integration ──
+
+  - name: app_respects_i3_workspace_assignment
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1
+    description: "The app opens on the correct i3 workspace (Worldview) and does not steal focus from the Record workspace."
+    preconditions:
+      - "User is on the Record workspace (Claude Code active)"
+      - "i3 config has workspace assignment for Actual Server UI"
+    steps:
+      - "User launches Actual Server UI from dmenu or keybinding"
+      - "App window is created"
+    verify:
+      - "App window appears on the Worldview workspace, not the current (Record) workspace"
+      - "Focus remains on the Record workspace — user is not yanked to Worldview"
+      - "When user switches to Worldview workspace (Super+N), the app is there and ready"
+      - "App window has correct i3 properties (class, instance) for workspace matching"
+
+  - name: single_instance_enforcement
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS1
+    description: "Launching the app a second time does not create a duplicate window. It focuses the existing instance."
+    preconditions:
+      - "App is already running on Worldview workspace"
+      - "User is on a different workspace"
+    steps:
+      - "User launches Actual Server UI again (keybinding or dmenu)"
+    verify:
+      - "No second window created"
+      - "Focus switches to the existing app window on the Worldview workspace"
+      - "Existing state (tab, scroll, selection) preserved — not reset"
+      - "If the existing window was minimized or behind another window, it is raised"
+
+  # ── Annotation as Deposit ──
+
+  - name: annotation_on_item_creates_chronicle_deposit
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "User annotates an item in the spatial view, creating a deposit that agents can attend to."
+    preconditions:
+      - "Data Models tab, item selected at domain or item zoom"
+    steps:
+      - "User presses 'n' (annotate — not 'd' which is compose full deposit)"
+      - "Inline annotation input appears anchored to the item"
+      - "User types: 'This assumption seems wrong — check against the January test results'"
+      - "User presses Enter to submit"
+    verify:
+      - "OBSERVATION deposit created with references field pointing to the annotated item"
+      - "Deposit tagged as user-annotation"
+      - "Item shows annotation indicator (small badge) in spatial view"
+      - "Analyst agent can detect the annotation via SENSE_documents_search"
+      - "The annotation is visible in the item's thread-pull view"
+
+  # ── Adversarial: Race Conditions and Edge Cases ──
+
+  - name: triage_item_that_agent_resolves_simultaneously
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3
+    description: "User starts triaging an item that an agent simultaneously resolves. No crash, no duplicate deposits, no silent data loss."
+    preconditions:
+      - "Decision Inbox has item 'X' in untriaged state"
+      - "User opens item X detail view"
+      - "Agent simultaneously writes a VERIFICATION deposit resolving item X"
+    steps:
+      - "User is reading item X detail"
+      - "Agent's deposit arrives via next poll"
+      - "Item X's status changes server-side to resolved"
+      - "User presses 'r' (resolve) for item X"
+      - "UI sends ACT_deposits_write for a DECISION deposit"
+    verify:
+      - "One of two acceptable outcomes: (a) user's deposit is recorded alongside agent's, item stays resolved, or (b) UI shows 'This item was resolved by [agent] while you were reading it — still submit your deposit?'"
+      - "No crash, no unhandled error"
+      - "No duplicate resolution deposits"
+      - "If user's deposit is recorded, both deposits appear in the Chronicle timeline (not conflict)"
+
+  - name: worldview_data_changes_during_deep_zoom
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS3, UWS-DS4
+    description: "While user is deep in an item's thread-pull view, the underlying Worldview data changes. The deep view does not corrupt or crash."
+    preconditions:
+      - "User has pulled two levels deep on item Y (viewing raw session content)"
+      - "Agent writes a contradicting deposit that changes item Y's knowledge state"
+    steps:
+      - "User is reading raw turn content for item Y"
+      - "Next poll detects updated Worldview with changed state for item Y"
+      - "UI receives the update"
+    verify:
+      - "Deep view remains stable — user's read is not interrupted"
+      - "A subtle indicator appears: 'Item updated — pull to refresh'"
+      - "When user backs out (q q) to spatial view, updated colors are visible"
+      - "No stale data is silently shown as current after the user exits deep view"
+
+  - name: extremely_large_domain_box_performance
+    status: NOT_IMPLEMENTED
+    ds_ref: UWS-DS8
+    description: "A domain with 500+ items does not cause the UI to freeze at domain zoom."
+    preconditions:
+      - "A project has 500 knowledge items (e.g., actual-server with extensive deposits)"
+    steps:
+      - "Zoom into the large domain"
+      - "Navigate with j/k through items"
+      - "Scroll through the full item list"
+    verify:
+      - "Domain zoom renders within 500ms (no multi-second freeze)"
+      - "j/k navigation responds within 100ms per keystroke"
+      - "Items are virtualized (only visible items rendered, not all 500)"
+      - "Scrolling is smooth (60fps target)"
+      - "Memory usage does not spike (< 100MB for the domain view)"
+      - "Aggregate summary at overview zoom for this domain remains responsive"

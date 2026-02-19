@@ -1,16 +1,24 @@
 vocabulary:
   fleet: "Multi-device set: Linux desktop (primary), Mac Pro, Android phone, iPad, NAS (4-drive RAID). Connected via Tailscale."
   service_placement: "Which services run on which device. Desktop keeps compute (GPU), NAS gets stateful services (Kafka, PostgreSQL, Neo4j)."
-  openclaw: "Telegram bot that connects mobile users to the gateway via Tailscale + MCP."
+  openclaw: "Telegram bot that connects mobile users to the gateway via Streamable HTTP MCP over Tailscale."
   k3s: "Lightweight Kubernetes distribution. Container orchestration, auto-restart, scheduling across nodes."
+  tailscale_acl: "Identity-based access control list on the Tailscale mesh. Network boundary is the trust boundary — no application-level auth."
+  session_isolation: "Each MCP client gets its own session (session_id, scratchpad, deferred checks). Clients share the Chronicle but not session-scoped data."
+  node_label: "K3s node metadata (node-role=desktop|nas|macpro) used by nodeSelector to place pods on correct hardware."
+  pvc: "PersistentVolumeClaim — K3s-managed storage that survives pod restarts. Backed by NAS RAID."
+  host_network: "K3s pod networking mode where the pod uses the host's network stack directly. Required for gateway (SHM access to sensor)."
+  split_brain: "Condition where two devices independently modify shared state (Chronicle projections, FTS5 indexes) while unable to communicate, producing divergent state."
 
 metadata:
   feature: multi-device
   project: actual-server
-  date: "2026-02-13"
+  date: "2026-02-19"
   status: NOT_IMPLEMENTED
 
 stories:
+  # ── Existing stories (preserved) ──
+
   - name: mobile_queries_agent_via_telegram
     status: NOT_IMPLEMENTED
     description: "User sends a query from their phone via Telegram and receives an agent response."
@@ -20,7 +28,7 @@ stories:
       - "Phone has Telegram installed"
     steps:
       - "User sends message to OpenClaw Telegram bot from phone"
-      - "OpenClaw receives message, connects to gateway:8080/mcp via Tailscale"
+      - "OpenClaw receives message, connects to gateway:8372/mcp via Tailscale"
       - "Gateway processes the MCP request"
       - "Gateway returns response via Streamable HTTP"
       - "OpenClaw formats response and sends back via Telegram"
@@ -72,6 +80,562 @@ stories:
       - "No manual intervention required"
       - "Grafana alert fires for the outage (TEL-DS3)"
 
+  # ── Device Discovery & Registration ──
+
+  - name: new_device_joins_tailscale_mesh
+    status: NOT_IMPLEMENTED
+    description: >
+      A new device (Mac Pro) joins the Tailscale network and can immediately
+      reach the gateway MCP endpoint. No application-level registration
+      required — Tailscale ACL membership IS the registration.
+    preconditions:
+      - "Gateway listening on 0.0.0.0:8372"
+      - "Tailscale ACL allows the Mac Pro's identity"
+      - "Mac Pro has tailscale installed and authenticated"
+    steps:
+      - "Run 'tailscale up' on Mac Pro"
+      - "Mac Pro receives a stable Tailscale IP"
+      - "From Mac Pro, attempt HTTP GET to desktop-tailscale-ip:8372/health"
+      - "Gateway responds 200 OK"
+      - "Claude Code on Mac Pro connects to desktop-tailscale-ip:8372/mcp"
+      - "Gateway creates a new MCP session for this client"
+    verify:
+      - "No configuration change on the gateway was needed"
+      - "Mac Pro's session is independent from desktop's session"
+      - "Gateway logs show a new session with the Mac Pro's Tailscale IP as remote address"
+      - "No application-level credential exchange occurred — Tailscale ACL was sufficient"
+
+  - name: unauthorized_device_rejected_at_network_layer
+    status: NOT_IMPLEMENTED
+    description: >
+      A device NOT in the Tailscale network cannot reach the gateway at all.
+      The rejection happens at the network layer, not the application layer —
+      the gateway never sees the request.
+    preconditions:
+      - "Gateway listening on 0.0.0.0:8372"
+      - "Attacker machine is on the same LAN but NOT in the Tailscale network"
+    steps:
+      - "Attacker attempts TCP connection to desktop's LAN IP on port 8372"
+      - "Connection succeeds (gateway binds 0.0.0.0)"
+      - "Attacker sends MCP initialize request"
+      - "Gateway processes the request — NO application-level auth blocks it"
+    verify:
+      - "THIS STORY FAILS — it exposes a gap: binding 0.0.0.0 means LAN devices bypass Tailscale"
+      - "Mitigation: gateway must bind to 127.0.0.1 + Tailscale interface IP only, OR use firewall rules (iptables/nftables) to restrict port 8372 to Tailscale subnet (100.64.0.0/10)"
+      - "Until mitigated, any device on the LAN can reach the gateway without Tailscale membership"
+      - "This is the single biggest security gap in the current design"
+
+  # ── Session Isolation & Handoff ──
+
+  - name: session_isolation_prevents_cross_device_interference
+    status: NOT_IMPLEMENTED
+    description: >
+      Two simultaneous MCP clients (desktop Claude Code + Mac Pro Claude Code)
+      each get isolated sessions. One client's deferred checks, scratchpad,
+      and session state are invisible to the other.
+    preconditions:
+      - "Gateway running with HTTP transport"
+      - "Desktop client connected with session_id=A"
+      - "Mac Pro client connected with session_id=B"
+    steps:
+      - "Desktop client calls ACT_sessions_save with session-specific key_facts"
+      - "Mac Pro client calls SENSE_sessions_search"
+      - "Mac Pro client calls ACT_set_attention_target (display_id='host')"
+      - "Desktop client calls SENSE_read_snapshot"
+    steps_adversarial:
+      - "Mac Pro client attempts to reference session_id=A in a tool call parameter"
+    verify:
+      - "Mac Pro's SENSE_sessions_search returns results from the shared Chronicle (correct — Chronicle is shared)"
+      - "Mac Pro's ACT_set_attention_target targets Mac Pro's own display context, not desktop's"
+      - "Desktop's SENSE_read_snapshot returns desktop sensor data, not Mac Pro's"
+      - "Session-scoped state (scratchpad, deferred checks) is never leaked between sessions"
+      - "Adversarial cross-session reference is rejected or silently scoped to the caller's session"
+
+  - name: session_handoff_desktop_to_mobile_loses_display_tools
+    status: NOT_IMPLEMENTED
+    description: >
+      User moves from desktop to mobile (Telegram via OpenClaw). The mobile
+      session can query knowledge but CANNOT invoke display tools (no X11,
+      no sensor, no screenshots). The gateway must degrade gracefully, not crash.
+    preconditions:
+      - "Desktop session active with full tool surface (display, sensor, emacs, etc.)"
+      - "User switches to phone, sends query via OpenClaw"
+      - "OpenClaw connects to gateway as a new MCP session"
+    steps:
+      - "OpenClaw session calls SENSE_sessions_reassemble — succeeds (knowledge query)"
+      - "OpenClaw session calls SENSE_capture_screen_region — fails (no display context)"
+      - "OpenClaw session calls ACT_send_keystroke — fails (no display context)"
+      - "OpenClaw session calls SENSE_documents_search — succeeds (knowledge query)"
+    verify:
+      - "Knowledge tools work identically from mobile and desktop"
+      - "Display/sensor tools return a clear error ('no display context for this session') not a stack trace"
+      - "The error is MCP-compliant (isError=true in CallToolResult) so OpenClaw can relay it cleanly"
+      - "Desktop session is unaffected by mobile session's display tool failures"
+      - "OpenClaw can filter tools/list to hide display-dependent tools from the Telegram UI"
+
+  # ── Network Partition & Offline Handling ──
+
+  - name: nas_network_partition_gateway_loses_stateful_services
+    status: NOT_IMPLEMENTED
+    description: >
+      The NAS becomes unreachable (Tailscale tunnel drops, NAS reboots, switch failure).
+      Gateway loses access to Kafka, PostgreSQL, Neo4j, Qdrant. Agent must degrade,
+      not crash.
+    preconditions:
+      - "Gateway running on desktop"
+      - "Stateful services (Kafka, PostgreSQL, Neo4j, Qdrant) on NAS"
+      - "All services healthy"
+    steps:
+      - "NAS becomes unreachable (simulate: tailscale down on NAS, or iptables DROP)"
+      - "Gateway attempts to write to Kafka — connection timeout"
+      - "Gateway attempts FTS5 query — succeeds (local SQLite, not on NAS)"
+      - "Gateway attempts Qdrant vector search — connection timeout"
+      - "Gateway attempts Neo4j graph query — connection timeout"
+      - "User invokes SENSE_documents_search"
+      - "User invokes ACT_events_write"
+    verify:
+      - "SENSE_documents_search falls back to FTS5-only (local SQLite) — returns results, no semantic ranking"
+      - "ACT_events_write buffers events locally or returns a clear 'event bus unavailable' error"
+      - "Gateway does NOT hang indefinitely — all remote calls have timeouts (< 5s)"
+      - "Gateway health endpoint reports degraded status, not healthy"
+      - "When NAS returns, gateway reconnects automatically — no manual restart"
+      - "Buffered events (if any) are flushed to Kafka on reconnection"
+      - "No data loss: local SQLite state is authoritative for session/document indexes"
+
+  - name: desktop_offline_nas_still_serves_mobile
+    status: NOT_IMPLEMENTED
+    description: >
+      Desktop goes offline (sleep, reboot, power failure). NAS is still running.
+      Mobile user sends a Telegram query. OpenClaw cannot reach the gateway
+      because the gateway runs on the desktop.
+    preconditions:
+      - "Gateway runs on desktop (not NAS)"
+      - "Desktop is powered off"
+      - "NAS is running with all stateful services healthy"
+      - "OpenClaw is deployed (where? — this is the question)"
+    steps:
+      - "User sends Telegram message to OpenClaw"
+      - "OpenClaw attempts to connect to desktop-tailscale-ip:8372/mcp"
+      - "Connection refused — desktop is offline"
+      - "OpenClaw has no fallback"
+    verify:
+      - "THIS STORY EXPOSES A GAP: gateway is a single point of failure for all access"
+      - "Mitigation options: (a) run a secondary read-only gateway on NAS for knowledge queries, (b) OpenClaw caches last-known answers, (c) accept the limitation — desktop offline = agent offline"
+      - "Current design accepts this: 'Gateway is the single MCP entry point' (enforced constraint)"
+      - "OpenClaw should return a user-friendly 'Agent offline — desktop is not running' message, not a raw connection error"
+
+  - name: tailscale_relay_fallback_when_direct_connection_fails
+    status: NOT_IMPLEMENTED
+    description: >
+      Two devices on different networks (desktop at home, phone on cellular)
+      cannot establish a direct WireGuard tunnel. Tailscale falls back to
+      DERP relay servers. Latency increases but connectivity is preserved.
+    preconditions:
+      - "Desktop on home network behind CGNAT"
+      - "Phone on cellular network"
+      - "Tailscale DERP relays operational"
+    steps:
+      - "Phone sends MCP request via OpenClaw"
+      - "Tailscale attempts direct connection — fails (both behind NAT)"
+      - "Tailscale routes through nearest DERP relay"
+      - "MCP request reaches gateway with added relay latency (~50-200ms)"
+      - "Gateway processes request and responds"
+      - "Response relayed back through DERP"
+    verify:
+      - "End-to-end latency increases but stays under 5s for simple queries"
+      - "No configuration change needed — DERP fallback is automatic"
+      - "Tailscale status shows relay path (not direct)"
+      - "MCP protocol (HTTP) is unaffected by the relay — it's a transport-layer concern"
+      - "Gateway cannot distinguish direct vs relayed connections (transparent)"
+
+  # ── Conflict Resolution ──
+
+  - name: simultaneous_session_saves_from_two_devices
+    status: NOT_IMPLEMENTED
+    description: >
+      Desktop and Mac Pro both call ACT_sessions_save at the same instant.
+      Both write to the same SQLite database. sqlite-jdbc serializes via
+      internal synchronized block — one wins, one blocks. Neither should corrupt.
+    preconditions:
+      - "Gateway running with HTTP transport"
+      - "Desktop session_id=A and Mac Pro session_id=B both active"
+      - "Both sessions have accumulated key_facts to save"
+    steps:
+      - "Desktop calls ACT_sessions_save(summary='desktop work', ...)"
+      - "Mac Pro calls ACT_sessions_save(summary='macpro work', ...) at the same time"
+      - "sqlite-jdbc serializes the two INSERT statements (internal synchronized on Connection)"
+      - "First caller acquires the lock, writes, releases"
+      - "Second caller acquires the lock, writes, releases"
+    verify:
+      - "Both sessions are saved — no data loss"
+      - "Each session has its own row with distinct session_id — no overwrite"
+      - "Second caller experiences latency (~10-50ms) from lock contention, not failure"
+      - "No SQLITE_BUSY errors — single Connection serialization handles this"
+      - "If watcher scan is also running, third-party contention increases latency further (known issue)"
+
+  - name: concurrent_chronicle_writes_from_multiple_agents
+    status: NOT_IMPLEMENTED
+    description: >
+      Future scenario: multiple agent sessions (desktop, Mac Pro, mobile) all
+      emit events to Kafka simultaneously. Events are ordered per-partition
+      but may interleave across partitions. Projections must handle this.
+    preconditions:
+      - "Kafka running on NAS with multi-partition topic"
+      - "Three active sessions emitting events"
+      - "PostgreSQL projection consumer running"
+    steps:
+      - "Desktop emits DECISION event at T=0"
+      - "Mac Pro emits OBSERVATION event at T=0"
+      - "Mobile emits OBSERVATION event at T=1"
+      - "Events land in different Kafka partitions (partitioned by session_id)"
+      - "Projection consumer reads from all partitions"
+      - "Consumer processes events — order within each session is guaranteed, cross-session order is not"
+    verify:
+      - "All three events appear in the projection"
+      - "Events from the same session are ordered correctly (Kafka partition ordering)"
+      - "Cross-session event ordering is by timestamp, not by Kafka offset (timestamps may have clock skew)"
+      - "Projection does not assume global ordering — it handles interleaved multi-session events"
+      - "No duplicate events — Kafka consumer commits offsets after projection write"
+
+  # ── K3s Migration & Service Resilience ──
+
+  - name: gateway_pod_restart_preserves_sensor_connection
+    status: NOT_IMPLEMENTED
+    description: >
+      Gateway runs as K3s pod with hostNetwork:true. Pod restarts (OOM, rolling update).
+      Sensor daemon runs on systemd (not K3s). Gateway must reconnect to sensor
+      after restart without sensor noticing.
+    preconditions:
+      - "Gateway deployed as K3s pod with hostNetwork:true"
+      - "Sensor running as systemd service"
+      - "SHM segment exists at /dev/shm/sensor_ambient"
+    steps:
+      - "Gateway pod is killed (kubectl delete pod gateway-xxx)"
+      - "K3s schedules new gateway pod on same node (nodeSelector: node-role=desktop)"
+      - "New pod starts, mounts /dev/shm as hostPath volume"
+      - "Gateway reads SHM segment — sensor data is there (sensor never stopped)"
+      - "Gateway re-registers sensor-proxied tools"
+      - "Claude Code reconnects (session resurrection or new session)"
+    verify:
+      - "Sensor daemon was never restarted — uptime unchanged"
+      - "SHM data is continuous — no gap in sensor readings"
+      - "New gateway pod has same IP (hostNetwork) — no DNS/service discovery change"
+      - "Claude Code session resurrects (SessionResurrectionFilter) or starts fresh"
+      - "Total downtime < 30s (pod restart + JVM startup + tool registration)"
+
+  - name: pvc_data_survives_nas_pod_migration
+    status: NOT_IMPLEMENTED
+    description: >
+      PostgreSQL pod on NAS is rescheduled (node drain, K3s upgrade).
+      PersistentVolumeClaim retains data across pod deletion and recreation.
+    preconditions:
+      - "PostgreSQL running as K3s pod on NAS with PVC backed by RAID"
+      - "Database contains Chronicle projection tables"
+      - "Gateway actively querying PostgreSQL"
+    steps:
+      - "kubectl drain nas-node --ignore-daemonsets"
+      - "PostgreSQL pod evicted, PVC remains bound"
+      - "kubectl uncordon nas-node"
+      - "K3s reschedules PostgreSQL pod to NAS (only node with node-role=nas and the PVC)"
+      - "Pod starts, mounts existing PVC"
+      - "PostgreSQL recovers from WAL"
+      - "Gateway reconnects (connection pool retry)"
+    verify:
+      - "All Chronicle projection data intact — row counts match pre-drain"
+      - "No data corruption — PostgreSQL WAL recovery is clean"
+      - "Gateway experienced connection errors during drain but recovered automatically"
+      - "Total data unavailability window < 120s"
+      - "PVC was never deleted — only the pod was rescheduled"
+
+  # ── Device Capability Negotiation ──
+
+  - name: mobile_client_receives_filtered_tool_list
+    status: NOT_IMPLEMENTED
+    description: >
+      OpenClaw connects to gateway and receives the full MCP tools/list.
+      Many tools are useless on mobile (display, sensor, emacs). OpenClaw
+      must filter the tool list to present only relevant tools in Telegram.
+    preconditions:
+      - "OpenClaw connected to gateway via MCP"
+      - "Gateway returns full 100-tool surface on tools/list"
+    steps:
+      - "OpenClaw calls tools/list"
+      - "Gateway returns all 100 tools (it has no client-capability awareness)"
+      - "OpenClaw filters tools client-side based on a hardcoded allowlist"
+      - "Allowed: SENSE_sessions_search, SENSE_sessions_reassemble, SENSE_documents_search, ACT_sessions_save"
+      - "Filtered out: all ACT_send_*, SENSE_capture_*, ACT_evaluate_elisp, etc."
+      - "OpenClaw presents filtered tools as Telegram slash commands"
+    verify:
+      - "Gateway does NOT filter tools — it serves the same surface to all clients"
+      - "Filtering is the client's responsibility (OpenClaw maintains the allowlist)"
+      - "If OpenClaw invokes a display tool anyway, gateway returns a clean MCP error, not a crash"
+      - "Future improvement: gateway could accept client capabilities in initialize and filter server-side"
+
+  - name: display_adaptation_across_screen_types
+    status: NOT_IMPLEMENTED
+    description: >
+      Gateway's display tools target specific X11 displays. When accessed from
+      a device without X11 (phone, iPad), display tools are meaningless.
+      When accessed from Mac Pro (which may have its own X11 or Wayland),
+      the display_id parameter determines routing.
+    preconditions:
+      - "Gateway on desktop has display :0 (user) and :99 (agent)"
+      - "Mac Pro has its own display environment (not shared with desktop)"
+    steps:
+      - "Mac Pro client calls SENSE_capture_screen_region(display_id='host')"
+      - "Gateway resolves 'host' to desktop's :0 (gateway runs on desktop)"
+      - "Screenshot shows desktop's screen, NOT Mac Pro's screen"
+      - "Mac Pro client calls ACT_send_keystroke targeting 'host'"
+      - "Keystrokes go to desktop's X11, not Mac Pro's"
+    verify:
+      - "THIS IS CORRECT BUT COUNTERINTUITIVE: 'host' means the gateway's host, not the client's host"
+      - "Mac Pro cannot screenshot its own screen via the gateway — gateway has no X11 access to Mac Pro"
+      - "To screenshot Mac Pro, Mac Pro would need its own sensor daemon + gateway (or sensor-proxied tools via a local sensor)"
+      - "Documentation must make this clear: display tools operate on the gateway's host, not the MCP client's host"
+      - "Future: Mac Pro runs its own sensor daemon, desktop gateway proxies to it via Tailscale (sensor-over-network)"
+
+  # ── Push Notification Routing ──
+
+  - name: notification_routing_to_active_device
+    status: NOT_IMPLEMENTED
+    description: >
+      Agent needs to alert the user (build failure, anomaly detected).
+      User might be at desktop, on phone, or away. The notification
+      must reach the device the user is actually using.
+    preconditions:
+      - "Desktop sensor running (can detect user activity via typing rhythm, pointer)"
+      - "OpenClaw connected from mobile"
+      - "Notification event generated by agent"
+    steps:
+      - "Agent calls ACT_post_message('Build failed: actual-server tests')"
+      - "Gateway checks: is user active on desktop? (SENSE_read_snapshot → idle_seconds)"
+      - "If idle_seconds < 300: route to desktop overlay (ACT_emit_overlay_message)"
+      - "If idle_seconds >= 300: route to mobile (OpenClaw → Telegram push notification)"
+      - "If no mobile session active: notification is logged but not delivered"
+    verify:
+      - "THIS IS NOT IMPLEMENTED — current gateway has no notification routing logic"
+      - "Current behavior: ACT_post_message only targets the desktop overlay, always"
+      - "Gap: no mechanism to push from gateway → OpenClaw (OpenClaw polls, doesn't subscribe)"
+      - "Mitigation: OpenClaw could long-poll or use SSE from gateway for push notifications"
+      - "Activity detection (idle_seconds) already exists via sensor — routing logic is the missing piece"
+
+  # ── Device Removal ──
+
+  - name: revoke_device_access_via_tailscale_acl
+    status: NOT_IMPLEMENTED
+    description: >
+      A device must be removed from the fleet (lost phone, decommissioned Mac Pro).
+      Removing it from Tailscale ACL immediately revokes all access.
+      No application-level deregistration needed.
+    preconditions:
+      - "Device is in Tailscale network and has an active MCP session"
+      - "Tailscale admin console accessible"
+    steps:
+      - "Admin removes device from Tailscale ACL (or deletes the device)"
+      - "Tailscale tears down the WireGuard tunnel"
+      - "Device's next MCP request fails at TCP level (no route to host)"
+      - "Gateway's existing session for this device becomes orphaned"
+      - "Session eventually times out and is garbage collected"
+    verify:
+      - "Access revocation is immediate — no propagation delay beyond Tailscale's ACL sync (~seconds)"
+      - "Gateway does not need to be restarted or reconfigured"
+      - "Orphaned session does not consume significant resources (no active polling)"
+      - "Gateway logs show the session's TCP connection reset, then no further activity"
+      - "Re-adding the device to Tailscale restores access — no gateway-side state to clean up"
+
+  - name: orphaned_sessions_do_not_leak_resources
+    status: NOT_IMPLEMENTED
+    description: >
+      A device disconnects uncleanly (phone loses signal, laptop lid closed,
+      network cable pulled). The MCP session on the gateway is never properly
+      closed. Sessions must not accumulate indefinitely.
+    preconditions:
+      - "Gateway has 3 active MCP sessions (desktop, Mac Pro, mobile)"
+      - "Mobile device loses connectivity abruptly"
+    steps:
+      - "Mobile's TCP connection breaks — no FIN, no RST delivered"
+      - "Gateway holds the session object in memory"
+      - "No further requests arrive for this session"
+      - "Session idle timeout fires (configurable, e.g., 30 minutes)"
+      - "Gateway evicts the session from its session store"
+    verify:
+      - "Session is cleaned up after timeout — no manual intervention"
+      - "Memory usage returns to pre-session baseline after cleanup"
+      - "If mobile reconnects before timeout, session resurrection works (SessionResurrectionFilter)"
+      - "If mobile reconnects after timeout, a new session is created — no stale state"
+      - "Gateway metrics track session count over time — orphan accumulation is detectable"
+
+  # ── Battery & Resource Awareness ──
+
+  - name: mobile_query_respects_response_size
+    status: NOT_IMPLEMENTED
+    description: >
+      Mobile clients are on metered connections with limited bandwidth.
+      A SENSE_sessions_reassemble call could return megabytes of session history.
+      Responses must be bounded.
+    preconditions:
+      - "OpenClaw connected via cellular data"
+      - "Chronicle contains 500+ sessions spanning months of history"
+    steps:
+      - "OpenClaw calls SENSE_sessions_reassemble(lookback_days=30)"
+      - "Gateway assembles full session reconstruction — 2MB of JSON"
+      - "Gateway returns the full 2MB response over Tailscale (cellular)"
+      - "OpenClaw receives 2MB, must truncate for Telegram (message limit: 4096 chars)"
+      - "Most of the data transfer was wasted"
+    verify:
+      - "THIS EXPOSES A GAP: no response size negotiation in MCP"
+      - "Mitigation: OpenClaw should use lookback_days=3 (not 30) for mobile queries"
+      - "Better mitigation: add a 'max_response_bytes' parameter to knowledge tools"
+      - "Best mitigation: OpenClaw summarizes server-side before sending to Telegram (but OpenClaw is a thin client, not an LLM)"
+      - "Current workaround: OpenClaw truncates responses client-side with a 'see full result on desktop' note"
+
+  - name: nas_under_heavy_load_degrades_gracefully
+    status: NOT_IMPLEMENTED
+    description: >
+      NAS is resource-constrained (low-power CPU, spinning disks). Running
+      Kafka + PostgreSQL + Neo4j + Qdrant + MinIO + Valkey simultaneously
+      may exceed its capacity during peak load.
+    preconditions:
+      - "All stateful services running on NAS as K3s pods"
+      - "K3s resource limits configured for each pod"
+      - "Gateway on desktop sending concurrent requests to NAS services"
+    steps:
+      - "Agent triggers a large document indexing batch (ACT_documents_index)"
+      - "Indexer writes to PostgreSQL (projections), Qdrant (embeddings), Kafka (events) simultaneously"
+      - "NAS CPU saturates at 100% — spinning disks hit IOPS ceiling"
+      - "PostgreSQL query latency spikes from 5ms to 500ms"
+      - "Qdrant search timeout triggers circuit breaker in gateway"
+      - "Neo4j graph queries start timing out"
+    verify:
+      - "K3s resource limits prevent any single pod from starving others (CPU/memory limits)"
+      - "Gateway circuit breakers trip for timed-out services — subsequent requests fail fast"
+      - "Indexing batch detects degraded NAS and throttles write rate (backpressure)"
+      - "User-facing queries (SENSE_documents_search, SENSE_sessions_search) use local SQLite first — NAS degradation doesn't block them"
+      - "Observability stack (also on NAS) may be degraded — catch-22 for monitoring"
+      - "Mitigation: prioritize query pods (PostgreSQL, Qdrant) over batch pods (Kafka consumers) via K3s PriorityClass"
+
+  # ── Proximity & Local Interactions ──
+
+  - name: local_desktop_connection_bypasses_tailscale
+    status: NOT_IMPLEMENTED
+    description: >
+      Desktop Claude Code connects to 127.0.0.1:8372, not the Tailscale IP.
+      Local connections should have zero Tailscale overhead — loopback is fastest.
+    preconditions:
+      - "Gateway bound to 0.0.0.0:8372"
+      - "Claude Code configured with url: 'http://127.0.0.1:8372/mcp'"
+    steps:
+      - "Claude Code connects via loopback"
+      - "TCP handshake completes on loopback interface"
+      - "MCP session established"
+      - "Tool calls execute with sub-millisecond network overhead"
+    verify:
+      - "Connection does NOT traverse Tailscale — loopback is kernel-level"
+      - "Latency is strictly lower than Tailscale path (no WireGuard encryption overhead)"
+      - "Gateway cannot distinguish loopback from Tailscale connections at the application layer"
+      - "If gateway is ever restricted to Tailscale-only binding (per security story), localhost access still works via Tailscale's local interface (100.x.y.z on loopback)"
+
+  - name: mac_pro_accesses_desktop_gpu_tools_remotely
+    status: NOT_IMPLEMENTED
+    description: >
+      Mac Pro needs LLM inference (Ollama) and embedding generation (TEI).
+      These run on desktop GPU. Mac Pro accesses them through the gateway
+      MCP interface, not by SSH or direct API calls.
+    preconditions:
+      - "Ollama running on desktop with GPU"
+      - "TEI running on desktop with GPU"
+      - "Mac Pro connected to gateway via Tailscale"
+      - "Gateway has tools that wrap Ollama/TEI inference"
+    steps:
+      - "Mac Pro Claude Code session needs to generate embeddings for a document"
+      - "Calls gateway tool that invokes TEI"
+      - "Gateway calls TEI on localhost (same machine)"
+      - "TEI processes on GPU, returns embeddings"
+      - "Gateway returns embeddings to Mac Pro session via MCP response"
+      - "Mac Pro receives embeddings over Tailscale"
+    verify:
+      - "Mac Pro did not need GPU — desktop's GPU served the request"
+      - "Latency: ~5ms (TEI inference) + ~2ms (Tailscale) = ~7ms total — well within tolerance"
+      - "If Mac Pro had its own GPU, it could run TEI locally — but consolidating GPU use on desktop simplifies management"
+      - "Gateway does not expose raw Ollama/TEI APIs — only MCP tool wrappers"
+
+  # ── Authentication Edge Cases ──
+
+  - name: tailscale_key_expiry_disrupts_remote_sessions
+    status: NOT_IMPLEMENTED
+    description: >
+      Tailscale auth keys expire (default: 90 days for most plans). When a
+      device's key expires, its tunnel is torn down. Active MCP sessions
+      from that device are severed.
+    preconditions:
+      - "Mac Pro connected via Tailscale with an auth key nearing expiration"
+      - "Active MCP session from Mac Pro"
+    steps:
+      - "Tailscale key expires"
+      - "Tailscale daemon on Mac Pro loses tunnel"
+      - "In-flight MCP request from Mac Pro times out (no TCP path)"
+      - "Gateway's TCP connection to Mac Pro hangs, then times out"
+      - "Session becomes orphaned"
+      - "Mac Pro user must re-authenticate with Tailscale ('tailscale up --reset')"
+      - "After re-auth, Mac Pro gets new Tailscale IP (possibly) and reconnects"
+    verify:
+      - "Gateway handles the orphaned session via idle timeout (see orphaned_sessions story)"
+      - "If Mac Pro gets a new Tailscale IP, session resurrection still works (session_id is in HTTP header, not tied to IP)"
+      - "Mitigation: use Tailscale's 'disable key expiry' for trusted devices"
+      - "Alert: OpenClaw should notify user when Tailscale key expiry is approaching (tailscale status --json shows expiry)"
+
+  - name: multiple_claude_code_instances_share_gateway
+    status: NOT_IMPLEMENTED
+    description: >
+      HTTP daemon mode allows multiple Claude Code instances on the same desktop
+      to share the gateway. Each gets its own MCP session. Verify they don't
+      interfere — especially display tools that target the same X11 display.
+    preconditions:
+      - "Gateway running in HTTP daemon mode (actual-gateway.service)"
+      - "Two Claude Code instances running on the same desktop"
+      - "Both connected to 127.0.0.1:8372/mcp with separate sessions"
+    steps:
+      - "Instance A calls ACT_send_keystroke('Return') targeting display_id='host'"
+      - "Instance B calls ACT_send_keystroke('Escape') targeting display_id='host' at the same time"
+      - "Both keystrokes are sent to the same X11 display (:0)"
+      - "Keystroke order is non-deterministic — whichever gateway thread runs first wins"
+      - "Instance A calls SENSE_capture_screen_region(display_id='host')"
+      - "Screenshot may reflect B's keystroke, A's keystroke, or both"
+    verify:
+      - "Neither instance crashes — concurrent display access is thread-safe at the gateway level"
+      - "Keystroke ordering is NOT guaranteed — this is a known limitation of shared display access"
+      - "No mutex on display tools — serialization would add latency with no correctness guarantee (X11 is inherently racy)"
+      - "Best practice: only one Claude Code instance should use display tools at a time"
+      - "Instance on display :99 (agent display) does not conflict with instance on display :0 (host display)"
+
+  # ── End-to-End Fleet Scenario ──
+
+  - name: full_fleet_query_touches_all_nodes
+    status: NOT_IMPLEMENTED
+    description: >
+      A single user query from mobile traverses the entire fleet:
+      phone → OpenClaw → Tailscale → desktop gateway → NAS services → back.
+      This is the longest possible request path. Verify it completes within SLA.
+    preconditions:
+      - "All fleet devices online: desktop, NAS, phone"
+      - "OpenClaw deployed and connected to gateway"
+      - "All stateful services on NAS healthy"
+    steps:
+      - "User sends 'what were we working on last week?' via Telegram"
+      - "OpenClaw receives message, calls SENSE_sessions_search via MCP over Tailscale"
+      - "Gateway receives request, queries FTS5 (local SQLite) — returns session IDs"
+      - "Gateway queries PostgreSQL on NAS for session details — Tailscale hop"
+      - "Gateway queries Qdrant on NAS for semantic matches — Tailscale hop"
+      - "Gateway assembles response, returns to OpenClaw"
+      - "OpenClaw formats and sends via Telegram"
+      - "User reads response on phone"
+    verify:
+      - "End-to-end latency: < 8s (OpenClaw processing + Tailscale × 2 hops + gateway + NAS queries + Telegram API)"
+      - "Breakdown: Telegram API ~1s, OpenClaw processing ~500ms, Tailscale RTT ~20ms, gateway ~200ms, NAS queries ~500ms, return path ~1.5s"
+      - "If any NAS service is down, gateway falls back to local-only results (degraded but functional)"
+      - "If Tailscale is relayed (DERP), add ~100-200ms — still within 8s SLA"
+      - "Observability: request tracing spans the entire path (OTel trace from OpenClaw through gateway to NAS and back)"
+
 enforced_constraints:
   - "Tailscale for all cross-device networking — no port forwarding, no VPN servers"
   - "Gateway is the single MCP entry point — all clients connect to one gateway"
@@ -81,3 +645,5 @@ opinionated_constraints:
   - "Defer until Phase 6 — multi-device depends on stable observability"
   - "NAS first, Mac Pro second — NAS solves the immediate resource problem"
   - "Mobile is a thin client — notification and query interface, not a full agent session"
+  - "Network boundary is the trust boundary — Tailscale ACLs, no app-level auth (initially)"
+  - "Incremental K3s migration — one service at a time, Docker Compose as fallback"

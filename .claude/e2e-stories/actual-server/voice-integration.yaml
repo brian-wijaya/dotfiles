@@ -1,56 +1,477 @@
 vocabulary:
-  actual_dictation: "Existing Whisper-based speech-to-text system. Runs on GPU. Integrated with desktop via keybinding. Produces text output."
-  voice_sensor: "Proposed sensor sensor channel for microphone activity. Would export voice_active/idle to SHM alongside typing rhythm and pointer dynamics."
+  actual_dictation: "Existing Whisper-based speech-to-text system. Runs on GPU. Integrated with desktop via keybinding. Produces text output. After transcription, POSTs to gateway /voice endpoint."
+  voice_sensor: "PulseAudio monitor in sensor daemon. Reads input device volume level (single float, dB). Exports binary voice_active/idle to SHM. No audio content captured or stored."
+  voice_endpoint: "Gateway HTTP endpoint at /voice. Accepts JSON with text, timestamp, confidence, duration_ms. Creates Turn event with role: USER, source: voice. Written to chronicle.turns."
+  voice_gate: "Input gate that blocks host X11 input while user speaks. Only active in collaborative mode (display_id: host). Additive with typing gate: typing=active OR voice=active -> block."
+  voice_turn: "Chronicle Turn event with source: voice metadata. Distinguishable from typed input. Carries confidence score and duration. Accessible via normal knowledge tools."
+  confidence_threshold: "Minimum transcription confidence (0.0-1.0) below which the agent should request clarification rather than acting on uncertain input."
+  silence_threshold: "Configurable dB level in sensor daemon below which microphone input is classified as idle. Used for ambient noise rejection."
+  pulseaudio_monitor: "PulseAudio monitor source used by sensor to read input level. Not microphone capture — reads the volume meter on the default input device."
 
 metadata:
   feature: voice-integration
   project: actual-server
-  date: "2026-02-13"
+  date: "2026-02-19"
   status: NOT_IMPLEMENTED
 
 stories:
-  - name: dictation_text_reaches_agent
+  # ── DS-1: Dictation → Gateway Text Pipeline ──
+
+  - name: dictation_text_reaches_gateway_endpoint
     status: NOT_IMPLEMENTED
-    description: "User dictates via Actual Dictation and the text reaches Claude through the normal input flow."
+    description: >
+      User dictates via Actual Dictation, Whisper transcribes on GPU, and the
+      transcribed text is POSTed to the gateway /voice endpoint. Gateway creates
+      a Turn event in the Chronicle. End-to-end: speech to persisted event.
     preconditions:
       - "Actual Dictation operational with Whisper on GPU"
+      - "Gateway running with /voice endpoint registered"
       - "User has dictation keybinding configured"
     steps:
       - "User presses dictation keybinding"
-      - "Actual Dictation activates Whisper, captures audio"
-      - "Whisper transcribes speech to text"
-      - "Text is produced (clipboard, direct input, or paste)"
-      - "User submits text to Claude Code"
-      - "Agent processes the dictated text as normal input"
+      - "Actual Dictation activates Whisper, captures audio from default input device"
+      - "Whisper transcribes speech to text on GPU"
+      - "Actual Dictation POSTs JSON to http://127.0.0.1:8372/voice with text, timestamp, confidence, duration_ms"
+      - "Gateway receives POST, validates payload"
+      - "Gateway creates Turn event with role: USER, source: voice"
+      - "Turn event written to chronicle.turns"
     verify:
-      - "Whisper runs on GPU (not CPU)"
-      - "Transcription latency < 2s for typical utterance"
-      - "No gateway changes required (option 1: minimal integration)"
-      - "Agent cannot distinguish typed from dictated input (no metadata)"
+      - "Whisper runs on GPU (not CPU) — nvidia-smi shows VRAM usage during transcription"
+      - "Transcription latency < 2s for typical utterance (< 15 words)"
+      - "Turn event exists in chronicle.turns with source: voice"
+      - "Turn event contains confidence score and duration_ms metadata"
+      - "Agent can retrieve the voice turn via SENSE_sessions_search"
+
+  - name: voice_turn_distinguishable_from_typed_input
+    status: NOT_IMPLEMENTED
+    description: >
+      Agent receives two inputs — one typed, one dictated — and can distinguish
+      them by source metadata. The voice turn carries source: voice; the typed
+      turn carries source: keyboard (or no source tag). Verifies the metadata
+      propagates through the entire pipeline.
+    preconditions:
+      - "Gateway /voice endpoint active"
+      - "Agent has access to knowledge tools"
+    steps:
+      - "User types 'hello from keyboard' into Claude Code terminal"
+      - "User dictates 'hello from voice' via Actual Dictation"
+      - "Both inputs become Turn events in chronicle.turns"
+      - "Agent queries recent turns via SENSE_sessions_search"
+    verify:
+      - "Voice turn has source: voice metadata"
+      - "Typed turn does NOT have source: voice"
+      - "Both turns are accessible through the same knowledge tools — no special voice API"
+      - "Agent can filter turns by source if needed"
+
+  - name: low_confidence_transcription_triggers_clarification
+    status: NOT_IMPLEMENTED
+    description: >
+      Whisper produces a transcription with low confidence (< 0.5). The gateway
+      stores the turn with the low confidence score. The agent, seeing the low
+      confidence, asks the user for clarification rather than acting on uncertain
+      input. Tests the confidence-driven clarification loop.
+    preconditions:
+      - "Gateway /voice endpoint active"
+      - "Agent has logic to check confidence field on voice turns"
+    steps:
+      - "User dictates in a noisy environment"
+      - "Whisper transcribes with confidence: 0.31"
+      - "Actual Dictation POSTs to /voice with confidence: 0.31"
+      - "Gateway creates Turn event with the low confidence"
+      - "Agent retrieves the turn and inspects confidence"
+    verify:
+      - "Turn event stored with confidence: 0.31 — not silently dropped"
+      - "Agent can read the confidence field from the Turn metadata"
+      - "Agent asks 'I heard X — is that right?' rather than acting on low-confidence input"
+      - "If user confirms, agent proceeds. If user corrects, corrected text becomes a new Turn"
+
+  - name: voice_endpoint_rejects_malformed_payload
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: POST to /voice with missing required field (no 'text'),
+      empty text, null text, or non-JSON body. Gateway returns 400 and does NOT
+      create a Turn event. No partial state corruption.
+    preconditions:
+      - "Gateway /voice endpoint active"
+    steps:
+      - "POST to /voice with body: {\"confidence\": 0.9} (missing text)"
+      - "POST to /voice with body: {\"text\": \"\"} (empty text)"
+      - "POST to /voice with body: {\"text\": null} (null text)"
+      - "POST to /voice with body: 'not json at all'"
+      - "POST to /voice with body: {\"text\": \"valid\", \"confidence\": 2.0} (confidence out of range)"
+    verify:
+      - "All malformed requests return HTTP 400"
+      - "No Turn events created for any of the malformed requests"
+      - "chronicle.turns table unchanged after all malformed POSTs"
+      - "Gateway logs the rejection reason at WARN level"
+      - "Gateway does not crash or enter error state from any malformed input"
+
+  - name: rapid_sequential_dictations
+    status: NOT_IMPLEMENTED
+    description: >
+      User dictates three sentences in rapid succession (< 1s gap between
+      each POST). All three produce separate Turn events in correct chronological
+      order. No race conditions, no dropped turns, no reordering.
+    preconditions:
+      - "Gateway /voice endpoint active"
+      - "Actual Dictation can fire multiple POSTs rapidly"
+    steps:
+      - "User dictates sentence 1, Actual Dictation POSTs with timestamp T1"
+      - "User dictates sentence 2 immediately after, POST with timestamp T2 (T2 > T1)"
+      - "User dictates sentence 3 immediately after, POST with timestamp T3 (T3 > T2)"
+      - "All three POSTs arrive at gateway within ~500ms"
+    verify:
+      - "Three distinct Turn events in chronicle.turns"
+      - "Events are ordered T1 < T2 < T3"
+      - "No duplicate turns — each POST produces exactly one event"
+      - "No sqlite write contention error (virtual thread safe)"
+      - "All three retrievable via SENSE_sessions_search in correct order"
+
+  - name: voice_endpoint_unavailable_during_gateway_restart
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: Actual Dictation POSTs to /voice while the gateway is
+      restarting. The POST fails (connection refused). Actual Dictation must
+      handle the failure — the transcribed text is not silently lost.
+    preconditions:
+      - "Actual Dictation configured to POST to gateway"
+      - "Gateway is mid-restart (port 8372 not listening)"
+    steps:
+      - "User dictates while gateway is restarting"
+      - "Whisper transcribes successfully"
+      - "Actual Dictation attempts POST to http://127.0.0.1:8372/voice"
+      - "Connection refused"
+    verify:
+      - "Actual Dictation detects the failure (does not silently swallow)"
+      - "Actual Dictation falls back to clipboard/paste output (degraded but functional)"
+      - "User is notified that voice-to-agent pipeline is unavailable"
+      - "When gateway recovers, subsequent dictations succeed via /voice"
+      - "No partial Turn events in chronicle from the failed attempt"
+
+  # ── DS-2: Voice Activity as Sensor ──
 
   - name: voice_activity_detected_as_sensor
     status: NOT_IMPLEMENTED
-    description: "Sensor sensor detects microphone activity and exports voice state."
+    description: >
+      Sensor daemon detects microphone activity via PulseAudio monitor and
+      exports binary voice_active/idle state to SHM. Gateway ambient header
+      reflects voice state. Agent sees voice=active in ambient context.
     preconditions:
-      - "Sensor daemon has microphone access"
+      - "Sensor daemon has PulseAudio access"
       - "Voice activity detection enabled in sensor config"
+      - "Silence threshold calibrated for user's environment"
     steps:
-      - "User begins speaking"
-      - "Sensor detects microphone energy above threshold"
-      - "Sensor exports voice_active=true to SHM"
-      - "Gateway ambient header includes voice=active"
+      - "User begins speaking into microphone"
+      - "Sensor reads PulseAudio input level, detects level above silence threshold"
+      - "Sensor exports voice_state=active to SHM"
+      - "Gateway reads SHM, ambient header includes voice=active"
       - "Agent sees voice=active in ambient context"
       - "User stops speaking"
-      - "Sensor exports voice_active=false after silence threshold"
+      - "After silence holds below threshold for debounce period, sensor exports voice_state=idle"
+      - "Gateway ambient header shows voice=idle"
     verify:
-      - "Voice activity detection latency < 100ms"
-      - "No false positives from ambient noise (threshold calibration)"
-      - "Privacy: audio is NOT recorded or transmitted — only activity detection"
-      - "Voice state integrates with typing gate (agent pauses during voice activity)"
+      - "Voice activity detection latency < 100ms (threshold crossing to SHM write)"
+      - "No false positives from ambient noise (threshold calibration works)"
+      - "Privacy: audio is NOT recorded or transmitted — only activity level read"
+      - "voice_state integrates into ambient header alongside typing_state"
+
+  - name: voice_gate_blocks_agent_input_in_collaborative_mode
+    status: NOT_IMPLEMENTED
+    description: >
+      Agent is in collaborative mode (targeting host display) and attempts to
+      send X11 input while user is speaking. The voice gate blocks the input,
+      same as the typing gate. Agent waits for voice=idle before proceeding.
+    preconditions:
+      - "Agent targeting display_id: host (collaborative mode)"
+      - "Voice sensor active, user is speaking (voice=active)"
+      - "Input gate enabled"
+    steps:
+      - "Agent calls ACT_send_keystroke targeting host display"
+      - "Gateway checks ambient state: voice=active"
+      - "Gateway blocks the X11 input (voice gate)"
+      - "User finishes speaking"
+      - "Sensor exports voice=idle"
+      - "Gateway releases the gate, ACT_send_keystroke executes"
+    verify:
+      - "X11 input is NOT sent while voice=active"
+      - "Agent receives clear indication that input was gated (not a timeout)"
+      - "Input executes after voice transitions to idle"
+      - "Gate only fires in collaborative mode — does NOT fire for display_id: 99"
+
+  - name: voice_gate_does_not_fire_in_autonomous_mode
+    status: NOT_IMPLEMENTED
+    description: >
+      Agent is working in its own display (:99) in autonomous mode. User is
+      speaking on the host display. The voice gate does NOT block the agent's
+      X11 input on :99. Agent has total freedom in its own environment.
+    preconditions:
+      - "Agent targeting display_id: 99 (autonomous mode)"
+      - "Voice sensor on host shows voice=active"
+    steps:
+      - "User is actively dictating on host display"
+      - "Agent calls ACT_send_keystroke targeting display :99"
+      - "Gateway checks: display_id is 99, not host"
+    verify:
+      - "X11 input on :99 executes immediately — no gate"
+      - "User's voice activity has zero effect on agent's autonomous work"
+      - "Agent does not see any gate delay or rejection"
+
+  - name: concurrent_voice_and_typing_both_gate
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: User is simultaneously dictating (voice=active) AND typing
+      corrections (typing=active). Both gates fire. Agent input is blocked
+      by the OR of both signals. Neither gate releasing independently allows
+      agent input through — both must be idle.
+    preconditions:
+      - "Agent targeting display_id: host"
+      - "User is dictating AND typing simultaneously"
+    steps:
+      - "voice=active AND typing=active in SHM"
+      - "Agent calls ACT_send_keystroke targeting host"
+      - "Gate blocks (voice=active OR typing=active)"
+      - "User stops typing (typing=idle), but continues speaking (voice=active)"
+      - "Agent attempts ACT_send_keystroke again"
+      - "Gate still blocks (voice=active)"
+      - "User stops speaking (voice=idle)"
+      - "Both signals now idle"
+    verify:
+      - "Agent input blocked while either voice OR typing is active"
+      - "Releasing only one gate does not allow agent input through"
+      - "Agent input only proceeds when BOTH voice=idle AND typing=idle"
+      - "Gate logic is additive OR, not AND"
+
+  - name: ambient_noise_does_not_trigger_voice_active
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: User is not speaking, but ambient noise (fan, music, HVAC,
+      neighbor's dog) pushes microphone input level above zero but below the
+      configured silence threshold. Sensor correctly classifies this as idle.
+    preconditions:
+      - "Sensor daemon monitoring PulseAudio input"
+      - "Silence threshold set to -30dB (configurable)"
+      - "Ambient noise present at -40dB (below threshold)"
+    steps:
+      - "Fan/HVAC running, microphone picks up ambient noise at -40dB"
+      - "Sensor reads PulseAudio level: -40dB"
+      - "Sensor compares against threshold: -40dB < -30dB"
+      - "Sensor keeps voice_state=idle in SHM"
+      - "User begins speaking at -15dB"
+      - "Sensor detects -15dB > -30dB threshold"
+      - "Sensor sets voice_state=active"
+    verify:
+      - "Ambient noise at -40dB does NOT trigger voice_state=active"
+      - "Speech at -15dB DOES trigger voice_state=active"
+      - "No jitter between active/idle from noise near threshold (debounce)"
+      - "Threshold is configurable in sensor config"
+
+  - name: no_microphone_degrades_gracefully
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: PulseAudio has no input device (microphone unplugged, no
+      audio hardware, or PulseAudio not running). Sensor daemon does not crash.
+      Voice activity detection is simply absent — voice_state is not exported
+      to SHM. Gateway ambient header omits voice field entirely.
+    preconditions:
+      - "Sensor daemon running"
+      - "No PulseAudio input device available"
+    steps:
+      - "Sensor attempts to open PulseAudio monitor for default input"
+      - "PulseAudio returns error (no input device)"
+      - "Sensor logs warning: 'No audio input device available, voice detection disabled'"
+      - "Sensor continues normal operation for typing and pointer channels"
+    verify:
+      - "Sensor does NOT crash"
+      - "voice_state field absent from SHM (not present as stale value)"
+      - "Gateway ambient header omits voice= field (not voice=error)"
+      - "Agent operates normally without voice state — typing gate still works"
+      - "If microphone is later connected, sensor picks it up (PulseAudio hotplug)"
+
+  - name: pulseaudio_device_changes_mid_session
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: User switches audio input device mid-session (plugs in USB
+      headset, Bluetooth connects, PulseAudio default changes). Sensor detects
+      the device change and switches to monitoring the new default input.
+    preconditions:
+      - "Sensor monitoring PulseAudio default input (built-in mic)"
+      - "User has USB headset ready to connect"
+    steps:
+      - "Sensor is monitoring built-in mic, voice detection working"
+      - "User plugs in USB headset"
+      - "PulseAudio switches default input to USB headset"
+      - "Sensor detects default input change (PulseAudio subscribe event)"
+      - "Sensor switches monitoring to USB headset input"
+      - "User speaks into USB headset"
+    verify:
+      - "No gap in voice detection during device switch (< 500ms)"
+      - "Sensor logs device change at INFO level"
+      - "Voice detection works on new device immediately"
+      - "Old device monitoring is cleanly stopped (no file descriptor leak)"
+      - "If new device is removed, falls back to remaining device or degrades gracefully"
+
+  - name: voice_sensor_privacy_audit
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial audit: Verify that the sensor daemon truly captures zero
+      audio content. No buffers, no files, no network transmission of audio data.
+      Only the volume level (single float) is read from PulseAudio.
+    preconditions:
+      - "Sensor daemon running with voice detection enabled"
+      - "strace/ltrace available for system call auditing"
+    steps:
+      - "User speaks continuously for 30 seconds"
+      - "Audit sensor process: strace for write() syscalls to files/sockets"
+      - "Audit sensor SHM: read voice_state field, verify it's a single enum (active/idle)"
+      - "Audit sensor memory: /proc/<pid>/maps for audio buffer allocations"
+      - "Check sensor binary: no linked audio encoding libraries (opus, vorbis, lame)"
+    verify:
+      - "No audio data written to any file during 30s of speech"
+      - "No audio data sent over any socket"
+      - "SHM contains exactly one field for voice: a binary state, not audio samples"
+      - "No audio encoding libraries linked"
+      - "PulseAudio API usage is limited to pa_stream_peek for level metering, not capture"
+
+  # ── Voice Session Lifecycle ──
+
+  - name: voice_session_start_stop_lifecycle
+    status: NOT_IMPLEMENTED
+    description: >
+      User starts a voice session (presses dictation key), speaks, stops.
+      The full lifecycle produces correct events: session start, Turn events
+      for each utterance, session end. Sensor tracks voice=active throughout.
+    preconditions:
+      - "Actual Dictation and gateway /voice endpoint active"
+      - "Sensor voice detection active"
+    steps:
+      - "User presses dictation keybinding — Actual Dictation starts"
+      - "Sensor detects voice=active (microphone opens)"
+      - "User speaks first sentence — Whisper transcribes, POST to /voice"
+      - "User pauses briefly (< 2s), Whisper treats as same utterance"
+      - "User speaks second sentence — separate POST to /voice"
+      - "User presses dictation keybinding again — Actual Dictation stops"
+      - "Sensor detects voice=idle (microphone closes)"
+    verify:
+      - "Two Turn events created (one per utterance)"
+      - "Sensor correctly tracked active→idle transition"
+      - "Brief pause between sentences did not cause false idle→active→idle"
+      - "Dictation stop cleanly terminates Whisper inference"
+
+  - name: voice_feedback_loop_prevention
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: Agent produces TTS output (or system sounds play) while
+      the microphone is active. The microphone picks up the speaker output,
+      creating a feedback loop. Sensor and/or Actual Dictation must prevent
+      this from generating spurious voice turns.
+    preconditions:
+      - "Microphone and speakers active simultaneously"
+      - "No hardware echo cancellation"
+      - "Sensor voice detection active"
+    steps:
+      - "Agent triggers system notification sound"
+      - "Microphone picks up the sound"
+      - "Sensor reads PulseAudio input level — above threshold from speaker bleed"
+      - "If Actual Dictation is active, Whisper transcribes the system sound"
+    verify:
+      - "Sensor voice detection uses PulseAudio echo cancellation module (module-echo-cancel) if available"
+      - "If no echo cancellation, sensor ignores input that correlates with simultaneous output"
+      - "System sounds do not produce Turn events in chronicle"
+      - "If Whisper transcribes system audio, the confidence score should be very low (< 0.3)"
+      - "Agent does not act on speaker-bleed transcription"
+
+  - name: dictation_during_active_agent_output
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: User begins dictating while the agent is actively writing
+      to the terminal (streaming response). The voice input and agent output
+      must not collide. Voice turns are stored even while agent is producing
+      output. Agent can read them on next tool call.
+    preconditions:
+      - "Agent is mid-response, streaming text to terminal"
+      - "User presses dictation keybinding and begins speaking"
+    steps:
+      - "Agent is writing a long response to terminal"
+      - "User presses dictation key, speaks 'actually, stop and do X instead'"
+      - "Actual Dictation transcribes, POSTs to /voice"
+      - "Gateway creates Turn event while agent is still streaming"
+      - "Agent finishes current response"
+      - "On next tool call, agent sees the voice Turn in context"
+    verify:
+      - "Voice Turn is persisted even while agent is actively streaming"
+      - "No race condition between agent writing and voice POST arriving"
+      - "Agent sees the voice Turn on its next context pull"
+      - "Voice input does not corrupt agent's streaming output"
+
+  - name: whisper_gpu_oom_during_transcription
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: GPU memory is exhausted (other processes using VRAM) when
+      Whisper attempts transcription. Whisper fails. The failure does not
+      propagate as a corrupted Turn event or crash the pipeline.
+    preconditions:
+      - "GPU VRAM nearly full (other ML models loaded)"
+      - "User presses dictation keybinding and speaks"
+    steps:
+      - "User speaks, Actual Dictation invokes Whisper"
+      - "Whisper attempts GPU allocation, fails with CUDA OOM"
+      - "Actual Dictation catches the Whisper failure"
+    verify:
+      - "Actual Dictation does NOT POST to /voice (no transcription to send)"
+      - "User is notified that transcription failed (desktop notification or audio cue)"
+      - "No partial/garbage Turn event created in chronicle"
+      - "Subsequent dictation attempts work once GPU memory is freed"
+      - "Sensor voice detection continues working (independent of Whisper)"
+
+  - name: very_long_dictation_handled
+    status: NOT_IMPLEMENTED
+    description: >
+      Adversarial: User dictates continuously for 5 minutes (e.g., describing
+      a complex problem). Whisper must handle the long audio. The resulting
+      text may be very large. Gateway /voice endpoint must accept large payloads.
+    preconditions:
+      - "Actual Dictation and gateway /voice endpoint active"
+      - "User has a lot to say"
+    steps:
+      - "User dictates continuously for 5 minutes"
+      - "Actual Dictation may chunk into multiple Whisper calls (model-dependent)"
+      - "One or more POSTs to /voice with potentially large text fields"
+      - "Gateway creates Turn events for each POST"
+    verify:
+      - "All dictated text is captured — nothing truncated or dropped"
+      - "If chunked, chunks arrive in order and are stored as separate Turn events"
+      - "Gateway /voice endpoint accepts text field up to at least 50KB"
+      - "No HTTP timeout from Actual Dictation during the POST"
+      - "Whisper GPU inference does not accumulate memory across chunks (cleaned up per chunk)"
+
+  - name: mute_indicator_reflects_system_state
+    status: NOT_IMPLEMENTED
+    description: >
+      User mutes microphone at the OS level (PulseAudio mute). Sensor must
+      detect the mute state and NOT report voice=active even if the user is
+      speaking (muted mic reads zero level). If Actual Dictation is active,
+      it should indicate that the mic is muted.
+    preconditions:
+      - "Sensor monitoring PulseAudio input"
+      - "Actual Dictation running"
+    steps:
+      - "User mutes microphone via PulseAudio (pactl set-source-mute @DEFAULT_SOURCE@ 1)"
+      - "User speaks while muted"
+      - "Sensor reads PulseAudio level: -inf dB (muted)"
+      - "If Actual Dictation is active, Whisper receives silence"
+    verify:
+      - "Sensor reports voice=idle while muted (correct — no audio reaching mic)"
+      - "Sensor does not report a separate muted state (mute = idle from sensor's perspective)"
+      - "Actual Dictation produces empty/silence transcription or times out gracefully"
+      - "No Turn event created from muted dictation (empty text rejected by /voice)"
+      - "When user unmutes, voice detection resumes immediately"
 
 enforced_constraints:
   - "Whisper stays on GPU — no CPU inference for voice"
+  - "No audio capture in sensor — reads volume level only. One bit: active/idle"
 
 opinionated_constraints:
-  - "Option 1 (dictation → text → normal flow) is sufficient for now"
-  - "Voice sensor channel deferred to post-Phase 4 — requires microphone access, raises privacy questions"
+  - "Transcription boundary is in Actual Dictation — gateway receives text, not audio"
+  - "Voice gate matches typing gate, collaborative mode only — same principle, same mechanism"
+  - "Voice turns are Chronicle events, not special — source: voice metadata, same knowledge tools"
+  - "Voice sensor channel is a PulseAudio level meter — no audio content, no buffers, no encoding"
