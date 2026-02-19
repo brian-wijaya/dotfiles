@@ -1,0 +1,1346 @@
+vocabulary:
+  claude_code_client: "LlmClient implementation that shells out to `claude -p` CLI for text-only inference. Bounded by semaphore (3 slots), exponential backoff on failure."
+  llm_client: "Common interface for LLM backends (OllamaClient, ClaudeCodeClient). All methods return null on error."
+  extraction_model: "Model tier used for session metadata extraction. Configurable via Config.modelTierClerk(). Default: qwen2.5-coder:7b."
+  llm_extraction: "Stage 18A pipeline: conversation text -> LLM chat -> JSON {topics, summary, key_facts}. Falls back to heuristic extraction on failure."
+  heuristic_extraction: "Keyword-matching fallback for topic/fact extraction when LLM is unavailable. Scans user messages against TOPIC_KEYWORDS map."
+  llm_fact_scorer: "Single-LLM-call classifier that filters noise facts (KEEP/DROP) and improves titles. Uses TASK 1/2 structured prompt format."
+  tag_classifier: "Conservative per-fact classifier that assigns semantic tags (env:, project:, preference:) and event types (DECISION, BUG_FOUND, etc.) via LLM."
+  keyword_gate: "Post-classification regex validation. Each env:/preference: tag must pass a keyword check against the original statement. Catches 7B model over-tagging."
+  entity_extractor: "Four extraction paths (document, event, email, conversation). Conversation path uses LLM to identify decisions, topics, tools, files."
+  sub_agent_session: "A .jsonl conversation created by gateway's own claude -p invocations (LlmFactScorer, TagClassifier, EntityExtractor). Detected by 17 prompt prefix patterns."
+  extraction_prompt_prefix: "Known prompt patterns that identify gateway self-generated sessions. Matched case-insensitively against first user message."
+  content_hash: "SHA-256 of size:mtime for conversations. Used to skip re-indexing unchanged files."
+  noise_line: "System boilerplate, XML tags, code fences, subagent prompts filtered by isNoiseLine(). >50 patterns."
+  backoff: "Exponential retry delay after LLM failure. ClaudeCodeClient: 60s->120s->240s->300s cap. LlmFactScorer: flat 60s."
+  semaphore: "java.util.concurrent.Semaphore limiting ClaudeCodeClient to maxConcurrent (default 3) simultaneous processes."
+  deterministic_event_id: "SHA-256 of fact statement text. Used to detect facts already classified by frontier model (ACT_sessions_save) and skip redundant 7B classification."
+  max_llm_chars: "16000 char truncation limit for conversation text sent to LLM extraction. ~4000 tokens at ~4 chars/token."
+
+metadata:
+  feature: LLM Extraction Pipeline
+  component: datapipeline/indexing + datapipeline/extraction + common/client
+  date: "2026-02-19"
+
+stories:
+  # ── ClaudeCodeClient: Process Lifecycle ──
+
+  - name: claude-code-client-connect-success
+    description: >
+      connect() runs `claude --version`, verifies exit code 0, sets connected=true,
+      and logs the version string.
+    preconditions:
+      - "claude binary is on PATH and functional"
+    steps:
+      - "ProcessBuilder('claude', '--version') launched with redirectErrorStream(true)"
+      - "Virtual thread reads stdout via readAllBytes()"
+      - "proc.waitFor(10, TimeUnit.SECONDS) returns true"
+      - "proc.exitValue() returns 0"
+      - "connected set to true"
+      - "Version string logged to stderr"
+    verify:
+      - "connect() returns true"
+      - "isConnected() returns true"
+      - "Stderr contains '[gateway] ClaudeCodeClient: connected, version: <version>'"
+      - "Subsequent generate()/chat() calls proceed normally"
+
+  - name: claude-code-client-connect-binary-missing
+    description: >
+      connect() handles missing claude binary gracefully — IOException caught,
+      connected remains false.
+    preconditions:
+      - "claude binary not on PATH"
+    steps:
+      - "ProcessBuilder('claude', '--version') throws IOException"
+      - "Exception caught in outer catch block"
+      - "connected remains false"
+    verify:
+      - "connect() returns false"
+      - "isConnected() returns false"
+      - "Stderr: '[gateway] ClaudeCodeClient: connect failed: <message>'"
+      - "No exception propagated to caller"
+
+  - name: claude-code-client-connect-version-timeout
+    description: >
+      connect() handles a hanging claude --version process. The 10-second
+      waitFor times out, process is not forcibly killed (just abandoned),
+      connected remains false.
+    preconditions:
+      - "claude binary exists but hangs on --version"
+    steps:
+      - "proc.waitFor(10, SECONDS) returns false (timeout)"
+      - "reader thread may still be alive — stream closed after 2s grace"
+      - "connected remains false"
+    verify:
+      - "connect() returns false"
+      - "Stderr: 'claude --version exited with timeout'"
+      - "Reader thread cleaned up via join(2000) then stream close then join(500)"
+
+  - name: claude-code-client-generate-success
+    description: >
+      Successful claude -p invocation: prompt written to stdin, response read
+      from stdout, backoff state reset.
+    preconditions:
+      - "ClaudeCodeClient connected"
+      - "Semaphore has available permits"
+      - "No active backoff"
+    steps:
+      - "callClaude() checks connected=true"
+      - "Backoff check: lastFailTime=0, no backoff active"
+      - "semaphore.tryAcquire(timeout) succeeds immediately"
+      - "ProcessBuilder builds command: claude -p --output-format text --model sonnet --no-session-persistence --tools ''"
+      - "Prompt written to stdin, stdin closed"
+      - "Virtual threads read stdout and stderr concurrently"
+      - "proc.waitFor(timeout) returns true, exitValue()=0"
+      - "consecutiveFailures.set(0), lastFailTime=0"
+      - "stdout content returned as String"
+    verify:
+      - "Response is non-null stdout content"
+      - "Backoff state fully reset after success"
+      - "Semaphore released in finally block"
+      - "--tools '' disables all tool use"
+      - "--no-session-persistence prevents .jsonl creation"
+
+  - name: claude-code-client-system-prompt-passed
+    description: >
+      When systemPrompt is non-null and non-empty, --system-prompt flag is
+      appended to the command line.
+    preconditions:
+      - "ClaudeCodeClient connected"
+    steps:
+      - "chat() called with systemPrompt='You are a metadata classifier.'"
+      - "callClaude() adds '--system-prompt' and systemPrompt to command list"
+      - "ProcessBuilder includes the flag"
+    verify:
+      - "Command includes '--system-prompt' followed by the system prompt text"
+      - "Null or empty systemPrompt does NOT add --system-prompt flag"
+
+  - name: claude-code-client-process-timeout-destroyforcibly
+    description: >
+      When claude -p exceeds the 10-minute timeout, the process is forcibly
+      destroyed. If it survives 5s after destroyForcibly, a zombie warning is logged.
+    preconditions:
+      - "ClaudeCodeClient connected, semaphore available"
+      - "claude -p process hangs indefinitely"
+    steps:
+      - "proc.waitFor(600, SECONDS) returns false (10 min timeout)"
+      - "proc.destroyForcibly() called"
+      - "proc.waitFor(5, SECONDS) checks if process actually died"
+      - "If still alive: zombie warning logged with pid"
+      - "consecutiveFailures incremented"
+      - "lastFailTime set to current time"
+      - "Returns null"
+    verify:
+      - "destroyForcibly() called on timeout"
+      - "5-second grace period for zombie detection"
+      - "Zombie PID logged if process survives: 'WARNING zombie process pid=<N>'"
+      - "consecutiveFailures incremented by 1"
+      - "Semaphore released despite timeout (finally block)"
+
+  - name: claude-code-client-nonzero-exit-code
+    description: >
+      When claude -p exits with non-zero code, stderr is captured (truncated
+      to 500 chars), failure state updated, null returned.
+    preconditions:
+      - "ClaudeCodeClient connected"
+      - "claude -p will exit with code 1"
+    steps:
+      - "Process completes with exitValue()=1"
+      - "stderr content captured via virtual thread"
+      - "stderr.strip().substring(0, min(len, 500)) logged"
+      - "consecutiveFailures incremented"
+      - "lastFailTime set"
+      - "Returns null"
+    verify:
+      - "Stderr truncated to 500 chars maximum in log message"
+      - "consecutiveFailures incremented"
+      - "Returns null, not empty string"
+
+  - name: claude-code-client-exponential-backoff-progression
+    description: >
+      After consecutive failures, backoff increases exponentially:
+      60s -> 120s -> 240s -> 300s (cap). Calls during backoff return null immediately.
+    preconditions:
+      - "ClaudeCodeClient connected"
+    steps:
+      - "First failure: consecutiveFailures=1, backoff = min(60000 * 2^0, 300000) = 60000ms"
+      - "Call within 60s of failure: skipped with 'in backoff period (60s, failures=1)'"
+      - "Second failure: consecutiveFailures=2, backoff = min(60000 * 2^1, 300000) = 120000ms"
+      - "Third failure: consecutiveFailures=3, backoff = min(60000 * 2^2, 300000) = 240000ms"
+      - "Fourth failure: consecutiveFailures=4, backoff = min(60000 * 2^3, 300000) = 300000ms (cap)"
+      - "Fifth+ failure: backoff remains 300000ms due to min(failures-1, 3) clamping the shift"
+    verify:
+      - "Backoff formula: min(BACKOFF_MS * (1L << min(failures-1, 3)), MAX_BACKOFF_MS)"
+      - "BACKOFF_MS = 60000, MAX_BACKOFF_MS = 300000"
+      - "Shift clamped at 3 (so max multiplier is 2^3 = 8, but 60000*8=480000 > 300000 cap)"
+      - "Calls during backoff return null without spawning a process"
+      - "Backoff check uses System.currentTimeMillis() - lastFailTime < backoff"
+
+  - name: claude-code-client-success-resets-backoff
+    description: >
+      A successful call after failures resets consecutiveFailures to 0 and
+      lastFailTime to 0, immediately exiting backoff state.
+    preconditions:
+      - "ClaudeCodeClient has consecutiveFailures=3 (240s backoff)"
+      - "Enough time has elapsed to exit backoff window"
+    steps:
+      - "Next call succeeds (exit code 0)"
+      - "consecutiveFailures.set(0)"
+      - "lastFailTime = 0"
+    verify:
+      - "After success: no backoff on subsequent calls"
+      - "lastFailTime=0 means the backoff check (lastFailTime > 0) is false"
+      - "Next call proceeds immediately regardless of timing"
+
+  - name: claude-code-client-semaphore-concurrency-limit
+    description: >
+      Semaphore limits concurrent claude processes to maxConcurrent (default 3).
+      Fourth concurrent call blocks until one completes or timeout expires.
+    preconditions:
+      - "ClaudeCodeClient(claude, sonnet, 3) — 3 permits"
+      - "Three claude -p processes running simultaneously"
+    steps:
+      - "Three threads acquire semaphore permits successfully"
+      - "Fourth thread calls generate() — semaphore.tryAcquire(timeout) blocks"
+      - "First process completes, releases permit in finally block"
+      - "Fourth thread acquires the released permit and proceeds"
+    verify:
+      - "At most 3 claude processes run simultaneously"
+      - "Semaphore released in finally block (even on exception/timeout)"
+      - "tryAcquire uses the full timeout duration for waiting"
+
+  - name: claude-code-client-semaphore-timeout
+    description: >
+      When all semaphore slots are busy and none free within the timeout period,
+      the call returns null with a log message.
+    preconditions:
+      - "All 3 semaphore permits held by long-running calls"
+      - "New call with a short timeout"
+    steps:
+      - "semaphore.tryAcquire(timeout.toMillis(), MILLISECONDS) returns false"
+      - "Logged: 'semaphore timeout, all slots busy'"
+      - "Returns null"
+      - "acquired=false, so finally block does NOT release semaphore"
+    verify:
+      - "No process spawned when semaphore unavailable"
+      - "Returns null, not exception"
+      - "Semaphore NOT released (acquired flag prevents double-release)"
+
+  - name: claude-code-client-not-connected-guard
+    description: >
+      All generate/chat methods immediately return null if connect() was never
+      called or returned false.
+    preconditions:
+      - "ClaudeCodeClient created but connect() not called"
+    steps:
+      - "generate() or chat() called"
+      - "callClaude() checks connected=false"
+      - "Returns null immediately"
+    verify:
+      - "No process spawned"
+      - "No semaphore acquired"
+      - "Stderr: 'not connected'"
+
+  - name: claude-code-client-interrupted-thread
+    description: >
+      If the calling thread is interrupted while waiting for semaphore or process,
+      InterruptedException is caught, interrupt flag re-set, null returned.
+    preconditions:
+      - "ClaudeCodeClient connected"
+      - "Calling thread will be interrupted"
+    steps:
+      - "Thread.interrupt() called on the calling thread"
+      - "semaphore.tryAcquire() or proc.waitFor() throws InterruptedException"
+      - "Caught: Thread.currentThread().interrupt() re-sets flag"
+      - "Returns null"
+    verify:
+      - "Thread interrupt flag preserved (re-set after catch)"
+      - "Stderr: 'interrupted'"
+      - "Semaphore released if acquired before interrupt"
+
+  - name: claude-code-client-stream-drain-cascade
+    description: >
+      After process exits, stdout/stderr reader threads get 2s to finish.
+      If still alive, streams are force-closed, then 500ms final join.
+    preconditions:
+      - "claude -p process completed but produced large output"
+    steps:
+      - "proc.waitFor() returns true (process exited)"
+      - "stdoutThread.join(2000) — wait 2s for reader to finish"
+      - "stderrThread.join(2000)"
+      - "If stdoutThread.isAlive(): proc.getInputStream().close() — forces reader to unblock"
+      - "If stderrThread.isAlive(): proc.getErrorStream().close()"
+      - "Final join(500) — 0.5s grace after stream close"
+    verify:
+      - "No hung virtual threads from slow stream reads"
+      - "Stream close forces readAllBytes() to complete or throw"
+      - "Total drain timeout: 2s + 0.5s = 2.5s maximum"
+
+  # ── ClaudeConversationIndexer: LLM Extraction Path ──
+
+  - name: llm-extraction-happy-path
+    description: >
+      LLM extraction produces structured JSON with topics, summary, and key_facts.
+      Used in preference to heuristic extraction when LLM is available.
+    preconditions:
+      - "LlmClient connected and functional"
+      - "Conversation .jsonl with substantive user/assistant messages"
+    steps:
+      - "extractWithLlm(messages) called"
+      - "Conversation text built: [role]\\ncontent\\n\\n for each message"
+      - "Truncated at MAX_LLM_CHARS=16000"
+      - "Prompt includes conversation text + JSON schema description + rules"
+      - "llm.chat(extractionModel, SESSION_EXTRACTION_SYSTEM, prompt, 800) called"
+      - "Response JSON parsed: {topics: [...], summary: '...', key_facts: [...]}"
+      - "Topics validated: non-empty, < 100 chars each"
+      - "Summary validated: non-empty, truncated to MAX_SUMMARY_CHARS=2000"
+      - "Key facts validated: non-empty, < 500 chars each"
+      - "LlmExtractionResult returned"
+    verify:
+      - "topics, summary, key_facts all populated from LLM response"
+      - "LLM system prompt: 'You are a conversation analyzer'"
+      - "maxTokens=800 for extraction response"
+      - "Topic strings > 100 chars silently dropped"
+      - "Fact strings > 500 chars silently dropped"
+      - "Summary > 2000 chars truncated with '...' suffix"
+
+  - name: llm-extraction-markdown-fence-stripping
+    description: >
+      LLM responses wrapped in ```json ... ``` fences are correctly stripped
+      before JSON parsing.
+    preconditions:
+      - "LLM returns response with markdown fences"
+    steps:
+      - "LLM returns: '```json\\n{\"topics\": [\"emacs\"]}\\n```'"
+      - "stripJsonFences() removes leading '```json' and trailing '```'"
+      - "Also handles bare '```' fences (without 'json' suffix)"
+      - "Remaining string stripped of whitespace"
+      - "JSON parsed normally"
+    verify:
+      - "Both '```json' and bare '```' prefixes handled"
+      - "Trailing '```' removed"
+      - "Result is clean JSON parseable by ObjectMapper"
+
+  - name: llm-extraction-empty-topics-returns-null
+    description: >
+      If the LLM returns an empty topics array or no topics field,
+      extractWithLlm returns null, triggering heuristic fallback.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "LLM returns: '{\"topics\": [], \"summary\": \"Some text\", \"key_facts\": []}'"
+      - "Topics array is empty after parsing"
+      - "extractWithLlm returns null"
+      - "indexIfChanged falls back to heuristic extractTopics() + extractKeyFacts()"
+    verify:
+      - "Empty topics = null result (triggers fallback)"
+      - "Missing topics field = null result"
+      - "Heuristic path used for topics and facts"
+      - "LlmFactScorer.score() still called on heuristic results"
+
+  - name: llm-extraction-empty-summary-returns-null
+    description: >
+      If the LLM returns a valid topics array but empty/missing summary,
+      extractWithLlm returns null, triggering heuristic fallback.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "LLM returns: '{\"topics\": [\"emacs\"], \"summary\": \"\", \"key_facts\": [\"fact1\"]}'"
+      - "Summary is empty string after strip()"
+      - "extractWithLlm returns null"
+    verify:
+      - "Empty summary = null result (triggers fallback)"
+      - "Good topics are discarded — entire LLM result is all-or-nothing"
+
+  - name: llm-extraction-llm-unavailable-fallback
+    description: >
+      When LlmClient is null or not connected, extractWithLlm returns null
+      immediately. Heuristic extraction handles the session.
+    preconditions:
+      - "LlmClient is null OR llm.isConnected() returns false"
+    steps:
+      - "extractWithLlm(messages): llm==null check or !llm.isConnected() check"
+      - "Returns null immediately"
+      - "indexIfChanged: llmResult==null branch executes"
+      - "extractTopics(messages) uses TOPIC_KEYWORDS matching"
+      - "extractKeyFacts(messages) takes first substantive line per user message"
+      - "LlmFactScorer.score() called on heuristic results"
+      - "generateSummary() builds summary from title + user messages"
+    verify:
+      - "Heuristic fallback works end-to-end without LLM"
+      - "Topics are keyword-matched canonical names (e.g., 'elisp' -> 'emacs')"
+      - "Facts limited to 5 items"
+      - "Summary limited to 2000 chars"
+
+  - name: llm-extraction-malformed-json-response
+    description: >
+      When the LLM returns invalid JSON (not parseable by ObjectMapper),
+      extractWithLlm catches the exception and returns null for heuristic fallback.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "LLM returns: 'I analyzed the conversation. Here are the topics: emacs, git'"
+      - "stripJsonFences() doesn't find fences — returns as-is"
+      - "MAPPER.readTree() throws JsonProcessingException"
+      - "Exception caught in outer try-catch"
+      - "Logged: 'LLM extraction failed, falling back to heuristics: <message>'"
+      - "Returns null"
+    verify:
+      - "Malformed JSON does not crash the indexer"
+      - "Heuristic fallback activated"
+      - "Error message logged with exception detail"
+
+  - name: llm-extraction-truncation-boundary
+    description: >
+      Conversations exceeding MAX_LLM_CHARS=16000 are truncated mid-message.
+      The truncation appends '...' and sends whatever fit.
+    preconditions:
+      - "Conversation with total text > 16000 chars"
+    steps:
+      - "StringBuilder accumulates [role]\\ncontent\\n\\n per message"
+      - "Loop breaks when sb.length() >= MAX_LLM_CHARS"
+      - "If sb.length() > MAX_LLM_CHARS: substring(0, 16000) + '...'"
+      - "Truncated text sent to LLM"
+    verify:
+      - "Text sent to LLM never exceeds 16003 chars (16000 + '...')"
+      - "Later messages in long conversations are silently dropped"
+      - "The break happens after the message that pushes past the limit (not before)"
+      - "Partial messages possible at the boundary"
+
+  - name: llm-extraction-then-fact-scorer
+    description: >
+      Even when LLM extraction succeeds, LlmFactScorer.score() is still called
+      to improve the title. Facts from LLM are passed through the scorer.
+    preconditions:
+      - "LLM extraction returns valid result"
+      - "LlmFactScorer enabled and connected"
+    steps:
+      - "LLM extraction provides topics, summary, key_facts"
+      - "titleContext: first 5 non-noise user message lines collected"
+      - "LlmFactScorer.score(title, keyFacts, titleContext) called"
+      - "Scored title replaces the heuristic/LLM title"
+      - "Note: in the LLM path, scored.title() is used but scored.facts() is NOT"
+      - "keyFacts from LLM extraction are used directly (scorer does not filter in LLM path)"
+    verify:
+      - "scoredTitle comes from LlmFactScorer, not directly from LLM extraction"
+      - "titleContext limited to 5 lines"
+      - "Only non-noise lines included in titleContext (isNoiseLine filter applied)"
+
+  # ── ClaudeConversationIndexer: Sub-Agent Filtering ──
+
+  - name: sub-agent-detection-extraction-prompts
+    description: >
+      isSubAgentConversation detects sessions created by gateway's own LLM
+      pipeline by matching first user message against 17 extraction prompt prefixes.
+    preconditions:
+      - ".jsonl file where first user message starts with a known extraction prefix"
+    steps:
+      - "parseFirstMessages(path, 3) reads only first 3 messages (cheap I/O)"
+      - "First user message found"
+      - "lower = firstUserMsg.toLowerCase()"
+      - "Iterated against EXTRACTION_PROMPT_PREFIXES array"
+      - "Match found (e.g., 'task 1: classify', 'analyze this conversation transcript')"
+      - "Returns true"
+    verify:
+      - "All 17 prefixes detected: task 1/2/3, classify this fact, analyze this conversation transcript, you are an entity extractor, you are a conversation analyzer, you are a conservative tag classifier, you are a metadata classifier, you are a fact/knowledge/tag/session/summary, you are processing metadata, you are classifying"
+      - "Case-insensitive matching (lowercased)"
+      - "No message-count gate — prompt pattern match is sufficient"
+      - "Only first 3 messages read (performance optimization)"
+
+  - name: sub-agent-empty-file-returns-true
+    description: >
+      An empty .jsonl file is treated as a sub-agent conversation (skipped).
+    preconditions:
+      - "Empty .jsonl file"
+    steps:
+      - "parseFirstMessages returns empty list"
+      - "messages.isEmpty() returns true"
+    verify:
+      - "isSubAgentConversation returns true"
+      - "File skipped during reindex"
+
+  - name: sub-agent-no-user-message-returns-true
+    description: >
+      A .jsonl with only assistant or system messages (no user message)
+      is treated as sub-agent and skipped.
+    preconditions:
+      - ".jsonl with only type='assistant' entries"
+    steps:
+      - "parseFirstMessages returns messages, all role='assistant'"
+      - "firstUserMsg remains null after loop"
+    verify:
+      - "isSubAgentConversation returns true"
+
+  - name: sub-agent-legitimate-session-passes
+    description: >
+      A genuine user conversation (first user message doesn't match any
+      extraction prefix) passes the sub-agent filter.
+    preconditions:
+      - ".jsonl where first user message is 'Fix the polybar font size issue'"
+    steps:
+      - "lower = 'fix the polybar font size issue'"
+      - "No EXTRACTION_PROMPT_PREFIXES match"
+      - "Returns false"
+    verify:
+      - "Legitimate sessions are not filtered out"
+      - "Only exact prefix matches trigger detection"
+
+  - name: sub-agent-read-error-returns-true
+    description: >
+      If reading the .jsonl file throws an exception (corrupt file, permission
+      denied), isSubAgentConversation returns true (skip the file).
+    preconditions:
+      - ".jsonl file is unreadable (permission denied or corrupt)"
+    steps:
+      - "parseFirstMessages throws IOException"
+      - "Exception caught in outer try-catch"
+      - "Returns true"
+    verify:
+      - "Unreadable files are skipped, not crashed on"
+      - "Conservative: better to skip than index garbage"
+
+  # ── ClaudeConversationIndexer: Quality Filters ──
+
+  - name: quality-threshold-low-word-count
+    description: >
+      Sessions with fewer than MIN_WORD_COUNT=100 words are skipped
+      during reindex.
+    preconditions:
+      - ".jsonl with 2 short messages totaling 50 words"
+    steps:
+      - "parseMessages returns messages"
+      - "isBelowQualityThreshold: wordCount = sum of message word counts = 50"
+      - "50 < MIN_WORD_COUNT(100) → returns true (below threshold)"
+      - "Session skipped, reindexSkipped incremented"
+    verify:
+      - "Sessions under 100 words are skipped"
+      - "Word count uses content.split('\\s+').length"
+
+  - name: quality-threshold-low-message-count
+    description: >
+      Sessions with fewer than MIN_MESSAGE_COUNT=3 messages are skipped.
+    preconditions:
+      - ".jsonl with 2 messages but substantial word count"
+    steps:
+      - "isBelowQualityThreshold: messages.size()=2 < MIN_MESSAGE_COUNT(3)"
+      - "Returns true (below threshold)"
+    verify:
+      - "Minimum 3 messages required regardless of word count"
+      - "2-message conversations (e.g., single user+assistant exchange) skipped"
+
+  - name: api-error-session-detection
+    description: >
+      Sessions where all assistant messages are API errors or trivially short
+      are detected and skipped.
+    preconditions:
+      - ".jsonl where assistant messages contain 'rate limit exceeded' or 'invalid api key'"
+    steps:
+      - "isApiErrorSession: filter messages where role='assistant'"
+      - "For each assistant message: check length >= 50"
+      - "If >= 50: check lower case against API_ERROR_PATTERNS"
+      - "All 6 patterns: 'invalid api key', 'api error', 'please run /login', 'unauthorized', 'authentication failed', 'rate limit exceeded'"
+      - "If every assistant message is short (<50) or matches an error pattern → return true"
+    verify:
+      - "Sessions with only error responses are skipped"
+      - "One substantive non-error assistant message = session kept"
+      - "Empty assistant list = NOT an error session (returns false)"
+
+  # ── ClaudeConversationIndexer: Deduplication & Persistence ──
+
+  - name: content-hash-deduplication
+    description: >
+      Conversations are deduplicated by content hash (SHA-256 of size:mtime).
+      Unchanged files are skipped without full parsing.
+    preconditions:
+      - ".jsonl already indexed, file unchanged"
+    steps:
+      - "Files.size() and Files.getLastModifiedTime() read"
+      - "contentHash = SHA-256(size + ':' + mtime)"
+      - "sourcePath = 'claude:' + sessionId"
+      - "Messages parsed (parseMessages runs before lock)"
+      - "db.executeWrite entered"
+      - "db.fetchDocument(null, sourcePath) returns existing doc"
+      - "existing.content_hash == contentHash → return false"
+    verify:
+      - "No DB writes performed for unchanged files"
+      - "source_path format: 'claude:<filename-without-.jsonl>'"
+      - "Hash based on size:mtime, not file content (performance)"
+
+  - name: content-hash-changed-triggers-reindex
+    description: >
+      When file size or mtime changes, content hash mismatches, triggering
+      full re-indexing of the conversation.
+    preconditions:
+      - ".jsonl previously indexed, then modified"
+    steps:
+      - "New contentHash differs from stored content_hash"
+      - "Full pipeline executes: LLM extraction (or heuristic), scoring, DB writes"
+      - "Transaction: saveSession, upsertDocument, deleteChunks, insertChunks"
+    verify:
+      - "Changed file fully re-indexed"
+      - "Old chunks deleted before new chunks inserted"
+      - "Session record updated via upsert (ON CONFLICT source_id)"
+
+  - name: transaction-rollback-on-failure
+    description: >
+      If any DB operation within indexIfChanged fails, the entire transaction
+      is rolled back. No partial state.
+    preconditions:
+      - "Database operation will fail (e.g., constraint violation)"
+    steps:
+      - "conn.setAutoCommit(false)"
+      - "db.saveSession() succeeds"
+      - "db.upsertDocument() throws exception"
+      - "catch block: conn.rollback()"
+      - "finally block: conn.setAutoCommit(wasAutoCommit)"
+      - "Exception propagated"
+    verify:
+      - "Session not saved if document upsert fails"
+      - "Chunks not orphaned"
+      - "autoCommit restored regardless of success/failure"
+      - "Transaction is all-or-nothing"
+
+  # ── ClaudeConversationIndexer: Event Emission ──
+
+  - name: per-fact-event-emission
+    description: >
+      Each key fact >= 30 chars emits an individual chronicle event via
+      TagClassifier + EventEmitter. Sub-agent sessions (claude:agent-*) are excluded.
+    preconditions:
+      - "Session indexed with key facts"
+      - "sourcePath does NOT start with 'claude:agent-'"
+      - "Topics non-empty, title non-blank"
+    steps:
+      - "Session-indexed summary event emitted if statement >= 50 chars"
+      - "For each scoredFact where fact.length() >= 30:"
+      - "  Event.deterministicEventId(fact) computed"
+      - "  db.eventExists(deterministicId) checked"
+      - "  If exists: skip (frontier already classified)"
+      - "  If not: TagClassifier.classify(fact, topics, llm, model) called"
+      - "  factTags = eventTags + classification.additionalTags() + 'source:session-keyfact'"
+      - "  EventEmitter.emitEvent(db, kafka, fact, factTags, classification.eventType())"
+    verify:
+      - "Facts < 30 chars skipped"
+      - "Sub-agent sessions (claude:agent-*) skip all per-fact emission"
+      - "Deterministic event ID prevents duplicate classification"
+      - "TagClassifier failure falls back to OBSERVATION + no tags"
+      - "Topic tags have format 'topic:<lowercased-hyphenated-name>'"
+
+  - name: deterministic-event-id-dedup
+    description: >
+      Facts already classified by the frontier model (via ACT_sessions_save)
+      are detected by deterministic event ID and skipped during 7B classification.
+    preconditions:
+      - "Frontier model previously saved a session with structured key_facts"
+      - "SaveSession emitted events with Event.deterministicEventId(fact)"
+      - "Same conversation now being re-indexed by ClaudeConversationIndexer"
+    steps:
+      - "For fact 'Chose PostgreSQL over SQLite for worldview':"
+      - "  deterministicId = SHA-256('Chose PostgreSQL over SQLite for worldview')"
+      - "  db.eventExists(deterministicId) returns true"
+      - "  Skip TagClassifier.classify() — continue to next fact"
+    verify:
+      - "No redundant 7B LLM calls for facts already classified by frontier"
+      - "Same SHA-256 scheme used in SaveSession.java and here"
+      - "eventExists check failure logged but does not prevent classification"
+
+  - name: event-exists-check-failure-proceeds
+    description: >
+      If db.eventExists() throws an exception, the fact is still classified
+      via TagClassifier (conservative: better to classify twice than miss).
+    preconditions:
+      - "Database error during eventExists check"
+    steps:
+      - "db.eventExists(deterministicId) throws SQLException"
+      - "Exception caught, logged: 'eventExists check failed, proceeding with TagClassifier'"
+      - "TagClassifier.classify() called normally"
+    verify:
+      - "Database errors don't prevent fact classification"
+      - "Worst case: duplicate event (idempotent via event_id)"
+
+  # ── LlmFactScorer ──
+
+  - name: fact-scorer-combined-task-prompt
+    description: >
+      LlmFactScorer sends a single LLM call with TASK 1 (fact classification)
+      and TASK 2 (title evaluation) in one prompt. Response parsed line by line.
+    preconditions:
+      - "LlmFactScorer enabled, llmClient connected"
+      - "Title needs scoring, facts need scoring"
+    steps:
+      - "TASK 1: numbered list of facts with KEEP/DROP classification request"
+      - "TASK 2: title evaluation with context lines for specificity judgment"
+      - "Reply format: 'FACTS: <numbers>\\nTITLE: <text>'"
+      - "llm.chat(fastModel, SYSTEM_PROMPT, prompt, 200) called"
+      - "Response split on newlines, parsed for 'FACTS:' and 'TITLE:' lines"
+    verify:
+      - "Single LLM call covers both tasks"
+      - "SYSTEM_PROMPT: 'You are a metadata classifier for Claude Code conversation logs'"
+      - "maxTokens=200 (small structured response)"
+      - "Model: qwen2.5-coder:7b (fastModel)"
+
+  - name: fact-scorer-keep-all-response
+    description: >
+      When LLM responds with 'FACTS: ALL', all candidate facts are kept.
+    preconditions:
+      - "LlmFactScorer enabled"
+    steps:
+      - "LLM responds: 'FACTS: ALL\\nTITLE: Fix polybar font size'"
+      - "parseFactNumbers('ALL', candidates) returns candidates unchanged"
+    verify:
+      - "'ALL' (case-insensitive) returns all original facts"
+
+  - name: fact-scorer-keep-none-response
+    description: >
+      When LLM responds with 'FACTS: NONE', fact list becomes empty.
+    preconditions:
+      - "LlmFactScorer enabled"
+    steps:
+      - "LLM responds: 'FACTS: NONE'"
+      - "parseFactNumbers('NONE', candidates) returns List.of()"
+    verify:
+      - "'NONE' returns empty list"
+      - "All candidate facts discarded"
+
+  - name: fact-scorer-selective-keep
+    description: >
+      LLM responds with specific fact numbers to keep. Invalid or out-of-range
+      numbers are silently ignored.
+    preconditions:
+      - "5 candidate facts"
+    steps:
+      - "LLM responds: 'FACTS: 1, 3, 5'"
+      - "parseFactNumbers splits on [,\\s]+"
+      - "Integer.parseInt('1') → index 0 → candidates.get(0)"
+      - "Integer.parseInt('3') → index 2 → candidates.get(2)"
+      - "Integer.parseInt('5') → index 4 → candidates.get(4)"
+      - "Returns [fact1, fact3, fact5]"
+    verify:
+      - "1-indexed numbers mapped to 0-indexed candidates"
+      - "Out-of-range indices silently skipped"
+      - "Empty kept list falls back to returning all candidates"
+
+  - name: fact-scorer-unparseable-response-keeps-all
+    description: >
+      When fact number parsing encounters a non-numeric token (unexpected format),
+      all candidates are returned as fallback.
+    preconditions:
+      - "LlmFactScorer enabled"
+    steps:
+      - "LLM responds: 'FACTS: keep items 1 and 3'"
+      - "parseFactNumbers encounters 'keep' — NumberFormatException"
+      - "Caught: returns candidates (all original facts)"
+    verify:
+      - "Non-numeric tokens trigger fallback to keeping all facts"
+      - "Conservative: never lose facts due to parse errors"
+
+  - name: fact-scorer-title-quote-stripping
+    description: >
+      If LLM wraps the title in double quotes, they are stripped.
+      Title > 120 chars is rejected (original title kept).
+    preconditions:
+      - "LlmFactScorer enabled"
+    steps:
+      - "LLM responds: 'TITLE: \"Fix polybar font size for ultrawide display\"'"
+      - "Leading and trailing quotes stripped"
+      - "titleStr.length() <= 120 — accepted"
+      - "If titleStr.length() > 120 — rejected, original title kept"
+    verify:
+      - "Quoted titles have quotes removed"
+      - "Empty title after stripping keeps original"
+      - "Title > 120 chars rejected (LLM hallucination guard)"
+
+  - name: fact-scorer-empty-llm-response
+    description: >
+      Empty or null LLM response throws RuntimeException, caught by outer
+      try-catch, triggers 60s backoff, returns original title + facts.
+    preconditions:
+      - "LlmFactScorer enabled, llmClient connected"
+      - "LLM returns null or blank response"
+    steps:
+      - "callLlm: response is null or blank"
+      - "throw RuntimeException('LLM returned empty response')"
+      - "score() catches exception"
+      - "lastFailTime set to current time (60s backoff begins)"
+      - "Returns ScoredResult(original title, original facts)"
+    verify:
+      - "Empty response triggers backoff (RETRY_INTERVAL_MS=60000)"
+      - "Original title and facts returned unchanged"
+      - "Next call within 60s returns originals immediately (backoff check)"
+
+  - name: fact-scorer-disabled-passthrough
+    description: >
+      When LlmFactScorer is disabled (setEnabled(false)), score() returns
+      originals immediately without LLM call.
+    preconditions:
+      - "LlmFactScorer.setEnabled(false) called"
+    steps:
+      - "score() checks enabled=false"
+      - "Returns ScoredResult(title, facts) immediately"
+    verify:
+      - "No LLM call made"
+      - "Original inputs passed through unchanged"
+
+  - name: fact-scorer-nothing-to-score
+    description: >
+      When title doesn't need scoring AND facts list has 0 or 1 items,
+      LLM call is skipped entirely (no work to do).
+    preconditions:
+      - "title = 'Untitled conversation' (needsTitleScoring returns false)"
+      - "facts = ['single fact'] (size <= 1, factsNeedScoring=false)"
+    steps:
+      - "needsTitleScoring('Untitled conversation') returns false"
+      - "facts.size()=1 <= 1 — factsNeedScoring=false"
+      - "Both false — returns ScoredResult(title, facts) immediately"
+    verify:
+      - "No LLM call wasted on trivial inputs"
+      - "'Untitled conversation' is never scored (already a known fallback title)"
+
+  - name: fact-scorer-backoff-after-failure
+    description: >
+      After an LLM failure, LlmFactScorer enters 60s backoff. Success resets
+      the backoff via lastFailTime=0 in callLlm().
+    preconditions:
+      - "LlmFactScorer previously failed (lastFailTime set)"
+    steps:
+      - "score() called within 60s of failure"
+      - "System.currentTimeMillis() - lastFailTime < RETRY_INTERVAL_MS"
+      - "Returns original title + facts immediately"
+      - "After 60s: next call proceeds to LLM"
+      - "Success: callLlm sets lastFailTime=0"
+    verify:
+      - "60s flat backoff (not exponential)"
+      - "Success resets backoff immediately"
+      - "Backoff check is in score(), not callLlm()"
+
+  # ── TagClassifier ──
+
+  - name: tag-classifier-conservative-no-tags
+    description: >
+      Most facts receive no tags. The system prompt emphasizes conservatism:
+      'Most facts need NO tags at all.'
+    preconditions:
+      - "LlmClient connected"
+      - "Fact: 'Agent delegated task to subagent'"
+    steps:
+      - "classify('Agent delegated task to subagent', topics, llm, model)"
+      - "LLM prompt includes extensive WRONG examples showing facts that should NOT be tagged"
+      - "LLM responds: '{\"tags\": [], \"event_type\": \"OBSERVATION\"}'"
+      - "Empty tags array accepted"
+      - "EventType.OBSERVATION used"
+    verify:
+      - "Classification returns empty additionalTags list"
+      - "EventType defaults to OBSERVATION"
+      - "Conservative tagging is the expected baseline behavior"
+
+  - name: tag-classifier-valid-prefix-filtering
+    description: >
+      Tags with prefixes other than env:, project:, preference: are silently
+      dropped. Only the three valid prefixes accepted.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "LLM returns: '{\"tags\": [\"env:hardware\", \"topic:emacs\", \"system:internal\", \"custom:bad\"], \"event_type\": \"OBSERVATION\"}'"
+      - "hasValidPrefix checks each tag"
+      - "'env:hardware' — valid (starts with 'env:')"
+      - "'topic:emacs' — INVALID (not in VALID_TAG_PREFIXES set)"
+      - "'system:internal' — INVALID"
+      - "'custom:bad' — INVALID"
+    verify:
+      - "Only 'env:hardware' survives prefix validation"
+      - "VALID_TAG_PREFIXES: env:, project:, preference:"
+      - "topic: tags are NOT valid additional tags (they come from session topics)"
+
+  - name: tag-classifier-keyword-gate-env-hardware
+    description: >
+      env:hardware tag must pass a keyword gate requiring hardware-specific terms
+      (CPU, GPU, RAM, etc.) in the original statement.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "Fact: 'HUD overlay scrolls activity updates' — LLM returns env:hardware"
+      - "validateTag('env:hardware', statement): GATE_ENV_HARDWARE regex searched"
+      - "No match for RAM/CPU/GPU/disk/etc. keywords"
+      - "Tag dropped"
+      - "Fact: 'AMD Ryzen 9 7950X with 64GB RAM' — LLM returns env:hardware"
+      - "GATE_ENV_HARDWARE matches 'Ryzen' and 'RAM'"
+      - "Tag kept"
+    verify:
+      - "env:hardware requires: ram|cpu|gpu|disk|ssd|nvme|ryzen|intel|amd|nvidia|geforce|memory|core|thread|ghz|mhz|tb|gb"
+      - "Case-insensitive regex"
+      - "False positives from 7B model caught by keyword gate"
+
+  - name: tag-classifier-keyword-gate-env-display
+    description: >
+      env:display requires display-specific keywords (resolution, 1440, monitor, etc.).
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "Fact: 'A twitch chat overlay concept' — LLM returns env:display"
+      - "No match for resolution|1440|3440|monitor|dpi|pixel|ultrawide|display|screen"
+      - "Tag dropped (keyword 'display' is in the pattern but 'overlay' is not)"
+      - "Wait — 'display' IS in the pattern. Re-check: the fact doesn't contain 'display'"
+      - "Actually the fact contains 'overlay' not 'display'. Tag dropped."
+    verify:
+      - "env:display requires: resolution|1440|3440|monitor|dpi|pixel|ultrawide|display|screen"
+      - "UI overlay concepts do not pass the gate"
+
+  - name: tag-classifier-keyword-gate-env-runtime
+    description: >
+      env:runtime requires version-like patterns (e.g., 3.14, 25.0) or
+      named runtimes with versions.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "Fact: 'JDK 25 with virtual threads' — matches 'jdk\\s+25' and '25' as version"
+      - "Tag kept"
+      - "Fact: 'Using Java for the gateway' — no version number"
+      - "Tag dropped"
+    verify:
+      - "Version numbers like '3.14', '25.0', '0.5.1' pass"
+      - "Named runtimes: jdk|java|python|node|ruby|go|rust|erlang|elixir|php|perl|dotnet|kotlin + version"
+      - "General runtime mentions without version fail"
+
+  - name: tag-classifier-project-tags-no-gate
+    description: >
+      project:* tags have no keyword gate — they pass unconditionally.
+      Project names are specific enough that over-tagging is unlikely.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "LLM returns: '{\"tags\": [\"project:actual-server\"], ...}'"
+      - "hasValidPrefix('project:actual-server') returns true"
+      - "validateTag('project:actual-server', statement): KEYWORD_GATES.get() returns null"
+      - "null gate → returns true (pass unconditionally)"
+    verify:
+      - "No keyword gate for project: tags"
+      - "Also no keyword gate for preference:workflow or preference:tooling? No — those DO have gates"
+
+  - name: tag-classifier-preference-workflow-gate
+    description: >
+      preference:workflow requires workflow-specific language: always, never,
+      must, rule, practice, convention, workflow, habit, prefer.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "Fact: 'Always use trash-put instead of rm' — matches 'always'"
+      - "Tag kept"
+      - "Fact: 'Tried out the new Emacs package' — no workflow keywords"
+      - "Tag dropped"
+    verify:
+      - "Workflow language must be present in the statement"
+      - "General observations about tools do not qualify"
+
+  - name: tag-classifier-event-type-classification
+    description: >
+      TagClassifier maps event_type strings to EventType enum values.
+      Invalid types fall back to OBSERVATION.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "LLM returns event_type='DECISION' — EventType.DECISION"
+      - "LLM returns event_type='BUG_FOUND' — EventType.BUG_FOUND"
+      - "LLM returns event_type='CUSTOM_TYPE' — not in VALID_EVENT_TYPES → OBSERVATION"
+      - "LLM returns no event_type field → OBSERVATION"
+    verify:
+      - "Valid types: DECISION, OBSERVATION, BUG_FOUND, VERIFICATION, OUTCOME, HYPOTHESIS, CAUSAL_LINK, QUESTION_OPEN, QUESTION_RESOLVED, TOPIC_SHIFT"
+      - "Invalid types silently fall back to OBSERVATION"
+      - "Missing field falls back to OBSERVATION"
+
+  - name: tag-classifier-malformed-json-fallback
+    description: >
+      When TagClassifier cannot parse the LLM response as JSON, it returns
+      the FALLBACK (empty tags, OBSERVATION).
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "LLM returns garbled text: 'The tags are env:hardware and the type is DECISION'"
+      - "JSON brace extraction finds no valid JSON"
+      - "MAPPER.readTree() fails"
+      - "Exception caught: returns FALLBACK"
+    verify:
+      - "FALLBACK = Classification(List.of(), EventType.OBSERVATION)"
+      - "No crash, no null pointer"
+      - "Error logged: 'failed to parse LLM response: <message>'"
+
+  - name: tag-classifier-json-extraction-from-wrapper-text
+    description: >
+      If LLM wraps JSON in explanatory text, TagClassifier extracts the JSON
+      between first { and last }.
+    preconditions:
+      - "LlmClient connected"
+    steps:
+      - "LLM responds: 'Here is the classification:\\n{\"tags\": [], \"event_type\": \"OBSERVATION\"}\\nThat is my answer.'"
+      - "response.indexOf('{') finds the brace"
+      - "response.lastIndexOf('}') finds the closing brace"
+      - "Substring extracted between braces"
+      - "JSON parsed successfully"
+    verify:
+      - "Wrapper text before { and after } stripped"
+      - "JSON extraction uses first { and last } (handles nested objects)"
+
+  - name: tag-classifier-llm-unavailable-fallback
+    description: >
+      When LLM is null or disconnected, classify returns FALLBACK immediately.
+    preconditions:
+      - "llm is null OR llm.isConnected() returns false"
+    steps:
+      - "classify() checks llm==null → returns FALLBACK"
+      - "Or: llm.isConnected()=false → returns FALLBACK"
+    verify:
+      - "No LLM call attempted"
+      - "FALLBACK: empty tags, OBSERVATION"
+
+  - name: tag-classifier-null-statement-fallback
+    description: >
+      Null or blank statement immediately returns FALLBACK.
+    preconditions:
+      - "statement is null or blank"
+    steps:
+      - "classify(null, ...) or classify('', ...)"
+      - "Returns FALLBACK immediately"
+    verify:
+      - "No LLM call for empty input"
+
+  - name: tag-classifier-tags-lowercased
+    description: >
+      All tags from LLM are lowercased and stripped before validation.
+    preconditions:
+      - "LLM returns tags with mixed case"
+    steps:
+      - "LLM returns: '{\"tags\": [\"Env:Hardware\", \" Project:Actual-Server \"], ...}'"
+      - "Each tag: t.asText().strip().toLowerCase()"
+      - "'env:hardware' and 'project:actual-server' after normalization"
+    verify:
+      - "Tags are always lowercase in output"
+      - "Leading/trailing whitespace stripped"
+
+  # ── EntityExtractor: Conversation Path ──
+
+  - name: entity-extractor-conversation-happy-path
+    description: >
+      extractFromConversation sends truncated session content to LLM,
+      parses JSON response into Decision, Topic, Tool, File entities with relationships.
+    preconditions:
+      - "LlmClient connected"
+      - "Session content available"
+    steps:
+      - "Session node always created: Entity('Session', sessionId)"
+      - "Content truncated to 4000 chars if longer"
+      - "LLM prompt requests: decisions, topics, tools, files arrays"
+      - "Response parsed into entities and relationships"
+      - "Decisions: Decision node with session_id prop, Session->DECIDED->Decision relationship"
+      - "Topics: Topic node, Session->DISCUSSES->Topic"
+      - "Tools: Tool node, Session->USES->Tool"
+      - "Files: File node with path prop, Session->REFERENCES->File"
+    verify:
+      - "Decision IDs: sessionId/decision/N (0-indexed)"
+      - "All relationships carry timestamp and session_id provenance"
+      - "System prompt: 'You are an entity extractor'"
+      - "maxTokens=500"
+
+  - name: entity-extractor-conversation-llm-unavailable
+    description: >
+      When LLM is unavailable, extractFromConversation returns just the
+      Session node with no relationships.
+    preconditions:
+      - "llm is null OR !llm.isConnected()"
+    steps:
+      - "Session entity created"
+      - "LLM check fails → return immediately"
+    verify:
+      - "Result has 1 entity (Session) and 0 relationships"
+      - "No crash, no null result"
+
+  - name: entity-extractor-conversation-empty-content
+    description: >
+      Null or blank session content returns empty result (no Session node either).
+    preconditions:
+      - "sessionContent is null or blank"
+    steps:
+      - "Early return with empty lists"
+    verify:
+      - "Empty ExtractionResult (0 entities, 0 relationships)"
+
+  - name: entity-extractor-conversation-llm-failure
+    description: >
+      When LLM call fails (exception, null response, malformed JSON),
+      the Session node is still returned — extraction degrades gracefully.
+    preconditions:
+      - "LlmClient connected but returns garbled response"
+    steps:
+      - "Session entity created before LLM call"
+      - "llm.chat() returns null or malformed JSON"
+      - "Exception caught in outer try-catch"
+      - "Error logged: 'LLM conversation extraction failed for session <id>'"
+      - "Result returned with Session node only"
+    verify:
+      - "Session node preserved despite LLM failure"
+      - "No crash from malformed LLM output"
+      - "Error includes sessionId for debugging"
+
+  - name: entity-extractor-conversation-truncation
+    description: >
+      Session content > 4000 chars is truncated to 4000 + '...' before
+      sending to LLM.
+    preconditions:
+      - "Session content is 10000 chars"
+    steps:
+      - "content.length() > 4000 → substring(0, 4000) + '...'"
+      - "Truncated text included in prompt"
+    verify:
+      - "LLM sees at most 4003 chars of conversation content"
+      - "Separate from ClaudeConversationIndexer's 16000 char limit (different LLM call)"
+
+  - name: entity-extractor-dedup-across-sessions
+    description: >
+      Entity deduplication happens at the Neo4j level via MERGE, not at
+      extraction time. The same Topic/Tool name from different sessions
+      produces duplicate Entity objects in the extraction result.
+    preconditions:
+      - "Two sessions mention 'emacs'"
+    steps:
+      - "Session A extraction: Entity('Topic', 'emacs', {})"
+      - "Session B extraction: Entity('Topic', 'emacs', {})"
+      - "Neo4j MERGE on (type, name) deduplicates at storage time"
+    verify:
+      - "EntityExtractor does NOT deduplicate — that's Neo4j's job"
+      - "Multiple extractions can produce identical entities"
+      - "neo4j.mergeEntity handles idempotent insert"
+
+  # ── Pipeline Integration: End-to-End Scenarios ──
+
+  - name: pipeline-e2e-llm-extraction-to-events
+    description: >
+      Full pipeline from .jsonl file change through LLM extraction, fact scoring,
+      tag classification, and chronicle event emission.
+    preconditions:
+      - "VaultWatcher running, LlmClient connected, database available"
+      - "New .jsonl conversation file with substantive content"
+    steps:
+      - "WatchService detects ENTRY_MODIFY, debounced 10s"
+      - "isSubAgentConversation(path) returns false (legitimate session)"
+      - "parseMessages(path) returns messages"
+      - "isBelowQualityThreshold returns false (>100 words, >3 messages)"
+      - "isApiErrorSession returns false"
+      - "indexIfChanged(path):"
+      - "  extractWithLlm(messages) → LlmExtractionResult with topics, summary, facts"
+      - "  LlmFactScorer.score(title, keyFacts, context) → improved title"
+      - "  DB transaction: saveSession, upsertDocument, deleteChunks, insertChunks"
+      - "  Session event: 'Session indexed: <title>. Topics: <topics>'"
+      - "  Per-fact: deterministicEventId check → TagClassifier.classify → EventEmitter.emitEvent"
+    verify:
+      - "Complete data flow from file change to chronicle events"
+      - "At least 4 LLM calls: 1 extraction, 1 fact scoring, N tag classifications"
+      - "All DB writes atomic in single transaction"
+      - "Events emitted AFTER transaction commits (outside rollback scope)"
+
+  - name: pipeline-e2e-heuristic-fallback-full
+    description: >
+      Full pipeline with LLM unavailable: heuristic extraction, fact scoring
+      (also falls back), and event emission with OBSERVATION defaults.
+    preconditions:
+      - "LlmClient is null"
+      - "LlmFactScorer.llmClient is null"
+    steps:
+      - "extractWithLlm returns null (LLM unavailable)"
+      - "extractTopics uses TOPIC_KEYWORDS matching"
+      - "extractKeyFacts takes first substantive line per user message"
+      - "LlmFactScorer.score: llmClient==null → returns originals"
+      - "generateSummary builds from title + user messages"
+      - "DB transaction proceeds normally"
+      - "Per-fact events: TagClassifier returns FALLBACK (empty tags, OBSERVATION)"
+    verify:
+      - "Pipeline completes without any LLM calls"
+      - "Sessions still indexed with heuristic metadata"
+      - "Events emitted with OBSERVATION type and no semantic tags"
+      - "Only topic:* tags from session-level extraction present"
+
+  - name: pipeline-reindex-cancel-mid-stream
+    description: >
+      A running reindex can be cancelled mid-stream via cancelReindex().
+      Progress counters reflect partial completion.
+    preconditions:
+      - "reindexAllSessions running with 100 files"
+      - "30 files processed so far"
+    steps:
+      - "cancelReindex() sets reindexCancelled=true"
+      - "Main loop checks reindexCancelled at each iteration"
+      - "Loop breaks"
+      - "reindexRunning set to false in finally block"
+      - "ReindexResult returned with partial counts"
+    verify:
+      - "Cancellation is cooperative (checked per-file, not immediate)"
+      - "getReindexProgress() shows cancelled=true"
+      - "reindexRunning=false after cancellation"
+      - "Files already processed are committed (not rolled back)"
+
+  - name: pipeline-reindex-invalidates-hashes
+    description: >
+      reindexAllSessions invalidates all claude session content hashes FIRST,
+      then re-processes files through the full pipeline.
+    preconditions:
+      - "vault.db has 50 indexed sessions"
+    steps:
+      - "db.invalidateContentHashes('claude:%') — sets all hashes to 'invalidated'"
+      - "Files walked from claudeProjectsDir"
+      - "Each file: isSubAgentConversation filter, quality filter, error filter"
+      - "indexIfChanged: contentHash != 'invalidated' → triggers re-indexing"
+      - "Rate-limited by delayMs between files"
+    verify:
+      - "Hash invalidation forces re-indexing regardless of file changes"
+      - "Sub-agent sessions still filtered (not re-indexed)"
+      - "Quality threshold still enforced on reindex"
+      - "Rate limiting between files (configurable delayMs)"
+
+  - name: pipeline-concurrent-llm-calls-bounded
+    description: >
+      The extraction pipeline makes multiple LLM calls per session (extraction,
+      scoring, N tag classifications). All go through ClaudeCodeClient's
+      3-slot semaphore, preventing resource exhaustion.
+    preconditions:
+      - "ClaudeCodeClient with maxConcurrent=3"
+      - "Multiple sessions being indexed concurrently"
+    steps:
+      - "Session A: extractWithLlm → 1 claude -p process"
+      - "Session A: LlmFactScorer → 1 claude -p process"
+      - "Session A: TagClassifier × 5 facts → 5 sequential claude -p processes"
+      - "Session B concurrently: extractWithLlm → blocks on semaphore if 3 active"
+    verify:
+      - "Never more than 3 claude processes running simultaneously"
+      - "Semaphore contention between extraction, scoring, and classification"
+      - "Tag classification calls are sequential per-fact (not parallel)"
+
+  - name: pipeline-noise-line-adversarial
+    description: >
+      isNoiseLine correctly handles adversarial edge cases: lines that look
+      like noise but aren't, and lines that look substantive but are noise.
+    preconditions:
+      - "Various edge case strings"
+    steps:
+      - "'<html>' → true (starts with <)"
+      - "'<less than sign in english>' → true (starts with <, even though it's text)"
+      - "'A line starting with I'll fix the bug' → true (starts with 'i\\'ll ')"
+      - "'Configure emacs to use evil-mode' → false (legitimate user intent)"
+      - "'{\"key\": \"value\"}' → true (starts with {)"
+      - "'JSON is a data format' → false (doesn't start with { or [)"
+      - "'1. First item' → true (numbered list)"
+      - "'10x performance improvement' → false (starts with digit but no dot after)"
+      - "'ab' → true (length < 3)"
+      - "'Fix' → false (length = 3, not matching any pattern)"
+    verify:
+      - "Lines under 3 chars always noise"
+      - "XML-like lines always noise (could miss legitimate '<' use)"
+      - "Numbered list detection: digit followed by period"
+      - "Two-digit numbered lists: '12.' also detected"
+
+  - name: pipeline-session-extraction-self-contamination-guard
+    description: >
+      The gateway's own LLM extraction calls create .jsonl sessions in
+      ~/.claude/projects/. These are filtered by isSubAgentConversation
+      to prevent infinite extraction loops.
+    preconditions:
+      - "Gateway ran claude -p for tag classification"
+      - "claude -p created a .jsonl session file"
+      - "VaultWatcher detects the new .jsonl file"
+    steps:
+      - "WatchService detects ENTRY_CREATE for new .jsonl"
+      - "isSubAgentConversation(path) reads first user message"
+      - "First user message starts with 'Classify this fact. Return JSON'"
+      - "Matches EXTRACTION_PROMPT_PREFIX 'classify this fact'"
+      - "Returns true → file skipped"
+    verify:
+      - "No infinite loop: extraction sessions don't get extracted"
+      - "All known gateway prompt patterns covered by 17 prefixes"
+      - "New extraction prompts need to be added to EXTRACTION_PROMPT_PREFIXES"
+
+enforced_constraints:
+  - name: semaphore-always-released
+    description: >
+      ClaudeCodeClient releases the semaphore in a finally block. The acquired
+      flag guards against releasing when tryAcquire timed out.
+    rationale: >
+      Resource leak of semaphore permits would progressively reduce concurrency
+      to zero, silently degrading the entire extraction pipeline.
+
+  - name: backoff-on-all-failure-paths
+    description: >
+      Every failure path in ClaudeCodeClient (timeout, non-zero exit, exception)
+      increments consecutiveFailures and sets lastFailTime.
+    rationale: >
+      Prevents thundering herd against a broken LLM backend. Exponential backoff
+      with 300s cap gives the backend time to recover.
+
+  - name: tag-classifier-keyword-gates
+    description: >
+      Every env: and preference: tag must pass a regex keyword gate against the
+      original statement. project: tags are exempt.
+    rationale: >
+      7B models over-tag aggressively. Keyword gates catch false positives where
+      the model assigns env:hardware to facts about UI overlays or assigns
+      env:display to facts about data visualization concepts.
+
+  - name: extraction-prompt-prefix-coverage
+    description: >
+      All LLM calls from LlmFactScorer, TagClassifier, EntityExtractor, and
+      ClaudeConversationIndexer must have their prompt prefixes registered in
+      EXTRACTION_PROMPT_PREFIXES to prevent self-contamination.
+    rationale: >
+      claude -p creates .jsonl session files. Without prefix detection, the
+      gateway would re-index its own extraction prompts, creating a contamination
+      loop that pollutes session search and worldview.
+
+  - name: deterministic-event-id-dedup
+    description: >
+      Facts classified by the frontier model (ACT_sessions_save) are detected
+      via SHA-256 deterministic event ID. ClaudeConversationIndexer skips 7B
+      classification for these facts.
+    rationale: >
+      Frontier model classification is higher quality. Redundant 7B classification
+      wastes LLM resources and could produce conflicting tags/event types for
+      the same fact.
+
+  - name: transaction-atomicity-session-document-chunks
+    description: >
+      saveSession, upsertDocument, deleteChunks, and insertChunks all run in a
+      single DB transaction with rollback on failure.
+    rationale: >
+      Partial writes would leave sessions without documents, documents without
+      chunks, or orphaned chunks — corrupting search results.
+
+opinionated_constraints:
+  - name: llm-extraction-preferred-over-heuristic
+    description: >
+      When LlmClient is available, LLM extraction is attempted first. Heuristic
+      extraction is a fallback, not a parallel path.
+    rationale: >
+      LLM produces higher-quality topics (specific), summaries (contextual),
+      and key facts (decision-focused) compared to keyword matching. Heuristic
+      extraction produces generic topics like "debugging" or "configuration".
+
+  - name: conservative-tagging-default
+    description: >
+      TagClassifier's default posture is to return no tags. Tags are only added
+      when the fact CLEARLY matches a narrow definition. This is reinforced by
+      prompt engineering, keyword gates, and extensive negative examples.
+    rationale: >
+      False positive tags pollute the worldview and mislead the agent about
+      system state. A missed tag is recoverable (human can add it); a wrong
+      tag is silently misleading.
+
+  - name: single-llm-call-scoring
+    description: >
+      LlmFactScorer combines title evaluation and fact classification in a
+      single LLM call (TASK 1 + TASK 2), not separate calls.
+    rationale: >
+      Each LLM call via claude -p has ~2-5s overhead (process spawn, model
+      loading). Combining tasks halves the latency for per-session scoring.
+
+  - name: size-mtime-hash-for-conversations
+    description: >
+      Conversation files use SHA-256(size:mtime) instead of full content hash.
+      This is a performance optimization — .jsonl files can be very large.
+    rationale: >
+      Full SHA-256 of a 10MB .jsonl file is expensive I/O on every scan pass.
+      size:mtime catches all legitimate changes (file append, modification)
+      while avoiding full file reads for unchanged files.

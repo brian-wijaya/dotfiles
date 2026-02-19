@@ -1,0 +1,625 @@
+vocabulary:
+  startup_sequence: "Ordered initialization of gateway subsystems: config load, display isolation, state injection, client connections (sensor, emacs, db, qdrant, kafka, temporal, neo4j), LLM provider, bootstrap events, worldview materializer, tool registration, watcher, and finally MCP HTTP server. Each step is fault-tolerant — failures degrade capability without blocking startup."
+  jetty_server: "Embedded Jetty 12 HTTP server hosting the MCP streamable HTTP endpoint on 127.0.0.1:8372. Binds a ServerConnector, installs servlet filters (TrafficLog, SseDisconnect, ProtocolVersion, SessionResurrection), and the MCP transport servlet at /mcp plus HealthServlet at /health."
+  filter_chain: "Ordered sequence of Jakarta Servlet Filters applied to every request: TrafficLogFilter (logging + session activity tracking + response ack absorption), SseDisconnectFilter (SSE lifecycle detection), ProtocolVersionFilter (version patching), SessionResurrectionFilter (stale session recovery). Order matters — traffic logging must precede resurrection."
+  protocol_version_filter: "Servlet filter that byte-patches 'protocolVersion' values in HTTP response bodies from the SDK's native version (2024-11-05 or 2025-06-18) to '2025-11-25' required by Claude Code. Same-length replacement avoids Content-Length issues. Temporary shim until SDK updates."
+  session_reaper: "Background virtual thread that sweeps dead MCP sessions from the SDK's internal ConcurrentHashMap via reflection. Two eviction triggers: SSE disconnect (fast path, 30s grace) and idle timeout (slow path, 24h default). Injects TOPIC_SHIFT fallback event for sessions with tool calls but no explicit events. Cleans up SessionState and in-memory event store."
+  sse_disconnect_filter: "Servlet filter that intercepts GET /mcp requests (SSE stream opens) and attaches AsyncListener to detect onComplete/onTimeout/onError. Records disconnect timestamp per session ID. Clears disconnect marker when client reconnects (new GET with same session ID)."
+  traffic_log_filter: "Servlet filter that logs request bodies, absorbs unsolicited JSON-RPC response acks (Claude Code sends {result:{}} for keep-alive pings that SDK 0.17.2 does not expect), and maintains per-session last-activity timestamps consumed by the SessionReaper."
+  session_state: "Per-MCP-session key-value store with call counters, event counters, tool history (last 20), loop score, and a per-session ScheduledExecutorService for deferred operations. ThreadLocal propagation of session ID from filter to tool handlers. Cleanup on reaper eviction shuts down the deferred scheduler."
+  health_servlet: "GET /health endpoint returning JSON {status: 'ready', tools: N}. Used by systemd readiness checks and debugging."
+  keepalive_interval: "SDK transport configured with 120s keep-alive interval. Server sends periodic SSE keep-alive pings to connected clients. Disconnected clients cause 'Stream unavailable' warnings — the reaper exists to clean these up."
+  shutdown_hook: "Runtime.getRuntime().addShutdownHook() registered in Main. Shutdown order: close McpServer (Jetty + reaper), close sensor, shutdown display manager, close Kafka consumers, close Qdrant/Kafka/Temporal/Neo4j clients, await watcher initial scan completion, close database last. The watcher await is the critical path — ensures long-running LLM-scored re-index operations complete."
+  tool_registry: "Collects all tool specifications and wraps handlers with per-class timeouts (FAST 5s, STANDARD 25s, SLOW 120s), retry logic (3 attempts with exponential backoff + jitter), circuit breaker integration, and response size capping (100KB). Virtual thread executor prevents zombie tasks from starving new calls."
+  display_isolation: "ADR-007. Optional Xvfb :99 + i3 + per-display sensor via SENSOR_SHM_SUFFIX. Auto-created on startup if display.enabled and display.auto_create are set. Auto-attaches xpra viewer to user's display."
+  bootstrap_events: "Idempotent extraction of structured events from CLAUDE.md and MEMORY.md into the Chronicle database. Runs once per startup, skips if events already exist. Passes LLM client for background re-tagging."
+  vault_watcher: "Background file watching + indexing daemon replacing vault-rag-watcher.service. Runs initial scan on startup, then watches for file changes. Routes document events through Temporal when available."
+  mcp_initialize_handshake: "Two-phase session creation: client sends JSON-RPC 'initialize' with protocolVersion, capabilities, clientInfo. Server returns session ID in Mcp-Session-Id header plus capabilities. Client sends 'notifications/initialized' to confirm. Session is now active for tool calls."
+
+metadata:
+  feature: Server Lifecycle
+  component: gateway/server
+  date: "2026-02-19"
+
+stories:
+  # ═══════════════════════════════════════════════
+  # ── Startup Sequence ──
+  # ═══════════════════════════════════════════════
+
+  - name: nominal-startup-all-services
+    description: >
+      Full startup sequence with all optional services enabled and reachable.
+      Config loads, display isolation creates :99, all clients connect, tools register,
+      Jetty binds, health endpoint returns ready.
+    preconditions:
+      - "gateway.toml exists at ~/.config/actual-server/gateway.toml with valid configuration"
+      - "PostgreSQL is reachable at configured host:port"
+      - "Sensor binary exists at /usr/local/bin/sensor"
+      - "Kafka, Qdrant, Neo4j, Temporal are enabled and reachable"
+      - "Ollama or Claude Code CLI available per llm.provider setting"
+      - "Port 8372 is not in use"
+    steps:
+      - "JVM starts Main.main()"
+      - "Config.load() reads gateway.toml"
+      - "DisplayManager creates Xvfb :99 + i3 + sensor, auto-attaches xpra viewer"
+      - "AmbientStateHeader initialized with display-specific SHM path"
+      - "SensorClient.start() connects to sensor binary via stdio"
+      - "PostgresClient connects to database"
+      - "QdrantVectorClient.connect() establishes gRPC channel"
+      - "KafkaClient.connect() joins bootstrap servers"
+      - "TemporalClient.connect() establishes gRPC to Temporal"
+      - "Neo4jClient.connect() opens driver"
+      - "LLM client connects (ClaudeCodeClient.connect() version check or OllamaClient)"
+      - "BootstrapEvents.bootstrap() runs idempotent event extraction"
+      - "WorldviewMaterializer initialized with all backends"
+      - "Temporal workflows registered and worker started; cron schedules created"
+      - "Kafka projection consumers started (Search, Graph, Semantic)"
+      - "ToolRegistry registers 48 native + 52 sensor proxy tools"
+      - "VaultWatcher.start() begins initial scan"
+      - "McpServer.start() creates Jetty, binds 127.0.0.1:8372, installs filter chain"
+      - "SessionReaper.start() launches virtual thread"
+      - "Shutdown hook registered"
+    verify:
+      - "stderr shows '[gateway] Starting...' followed by '[gateway] HTTP server listening on 127.0.0.1:8372'"
+      - "GET /health returns {status: 'ready', tools: 100}"
+      - "registry.size() == 100 (48 native + 52 sensor proxy)"
+      - "SessionReaper virtual thread is alive and named 'session-reaper'"
+      - "Shutdown hook is registered in Runtime"
+
+  - name: startup-degraded-optional-services-down
+    description: >
+      Gateway starts successfully even when all optional services (Qdrant, Kafka,
+      Neo4j, Temporal, LLM) are unreachable. Core MCP functionality works;
+      optional features degrade gracefully with WARNING logs.
+    preconditions:
+      - "PostgreSQL is reachable (required)"
+      - "Sensor binary is available (required for proxy tools)"
+      - "Qdrant, Kafka, Neo4j, Temporal are all unreachable"
+      - "llm.provider is 'claude-code' but CLI binary is not installed"
+    steps:
+      - "Config loads successfully"
+      - "QdrantVectorClient.connect() throws — qdrant set to null, WARNING logged"
+      - "KafkaClient.connect() throws — kafka set to null, WARNING logged"
+      - "Neo4jClient.connect() throws — neo4j set to null, WARNING logged"
+      - "TemporalClient.connect() throws — temporal set to null, WARNING logged"
+      - "ClaudeCodeClient.connect() returns false — llm set to null, WARNING logged"
+      - "BootstrapEvents.bootstrap() runs with null llm (no re-tagging)"
+      - "Graph tools (GraphNeighbors, GraphPath, GraphQuery) NOT registered (neo4j null)"
+      - "Kafka projection consumers NOT started"
+      - "Temporal workflows NOT registered"
+      - "McpServer starts and binds port"
+    verify:
+      - "stderr contains 5 WARNING lines for each failed service"
+      - "stderr contains 'Semantic search and indexing will be unavailable'"
+      - "stderr contains 'Chronicle event tools will be unavailable'"
+      - "stderr contains 'Graph tools will be unavailable'"
+      - "stderr contains 'Workflow orchestration will be unavailable'"
+      - "GET /health returns 200 with reduced tool count (no graph tools)"
+      - "Core X11 tools, session tools, emacs tools all function"
+
+  - name: startup-sensor-binary-missing
+    description: >
+      When the sensor binary is not found or fails to start, the gateway continues
+      but all 52 sensor proxy tools and 6 sensor-backed sense tools are unavailable.
+      Native tools still work.
+    preconditions:
+      - "sensor.binary path in config points to nonexistent file"
+      - "PostgreSQL is reachable"
+    steps:
+      - "SensorClient.start() throws IOException — WARNING logged"
+      - "SensorProxyRegistrar.register() returns 0 (sensor not started)"
+      - "Sensor-backed tools (ReadPointerState, ReadTypingRhythm, etc.) register but fail at call time"
+      - "Overlay tools (EmitOverlayMessage, SetAttentionTarget, DismissOverlay) register but fail at call time"
+      - "McpServer starts normally"
+    verify:
+      - "stderr contains 'Sensor client failed to start'"
+      - "stderr contains 'Sensor-backed tools will not be available'"
+      - "registry.size() < 100 (sensor proxies missing)"
+      - "Non-sensor tools (ExecuteCommand, EvaluateElisp, etc.) work normally"
+      - "GET /health returns 200 with reduced tool count"
+
+  - name: startup-display-isolation-failure
+    description: >
+      When display isolation fails to create Xvfb :99 (e.g., Xvfb not installed,
+      display port occupied), the gateway continues without display isolation.
+      Host display (:0) routing still works.
+    preconditions:
+      - "display.enabled = true and display.auto_create = true in config"
+      - "Xvfb binary is missing or display :99 is already in use"
+    steps:
+      - "DisplayManager.createDisplay() throws exception"
+      - "WARNING logged: 'Auto-create display failed: ...'"
+      - "WARNING logged: 'Display isolation will not be available.'"
+      - "AmbientStateHeader falls back to config default SHM path (not display-specific)"
+      - "Tool registration proceeds normally with display_id=host routing"
+      - "McpServer starts"
+    verify:
+      - "No Xvfb process running for :99"
+      - "Tools with display_id parameter still work when targeting 'host'"
+      - "CreateDisplay tool can still be called manually later"
+      - "GET /health returns 200"
+
+  - name: startup-port-already-bound
+    description: >
+      When port 8372 is already in use (e.g., previous gateway instance still
+      running), Jetty fails to bind and the JVM exits with an error.
+    preconditions:
+      - "Another process is listening on 127.0.0.1:8372"
+      - "All other services are healthy"
+    steps:
+      - "All initialization up to McpServer.start() succeeds"
+      - "Jetty ServerConnector.open() throws BindException"
+      - "jettyServer.start() propagates exception"
+      - "Main.main() throws, JVM exits"
+      - "Shutdown hook fires (server.close(), sensor.close(), etc.)"
+    verify:
+      - "JVM process exits with non-zero status"
+      - "stderr contains bind error message"
+      - "Shutdown hook fires — sensor and display cleanup occur even on startup failure"
+      - "No zombie sensor processes remain"
+      - "systemd can restart the service after the port is freed"
+
+  - name: startup-config-file-missing
+    description: >
+      When gateway.toml is not found, Config.load() falls back to defaults
+      (empty Toml parse). Server starts with default host/port/settings.
+    preconditions:
+      - "No gateway.toml exists at any search path"
+      - "PostgreSQL is reachable at default host:port (localhost:5432)"
+    steps:
+      - "Config.load() fails to find toml file, constructs Config from empty Toml"
+      - "All config accessors return defaults (server.host=127.0.0.1, server.port=8372, etc.)"
+      - "Initialization proceeds with default values"
+    verify:
+      - "Server starts on 127.0.0.1:8372 (defaults)"
+      - "serverName is 'actual-server-gateway'"
+      - "serverVersion is '1.0.0'"
+      - "session_max_idle_seconds is 86400 (24h)"
+      - "session_disconnect_grace_seconds is 30"
+
+  - name: startup-bootstrap-events-idempotent
+    description: >
+      BootstrapEvents.bootstrap() runs on every startup but only inserts events
+      that don't already exist. Restarting the gateway does not duplicate bootstrap
+      events in the Chronicle database.
+    preconditions:
+      - "Gateway has been started and stopped previously"
+      - "Bootstrap events already exist in the database"
+    steps:
+      - "Gateway starts, reaches BootstrapEvents.bootstrap(db, llm, model)"
+      - "Bootstrap checks existing events in database"
+      - "All events already present — zero new inserts"
+    verify:
+      - "bootstrap() returns 0"
+      - "No 'Bootstrapped N events' message in stderr"
+      - "Database event count unchanged from before restart"
+      - "No duplicate event IDs in Chronicle"
+
+  # ═══════════════════════════════════════════════
+  # ── HTTP Transport ──
+  # ═══════════════════════════════════════════════
+
+  - name: mcp-initialize-handshake
+    description: >
+      A fresh MCP session is established via the standard two-phase initialize
+      handshake over HTTP. Client receives session ID, server capabilities,
+      and protocol version (patched to 2025-11-25).
+    preconditions:
+      - "Gateway HTTP server is running on 127.0.0.1:8372"
+      - "No existing MCP sessions"
+    steps:
+      - "Client sends POST /mcp with JSON-RPC initialize (protocolVersion, capabilities, clientInfo)"
+      - "ProtocolVersionFilter patches protocolVersion in response from SDK native to '2025-11-25'"
+      - "Server returns 200 with Mcp-Session-Id header and capabilities JSON"
+      - "Client sends POST /mcp with notifications/initialized and Mcp-Session-Id header"
+      - "Server returns 200 or 202"
+    verify:
+      - "Response contains 'protocolVersion':'2025-11-25' (patched by filter)"
+      - "Mcp-Session-Id header is present and non-empty"
+      - "Server capabilities include tools: true"
+      - "Server instructions contain 'Gateway is your desktop body'"
+      - "TrafficLogFilter recorded activity for the new session ID"
+      - "Subsequent tool calls with this session ID succeed"
+
+  - name: protocol-version-filter-patching
+    description: >
+      The ProtocolVersionFilter correctly rewrites the protocol version string
+      in response bodies regardless of the SDK's native version. The replacement
+      is same-length (YYYY-MM-DD format), avoiding Content-Length mismatch.
+    preconditions:
+      - "Gateway HTTP server is running"
+      - "SDK transport speaks protocolVersion '2025-06-18'"
+    steps:
+      - "Client sends initialize request"
+      - "SDK generates response containing '\"protocolVersion\":\"2025-06-18\"'"
+      - "PatchingOutputStream scans response bytes for PREFIX pattern"
+      - "Finds prefix at offset N, overwrites 10 bytes starting at N+PREFIX.length with '2025-11-25'"
+    verify:
+      - "Response body contains '\"protocolVersion\":\"2025-11-25\"'"
+      - "Response body does NOT contain '2025-06-18'"
+      - "Total response byte length is unchanged (same-length replacement)"
+      - "JSON remains valid after patching"
+      - "Non-initialize responses (tool results) pass through unmodified"
+
+  - name: traffic-filter-absorbs-response-acks
+    description: >
+      Claude Code 2025-11-25 sends unsolicited JSON-RPC response acks ({result:{}})
+      in response to server keep-alive pings. The TrafficLogFilter absorbs these
+      before they reach the SDK, which would log ERROR for unexpected messages.
+    preconditions:
+      - "Active MCP session with SSE stream"
+      - "Server sends keep-alive ping via SSE"
+      - "Client sends POST /mcp with body {\"jsonrpc\":\"2.0\",\"id\":42,\"result\":{}}"
+    steps:
+      - "TrafficLogFilter reads request body"
+      - "isResponseAck() detects 'result' key without 'method' key"
+      - "Filter returns 202 immediately without forwarding to filter chain"
+    verify:
+      - "Response status is 202 (Accepted)"
+      - "Request body was NOT forwarded to MCP SDK"
+      - "stderr shows '[traffic] Absorbed response ack session=...'"
+      - "No SDK ERROR log for unexpected message"
+      - "Session activity timestamp is updated (session stays alive)"
+
+  - name: multi-session-concurrent-tool-calls
+    description: >
+      Multiple Claude Code instances connect simultaneously, each with their own
+      MCP session. Tool calls from different sessions are isolated and execute
+      concurrently on virtual threads.
+    preconditions:
+      - "Gateway HTTP server is running"
+      - "Two Claude Code instances have completed initialize handshake"
+      - "Session A: 'session-aaa', Session B: 'session-bbb'"
+    steps:
+      - "Session A sends tools/call for SENSE_read_window_layout"
+      - "Session B sends tools/call for ACT_evaluate_elisp simultaneously"
+      - "TrafficLogFilter records activity for both sessions"
+      - "SessionState.setCurrentSession() propagates correct session ID per request thread"
+      - "Both tool calls execute concurrently on virtual threads"
+    verify:
+      - "Both requests complete successfully with correct results"
+      - "SessionState.getCurrentSession() returns 'session-aaa' within A's handler"
+      - "SessionState.getCurrentSession() returns 'session-bbb' within B's handler"
+      - "SessionState for each session tracks tool calls independently"
+      - "No cross-contamination of session scratchpad data"
+
+  - name: sse-stream-keepalive-cycle
+    description: >
+      After session initialization, the client opens a GET /mcp SSE stream.
+      The server sends keep-alive pings at the configured 120s interval.
+      The SSE stream remains open for long-running tool calls.
+    preconditions:
+      - "Active MCP session 'session-sse-test'"
+      - "keepAliveInterval configured to 120s in transport builder"
+    steps:
+      - "Client sends GET /mcp with Mcp-Session-Id header"
+      - "Server opens SSE stream (async context)"
+      - "SseDisconnectFilter clears any existing disconnect marker for this session"
+      - "SseDisconnectFilter attaches AsyncListener to the async context"
+      - "Server sends SSE events for tool call responses"
+      - "At T+120s, server sends keep-alive ping"
+    verify:
+      - "SSE stream is open and receiving events"
+      - "Keep-alive pings arrive approximately every 120s"
+      - "SseDisconnectFilter.disconnectTimes() does NOT contain this session"
+      - "Client can send POST tool calls while SSE stream is open"
+
+  - name: health-endpoint-returns-tool-count
+    description: >
+      The /health endpoint returns the total registered tool count as JSON,
+      usable by systemd readiness checks and monitoring.
+    preconditions:
+      - "Gateway is fully started with N tools registered"
+    steps:
+      - "Send GET /health"
+    verify:
+      - "Response status is 200"
+      - "Content-Type is application/json"
+      - "Response body is '{\"status\":\"ready\",\"tools\":N}' where N matches registry.size()"
+
+  # ═══════════════════════════════════════════════
+  # ── Session Management ──
+  # ═══════════════════════════════════════════════
+
+  - name: reaper-evicts-sse-disconnected-session
+    description: >
+      When a Claude Code instance exits, the SSE stream closes. The SseDisconnectFilter
+      records the disconnect time. After the 30s grace period, the SessionReaper
+      evicts the session from the SDK's internal map.
+    preconditions:
+      - "Active session 'session-disc-001' with SSE stream open"
+      - "session_disconnect_grace_seconds = 30"
+      - "SessionReaper sweep interval = 60s"
+    steps:
+      - "Client exits — SSE async context fires onComplete/onError"
+      - "SseDisconnectFilter records disconnect timestamp for session-disc-001"
+      - "Reaper sweep fires at next interval"
+      - "Reaper checks sseDisconnectFilter.disconnectTimes() — finds session-disc-001"
+      - "disconnectedFor > disconnectGraceMs (30s) — session marked as stale"
+      - "Reaper removes session from SDK's ConcurrentHashMap via reflection"
+      - "session.close() called on the McpStreamableServerSession"
+      - "SessionState.cleanup(session-disc-001) called — deferred scheduler shutdown"
+      - "SessionEventStore.removeSession(session-disc-001) called"
+    verify:
+      - "Session no longer in SDK's sessions map"
+      - "SessionState no longer contains session-disc-001"
+      - "Deferred scheduler for session-disc-001 is shut down"
+      - "stderr shows '[reaper] Evicted stale session session-disc-001'"
+      - "disconnectTimes entry is removed after eviction"
+      - "sessionActivity entry is removed after eviction"
+
+  - name: reaper-respects-sse-disconnect-grace-period
+    description: >
+      A session whose SSE disconnected less than 30s ago is NOT reaped.
+      The client may be reconnecting (e.g., network hiccup).
+    preconditions:
+      - "Session 'session-grace-001' SSE disconnected 15s ago"
+      - "session_disconnect_grace_seconds = 30"
+    steps:
+      - "Reaper sweep fires"
+      - "Reaper finds session-grace-001 in disconnectTimes with disconnectedFor = 15s"
+      - "15s < 30s grace — session is NOT marked stale"
+    verify:
+      - "Session remains in SDK's sessions map"
+      - "SessionState is preserved"
+      - "stderr does NOT mention session-grace-001 eviction"
+
+  - name: reaper-sse-reconnect-clears-disconnect-marker
+    description: >
+      When a client reconnects (new GET /mcp with same session ID), the
+      SseDisconnectFilter clears the disconnect marker. The session survives
+      the next reaper sweep even if grace period would have expired.
+    preconditions:
+      - "Session 'session-recon-001' SSE disconnected 20s ago"
+      - "disconnectTimes contains session-recon-001"
+    steps:
+      - "Client sends GET /mcp with Mcp-Session-Id: session-recon-001"
+      - "SseDisconnectFilter.doFilter() detects GET with session ID"
+      - "disconnectTimes.remove(session-recon-001) called"
+      - "New AsyncListener attached to the new SSE stream"
+      - "Reaper sweep fires — session-recon-001 NOT in disconnectTimes"
+    verify:
+      - "Session survives reaper sweep"
+      - "disconnectTimes does NOT contain session-recon-001"
+      - "Session activity timestamp is updated via TrafficLogFilter"
+      - "New SSE stream is active with fresh AsyncListener"
+
+  - name: reaper-evicts-idle-session-without-sse
+    description: >
+      Sessions that never opened an SSE stream (or where disconnect was not
+      detected) are evicted based on idle timeout from TrafficLogFilter activity
+      timestamps. Default 24h.
+    preconditions:
+      - "Session 'session-idle-001' exists in SDK sessions map"
+      - "Last activity was 25 hours ago"
+      - "No SSE disconnect marker exists for this session"
+      - "session_max_idle_seconds = 86400 (24h)"
+    steps:
+      - "Reaper sweep fires"
+      - "No disconnect marker in sseDisconnectFilter — falls to idle check"
+      - "trafficFilter.sessionActivity() shows last activity 25h ago"
+      - "25h > 24h maxIdle — session marked stale"
+      - "Reaper evicts session via same path as SSE disconnect"
+    verify:
+      - "Session removed from SDK map"
+      - "SessionState cleaned up"
+      - "stderr shows idle time in eviction message"
+
+  - name: reaper-injects-fallback-event-for-silent-sessions
+    description: >
+      When a session used tools but made zero explicit events (never called
+      ACT_events_write), the reaper injects a TOPIC_SHIFT fallback event
+      so the Chronicle records that work occurred.
+    preconditions:
+      - "Session 'session-silent-001' about to be evicted"
+      - "SessionState shows toolCallCount=15, eventCount=0"
+      - "toolHistory contains ['ACT_send_keystroke', 'SENSE_read_window_layout', 'ACT_evaluate_elisp']"
+    steps:
+      - "Reaper evicts session-silent-001"
+      - "injectFallbackEventIfNeeded() checks events==0 && toolCalls > 0"
+      - "Builds tool summary from history: 'Session used tools: ACT_send_keystroke, SENSE_read_window_layout, ACT_evaluate_elisp (15 total calls)'"
+      - "Creates Event with type=TOPIC_SHIFT, origin=SYSTEM, tags=[trigger:session-end]"
+      - "db.insertEvent(fallback) persists to database"
+      - "Metrics.recordEvent() incremented"
+    verify:
+      - "Database contains a TOPIC_SHIFT event with session_id 'session-silent-001'"
+      - "Event statement contains tool names and call count"
+      - "Event tags include 'trigger:session-end'"
+      - "Event origin is SYSTEM"
+      - "stderr shows '[reaper] Injected session-end fallback event'"
+
+  - name: reaper-skips-fallback-for-sessions-with-events
+    description: >
+      Sessions that already have explicit events (eventCount > 0) do NOT receive
+      a fallback TOPIC_SHIFT event on eviction. Only silent sessions get the injection.
+    preconditions:
+      - "Session 'session-vocal-001' about to be evicted"
+      - "SessionState shows toolCallCount=10, eventCount=3"
+    steps:
+      - "Reaper evicts session-vocal-001"
+      - "injectFallbackEventIfNeeded() checks events==3 > 0"
+      - "No fallback event injected"
+    verify:
+      - "No new TOPIC_SHIFT event in database for session-vocal-001"
+      - "No '[reaper] Injected session-end fallback event' in stderr"
+
+  - name: reaper-unknown-session-gets-grace-period
+    description: >
+      A session that exists in the SDK map but has no activity entry in
+      TrafficLogFilter (created before filter was active, or edge case) gets
+      one sweep grace period — the reaper seeds its activity timestamp to now.
+    preconditions:
+      - "Session 'session-unknown-001' exists in SDK sessions map"
+      - "No entry in trafficFilter.sessionActivity() for this session"
+      - "No SSE disconnect marker"
+    steps:
+      - "Reaper sweep fires — finds session-unknown-001 in SDK map"
+      - "lastSeen == null — session never seen by TrafficLogFilter"
+      - "activity.putIfAbsent(session-unknown-001, now) — seeds initial timestamp"
+      - "Session is NOT evicted this sweep"
+      - "Next sweep: now - lastSeen < maxIdleMs — still within grace"
+    verify:
+      - "Session survives the first sweep after discovery"
+      - "sessionActivity now contains an entry for session-unknown-001"
+      - "Session will be evicted only after maxIdleMs elapses from the seeded timestamp"
+
+  - name: session-state-threadlocal-propagation
+    description: >
+      The TrafficLogFilter sets SessionState.currentSession via ThreadLocal on every
+      request. Tool handlers access the correct session ID even when multiple sessions
+      are active concurrently on different virtual threads.
+    preconditions:
+      - "Two concurrent requests: session-aaa on thread-1, session-bbb on thread-2"
+    steps:
+      - "TrafficLogFilter processes request for session-aaa on thread-1"
+      - "SessionState.setCurrentSession('session-aaa') on thread-1"
+      - "TrafficLogFilter processes request for session-bbb on thread-2"
+      - "SessionState.setCurrentSession('session-bbb') on thread-2"
+      - "Tool handler on thread-1 calls SessionState.getCurrentSession()"
+      - "Tool handler on thread-2 calls SessionState.getCurrentSession()"
+    verify:
+      - "thread-1 sees 'session-aaa'"
+      - "thread-2 sees 'session-bbb'"
+      - "No cross-contamination between ThreadLocals"
+      - "SessionState.recordToolCall() attributes to correct session"
+
+  - name: session-state-loop-score-detection
+    description: >
+      SessionState tracks last 20 tool calls and computes a loop score (ratio of
+      most-repeated tool in last 10 calls). High loop score indicates potential
+      agent stuck-in-loop condition.
+    preconditions:
+      - "Session 'session-loop-001' is active"
+      - "Agent has called ACT_send_keystroke 8 times and SENSE_read_window_layout 2 times in last 10 calls"
+    steps:
+      - "SessionState.inspect('session-loop-001') called"
+      - "Extracts last 10 from toolHistory"
+      - "Counts frequency: ACT_send_keystroke=8, SENSE_read_window_layout=2"
+      - "maxFreq=8, loopScore = 8/10 = 0.8"
+    verify:
+      - "inspect() returns loop_score: 0.8"
+      - "tool_call_count reflects total calls"
+      - "last_tools contains the full history (up to 20)"
+      - "session_elapsed_ms is positive"
+
+  # ═══════════════════════════════════════════════
+  # ── Shutdown ──
+  # ═══════════════════════════════════════════════
+
+  - name: graceful-shutdown-sigterm
+    description: >
+      On SIGTERM (from systemd stop), the shutdown hook fires in order:
+      McpServer close, sensor close, display cleanup, Kafka consumer shutdown,
+      infrastructure clients close, watcher await + shutdown, database close last.
+    preconditions:
+      - "Gateway is fully running with all services"
+      - "Active MCP sessions exist"
+      - "VaultWatcher initial scan is in progress"
+    steps:
+      - "SIGTERM sent to JVM process"
+      - "Shutdown hook thread starts"
+      - "server.close() — SessionReaper.shutdown(), MCP server close, Jetty stop"
+      - "sensor.close() — kills sensor child process"
+      - "displayManager.shutdown() — stops Xvfb, xpra processes"
+      - "kafkaConsumerRef.shutdown() — consumer group leaves cleanly"
+      - "qdrantRef.close(), kafkaRef.close(), temporalRef.close(), neo4jRef.close()"
+      - "scalerRef.shutdown() — resource scaler stops"
+      - "watcherRef.awaitInitialScan() — blocks until watcher scan completes"
+      - "watcherRef.shutdown() — stops file watcher"
+      - "db.close() — closes PostgreSQL connection pool LAST"
+      - "stderr shows '[gateway] Shutdown complete'"
+    verify:
+      - "Jetty stops accepting new connections"
+      - "Sensor process is killed (no zombie sensor processes)"
+      - "Xvfb :99 process is terminated"
+      - "Kafka consumer leaves group gracefully (no rebalance storm)"
+      - "Watcher scan was allowed to complete (not interrupted)"
+      - "Database closed after all writers are done"
+      - "JVM exits cleanly"
+
+  - name: shutdown-waits-for-watcher-scan
+    description: >
+      The shutdown hook specifically waits for the VaultWatcher initial scan to
+      complete before closing the database. This ensures LLM-scored re-indexing
+      operations finish even when Claude Code disconnects.
+    preconditions:
+      - "VaultWatcher is performing initial scan with LLM scoring"
+      - "Scan has processed 30/100 files"
+      - "SIGTERM received"
+    steps:
+      - "Shutdown hook fires"
+      - "Server, sensor, display released immediately (so new gateway can start)"
+      - "watcherRef.awaitInitialScan() blocks shutdown hook thread"
+      - "Watcher continues processing remaining 70 files"
+      - "After all 100 files processed, awaitInitialScan() returns"
+      - "watcherRef.shutdown() called"
+      - "db.close() called"
+    verify:
+      - "stderr shows '[gateway] Shutdown — waiting for watcher scan to complete...'"
+      - "stderr shows '[gateway] Watcher scan complete, releasing lock'"
+      - "All 100 files were indexed before db.close()"
+      - "New gateway instance can start immediately (port freed by server.close())"
+      - "New gateway's watcher skips initial scan (can't get lock from old instance)"
+
+  - name: shutdown-releases-port-immediately
+    description: >
+      The shutdown hook closes the McpServer (and Jetty) first, freeing port 8372
+      immediately. A replacement gateway instance can bind the port while the old
+      instance's shutdown hook continues with watcher await and cleanup.
+    preconditions:
+      - "Gateway is running on 127.0.0.1:8372"
+      - "Watcher scan will take 30 more seconds"
+      - "SIGTERM received"
+    steps:
+      - "Shutdown hook calls server.close() first"
+      - "Jetty stops, port 8372 freed"
+      - "New gateway instance starts, binds 8372 successfully"
+      - "Old instance's shutdown hook continues: sensor, display, watcher await..."
+    verify:
+      - "Port 8372 is available within seconds of SIGTERM"
+      - "New instance starts serving requests while old instance finishes cleanup"
+      - "No BindException for the new instance"
+
+  - name: shutdown-in-flight-requests
+    description: >
+      When shutdown occurs during in-flight tool calls, the virtual thread executor
+      allows running tasks to complete (or timeout) before full shutdown. Jetty's
+      graceful shutdown drains active requests.
+    preconditions:
+      - "Two tool calls in progress: SENSE_capture_screen_region (2s remaining) and ACT_evaluate_elisp (1s remaining)"
+      - "SIGTERM received"
+    steps:
+      - "Shutdown hook calls server.close()"
+      - "Jetty enters graceful shutdown — stops accepting new connections"
+      - "In-flight requests continue processing"
+      - "Both tool calls complete within their timeout windows"
+      - "Jetty finishes shutdown after requests drain"
+    verify:
+      - "Both in-flight tool calls return results to their clients"
+      - "No abrupt connection resets for active requests"
+      - "New connections are rejected during drain period"
+
+  - name: shutdown-null-optional-services
+    description: >
+      When optional services were never connected (null references), the shutdown
+      hook's null checks prevent NullPointerException and proceed cleanly.
+    preconditions:
+      - "Gateway started in degraded mode: kafka=null, qdrant=null, temporal=null, neo4j=null"
+      - "watcher=null (watcher disabled), resourceScaler=null"
+    steps:
+      - "SIGTERM received, shutdown hook fires"
+      - "server.close() — works (always non-null)"
+      - "sensor.close() — works (always non-null)"
+      - "displayManager.shutdown() — works (always non-null)"
+      - "kafkaConsumerRef null check — skipped"
+      - "qdrantRef null check — skipped"
+      - "kafkaRef null check — skipped"
+      - "temporalRef null check — skipped"
+      - "neo4jRef null check — skipped"
+      - "scalerRef null check — skipped"
+      - "watcherRef null check — skipped (no awaitInitialScan, no shutdown)"
+      - "db.close() — always called"
+    verify:
+      - "No NullPointerException during shutdown"
+      - "stderr shows '[gateway] Shutdown complete'"
+      - "JVM exits cleanly with status 0"
