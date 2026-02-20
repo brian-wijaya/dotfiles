@@ -1,30 +1,36 @@
 [Unit]
-Description=Actual Server Gateway (MCP)
+Description=Actual Gateway (MCP)
 After=default.target
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/java \
-    -Xmx2g -XX:+UseZGC -XX:+ExitOnOutOfMemoryError \
+    -Xmx8g -XX:+UseZGC -XX:+ExitOnOutOfMemoryError \
+    -XX:NativeMemoryTracking=summary \
+    -XX:StartFlightRecording=filename=/tmp/gateway.jfr,maxsize=256m,maxage=1h,settings=profile,dumponexit=true \
     -javaagent:/home/bw/actual/lib/opentelemetry-javaagent.jar \
+    -Dotel.instrumentation.grpc.enabled=false \
     -jar /home/bw/actual/build/libs/actual-1.0.0.jar
 WorkingDirectory=/home/bw/actual
 Environment=DISPLAY=:0
 Environment=OTEL_SERVICE_NAME=actual-gateway
-Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
-Environment=OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317
+Environment=OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 Environment=OTEL_METRICS_EXPORTER=otlp
 Environment=OTEL_TRACES_EXPORTER=otlp
 Environment=OTEL_LOGS_EXPORTER=otlp
 Environment=OTEL_INSTRUMENTATION_GRPC_ENABLED=false
+Environment=OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative
+Environment=OTEL_BSP_SCHEDULE_DELAY=10000
+Environment=OTEL_BSP_MAX_EXPORT_BATCH_SIZE=2048
 Restart=on-failure
 RestartSec=5
 
 # Resource limits
-MemoryMax=4G
-MemoryHigh=3G
-CPUQuota=80%
-TasksMax=512
+MemoryMax=32G
+MemoryHigh=24G
+CPUQuota=400%
+TasksMax=4096
 
 # Logging
 StandardOutput=null

@@ -143,13 +143,13 @@ BLOCKING REQUIREMENTS - Execute before any other response:
 
    key_facts format — classify each fact at save time:
    key_facts: [
-     {"statement": "fact text", "tags": ["env:hardware", "project:actual-server"], "event_type": "DECISION"},
+     {"statement": "fact text", "tags": ["env:hardware", "project:actual"], "event_type": "DECISION"},
      {"statement": "another fact", "tags": [], "event_type": "OBSERVATION"}
    ]
 
    Available tags (use only when clearly applicable):
    - env:hardware, env:display, env:runtime, env:network
-   - project:actual-server, project:emacs, project:dotfiles, project:vault
+   - project:actual, project:emacs, project:dotfiles, project:vault
    - preference:workflow, preference:tooling
 
    Event types: DECISION (explicit choice made), OBSERVATION (default),
