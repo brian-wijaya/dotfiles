@@ -30,10 +30,11 @@
 - **maim --noopengl required on :99**: maim's OpenGL capture conflicts with xpra's composite manager.
 - **Session lifecycle fix** (2026-02-20): Fixed 878-session memory leak (209MB→3GB). 5 changes: idle timeout 24h→5min, 20-session hard cap with oldest-idle eviction, shared ScheduledExecutorService (was per-session), KeepAlive 120s re-enabled, NMT enabled. ADR in actual/docs/ADR/. Fresh baseline: 366MB committed.
 - **OTel agent v2.25.0**: Upgraded from v2.11.0 (broken on JDK 25). Jar at `~/actual/lib/opentelemetry-javaagent.jar`. gRPC exporter (port 4317).
-- **Observability stack** (Docker): Prometheus, Grafana, Tempo, Loki, OTel Collector. All pipelines working (metrics, traces). Logs→Loki not yet wired.
+- **Observability stack** (Docker): Prometheus, Grafana, Tempo, Loki, OTel Collector. All three pipelines operational (metrics→Prometheus, traces→Tempo, logs→Loki). JFR enabled (`-XX:StartFlightRecording`).
 - **Resource allocation** (2026-02-20): Liberal limits — gateway: -Xmx8g, MemoryMax=32G, MemoryHigh=24G, CPUQuota=400%, TasksMax=4096. Docker: Prometheus 4g, Grafana 2g, Tempo 4g, Loki 4g, OTel Collector 2g. Machine: 128GB RAM, 48 cores (Threadripper PRO 5965WX).
 - **All hooks now C++**: save_session (libpq, 21ms), capture-user-turn (libpq, 29ms), sensor_awareness (SHM, 3ms). SQLite completely eliminated from hook chain.
 - **SQLite→Postgres migration complete**: 478 sessions + 873 turns migrated. vault.db no longer written to by any active hook.
+- **Naming**: All "actual-server" references renamed to "actual" (config path, systemd, source code, dashboards).
 
 ## Architecture decisions
 
@@ -54,6 +55,14 @@
 ### Kafka consumer contract
 - Handlers are `Predicate<>` (return boolean), not `Consumer<>` (void). Return false = don't commit batch. At-least-once semantics.
 
+## CI & Testing
+- **GitHub Actions**: self-hosted runner "threadripper" at `~/github-actions-runner/`.
+- **Gateway tests**: JUnit 5 + YAML story runner (StoryRunner.java). 31/31 tools covered, 36 dynamic tests.
+- **Mosaic tests**: 55 Rust unit tests (cargo test), 14 Vitest frontend tests with JUnit XML reporter.
+- **Benchmarks**: JMH (tool dispatch, circuit breaker, error classifier, JSON). Baselines at `~/vault/data/benchmarks/gateway/`.
+- **Bencher**: self-hosted regression detection (API port 61016, console port 3001).
+- **just**: command runner with justfiles in `~/actual/` and `~/actual-mosaic/`.
+
 ## Actual Mosaic (2026-02-20)
 - **Status**: v0.1.0 running. Standalone Tauri 2.x app at `~/actual-mosaic/`.
 - **Concept**: Agent's visual communication channel. "Like talking with hands." Terminal = voice, mosaic = gestures. NOT a decision tool — agent controls, human watches.
@@ -63,9 +72,9 @@
 - **Three-phase turn cycle**: Wind-up (UserPromptSubmit hook → prepare → skeleton) → Chat lands → Voila (add_slide → dissolve).
 - **SHM IPC**: `/dev/shm/mosaic_state`, `mosaic_session_id`, `mosaic_turn_id`. Hooks write, Rust reads as fallback.
 - **Hooks** (all 6 are compiled C++ binaries, zero shell scripts):
-  - `mosaic_prepare` (UserPromptSubmit) — triggers skeleton, writes session_id to SHM
-  - `mosaic_sync` (Stop) — reads SHM, displays T{N}/timestamp/IDs in terminal
-  - `capture-user-turn` (UserPromptSubmit) — C++ with libpq, generates turn_id UUID, writes to SHM + Postgres
+  - `mosaic_prepare` (UserPromptSubmit) — triggers Mosaic skeleton only (no longer writes timestamps/IDs)
+  - `mosaic_sync` (Stop) — reads SHM files written by capture-user-turn, displays T{N}/timestamp/IDs in terminal
+  - `capture-user-turn` (UserPromptSubmit) — C++ with libpq, generates turn_id UUID, writes timestamp/session_id/turn_id to SHM + Postgres (session clock owner)
   - `save_session` (Stop, PreCompact) — C++ with libpq, UPSERT to Postgres
   - `sensor_awareness` (PostToolUse) — C++ SHM read, <3ms
   - `enforce_continuation` (Stop) — C++ checkpoint logic
