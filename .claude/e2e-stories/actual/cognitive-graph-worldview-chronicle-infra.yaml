@@ -13,14 +13,14 @@ vocabulary:
     ambient snapshots show focus, typing, or clipboard changes. Format: [ALERT: focus-changed] ...
   worldview: >
     Three-layer compressed representation of user knowledge state.
-    L1 ActiveContext: recent topics, session summaries, deposit count today.
+    L1 ActiveContext: recent topics, session summaries, event count today.
     L2 WorkingMemory: recurring themes, active projects, open questions, loose ends.
     L3 CoreBeliefs: LLM-summarized summary, CLAUDE.md preferences, stable patterns, identity facets.
     Plus a contradictions list. Token budget: 1400 tokens max, trimmed progressively from L1 to L3.
-  deposit: >
-    Fundamental unit of recorded knowledge. Record with deposit_id (UUID), session_id,
+  event: >
+    Fundamental unit of recorded knowledge. Record with event_id (UUID), session_id,
     pass_number, timestamp (Instant), event_type (OBSERVATION/DECISION/ARTIFACT/QUESTION/CORRECTION),
-    content, tags, references. Produced to chronicle.deposits Kafka topic.
+    content, tags, references. Produced to chronicle.events Kafka topic.
   loop-score: >
     Ratio of most-repeated tool name in last 10 calls. 1.0 = all same tool.
     Computed in SessionState.inspect() from the toolHistory deque.
@@ -511,11 +511,11 @@ stories:
     steps:
       - "materializeL1() queries: SELECT summary, topics FROM sessions ORDER BY start_time DESC LIMIT 5"
       - "Topics are split by comma, trimmed, deduplicated"
-      - "depositCountToday is 0 (deposits are in Kafka, not SQLite)"
+      - "eventCountToday is 0 (events are in Kafka, not SQLite)"
     verify:
       - "recentTopics has at most 10 entries"
       - "activeSessionSummaries has at most 3 entries"
-      - "depositCountToday is 0"
+      - "eventCountToday is 0"
 
   - name: worldview-l2-from-memory-md-and-sessions
     description: >
@@ -617,90 +617,90 @@ stories:
     steps:
       - "Worldview is constructed with all layers"
     verify:
-      - "L1ActiveContext has: recentTopics, activeSessionSummaries, depositCountToday"
+      - "L1ActiveContext has: recentTopics, activeSessionSummaries, eventCountToday"
       - "L2WorkingMemory has: recurringThemes, activeProjects, openQuestions, looseEnds"
       - "L3CoreBeliefs has: summary, preferences, stablePatterns, identityFacets (Map<String,String>)"
       - "Contradiction has: claim1, claim2, source1, source2, description"
       - "estimateTokens() computes from all text fields at 4 chars/token"
 
-  # ── Chronicle / Deposits ──
+  # ── Chronicle / Events ──
 
-  - name: deposits-write-produces-to-kafka
+  - name: events-write-produces-to-kafka
     description: >
-      ACT_deposits_write creates a Deposit record and produces it to the chronicle.deposits
-      Kafka topic synchronously, returning the deposit_id, topic, partition, and offset.
+      ACT_events_write creates a Event record and produces it to the chronicle.events
+      Kafka topic synchronously, returning the event_id, topic, partition, and offset.
     preconditions:
-      - "Kafka is connected and the chronicle.deposits topic exists"
+      - "Kafka is connected and the chronicle.events topic exists"
     steps:
-      - "Client calls ACT_deposits_write with event_type='OBSERVATION', content='User prefers dark themes'"
+      - "Client calls ACT_events_write with event_type='OBSERVATION', content='User prefers dark themes'"
       - "Handler verifies kafka.isConnected() is true"
-      - "Deposit.create() generates UUID deposit_id and current Instant timestamp"
-      - "kafka.produceSync() serializes Deposit to JSON and sends to chronicle.deposits topic"
-      - "Metrics.recordDeposit() increments the deposits counter"
+      - "Event.create() generates UUID event_id and current Instant timestamp"
+      - "kafka.produceSync() serializes Event to JSON and sends to chronicle.events topic"
+      - "Metrics.recordEvent() increments the events counter"
     verify:
-      - "Response contains deposit_id (UUID), topic='chronicle.deposits', partition, offset"
+      - "Response contains event_id (UUID), topic='chronicle.events', partition, offset"
       - "isError is false"
-      - "Deposit record has session_id, pass_number (default 1), tags, references"
+      - "Event record has session_id, pass_number (default 1), tags, references"
 
-  - name: deposits-write-all-event-types
+  - name: events-write-all-event-types
     description: >
-      ACT_deposits_write accepts five event types: OBSERVATION, DECISION, ARTIFACT, QUESTION, CORRECTION.
+      ACT_events_write accepts five event types: OBSERVATION, DECISION, ARTIFACT, QUESTION, CORRECTION.
     preconditions:
       - "Kafka is connected"
     steps:
-      - "Client sends deposits with each of the five event types"
+      - "Client sends events with each of the five event types"
     verify:
       - "All five types are accepted and produced to Kafka"
-      - "event_type field in the Deposit record matches the input"
+      - "event_type field in the Event record matches the input"
 
-  - name: deposits-write-with-optional-fields
+  - name: events-write-with-optional-fields
     description: >
-      ACT_deposits_write handles optional pass_number, tags, and references fields.
+      ACT_events_write handles optional pass_number, tags, and references fields.
     preconditions:
       - "Kafka is connected"
     steps:
-      - "Client calls ACT_deposits_write with only required fields (event_type, content)"
-      - "Client calls ACT_deposits_write with pass_number=3, tags=['design','ui'], references=['dep-123']"
+      - "Client calls ACT_events_write with only required fields (event_type, content)"
+      - "Client calls ACT_events_write with pass_number=3, tags=['design','ui'], references=['dep-123']"
     verify:
       - "Default pass_number is 1 when not provided"
       - "Default tags is empty list when not provided"
       - "Default references is empty list when not provided"
-      - "Provided tags and references are included in the Deposit record"
+      - "Provided tags and references are included in the Event record"
 
-  - name: deposits-write-kafka-not-connected
+  - name: events-write-kafka-not-connected
     description: >
-      ACT_deposits_write returns an error when Kafka is not connected.
+      ACT_events_write returns an error when Kafka is not connected.
     preconditions:
       - "Kafka client exists but isConnected() returns false"
     steps:
-      - "Client calls ACT_deposits_write"
+      - "Client calls ACT_events_write"
       - "Handler checks kafka.isConnected()"
     verify:
-      - "Response is isError=true with message 'Kafka not connected - deposits unavailable'"
+      - "Response is isError=true with message 'Kafka not connected - events unavailable'"
       - "No Kafka produce is attempted"
 
-  - name: deposits-write-not-registered-when-kafka-unavailable
+  - name: events-write-not-registered-when-kafka-unavailable
     description: >
-      When Kafka connection fails at startup, ACT_deposits_write is not registered at all.
+      When Kafka connection fails at startup, ACT_events_write is not registered at all.
     preconditions:
       - "Kafka is unreachable at bootstrap servers"
     steps:
       - "Main.main() catches Kafka connection exception"
       - "kafka variable is set to null"
-      - "The 'if (kafka != null)' guard around DepositsWrite.register() is false"
+      - "The 'if (kafka != null)' guard around EventsWrite.register() is false"
     verify:
-      - "ACT_deposits_write does not appear in the tool list"
+      - "ACT_events_write does not appear in the tool list"
       - "Warning is logged about Kafka unavailability"
 
-  - name: deposit-model-auto-fields
+  - name: event-model-auto-fields
     description: >
-      Deposit.create() auto-generates UUID deposit_id and current Instant timestamp.
+      Event.create() auto-generates UUID event_id and current Instant timestamp.
       Null tags and references default to empty lists.
     preconditions: []
     steps:
-      - "Deposit.create(sessionId, 1, 'OBSERVATION', 'content', null, null) is called"
+      - "Event.create(sessionId, 1, 'OBSERVATION', 'content', null, null) is called"
     verify:
-      - "depositId is a valid UUID string"
+      - "eventId is a valid UUID string"
       - "timestamp is approximately Instant.now()"
       - "tags is List.of() (empty)"
       - "references is List.of() (empty)"
@@ -715,7 +715,7 @@ stories:
       - "Kafka broker is running"
     steps:
       - "ensureTopics() lists existing topics via AdminClient"
-      - "Creates missing topics from: chronicle.deposits, chronicle.documents, chronicle.sessions"
+      - "Creates missing topics from: chronicle.events, chronicle.documents, chronicle.sessions"
       - "Creates sensor.state with cleanup.policy=compact"
       - "Initializes KafkaProducer with acks=1, linger.ms=5, batch.size=16384, max.block.ms=5000"
     verify:
@@ -1406,7 +1406,7 @@ stories:
   - name: metrics-otel-instrumentation-points
     description: >
       Metrics class exposes OTel counters and histograms for tool calls, errors,
-      deposits, documents, chunks, entities, and knowledge queries.
+      events, documents, chunks, entities, and knowledge queries.
     preconditions: []
     steps:
       - "OTel Meter obtained via GlobalOpenTelemetry.getMeter('com.bw.actual.gateway')"
@@ -1414,7 +1414,7 @@ stories:
       - "gateway.tool_calls: LongCounter with 'tool' attribute"
       - "gateway.tool_errors: LongCounter with 'tool' attribute"
       - "gateway.tool_duration: LongHistogram in ms with 'tool' attribute"
-      - "gateway.deposits: LongCounter (no attributes)"
+      - "gateway.events: LongCounter (no attributes)"
       - "gateway.documents_indexed: LongCounter"
       - "gateway.chunks_indexed: LongCounter"
       - "gateway.entities_extracted: LongCounter"
@@ -1643,7 +1643,7 @@ stories:
       - "Some or all optional services unavailable"
     steps:
       - "Sensor failure: WARNING logged, proxy tools not registered"
-      - "Kafka failure: WARNING logged, kafka=null, deposits tool not registered"
+      - "Kafka failure: WARNING logged, kafka=null, events tool not registered"
       - "Neo4j failure: WARNING logged, neo4j=null, graph tools not registered"
       - "Ollama failure: WARNING logged, ollama=null, L3/contradictions degrade"
       - "Qdrant failure: WARNING logged, qdrant=null, semantic search unavailable"
@@ -1715,7 +1715,7 @@ enforced_constraints:
 
   - name: kafka-disconnection-guard
     description: >
-      ACT_deposits_write checks kafka.isConnected() before attempting to produce.
+      ACT_events_write checks kafka.isConnected() before attempting to produce.
       Returns error immediately if Kafka is not available.
     rationale: >
       Prevents blocking on Kafka connection timeout during tool execution.

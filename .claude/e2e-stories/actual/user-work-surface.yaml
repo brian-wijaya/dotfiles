@@ -9,11 +9,11 @@ vocabulary:
   companion_app: "Emacs (text editing) or Krita (image markup) opened from the UI via i3 IPC for side-by-side work."
   triage_status: "untriaged → investigating → resolved/dismissed/deferred"
   which_key_panel: "Context-sensitive popup showing available keyboard actions, grouped by context."
-  semantic_zoom: "Content changes representation at different scales. Overview = colored boxes. Domain = item detail. Item = deposit history."
+  semantic_zoom: "Content changes representation at different scales. Overview = colored boxes. Domain = item detail. Item = event history."
   color_preset: "Single-keypress color scheme switch: Health (1), Activity (2), Trust (3), Novelty (4). Spatial layout unchanged."
   domain_box: "Named spatial region grouping related knowledge items by project/topic. Stable position across sessions."
   split_element: "Visual encoding for Both view: item box split vertically — left = user level, right = agent level."
-  deposit: "Chronicle event recording a user or agent action: DECISION, OBSERVATION, VERIFICATION, etc."
+  event: "Chronicle event recording a user or agent action: DECISION, OBSERVATION, VERIFICATION, etc."
 
 metadata:
   feature: user-work-surface
@@ -206,7 +206,7 @@ stories:
       - "Data Models tab active, items populated"
     steps:
       - "Press '1' (Health preset): items colored green/yellow/red by confidence+recency"
-      - "Press '2' (Activity preset): items colored hot/cold by recent deposit count"
+      - "Press '2' (Activity preset): items colored hot/cold by recent event count"
       - "Press '3' (Trust preset): items vary opacity by fidelity pass rate"
       - "Press '4' (Novelty preset): items bright/dim by changes since last session"
       - "Press '1' to return to Health"
@@ -239,12 +239,12 @@ stories:
       - "At domain zoom: individual items visible with titles, knowledge state colors"
       - "User presses j/k to move between items within domain"
       - "User presses Enter to zoom into selected item"
-      - "At item zoom: full deposit history, assumption list, provenance chain"
+      - "At item zoom: full event history, assumption list, provenance chain"
       - "User presses q to zoom back out one level"
     verify:
       - "Selection highlight moves with j/k"
       - "Zoom transitions smoothly between levels"
-      - "Item detail shows deposits, assumptions, and provenance"
+      - "Item detail shows events, assumptions, and provenance"
       - "q returns to previous zoom level"
 
   - name: semantic_zoom_overview_hides_item_labels
@@ -278,7 +278,7 @@ stories:
       - "Brief summary text (1-2 lines) visible for each item"
       - "Assumption count badge visible (e.g., '3 assumptions')"
       - "Content is qualitatively different from overview — not just scaled-up colored rectangles"
-      - "Deposit count or recency indicator visible per item"
+      - "Event count or recency indicator visible per item"
 
   # ── Data Models Tab: Stable Spatial Layout ──
 
@@ -302,12 +302,12 @@ stories:
   - name: new_domain_appears_in_unsorted_region
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS3
-    description: "A brand-new domain (first deposit for a new project) appears in the unsorted region, not displacing existing domains."
+    description: "A brand-new domain (first event for a new project) appears in the unsorted region, not displacing existing domains."
     preconditions:
       - "App running with established domain layout"
-      - "Agent creates a deposit for project 'brand-new-project' that has no prior domain box"
+      - "Agent creates a event for project 'brand-new-project' that has no prior domain box"
     steps:
-      - "Agent writes OBSERVATION deposit tagged project:brand-new-project"
+      - "Agent writes OBSERVATION event tagged project:brand-new-project"
       - "App receives update via next SENSE_worldview_load poll"
       - "New domain box appears"
     verify:
@@ -321,7 +321,7 @@ stories:
   - name: triage_decision_inbox_item
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS3
-    description: "User triages an item in the Decision Inbox — reads it, investigates, and resolves with a deposit."
+    description: "User triages an item in the Decision Inbox — reads it, investigates, and resolves with a event."
     preconditions:
       - "Decision Inbox tab has at least one untriaged item"
       - "Item is an ambient contradiction detection"
@@ -331,21 +331,21 @@ stories:
       - "User selects item with j/k, presses Enter to view detail"
       - "Detail view shows: contradiction description, both sides, provenance"
       - "User presses 'i' to mark as investigating"
-      - "User presses 'd' to compose a deposit (opens Emacs companion)"
+      - "User presses 'd' to compose a event (opens Emacs companion)"
       - "User writes resolution rationale in Emacs buffer"
-      - "User submits deposit (saves buffer, closes companion)"
-      - "App records DECISION deposit via ACT_deposits_write"
+      - "User submits event (saves buffer, closes companion)"
+      - "App records DECISION event via ACT_events_write"
       - "Item moves to 'resolved' status"
     verify:
       - "Item status progressed: untriaged → investigating → resolved"
-      - "Deposit recorded in Chronicle with correct references"
+      - "Event recorded in Chronicle with correct references"
       - "Item no longer appears in active inbox"
       - "Knowledge state updated for the resolved topic"
 
   - name: triage_dismiss_records_rationale
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS3
-    description: "Dismissing an item records the dismissal as a deposit, not a silent deletion. Future queries can find why this was dismissed."
+    description: "Dismissing an item records the dismissal as a event, not a silent deletion. Future queries can find why this was dismissed."
     preconditions:
       - "Decision Inbox has an untriaged contradiction"
     steps:
@@ -356,7 +356,7 @@ stories:
       - "User presses Enter to confirm"
     verify:
       - "Item moves to 'dismissed' status"
-      - "A DECISION deposit is written with: dismissed=true, rationale text, reference to dismissed item"
+      - "A DECISION event is written with: dismissed=true, rationale text, reference to dismissed item"
       - "Item disappears from active inbox but is findable via search with status:dismissed"
       - "The rationale is retrievable: SENSE_documents_search('dismissed contradiction') returns it"
 
@@ -368,7 +368,7 @@ stories:
       - "Decision Inbox has untriaged items"
     steps:
       - "User selects an item"
-      - "User presses 'D' (defer — capital D, not 'd' for deposit)"
+      - "User presses 'D' (defer — capital D, not 'd' for event)"
       - "App prompts for deferral period (1h, 1d, 1w, custom)"
       - "User selects '1d'"
       - "Item moves to 'deferred' status with timestamp = now + 24h"
@@ -425,7 +425,7 @@ stories:
       - "Executive session is active (Claude Code connected)"
     steps:
       - "User switches to Processes tab"
-      - "Executive section shows: current session info, recent tool calls, deposit rate"
+      - "Executive section shows: current session info, recent tool calls, event rate"
       - "Analysts section shows: Temporal workflow list with status (running/queued/completed)"
       - "Clerks section shows: Kafka consumer status, events processed, error rate"
       - "Workflows section shows: active workflows with progress, retry state, duration"
@@ -477,59 +477,59 @@ stories:
     steps:
       - "User selects an item (a Worldview belief/model/heuristic)"
       - "User presses 'p' (pull) to reveal the Chronicle thread"
-      - "First pull level: deposit timeline — shows deposits that contributed to this belief"
-      - "User selects a deposit and presses 'p' again"
+      - "First pull level: event timeline — shows events that contributed to this belief"
+      - "User selects a event and presses 'p' again"
       - "Second pull level: raw content — session context, assumptions, agent reasoning"
       - "User presses 'q' to collapse back one level"
       - "User presses 'q' again to return to spatial overview"
     verify:
       - "Each pull level shows progressively deeper provenance"
-      - "Deposit timeline is chronologically ordered"
+      - "Event timeline is chronologically ordered"
       - "Raw content includes session ID, timestamp, agent identity"
       - "q collapses levels in reverse order"
 
   - name: thread_pull_on_item_with_no_chronicle_history
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS4
-    description: "Pulling on an item that has no Chronicle deposits (e.g., imported from external source) shows an informative empty state."
+    description: "Pulling on an item that has no Chronicle events (e.g., imported from external source) shows an informative empty state."
     preconditions:
-      - "Data Models tab has an item with no deposits (imported reference data)"
+      - "Data Models tab has an item with no events (imported reference data)"
     steps:
       - "Select the item"
       - "Press 'p' to pull"
     verify:
       - "Pull view opens (not a crash, not a no-op)"
-      - "Message: 'No Chronicle deposits for this item. Origin: [import source]'"
+      - "Message: 'No Chronicle events for this item. Origin: [import source]'"
       - "If the item has graph neighbors, those are shown as context"
       - "'q' returns to spatial view normally"
 
-  - name: thread_pull_with_500_deposits_paginates
+  - name: thread_pull_with_500_events_paginates
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS4, UWS-DS8
     description: >
-      An item has accumulated 500 deposits over months of agent and user activity.
-      The first pull level (deposit timeline) must paginate or virtualize the
+      An item has accumulated 500 events over months of agent and user activity.
+      The first pull level (event timeline) must paginate or virtualize the
       timeline. Rendering and navigation must remain responsive. Memory must
       be bounded.
     preconditions:
       - "Data Models tab active"
-      - "Item 'Y' has exactly 500 deposits in its Chronicle thread"
+      - "Item 'Y' has exactly 500 events in its Chronicle thread"
     steps:
       - "Select item Y"
-      - "Press 'p' to pull thread — first pull level (deposit timeline)"
-      - "Timeline renders showing deposits"
-      - "Navigate with j/k through the deposit list"
-      - "Scroll rapidly from first deposit to last (Home to End or equivalent)"
-      - "Press 'p' on a deposit near the end of the list to pull second level"
+      - "Press 'p' to pull thread — first pull level (event timeline)"
+      - "Timeline renders showing events"
+      - "Navigate with j/k through the event list"
+      - "Scroll rapidly from first event to last (Home to End or equivalent)"
+      - "Press 'p' on a event near the end of the list to pull second level"
       - "Press 'q' to return to timeline"
       - "Monitor memory usage throughout"
     verify:
-      - "First pull level renders within 500ms (not all 500 deposits rendered at once)"
-      - "Timeline is paginated or virtualized — only visible deposits are in the DOM/render tree"
+      - "First pull level renders within 500ms (not all 500 events rendered at once)"
+      - "Timeline is paginated or virtualized — only visible events are in the DOM/render tree"
       - "j/k navigation responds within 100ms per keystroke"
       - "Rapid scroll (Home to End) does not freeze the UI — virtualized rendering handles it"
-      - "Memory usage bounded: < 50MB increase from opening the thread pull (not O(n) with deposit count)"
-      - "Deposit order is chronological — oldest first, newest last (or configurable)"
+      - "Memory usage bounded: < 50MB increase from opening the thread pull (not O(n) with event count)"
+      - "Event order is chronological — oldest first, newest last (or configurable)"
       - "If timeline is paginated: page indicators visible, page navigation keyboard-accessible"
       - "If timeline is virtualized: scroll position preserved when switching pull levels"
 
@@ -543,11 +543,11 @@ stories:
       - "User presses '/' to open search"
       - "User types query"
       - "Results show Worldview items: 'This belief exists in Worldview (L2, project: X)'"
-      - "Results show Chronicle items: 'These N deposits contributed to it'"
+      - "Results show Chronicle items: 'These N events contributed to it'"
       - "FTS5 and semantic search run in parallel (hybrid search)"
       - "User selects a result to navigate to it"
     verify:
-      - "Search results include both Worldview beliefs and Chronicle deposits"
+      - "Search results include both Worldview beliefs and Chronicle events"
       - "Results are ranked by relevance (hybrid FTS5 + semantic)"
       - "Selecting a result navigates to the item in context"
 
@@ -572,26 +572,26 @@ stories:
 
   # ── Companion App Integration ──
 
-  - name: open_emacs_companion_for_deposit
+  - name: open_emacs_companion_for_event
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS6
-    description: "User composes a deposit by opening Emacs as a companion app alongside the UI."
+    description: "User composes a event by opening Emacs as a companion app alongside the UI."
     preconditions:
       - "Emacs daemon is running"
       - "UI is on Worldview workspace"
     steps:
-      - "User presses 'd' to compose a deposit for the selected item"
+      - "User presses 'd' to compose a event for the selected item"
       - "UI contracts to left 1/3 of screen via i3 IPC"
-      - "Emacs opens in right 2/3 with deposit template buffer"
-      - "Template includes: item reference, deposit type selector, content area, tags"
-      - "User writes deposit content in Emacs"
+      - "Emacs opens in right 2/3 with event template buffer"
+      - "Template includes: item reference, event type selector, content area, tags"
+      - "User writes event content in Emacs"
       - "User saves buffer (C-x C-s)"
-      - "UI detects save, reads deposit content, submits via ACT_deposits_write"
+      - "UI detects save, reads event content, submits via ACT_events_write"
       - "Emacs companion closes, UI expands back to full width"
     verify:
       - "i3 layout changes to accommodate companion"
       - "Emacs buffer has correct template with item context"
-      - "Deposit recorded in Chronicle after save"
+      - "Event recorded in Chronicle after save"
       - "UI reflects updated knowledge state"
 
   - name: emacs_companion_crash_does_not_kill_app
@@ -600,9 +600,9 @@ stories:
     description: "If Emacs crashes or the daemon is not running, the UI recovers gracefully instead of hanging."
     preconditions:
       - "Emacs daemon is NOT running (or crashes mid-edit)"
-      - "User triggers deposit composition"
+      - "User triggers event composition"
     steps:
-      - "User presses 'd' to compose deposit"
+      - "User presses 'd' to compose event"
       - "UI sends emacsclient command"
       - "emacsclient fails (connection refused / daemon not running)"
     verify:
@@ -627,12 +627,12 @@ stories:
       - "User saves in Krita (Ctrl+S)"
       - "File watcher detects change"
       - "UI updates image preview with marked-up version"
-      - "When deposit is submitted, marked-up image is the attachment"
+      - "When event is submitted, marked-up image is the attachment"
     verify:
       - "Krita opens with the correct image file"
       - "File change detected within 2 seconds of save"
       - "UI shows updated image after Krita save"
-      - "Deposit attachment contains the annotated image"
+      - "Event attachment contains the annotated image"
 
   - name: companion_layout_respects_i3_splits
     status: NOT_IMPLEMENTED
@@ -642,9 +642,9 @@ stories:
       - "UI is running full-width on Worldview workspace"
       - "Emacs daemon is running"
     steps:
-      - "User triggers deposit composition (opens Emacs companion)"
+      - "User triggers event composition (opens Emacs companion)"
       - "UI should be left 1/3, Emacs right 2/3"
-      - "User finishes deposit, companion closes"
+      - "User finishes event, companion closes"
       - "UI restores to full width"
       - "User triggers image annotation (opens Krita companion)"
       - "UI should be left 1/3, Krita right 2/3"
@@ -690,7 +690,7 @@ stories:
       - "Note whether 'a (annotate)' appears"
     verify:
       - "'a (annotate in Krita)' is NOT shown for items without images"
-      - "'d (compose deposit)' IS shown (valid for all items)"
+      - "'d (compose event)' IS shown (valid for all items)"
       - "'p (pull thread)' IS shown (valid for all items with Chronicle history)"
       - "Actions are context-filtered, not just grayed out — absent means unavailable"
 
@@ -709,58 +709,58 @@ stories:
       - "User types: 'Focus on the dependency changes in project X'"
       - "Message sent to gateway, routed to analyst agent"
       - "Analyst responds with investigation plan"
-      - "Analyst produces OBSERVATION deposit as it finds results"
-      - "User sees deposit appear in Data Models tab in real time"
+      - "Analyst produces OBSERVATION event as it finds results"
+      - "User sees event appear in Data Models tab in real time"
     verify:
       - "Chat messages delivered to analyst via gateway"
       - "Analyst response appears in chat panel"
-      - "OBSERVATION deposits from analyst visible in Data Models tab"
+      - "OBSERVATION events from analyst visible in Data Models tab"
       - "Executive agent (Claude Code TTY) is NOT affected"
 
   # ── Concurrent Updates from Multiple Agents ──
 
-  - name: concurrent_agent_deposits_update_incrementally
+  - name: concurrent_agent_events_update_incrementally
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS2, UWS-DS3
-    description: "Multiple agents writing deposits simultaneously cause incremental UI updates, not a full re-render stampede."
+    description: "Multiple agents writing events simultaneously cause incremental UI updates, not a full re-render stampede."
     preconditions:
       - "App connected, Data Models tab active"
       - "Executive (Claude Code) and Analyst are both running"
     steps:
-      - "Executive writes DECISION deposit for project A"
-      - "Analyst writes OBSERVATION deposit for project B within same second"
-      - "Clerk writes enrichment deposit for project A 200ms later"
-      - "App polls SENSE_worldview_load and detects 3 new deposits"
+      - "Executive writes DECISION event for project A"
+      - "Analyst writes OBSERVATION event for project B within same second"
+      - "Clerk writes enrichment event for project A 200ms later"
+      - "App polls SENSE_worldview_load and detects 3 new events"
     verify:
-      - "All three deposits reflected in the UI"
+      - "All three events reflected in the UI"
       - "Only affected domain boxes re-render (project A and project B), not the entire canvas"
       - "No flickering, no z-order changes, no selection loss"
-      - "If user was zoomed into project A, they see the new deposits appear in the timeline"
-      - "Deposit timestamps are displayed in correct chronological order despite near-simultaneous arrival"
+      - "If user was zoomed into project A, they see the new events appear in the timeline"
+      - "Event timestamps are displayed in correct chronological order despite near-simultaneous arrival"
 
   - name: worldview_poll_detects_changes_within_interval
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS2
     description: >
       Define the poll interval for SENSE_worldview_load in the vocabulary (e.g. 5s).
-      An agent deposit at T=0 must be visible in the UI by T=poll_interval.
+      An agent event at T=0 must be visible in the UI by T=poll_interval.
       Test overlap: if SENSE_worldview_load takes 4s and poll interval is 5s,
       does the next poll overlap or wait?
     preconditions:
       - "App connected, Data Models tab active"
       - "Poll interval defined (e.g. 5s)"
-      - "Agent is about to write a deposit"
+      - "Agent is about to write a event"
     steps:
       - "Record timestamp T=0"
-      - "Agent writes OBSERVATION deposit at T=0 via ACT_deposits_write"
+      - "Agent writes OBSERVATION event at T=0 via ACT_events_write"
       - "App's poll cycle fires SENSE_worldview_load at next interval (worst case T=poll_interval)"
-      - "SENSE_worldview_load returns updated Worldview including the new deposit"
+      - "SENSE_worldview_load returns updated Worldview including the new event"
       - "UI renders the updated item"
       - "Record timestamp T_visible when UI reflects the change"
       - "Simulate slow response: SENSE_worldview_load takes 4s to respond (poll_interval is 5s)"
       - "Next poll fires at T=10s (not T=9s — interval measured from response, not request)"
     verify:
-      - "Deposit visible in UI within one poll interval after it was written (T_visible <= T=0 + poll_interval + response_time)"
+      - "Event visible in UI within one poll interval after it was written (T_visible <= T=0 + poll_interval + response_time)"
       - "Poll interval is documented in vocabulary (e.g. 'worldview_poll_interval: 5s')"
       - "No poll overlap: if previous poll is still in-flight (slow response), next poll does NOT fire concurrently"
       - "Poll timer resets from response completion, not from request start — prevents request pileup"
@@ -770,14 +770,14 @@ stories:
   - name: rapid_knowledge_state_transitions
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS2
-    description: "An item's knowledge state changes multiple times in quick succession (agent writes deposit, then user triages, then agent verifies). Each transition renders correctly."
+    description: "An item's knowledge state changes multiple times in quick succession (agent writes event, then user triages, then agent verifies). Each transition renders correctly."
     preconditions:
       - "Item 'X' is at (User: Deferred, Agent: Low)"
     steps:
-      - "Agent writes OBSERVATION deposit → Agent level becomes Medium"
+      - "Agent writes OBSERVATION event → Agent level becomes Medium"
       - "User reads the observation → User level becomes Low (seen but not confirmed)"
-      - "User resolves with DECISION deposit → User level becomes High"
-      - "Agent writes VERIFICATION deposit → Agent level becomes High"
+      - "User resolves with DECISION event → User level becomes High"
+      - "Agent writes VERIFICATION event → Agent level becomes High"
     verify:
       - "Four state transitions: (D,L) → (D,M) → (L,M) → (H,M) → (H,H)"
       - "Each transition is visually reflected (color change in Both view)"
@@ -802,7 +802,7 @@ stories:
       - "Inspect chat panel"
     verify:
       - "No text element has computed font-size < 14px"
-      - "Body text (deposit content, item descriptions) is >= 16px"
+      - "Body text (event content, item descriptions) is >= 16px"
       - "Status bar text >= 14px"
       - "Which-key panel key labels >= 14px"
       - "Timestamps, badges, and metadata labels >= 14px"
@@ -924,11 +924,11 @@ stories:
       - "App detects gateway unreachable"
       - "App falls back to cached data"
       - "User navigates Data Models tab"
-      - "User attempts to compose a deposit"
+      - "User attempts to compose a event"
     verify:
       - "Cached data is displayed with staleness indicator (last sync timestamp)"
       - "Read-only navigation works (zoom, scroll, search cached data)"
-      - "Write operations (deposit, triage) are queued with pending indicator"
+      - "Write operations (event, triage) are queued with pending indicator"
       - "Status bar shows: 'Offline — using cached data from [timestamp]'"
       - "When gateway becomes reachable again, queued writes are replayed"
 
@@ -947,18 +947,18 @@ stories:
       - "Gateway goes unreachable (user offline)"
     steps:
       - "User resolves item X in the Decision Inbox while offline"
-      - "App queues a DECISION deposit for item X (resolve) in local write queue"
-      - "Meanwhile, an agent writes a VERIFICATION deposit server-side resolving item X"
+      - "App queues a DECISION event for item X (resolve) in local write queue"
+      - "Meanwhile, an agent writes a VERIFICATION event server-side resolving item X"
       - "Item X is now 'resolved' on the server (agent resolved it)"
       - "User comes back online — gateway is reachable"
       - "App detects reconnection, begins replaying queued writes"
-      - "App attempts ACT_deposits_write for the queued DECISION deposit on item X"
+      - "App attempts ACT_events_write for the queued DECISION event on item X"
     verify:
       - "One of three acceptable outcomes:"
       - "  (a) Conflict detection: App detects item X was already resolved. Shows dialog: 'Item X was resolved by [agent] while you were offline. Submit your resolution anyway?'"
-      - "  (b) Graceful merge: Both deposits are recorded (user's DECISION + agent's VERIFICATION). Item shows dual provenance. No error."
-      - "  (c) Idempotent resolve: User's deposit is recorded but item stays in 'resolved' state. No duplicate status transition."
-      - "NOT acceptable: silent failure where user's deposit is dropped without notification"
+      - "  (b) Graceful merge: Both events are recorded (user's DECISION + agent's VERIFICATION). Item shows dual provenance. No error."
+      - "  (c) Idempotent resolve: User's event is recorded but item stays in 'resolved' state. No duplicate status transition."
+      - "NOT acceptable: silent failure where user's event is dropped without notification"
       - "NOT acceptable: unhandled error / crash during queue replay"
       - "NOT acceptable: silent duplicate where item appears resolved twice in the timeline"
       - "Queue replay status is visible to user: 'Replaying 1 queued action... done (conflict detected)'"
@@ -996,22 +996,22 @@ stories:
       - "Existing state (tab, scroll, selection) preserved — not reset"
       - "If the existing window was minimized or behind another window, it is raised"
 
-  # ── Annotation as Deposit ──
+  # ── Annotation as Event ──
 
-  - name: annotation_on_item_creates_chronicle_deposit
+  - name: annotation_on_item_creates_chronicle_event
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS3
-    description: "User annotates an item in the spatial view, creating a deposit that agents can attend to."
+    description: "User annotates an item in the spatial view, creating a event that agents can attend to."
     preconditions:
       - "Data Models tab, item selected at domain or item zoom"
     steps:
-      - "User presses 'n' (annotate — not 'd' which is compose full deposit)"
+      - "User presses 'n' (annotate — not 'd' which is compose full event)"
       - "Inline annotation input appears anchored to the item"
       - "User types: 'This assumption seems wrong — check against the January test results'"
       - "User presses Enter to submit"
     verify:
-      - "OBSERVATION deposit created with references field pointing to the annotated item"
-      - "Deposit tagged as user-annotation"
+      - "OBSERVATION event created with references field pointing to the annotated item"
+      - "Event tagged as user-annotation"
       - "Item shows annotation indicator (small badge) in spatial view"
       - "Analyst agent can detect the annotation via SENSE_documents_search"
       - "The annotation is visible in the item's thread-pull view"
@@ -1021,22 +1021,22 @@ stories:
   - name: triage_item_that_agent_resolves_simultaneously
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS3
-    description: "User starts triaging an item that an agent simultaneously resolves. No crash, no duplicate deposits, no silent data loss."
+    description: "User starts triaging an item that an agent simultaneously resolves. No crash, no duplicate events, no silent data loss."
     preconditions:
       - "Decision Inbox has item 'X' in untriaged state"
       - "User opens item X detail view"
-      - "Agent simultaneously writes a VERIFICATION deposit resolving item X"
+      - "Agent simultaneously writes a VERIFICATION event resolving item X"
     steps:
       - "User is reading item X detail"
-      - "Agent's deposit arrives via next poll"
+      - "Agent's event arrives via next poll"
       - "Item X's status changes server-side to resolved"
       - "User presses 'r' (resolve) for item X"
-      - "UI sends ACT_deposits_write for a DECISION deposit"
+      - "UI sends ACT_events_write for a DECISION event"
     verify:
-      - "One of two acceptable outcomes: (a) user's deposit is recorded alongside agent's, item stays resolved, or (b) UI shows 'This item was resolved by [agent] while you were reading it — still submit your deposit?'"
+      - "One of two acceptable outcomes: (a) user's event is recorded alongside agent's, item stays resolved, or (b) UI shows 'This item was resolved by [agent] while you were reading it — still submit your event?'"
       - "No crash, no unhandled error"
-      - "No duplicate resolution deposits"
-      - "If user's deposit is recorded, both deposits appear in the Chronicle timeline (not conflict)"
+      - "No duplicate resolution events"
+      - "If user's event is recorded, both events appear in the Chronicle timeline (not conflict)"
 
   - name: worldview_data_changes_during_deep_zoom
     status: NOT_IMPLEMENTED
@@ -1044,7 +1044,7 @@ stories:
     description: "While user is deep in an item's thread-pull view, the underlying Worldview data changes. The deep view does not corrupt or crash."
     preconditions:
       - "User has pulled two levels deep on item Y (viewing raw session content)"
-      - "Agent writes a contradicting deposit that changes item Y's knowledge state"
+      - "Agent writes a contradicting event that changes item Y's knowledge state"
     steps:
       - "User is reading raw turn content for item Y"
       - "Next poll detects updated Worldview with changed state for item Y"
@@ -1060,7 +1060,7 @@ stories:
     ds_ref: UWS-DS8
     description: "A domain with 500+ items does not cause the UI to freeze at domain zoom."
     preconditions:
-      - "A project has 500 knowledge items (e.g., actual-server with extensive deposits)"
+      - "A project has 500 knowledge items (e.g., actual-server with extensive events)"
     steps:
       - "Zoom into the large domain"
       - "Navigate with j/k through items"

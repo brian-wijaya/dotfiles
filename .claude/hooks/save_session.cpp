@@ -1,8 +1,8 @@
 // save_session.cpp - High-frequency hook for session persistence
 // Fires on: Stop (every response), PreCompact (before compaction)
-// Target latency: <5ms (vs Python 22ms)
+// Target latency: <5ms
 //
-// Reads session transcript, extracts summary/topics/facts, saves to gateway DB
+// Reads session transcript, extracts summary/topics/facts, saves to PostgreSQL (canonical.sessions)
 
 #include <iostream>
 #include <fstream>
@@ -11,9 +11,8 @@
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
-#include <ctime>
-#include <sys/stat.h>
-#include <sqlite3.h>
+#include <cstring>
+#include <libpq-fe.h>
 
 // Minimal JSON parsing (no external deps for speed)
 class JSONParser {
@@ -175,22 +174,44 @@ SessionData parse_transcript(const std::string& transcript_path) {
     return data;
 }
 
-// Save session to gateway SQLite DB
-int save_to_gateway(const SessionData& data) {
-    const char* vault_root = std::getenv("VAULT_ROOT");
-    std::string db_path = vault_root ? std::string(vault_root) + "/data/vault.db"
-                                     : std::string(std::getenv("HOME")) + "/vault/data/vault.db";
-
-    // Check if DB exists
-    struct stat buffer;
-    if (stat(db_path.c_str(), &buffer) != 0) {
-        std::cerr << "[save-session] Vault DB not found: " << db_path << std::endl;
-        return -1;
+// Build a JSON array string from a vector of strings
+static std::string to_json_array(const std::vector<std::string>& items,
+                                  const char* fallback = nullptr) {
+    std::ostringstream out;
+    out << "[";
+    if (items.empty() && fallback) {
+        out << "\"" << fallback << "\"";
+    } else {
+        for (size_t i = 0; i < items.size(); ++i) {
+            if (i > 0) out << ",";
+            out << "\"" << items[i] << "\"";
+        }
     }
+    out << "]";
+    return out.str();
+}
 
-    sqlite3* db;
-    if (sqlite3_open(db_path.c_str(), &db) != SQLITE_OK) {
-        std::cerr << "[save-session] Failed to open vault DB" << std::endl;
+// Build a plain-text version for full-text search columns
+static std::string to_text_list(const std::vector<std::string>& items) {
+    std::ostringstream out;
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (i > 0) out << " ";
+        out << items[i];
+    }
+    return out.str();
+}
+
+// Save session to PostgreSQL (canonical.sessions)
+int save_to_postgres(const std::string& source_id, const SessionData& data) {
+    static const char* conninfo =
+        "host=localhost port=5432 user=actual password=actual "
+        "dbname=worldview options='-c search_path=canonical,public'";
+
+    PGconn* conn = PQconnectdb(conninfo);
+    if (PQstatus(conn) != CONNECTION_OK) {
+        // Fire-and-forget: don't block Claude on DB errors
+        std::cerr << "[save-session] PG connect failed: " << PQerrorMessage(conn);
+        PQfinish(conn);
         return -1;
     }
 
@@ -199,24 +220,10 @@ int save_to_gateway(const SessionData& data) {
     std::vector<std::string> topics = data.extract_topics();
     std::vector<std::string> key_facts = data.extract_key_facts();
 
-    // Prepare topics JSON array
-    std::ostringstream topics_json;
-    topics_json << "[";
-    for (size_t i = 0; i < topics.size(); ++i) {
-        if (i > 0) topics_json << ",";
-        topics_json << "\"" << topics[i] << "\"";
-    }
-    if (topics.empty()) topics_json << "\"general\"";
-    topics_json << "]";
-
-    // Prepare key_facts JSON array
-    std::ostringstream facts_json;
-    facts_json << "[";
-    for (size_t i = 0; i < key_facts.size(); ++i) {
-        if (i > 0) facts_json << ",";
-        facts_json << "\"" << key_facts[i] << "\"";
-    }
-    facts_json << "]";
+    std::string topics_json = to_json_array(topics, "general");
+    std::string facts_json = to_json_array(key_facts);
+    std::string topics_text = to_text_list(topics);
+    std::string facts_text = to_text_list(key_facts);
 
     // Calculate word count
     int word_count = 0;
@@ -231,37 +238,54 @@ int save_to_gateway(const SessionData& data) {
         }
     }
 
-    int message_count = data.user_messages.size() + data.assistant_messages.size();
+    int message_count = static_cast<int>(data.user_messages.size() + data.assistant_messages.size());
 
-    // Insert into sessions table
-    const char* sql = "INSERT INTO sessions (summary, topics, key_facts, word_count, message_count, created_at) "
-                     "VALUES (?, ?, ?, ?, ?, datetime('now'))";
+    // Stack buffers for integer-to-string conversion
+    char word_count_buf[16];
+    char message_count_buf[16];
+    snprintf(word_count_buf, sizeof(word_count_buf), "%d", word_count);
+    snprintf(message_count_buf, sizeof(message_count_buf), "%d", message_count);
 
-    sqlite3_stmt* stmt;
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-        std::cerr << "[save-session] Failed to prepare statement" << std::endl;
-        sqlite3_close(db);
+    // Parameterized upsert
+    static const char* sql =
+        "INSERT INTO sessions (source_id, summary, topics, key_facts, "
+        "    topics_text, key_facts_text, word_count, message_count, created_at, updated_at) "
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now()) "
+        "ON CONFLICT (source_id) DO UPDATE SET "
+        "    summary = EXCLUDED.summary, "
+        "    topics = EXCLUDED.topics, "
+        "    key_facts = EXCLUDED.key_facts, "
+        "    topics_text = EXCLUDED.topics_text, "
+        "    key_facts_text = EXCLUDED.key_facts_text, "
+        "    word_count = EXCLUDED.word_count, "
+        "    message_count = EXCLUDED.message_count, "
+        "    updated_at = now()";
+
+    const char* paramValues[8] = {
+        source_id.c_str(),
+        summary.c_str(),
+        topics_json.c_str(),
+        facts_json.c_str(),
+        topics_text.c_str(),
+        facts_text.c_str(),
+        word_count_buf,
+        message_count_buf
+    };
+
+    PGresult* res = PQexecParams(conn, sql, 8, nullptr,
+                                  paramValues, nullptr, nullptr, 0);
+
+    ExecStatusType status = PQresultStatus(res);
+    if (status != PGRES_COMMAND_OK) {
+        std::cerr << "[save-session] PG exec failed: " << PQresultErrorMessage(res);
+        PQclear(res);
+        PQfinish(conn);
         return -1;
     }
 
-    sqlite3_bind_text(stmt, 1, summary.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, topics_json.str().c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 3, facts_json.str().c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(stmt, 4, word_count);
-    sqlite3_bind_int(stmt, 5, message_count);
-
-    int result = sqlite3_step(stmt);
-    int session_id = sqlite3_last_insert_rowid(db);
-
-    sqlite3_finalize(stmt);
-    sqlite3_close(db);
-
-    if (result != SQLITE_DONE) {
-        std::cerr << "[save-session] Failed to insert session" << std::endl;
-        return -1;
-    }
-
-    return session_id;
+    PQclear(res);
+    PQfinish(conn);
+    return 0;
 }
 
 int main() {
@@ -278,8 +302,8 @@ int main() {
     // Skip if stop_hook_active to prevent infinite loops
     // But still show confirmation for user reassurance
     if (stop_hook_active) {
-        std::cout << R"({"systemMessage": "✓ Session saved to gateway"})" << std::endl;
-        std::exit(0);
+        std::cout << R"({"systemMessage": "Session saved to gateway"})" << std::endl;
+        return 0;
     }
 
     // Parse transcript
@@ -287,20 +311,21 @@ int main() {
 
     // Skip if no messages
     if (data.user_messages.empty() && data.assistant_messages.empty()) {
-        std::exit(0);
+        return 0;
     }
 
-    // Save to gateway
-    int saved_id = save_to_gateway(data);
+    // Save to PostgreSQL — use session_id as source_id for upsert
+    int rc = save_to_postgres(session_id, data);
 
-    if (saved_id > 0) {
-        std::cerr << "[save-session] Saved session #" << saved_id
+    if (rc == 0) {
+        std::cerr << "[save-session] Saved session " << session_id
                   << " (" << data.extract_topics().size() << " topics, "
                   << data.extract_key_facts().size() << " facts)" << std::endl;
 
         // Output visible confirmation to user
-        std::cout << R"({"systemMessage": "✓ Session saved to gateway"})" << std::endl;
+        std::cout << R"({"systemMessage": "Session saved to gateway"})" << std::endl;
     }
+    // rc < 0: error already logged to stderr, exit 0 (fire-and-forget)
 
     return 0;
 }
