@@ -5,7 +5,7 @@ Started: 2026-02-11
 
 ## Context
 
-The vault data pipeline (VaultWatcher in kinetic) indexes documents from 6 source types into vault.db for FTS5 search and session memory. The pipeline currently has no topical/narrative tracking — topics exist only as hardcoded keyword matches on Claude sessions. The `tags` + `doc_tags` tables exist in schema but are empty. The user wants keyword/filename tagging that enables semantic/narrative tracing over time.
+The vault data pipeline (VaultWatcher in gateway) indexes documents from 6 source types into vault.db for FTS5 search and session memory. The pipeline currently has no topical/narrative tracking — topics exist only as hardcoded keyword matches on Claude sessions. The `tags` + `doc_tags` tables exist in schema but are empty. The user wants keyword/filename tagging that enables semantic/narrative tracing over time.
 
 Current scale: 17,415 documents, 175,983 chunks, 2,446 sessions, 13,185 emails. DB: 1.7GB + 1.1GB WAL.
 
@@ -15,7 +15,7 @@ Current scale: 17,415 documents, 175,983 chunks, 2,446 sessions, 13,185 emails. 
 
 ### US-1: Tag-filtered vault search
 **As** a user searching my vault,
-**I want** to filter search results by topic tags (e.g., "show me everything tagged project:kinetic"),
+**I want** to filter search results by topic tags (e.g., "show me everything tagged project:gateway"),
 **so that** I can narrow 17K documents to a relevant subset before or alongside FTS5 text search.
 
 **Acceptance**: `RECALL_search_hybrid` accepts optional `tags` parameter. Results filtered to documents having ALL specified tags. Tags combinable with text queries.
@@ -32,7 +32,7 @@ Current scale: 17,415 documents, 175,983 chunks, 2,446 sessions, 13,185 emails. 
 **I want** to ask "what happened with X over the last N days" and get a chronological topic-threaded timeline,
 **so that** I can trace how a project/feature/bug evolved across sessions, documents, and emails.
 
-**Acceptance**: A query like `RECALL_search_sessions(query="kinetic", recency_bias=0.5)` returns sessions tagged with project:kinetic, ordered by time, with co-occurring topics showing what else was active alongside.
+**Acceptance**: A query like `RECALL_search_sessions(query="gateway", recency_bias=0.5)` returns sessions tagged with project:gateway, ordered by time, with co-occurring topics showing what else was active alongside.
 
 ### US-4: Context Deposits — ephemeral context preservation
 **As** an agent working on a task,
@@ -146,13 +146,13 @@ load_worldview → agent works → deposit_context → ... → next session → 
 vault.db is WAL mode with a single writer (VaultWatcher). Tag extraction, context deposit insertion, and chunk writes must go through the same write path. No concurrent writes from separate processes. Context deposits from agents go through the MCP tool → DatabaseClient write path (single connection, serialized).
 
 ### EC-2: No GPU, Java-only pipeline
-The machine has no GPU. All extraction must be CPU-only. The kinetic pipeline is Java — no Python subprocess calls for extraction (LlmFactScorer's `claude -p` is the only subprocess call, and it's a CLI tool not a Python library). YAKE implemented natively in Java.
+The machine has no GPU. All extraction must be CPU-only. The gateway pipeline is Java — no Python subprocess calls for extraction (LlmFactScorer's `claude -p` is the only subprocess call, and it's a CLI tool not a Python library). YAKE implemented natively in Java.
 
 ### EC-3: Subscription-only LLM billing
 LLM calls use `claude -p --model haiku` (subscription). No per-token API cost. But each call has ~1-3s latency and 30s timeout. Budget: acceptable for new documents at ingest time, not acceptable for bulk backfill of 17K docs (would take 5-14 hours).
 
 ### EC-4: Existing schema compatibility
-Both Java (kinetic) and Python (vault-rag) share vault.db. Schema changes must be additive (new tables, new columns, new indexes). Cannot drop or rename existing columns. The Python side may still write directly to vault.db. The JSONL ledger file is kept on disk during transition but no longer written to; ReassembleLooseEnds reads from context_deposits table. Ledger data migrated to context_deposits on first startup.
+Both Java (gateway) and Python (vault-rag) share vault.db. Schema changes must be additive (new tables, new columns, new indexes). Cannot drop or rename existing columns. The Python side may still write directly to vault.db. The JSONL ledger file is kept on disk during transition but no longer written to; ReassembleLooseEnds reads from context_deposits table. Ledger data migrated to context_deposits on first startup.
 
 ### EC-5: WAL size discipline
 WAL is already 1.1GB. Any bulk operation (backfill) must checkpoint periodically to prevent unbounded WAL growth. Passive checkpoints only (non-blocking).
@@ -167,7 +167,7 @@ Tags are assigned to documents, not chunks. Rationale: primary use is search fil
 **Status**: CONFIRMED.
 
 ### OC-2: Flat namespace with prefix conventions
-Tags are flat strings with colon-delimited prefixes: `project:kinetic`, `lang:python`, `tool:emacs`, `activity:debugging`, `topic:display-isolation`. No hierarchical parent-child relationships in schema. Prefix-based queries (`tag LIKE 'project:%'`) provide faceted filtering. The `tags` table is a flat list; grouping is by convention only.
+Tags are flat strings with colon-delimited prefixes: `project:gateway`, `lang:python`, `tool:emacs`, `activity:debugging`, `topic:display-isolation`. No hierarchical parent-child relationships in schema. Prefix-based queries (`tag LIKE 'project:%'`) provide faceted filtering. The `tags` table is a flat list; grouping is by convention only.
 
 **Status**: CONFIRMED.
 
@@ -195,7 +195,7 @@ For Claude conversations, the agent's own tag deposits (via save_session or depo
 **Status**: CONFIRMED.
 
 ### OC-6: All-lowercase tag canonicalization
-All tags lowercased on insert. `Emacs` → `emacs`, `Project:Kinetic` → `project:kinetic`. The tag namespace is a controlled vocabulary, not free text. No alias/synonym table initially — deferred unless namespace pollution becomes measurable (CULS-1 monitoring).
+All tags lowercased on insert. `Emacs` → `emacs`, `Project:Gateway` → `project:gateway`. The tag namespace is a controlled vocabulary, not free text. No alias/synonym table initially — deferred unless namespace pollution becomes measurable (CULS-1 monitoring).
 
 **Status**: CONFIRMED.
 
@@ -224,7 +224,7 @@ Level 3 event types (decision, causal_link, outcome, topic_shift, question_open/
 
 | Prefix | Meaning | Examples |
 |--------|---------|----------|
-| `project:` | Named project/system | `project:kinetic`, `project:sensor`, `project:vault-rag` |
+| `project:` | Named project/system | `project:gateway`, `project:sensor`, `project:vault-rag` |
 | `lang:` | Programming language | `lang:java`, `lang:python`, `lang:elisp` |
 | `tool:` | Software tool/application | `tool:emacs`, `tool:polybar`, `tool:sqlite`, `tool:ghostty` |
 | `activity:` | What's being done | `activity:debugging`, `activity:refactoring`, `activity:design` |
@@ -257,7 +257,7 @@ source_type=chatgpt (source_path="chatgpt:<conv-id>"):
 source_type=markdown (source_path="docs/adr/ADR-015.md"):
   → source:markdown
   → directory components as topics: "docs/adr" → topic:adr
-  → parent project from path (e.g., "kinetic/docs/" → project:kinetic)
+  → parent project from path (e.g., "gateway/docs/" → project:gateway)
 
 source_type=onenote (source_path="onenote/..."):
   → source:onenote
@@ -266,7 +266,7 @@ General rules:
   → File extension → lang: tag (.java→lang:java, .py→lang:python,
     .el→lang:elisp, .rs→lang:rust, .ts→lang:typescript, .org→skip)
   → Known project directories → project: tag
-    (~/vault/programs/kinetic/ → project:kinetic,
+    (~/vault/programs/gateway/ → project:gateway,
      ~/vault/programs/sensor/ → project:sensor)
   → All tags lowercased
   → Skip noise directories: node_modules, .git, __pycache__, .cache, build, target
@@ -323,9 +323,9 @@ Event types: `decision`, `causal_link`, `outcome`, `topic_shift`, `question_open
 
 Payload is JSON, structure varies by event_type. Examples:
 ```json
-{"type": "decision", "description": "Chose YAKE over RAKE", "rationale": "No stopword dependency, single-document scoring", "tags": ["project:kinetic", "topic:keyword-extraction"]}
-{"type": "causal_link", "from": "System.exit(0) in parent-watchdog", "relation": "caused", "to": "Zombie kinetic processes accumulating", "tags": ["project:kinetic", "activity:debugging"]}
-{"type": "topic_shift", "from_topic": "kinetic lifecycle debugging", "to_topic": "pipeline redesign", "summary": "Lifecycle issue resolved, pivoting to topical tracking"}
+{"type": "decision", "description": "Chose YAKE over RAKE", "rationale": "No stopword dependency, single-document scoring", "tags": ["project:gateway", "topic:keyword-extraction"]}
+{"type": "causal_link", "from": "System.exit(0) in parent-watchdog", "relation": "caused", "to": "Zombie gateway processes accumulating", "tags": ["project:gateway", "activity:debugging"]}
+{"type": "topic_shift", "from_topic": "gateway lifecycle debugging", "to_topic": "pipeline redesign", "summary": "Lifecycle issue resolved, pivoting to topical tracking"}
 {"type": "task_start", "event_id": "task-001", "description": "Implement YAKE in Java", "priority": "high"}
 ```
 

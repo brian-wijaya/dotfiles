@@ -8,7 +8,7 @@ argument-hint: [story-file or feature-name] [--spectate]
 
 Isolated end-to-end testing in a dedicated Xvfb display. Creates a headless X11 environment, runs stories with full sensor instrumentation, and tears it down when done. The user's desktop is never touched.
 
-**Display isolation is the default.** With `display.enabled = true` in `~/.config/kinetic/kinetic.toml`, kinetic auto-creates display :99 on startup and auto-attaches an xpra viewer window (tiled on a separate workspace, read-only). All display-routed tools (X11 input, screenshots, sensor sensors) automatically target :99. The user can observe the agent's display via the xpra viewer. The polybar agent module (robot icon) shows activity state: cyan=idle, orange=active, green=done.
+**Display isolation is the default.** With `display.enabled = true` in `~/.config/actual-server/gateway.toml`, gateway auto-creates display :99 on startup and auto-attaches an xpra viewer window (tiled on a separate workspace, read-only). All display-routed tools (X11 input, screenshots, sensor sensors) automatically target :99. The user can observe the agent's display via the xpra viewer. The polybar agent module (robot icon) shows activity state: cyan=idle, orange=active, green=done.
 
 ## Arguments
 
@@ -59,7 +59,7 @@ Show to user:
 
 ### 4. CREATE ISOLATED DISPLAY
 
-With `display.enabled = true` (the default in `~/.config/kinetic/kinetic.toml`), kinetic has already created display :99 on startup and auto-attached an xpra viewer. In this case, **skip display creation** — the display already exists and all tools are already routing to :99.
+With `display.enabled = true` (the default in `~/.config/actual-server/gateway.toml`), gateway has already created display :99 on startup and auto-attached an xpra viewer. In this case, **skip display creation** — the display already exists and all tools are already routing to :99.
 
 If display isolation was not enabled at startup, create one manually:
 

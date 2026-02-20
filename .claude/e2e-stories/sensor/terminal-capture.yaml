@@ -4,14 +4,14 @@
 vocabulary:
   terminal-capture: Sensor sensor channel that captures raw terminal output from all PTYs with microsecond timestamps
   ring-buffer-per-channel: Each sensor channel (terminal, X11 events, keystrokes, pointer, clipboard) gets its own dedicated ring buffer in shared memory
-  hot-catalog: Kinetic's indexed, full-text-searchable store of recent terminal output (7-day retention)
-  cold-catalog: Kinetic's batch-compressed archive of terminal output (90-day retention)
-  unified-timeline: Single chronological table in kinetic with typed entries (source_type discriminator) covering terminal, visual, keystroke, clipboard events
+  hot-catalog: Gateway's indexed, full-text-searchable store of recent terminal output (7-day retention)
+  cold-catalog: Gateway's batch-compressed archive of terminal output (90-day retention)
+  unified-timeline: Single chronological table in gateway with typed entries (source_type discriminator) covering terminal, visual, keystroke, clipboard events
 
 metadata:
   feature: sensor
   component: terminal-capture
-  tags: [sensor, terminal, capture, sensor, kinetic]
+  tags: [sensor, terminal, capture, sensor, gateway]
 
 stories:
   # === CAPTURE ===
@@ -63,29 +63,29 @@ stories:
 
   # === CATALOGING ===
 
-  - name: kinetic-catalogs-from-ring-buffer
+  - name: gateway-catalogs-from-ring-buffer
     description: >
-      Kinetic reads from sensor's terminal ring buffer and catalogs entries into
+      Gateway reads from sensor's terminal ring buffer and catalogs entries into
       persistent SQLite storage with full-text indexing. No truncation at any tier.
     preconditions:
       - sensor running with terminal capture
-      - kinetic running and connected to sensor
+      - gateway running and connected to sensor
     steps:
       - bash: "echo 'catalog-test-STRING_7742' in a tmux pane"
-      - wait for kinetic to catalog
-      - kinetic: search "STRING_7742"
+      - wait for gateway to catalog
+      - gateway: search "STRING_7742"
     verify:
       - full line appears in catalog with timestamp, source, and content
       - full-text search returns the entry
 
   - name: unified-timeline-query
     description: >
-      A time-range query against kinetic's unified timeline returns terminal output,
+      A time-range query against gateway's unified timeline returns terminal output,
       visual capture, keystrokes, and clipboard events interleaved in chronological order.
     preconditions:
-      - kinetic running with multiple sensor channels producing data
+      - gateway running with multiple sensor channels producing data
     steps:
-      - kinetic: query timeline from T-5min to now
+      - gateway: query timeline from T-5min to now
     verify:
       - results contain entries with source_type 'terminal', 'visual', 'keystroke', etc.
       - entries are chronologically ordered regardless of source_type
@@ -93,14 +93,14 @@ stories:
 
   - name: ansi-raw-and-stripped
     description: >
-      Kinetic stores raw terminal bytes (including ANSI escape codes) AND generates
+      Gateway stores raw terminal bytes (including ANSI escape codes) AND generates
       a stripped-text column for full-text search. Raw bytes preserve exact terminal
       state for replay. Stripped text is what the search index operates on.
     preconditions:
       - terminal output containing ANSI color codes
     steps:
       - bash: "printf '\\033[31mERROR\\033[0m: something failed'"
-      - kinetic: search "ERROR: something failed"
+      - gateway: search "ERROR: something failed"
     verify:
       - full-text search finds the entry via stripped text
       - raw column contains the original ANSI escape sequences
@@ -113,7 +113,7 @@ stories:
       The hot catalog retains full terminal output for 7 days with full-text search.
       Entries older than 7 days are migrated to cold catalog.
     steps:
-      - kinetic: query entries from 6 days ago
+      - gateway: query entries from 6 days ago
     verify:
       - entries present and full-text searchable
       - no truncation of content
@@ -123,7 +123,7 @@ stories:
       The cold catalog retains batch-compressed terminal output for 90 days.
       Entries older than 90 days are permanently deleted.
     steps:
-      - kinetic: query entries from 60 days ago
+      - gateway: query entries from 60 days ago
     verify:
       - entries present (decompressed on read)
       - full content preserved, no truncation
@@ -133,8 +133,8 @@ stories:
       The terminal catalog is queryable by external tools: CLI for humans,
       MCP for Claude, and vault-rag for indexing the terminal archive.
     steps:
-      - bash: "kinetic search 'error' --last 1h"
-      - kinetic MCP: search terminal entries
+      - bash: "gateway search 'error' --last 1h"
+      - gateway MCP: search terminal entries
     verify:
       - CLI returns matching entries with timestamps and source attribution
       - MCP returns same data in structured format
@@ -169,8 +169,8 @@ opinionated_constraints:
     description: Terminal ring buffer is 64MB, providing hours of runway at typical terminal output rates
     rationale: >
       Typical developer terminal output: 1-10 KB/s during active use, 0 during idle.
-      64MB covers hours of active output. This is the window kinetic has to catalog
-      before data is overwritten. Hours of runway is sufficient — kinetic restarts
+      64MB covers hours of active output. This is the window gateway has to catalog
+      before data is overwritten. Hours of runway is sufficient — gateway restarts
       take seconds, not hours.
 
   - name: 7day-hot-90day-cold

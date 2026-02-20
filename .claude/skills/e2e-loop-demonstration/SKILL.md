@@ -8,7 +8,7 @@ argument-hint: [story-file or feature-name]
 
 Live-display end-to-end testing with human-emulated X11 input, sensor differential QA, cohabitation protocol, keystroke visualization, and structured reporting.
 
-**Display isolation note**: Demonstrations run on the agent's own isolated display (:99), NOT on the user's live display (:0). The user observes the demonstration through the xpra viewer window, which is auto-attached by kinetic on startup and tiled on a separate workspace (read-only). The polybar agent module (robot icon) shows activity state: cyan=idle, orange=active, green=done. For Emacs testing, launch a separate daemon on :99 (e.g., `DISPLAY=:99 emacs --daemon=claude-test`) — do NOT connect to the user's Emacs at localhost:8585.
+**Display isolation note**: Demonstrations run on the agent's own isolated display (:99), NOT on the user's live display (:0). The user observes the demonstration through the xpra viewer window, which is auto-attached by gateway on startup and tiled on a separate workspace (read-only). The polybar agent module (robot icon) shows activity state: cyan=idle, orange=active, green=done. For Emacs testing, launch a separate daemon on :99 (e.g., `DISPLAY=:99 emacs --daemon=claude-test`) — do NOT connect to the user's Emacs at localhost:8585.
 
 ## Arguments
 
@@ -380,7 +380,7 @@ BETWEEN STORIES:
 
 ### 3.5. SESSION EXEMPTION
 
-No exemption needed — resource scaling is handled by kinetic's VaultResourceScaler
+No exemption needed — resource scaling is handled by gateway's VaultResourceScaler
 based on X11 idle time, independent of e2e test execution.
 
 ### 4. RUN STORIES

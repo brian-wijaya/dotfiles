@@ -1,21 +1,21 @@
 vocabulary:
   qdrant: Vector database for semantic search (Rust-native, runs as Docker container)
-  kinetic: Java daemon — MCP gateway, knowledge, editor/desktop interaction (35 tools)
+  gateway: Java daemon — MCP gateway, knowledge, editor/desktop interaction (35 tools)
   sensor: C++ daemon — continuous sensory substrate (X11 events, keystrokes, pointer, clipboard, timing)
   time-machine: Java daemon — event-driven file protection (fanotify via Panama FFI, content-addressed versioning, NAS replication)
 
 metadata:
   feature: system
   component: infrastructure-topology
-  tags: [system, topology, qdrant, kinetic, sensor, time-machine]
+  tags: [system, topology, qdrant, gateway, sensor, time-machine]
   revised: 2026-02-08
   revision-note: >
-    Updated tool count 42→35 (coordination excluded from kinetic).
+    Updated tool count 42→35 (coordination excluded from gateway).
     Three fundamentals: sense, act, know. No coordinate category.
 
 stories:
   - name: qdrant-container-lifecycle
-    description: Qdrant container starts before kinetic needs it, stays running across kinetic restarts
+    description: Qdrant container starts before gateway needs it, stays running across gateway restarts
     tags: [smoke, infra]
     estimated_duration_ms: 10000
     steps:
@@ -29,69 +29,69 @@ stories:
       - Equals: "4294967296"
 
   - name: qdrant-unavailable-handling
-    description: Kinetic degrades to FTS-only results when Qdrant is unreachable
+    description: Gateway degrades to FTS-only results when Qdrant is unreachable
     tags: [resilience]
     estimated_duration_ms: 15000
     steps:
-      # TODO(kinetic): uncomment when kinetic is operational
+      # TODO(gateway): uncomment when gateway is operational
       # - bash: "docker stop qdrant"
       # - bash: "sleep 2"
-      # - bash: "kinetic-mcp call know.search.vault '{\"query\": \"test\"}' 2>&1 | jq -r '.warning // empty'"
+      # - bash: "gateway-mcp call know.search.vault '{\"query\": \"test\"}' 2>&1 | jq -r '.warning // empty'"
       # - bash: "docker start qdrant"
       # - bash: "sleep 3"
-      # - bash: "kinetic-mcp call know.search.vault '{\"query\": \"test\"}' | jq -r '.results | length'"
-      - bash: "echo 'TODO: kinetic not yet built'"
+      # - bash: "gateway-mcp call know.search.vault '{\"query\": \"test\"}' | jq -r '.results | length'"
+      - bash: "echo 'TODO: gateway not yet built'"
     verify:
-      # TODO(kinetic): replace with actual assertions
+      # TODO(gateway): replace with actual assertions
       # - Contains: "qdrant unavailable"
       # - Greater: 0
       - Contains: "TODO"
 
-  - name: kinetic-sensor-connection
-    description: Kinetic connects to sensor and proxies sense tools successfully
+  - name: gateway-sensor-connection
+    description: Gateway connects to sensor and proxies sense tools successfully
     tags: [smoke, integration]
     estimated_duration_ms: 5000
     steps:
-      # TODO(kinetic): uncomment when kinetic is operational
-      # - bash: "kinetic-mcp call sense.user_state | jq -r '.idle'"
-      # - bash: "kinetic-mcp call sense.timestamp | jq -r 'type'"
-      - bash: "echo 'TODO: kinetic not yet built'"
+      # TODO(gateway): uncomment when gateway is operational
+      # - bash: "gateway-mcp call sense.user_state | jq -r '.idle'"
+      # - bash: "gateway-mcp call sense.timestamp | jq -r 'type'"
+      - bash: "echo 'TODO: gateway not yet built'"
     verify:
-      # TODO(kinetic): replace with actual assertions
+      # TODO(gateway): replace with actual assertions
       # - NotEmpty
       # - Equals: "number"
       - Contains: "TODO"
 
-  - name: kinetic-sensor-unavailable
-    description: Kinetic starts without sensor and degrades gracefully
+  - name: gateway-sensor-unavailable
+    description: Gateway starts without sensor and degrades gracefully
     tags: [resilience]
     estimated_duration_ms: 15000
     steps:
-      # TODO(kinetic): uncomment when kinetic is operational
+      # TODO(gateway): uncomment when gateway is operational
       # - bash: "systemctl --user stop sensor"
       # - bash: "sleep 2"
-      # - bash: "kinetic-mcp call act.invoke.editor.elisp '{\"expression\": \"(+ 1 2)\"}' | jq -r '.result'"
-      # - bash: "kinetic-mcp call sense.user_state 2>&1 | jq -r '.error // empty'"
+      # - bash: "gateway-mcp call act.invoke.editor.elisp '{\"expression\": \"(+ 1 2)\"}' | jq -r '.result'"
+      # - bash: "gateway-mcp call sense.user_state 2>&1 | jq -r '.error // empty'"
       # - bash: "systemctl --user start sensor"
       # - bash: "sleep 3"
-      # - bash: "kinetic-mcp call sense.user_state | jq -r '.idle'"
-      - bash: "echo 'TODO: kinetic not yet built'"
+      # - bash: "gateway-mcp call sense.user_state | jq -r '.idle'"
+      - bash: "echo 'TODO: gateway not yet built'"
     verify:
-      # TODO(kinetic): replace with actual assertions
+      # TODO(gateway): replace with actual assertions
       # - Equals: "3"
       # - Contains: "sensor unavailable"
       # - NotEmpty
       - Contains: "TODO"
 
   - name: time-machine-independence
-    description: Time-machine runs as separate JVM, survives kinetic crash
+    description: Time-machine runs as separate JVM, survives gateway crash
     tags: [critical, isolation]
     estimated_duration_ms: 10000
     steps:
       - bash: "systemctl --user is-active time-machine && echo 'active'"
       - bash: "TM_PID=$(pgrep -f 'time-machine.*\\.jar' | head -1) && echo $TM_PID"
-      # TODO(kinetic): uncomment when kinetic is operational
-      # - bash: "kill -9 $(pgrep -f kinetic.jar) 2>/dev/null"
+      # TODO(gateway): uncomment when gateway is operational
+      # - bash: "kill -9 $(pgrep -f gateway.jar) 2>/dev/null"
       # - bash: "sleep 2"
       - bash: "echo 'test-independence' > /tmp/tm-independence-test.txt && sleep 2"
       - bash: "sqlite3 ~/.local/share/time-machine/metadata.db \"SELECT count(*) FROM versions WHERE file_path='/tmp/tm-independence-test.txt'\""
@@ -103,18 +103,18 @@ stories:
       - NotEmpty
 
   - name: mcp-tool-count
-    description: Kinetic exposes exactly 35 tools (sense:8 + act:18 + know:9)
+    description: Gateway exposes exactly 35 tools (sense:8 + act:18 + know:9)
     tags: [smoke]
     estimated_duration_ms: 3000
     steps:
-      # TODO(kinetic): uncomment when kinetic is operational
-      # - bash: "kinetic-mcp tools/list | jq '.tools | length'"
-      # - bash: "kinetic-mcp tools/list | jq '[.tools[] | select(.category == \"sense\")] | length'"
-      # - bash: "kinetic-mcp tools/list | jq '[.tools[] | select(.category == \"act\")] | length'"
-      # - bash: "kinetic-mcp tools/list | jq '[.tools[] | select(.category == \"know\")] | length'"
-      - bash: "echo 'TODO: kinetic not yet built'"
+      # TODO(gateway): uncomment when gateway is operational
+      # - bash: "gateway-mcp tools/list | jq '.tools | length'"
+      # - bash: "gateway-mcp tools/list | jq '[.tools[] | select(.category == \"sense\")] | length'"
+      # - bash: "gateway-mcp tools/list | jq '[.tools[] | select(.category == \"act\")] | length'"
+      # - bash: "gateway-mcp tools/list | jq '[.tools[] | select(.category == \"know\")] | length'"
+      - bash: "echo 'TODO: gateway not yet built'"
     verify:
-      # TODO(kinetic): replace with actual assertions
+      # TODO(gateway): replace with actual assertions
       # - Equals: "35"
       # - Equals: "8"
       # - Equals: "18"
@@ -143,12 +143,12 @@ enforced_constraints:
     rationale: Hardware limit; must be explicitly budgeted
 
   - name: two-mcp-entries
-    value: sensor + kinetic only
+    value: sensor + gateway only
     rationale: Claude Code connects to exactly 2 MCP servers; tool consolidation eliminates the other 5
 
   - name: time-machine-separate-jvm
     value: true
-    rationale: Protection must survive what it protects; kinetic crash must not interrupt file versioning
+    rationale: Protection must survive what it protects; gateway crash must not interrupt file versioning
 
 opinionated_constraints:
   - name: qdrant-as-docker
@@ -163,6 +163,6 @@ opinionated_constraints:
     description: Vector search unavailability falls back to FTS-only, does not crash
     rationale: Partial results better than no results; transient failures should not cascade
 
-  - name: kinetic-sensor-graceful-degradation
-    description: Sensor unavailability does not prevent kinetic from serving act/know tools
+  - name: gateway-sensor-graceful-degradation
+    description: Sensor unavailability does not prevent gateway from serving act/know tools
     rationale: Sensing failure should not cascade to action and knowledge; degrade, don't crash

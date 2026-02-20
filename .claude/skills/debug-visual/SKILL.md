@@ -8,7 +8,7 @@ allowed-tools: mcp__gateway__ACT_now, mcp__gateway__ACT_delta, mcp__gateway__SEN
 
 You have access to the X11 sensory bus which captures all desktop events with nanosecond timestamps.
 
-**Display targeting**: By default, screenshots and X11 event queries target the agent's isolated display :99 (auto-created by kinetic when `display.enabled = true`). This is the agent's own Xvfb display, not the user's live screen. If debugging an issue on the user's display (:0), pass the appropriate display parameter explicitly.
+**Display targeting**: By default, screenshots and X11 event queries target the agent's isolated display :99 (auto-created by gateway when `display.enabled = true`). This is the agent's own Xvfb display, not the user's live screen. If debugging an issue on the user's display (:0), pass the appropriate display parameter explicitly.
 
 ## Process
 

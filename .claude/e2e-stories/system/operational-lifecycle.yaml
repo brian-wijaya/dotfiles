@@ -1,6 +1,6 @@
 vocabulary:
   sensor-daemon: C++ process hosting sensor/ and executive/ modules
-  kinetic-jar: Java 25 JVM process hosting kinetic MCP gateway
+  gateway-jar: Java 25 JVM process hosting gateway MCP server
   fail-stop: both processes restart together on any crash
   consistency-sweep: startup validation of cross-store invariants
 
@@ -16,15 +16,15 @@ stories:
     estimated_duration_ms: 35000
     preconditions:
       - sensor running as systemd user service
-      - kinetic running as systemd user service
+      - gateway running as systemd user service
       - services configured with Restart=always
     steps:
       - bash: "systemctl --user is-active sensor && echo 'active'"
-      # TODO(kinetic): uncomment when kinetic.service exists
-      # - bash: "systemctl --user is-active kinetic && echo 'active'"
+      # TODO(gateway): uncomment when gateway.service exists
+      # - bash: "systemctl --user is-active gateway && echo 'active'"
       - bash: "kill -9 $(pidof sensor) 2>/dev/null; sleep 5; systemctl --user is-active sensor && echo 'recovered'"
-      # TODO(kinetic): test kinetic crash recovery
-      # - bash: "kill -9 $(pgrep -f kinetic.jar) 2>/dev/null; sleep 5; systemctl --user is-active kinetic && echo 'recovered'"
+      # TODO(gateway): test gateway crash recovery
+      # - bash: "kill -9 $(pgrep -f gateway.jar) 2>/dev/null; sleep 5; systemctl --user is-active gateway && echo 'recovered'"
     verify:
       - Equals: "recovered"
 
@@ -36,13 +36,13 @@ stories:
       - systemd user session starts
     steps:
       - bash: "systemctl --user start sensor && sleep 2 && systemctl --user is-active sensor"
-      # TODO(kinetic): uncomment when kinetic.service exists
-      # - bash: "systemctl --user start kinetic && sleep 5 && systemctl --user is-active kinetic"
-      # TODO(kinetic): verify MCP tools/list responds
-      # - bash: "kinetic-mcp tools/list | jq '.tools | length'"
+      # TODO(gateway): uncomment when gateway.service exists
+      # - bash: "systemctl --user start gateway && sleep 5 && systemctl --user is-active gateway"
+      # TODO(gateway): verify MCP tools/list responds
+      # - bash: "gateway-mcp tools/list | jq '.tools | length'"
     verify:
       - Equals: "active"
-      # TODO(kinetic): verify tool count
+      # TODO(gateway): verify tool count
       # - Equals: "35"
 
   - name: ring-buffer-overflow-handling
