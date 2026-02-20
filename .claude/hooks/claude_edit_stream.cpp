@@ -248,6 +248,70 @@ int main() {
     }
     // Parent: don't wait for child, just exit
 
+    // --- Emacs visibility check (fallback for PreToolUse) ---
+    // If PreToolUse hook ran, Emacs should already be on the user's workspace.
+    // This is the safety net: if Emacs is still not visible, alert the model.
+    usleep(150000); // 150ms — also serves the prompt check below
+
+    static constexpr const char* X11_STATE_PATH = "/dev/shm/x11_state";
+    {
+        int x11_fd = open(X11_STATE_PATH, O_RDONLY);
+        if (x11_fd >= 0) {
+            char x11_buf[512];
+            ssize_t x11_len = read(x11_fd, x11_buf, sizeof(x11_buf) - 1);
+            close(x11_fd);
+
+            if (x11_len > 0) {
+                x11_buf[x11_len] = '\0';
+                // Strip trailing whitespace
+                while (x11_len > 0 && (x11_buf[x11_len - 1] == '\n' || x11_buf[x11_len - 1] == ' '))
+                    x11_buf[--x11_len] = '\0';
+
+                // Only flag if Emacs exists (emacs_wksp > 0) but is on the wrong workspace.
+                // emacs_wksp=-1 means Emacs isn't running — not actionable here.
+                if (strstr(x11_buf, "emacs_visible=no") && !strstr(x11_buf, "emacs_wksp=-1")) {
+                    dprintf(STDERR_FILENO,
+                        "EMACS NOT VISIBLE: Emacs is not on the user's current workspace after preparation.\n"
+                        "State: %s\n"
+                        "Action required: Move Emacs to the user's workspace and arrange it next to the terminal.\n",
+                        x11_buf);
+                    return 2;
+                }
+            }
+        }
+    }
+
+    // --- Prompt interrupt check ---
+    // Read /dev/shm/emacs_state and check for prompt=yes.
+    // If blocked on a prompt, exit 2 (blocking error) with diagnostic on stderr.
+    static constexpr const char* EMACS_STATE_PATH = "/dev/shm/emacs_state";
+    int state_fd = open(EMACS_STATE_PATH, O_RDONLY);
+    if (state_fd >= 0) {
+        char state_buf[1024];
+        ssize_t state_len = read(state_fd, state_buf, sizeof(state_buf) - 1);
+        close(state_fd);
+
+        if (state_len > 0) {
+            state_buf[state_len] = '\0';
+
+            // Check for prompt=yes (not prompt=no)
+            if (strstr(state_buf, "prompt=yes")) {
+                // Strip trailing newline for cleaner stderr output
+                if (state_len > 0 && state_buf[state_len - 1] == '\n')
+                    state_buf[state_len - 1] = '\0';
+
+                // Write diagnostic to stderr — Claude Code feeds this back to the model
+                dprintf(STDERR_FILENO,
+                    "EMACS INTERRUPT: Emacs is blocked on a prompt and cannot process edits.\n"
+                    "State: %s\n"
+                    "Action required: Dismiss the prompt via emacsclient before making more edits.\n",
+                    state_buf);
+                return 2;
+            }
+        }
+    }
+    // If emacs_state doesn't exist or prompt!=yes, continue normally
+
     // No stdout output — this hook is silent
     return 0;
 }

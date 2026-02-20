@@ -250,6 +250,77 @@ cross_context:
   compound_sequence → BASELINE(SENSE_read_snapshot + SENSE_read_events) → SETUP → ACT → VERIFY(SENSE_read_anomalies + SENSE_read_events + SENSE_capture_screen_region, diff against baseline)
 </tool_dispatch>
 
+<display_routing>
+Every tool call that takes a `display_id` parameter requires an intent classification.
+Do NOT default blindly. Classify the operation:
+
+DEMONSTRATE (display_id: "host" → :0)
+  User wants to observe the result in real-time.
+  Signals: "show me", "let me see", "watch", "on my screen", "test it" (with visual context),
+  "pull up", "arrange", "put X next to Y", any window management on user's desktop.
+  Also: features whose entire purpose is user observation (edit-stream, mosaic, boardroom).
+
+DEVELOP (display_id: "99" → :99, or omit for gateway default)
+  Agent working independently. User doesn't need to see it.
+  Signals: "run tests", "build", "deploy", automated work, headless testing,
+  "work on X" (without observation request), background tasks.
+
+INSPECT (display_id: "host" → :0)
+  Reading the user's current environment state.
+  Signals: "what's on my screen", "what workspace am I on", querying user's window layout,
+  checking what the user is doing, any SENSE_ call about the user's desktop.
+
+AMBIGUOUS → Ask. "Should I do this on your screen or in the background?"
+
+HARD RULES:
+- edit-stream, mosaic slides, boardroom cards → ALWAYS :0 (inherently user-facing)
+- SENSE_read_window_layout for user context → ALWAYS display_id: "host"
+- Screenshots for user verification → display_id: "host"
+- e2e-loop-demonstration → :0; e2e-loop-headless → :99
+- Window arrangement requests → ALWAYS display_id: "host"
+- If the user just said "let's test it" or "show me" → :0
+
+The C++ edit-stream hook targets whichever Emacs is running.
+The emacsclient in the hook connects to the Emacs daemon — ensure the Emacs frame
+is on the correct display BEFORE triggering edits.
+</display_routing>
+
+<window_layout>
+Window sizing rules for :0 (user display, 3440x1440 ultrawide, 40px polybar).
+
+EQUAL SPLIT BY DEFAULT:
+- 2 windows → 50% / 50% (1710px each)
+- 3 windows → 33% / 33% / 33% (1140px each)
+- 4 windows → 25% each (rare, avoid when possible)
+
+WEIGHTED SPLIT (2/3 + 1/3) — only when justified:
+- Code review: editor 2/3, reference 1/3
+- Writing with documentation: editor 2/3, docs 1/3
+- Debugging: code 2/3, logs/output 1/3
+- Video/media playback: player 2/3, controls/chat 1/3
+
+JUDGMENT HEURISTIC:
+- The window the user is actively working IN gets the most space
+- The window being OBSERVED gets minimum viable space
+- Terminal running Claude Code = working window (user reads output here)
+- Emacs showing edit-stream = observation window (user watches, not types)
+- Chrome with YouTube = passive/background (candidate to move to another workspace)
+- When adding Emacs for edit-stream alongside terminal: 50/50 (both need readable text)
+
+ACTIONS BEFORE REARRANGING:
+1. SENSE_read_window_layout(display_id: "host") to see current state
+2. Classify each window: active-work / observation / passive / background
+3. Background windows → move to another workspace rather than squeeze
+4. Apply equal split unless a weighted split is clearly better
+5. Never go below 1/3 width (1140px) for any text-bearing window — below this, code/text wraps too aggressively on an ultrawide
+
+i3 COMMANDS (via ACT_execute_command, display_id: "host"):
+- Move window: i3-msg '[id=WINDOW_ID] move container to workspace N'
+- Resize: i3-msg '[con_id=CONTAINER_ID] resize set WIDTH ppt 0 ppt'
+- Focus: i3-msg '[id=WINDOW_ID] focus'
+- Layout: i3-msg 'layout splith' (horizontal split, the default)
+</window_layout>
+
 <vault_resource_management>
 Background indexing: vault-rag-watcher.service (file watcher, still Python)
 Resource modes: Conservative (8GB/50% CPU, user active) ↔ Aggressive (32GB/100% CPU, 6hr idle)

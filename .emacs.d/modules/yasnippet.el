@@ -38,4 +38,9 @@
     (when (and (boundp 'yas-minor-mode) yas-minor-mode)
       (let ((yas-buffer-local-condition ''(require-snippet-condition . auto)))
         (yas-expand))))
-  (add-hook 'post-self-insert-hook #'bw/yas-try-expanding-auto-snippets))
+  (add-hook 'post-self-insert-hook #'bw/yas-try-expanding-auto-snippets)
+
+  ;; which-key label for yasnippet's default C-c & prefix
+  (with-eval-after-load 'which-key
+    (which-key-add-key-based-replacements
+      "C-c &" "yasnippet")))
