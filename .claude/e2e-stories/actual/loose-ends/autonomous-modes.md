@@ -34,7 +34,7 @@ Human in the loop at every step. Human leads discussion. Agent researches, propo
 This is the bridge between human-led and fully autonomous. The agent learns to operate without real-time human feedback by making its uncertainty legible.
 
 ### 3. `/self-parenting-mode`
-**Autonomous, 24/7.** Agent team (parent + child roles) conducts authorial extraction continuously. Infrastructure: Ralph, OpenClaw, or actual-server's own scheduling (Temporal/Kafka).
+**Autonomous, 24/7.** Agent team (parent + child roles) conducts authorial extraction continuously. Infrastructure: Ralph, OpenClaw, or actual's own scheduling (Temporal/Kafka).
 
 **Parent agent(s)**: Interrogate, challenge, demand specificity, enforce constraint collapse.
 **Child agent(s)**: Propose, explore, generate, defend.
@@ -186,12 +186,12 @@ They solve different problems. Complementary, not overlapping.
 **Three-layer architecture for autonomous modes:**
 1. **OpenClaw** = communication/scheduling shell (24/7 daemon, messaging channels for idea trickle, Docker sandboxing enforcing "agent can't write to user's environment")
 2. **Ralph pattern** = iteration discipline (fresh context per authorial extraction pass, prevents hallucination drift, git-as-memory between iterations)
-3. **actual-server** = knowledge backbone (Chronicle for all events, Temporal for workflow orchestration, Worldview for triage agent)
+3. **actual** = knowledge backbone (Chronicle for all events, Temporal for workflow orchestration, Worldview for triage agent)
 
 **Remaining open questions:**
 - Git branching strategy for artifact versioning — one branch per cycle? Per day? Per quality improvement?
 - How do different model tiers (frontier vs open source) divide labor within the agent team?
-- OpenClaw's MCP story is immature (community bridges only) — is this a blocker? Or does actual-server's gateway serve as the MCP entry point regardless?
+- OpenClaw's MCP story is immature (community bridges only) — is this a blocker? Or does actual's gateway serve as the MCP entry point regardless?
 - NanoClaw (lightweight fork) enforces mandatory OS-level container isolation — worth evaluating vs stock OpenClaw sandboxing?
 
 ### Model Tier Strategy

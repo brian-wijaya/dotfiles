@@ -14,7 +14,7 @@ BEFORE sending any `x11_key` calls **that target the user's live display (:0)** 
 2. Interrupt the user's work
 3. Cause confusing state that's hard to debug
 
-**When NOT needed**: Keyboard handoff is NOT required when sending keystrokes to the agent's own isolated display (:99). Since gateway auto-creates display :99 on startup (`display.enabled = true` in `~/.config/actual-server/gateway.toml`), and all display-routed tools automatically target :99, handoff is unnecessary for the vast majority of agent operations. The user cannot be typing on :99 — it is the agent's exclusive display. Only invoke this protocol when explicitly targeting the user's display (:0).
+**When NOT needed**: Keyboard handoff is NOT required when sending keystrokes to the agent's own isolated display (:99). Since gateway auto-creates display :99 on startup (`display.enabled = true` in `~/.config/actual/gateway.toml`), and all display-routed tools automatically target :99, handoff is unnecessary for the vast majority of agent operations. The user cannot be typing on :99 — it is the agent's exclusive display. Only invoke this protocol when explicitly targeting the user's display (:0).
 
 ## Protocol Steps
 
