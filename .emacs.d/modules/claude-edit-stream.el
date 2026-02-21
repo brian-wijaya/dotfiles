@@ -1,7 +1,7 @@
 ;;; claude-edit-stream.el --- Real-time diff overlay for Claude Code edits -*- lexical-binding: t; -*-
 
 ;; Author: Claude Code
-;; Version: 1.0.0
+;; Version: 1.1.0
 ;; Package-Requires: ((emacs "27.1"))
 ;; Keywords: tools, diff
 
@@ -16,9 +16,13 @@
 ;; This package reads the SHM file, parses each JSON line, and renders
 ;; overlays showing removed (old) and added (new) text inline.  The user
 ;; can then accept or reject individual changes or all at once.
+;;
+;; Smart diff: When both old and new text share context lines, only the
+;; actually changed lines are highlighted — unchanged context stays normal.
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'diff)
 (require 'seq)
 
@@ -42,6 +46,11 @@
 (defface claude-edit-stream-header
   '((t :background "#24283b" :foreground "#7aa2f7" :weight bold :extend t))
   "Face for change header line."
+  :group 'claude-edit-stream)
+
+(defface claude-edit-stream-context
+  '((t :foreground "#565f89" :italic t))
+  "Face for fold indicators between changed regions."
   :group 'claude-edit-stream)
 
 ;;;; Variables -----------------------------------------------------------
@@ -278,69 +287,367 @@ Positions are 1-indexed buffer positions in the new content."
                       (push (list new-beg new-end old-text) hunks))))))))))
     (nreverse hunks)))
 
-;;;; Overlay rendering ---------------------------------------------------
+;;;; Smart line-level diff -----------------------------------------------
 
-(defun claude-edit-stream--show-change (buf beg end old-text new-text file type)
-  "Create diff overlays in BUF from BEG to END.
-OLD-TEXT is what was there before, NEW-TEXT is what replaced it.
-FILE is the absolute path.  TYPE is `edit' or `write'."
-  (let ((group (gensym "ces-")))
-    (with-current-buffer buf
-      ;; 1. Header overlay — spans beg..end so it is not evaporated.
-      ;;    before-string renders the header line above the change.
-      (let ((header-ov (make-overlay beg (max (1+ beg) end) buf nil t))
-            (header-str (propertize
-                         (format " Claude %s  [a]ccept  [r]eject  %s\n"
-                                 (if (eq type 'edit) "Edit" "Write")
-                                 (file-name-nondirectory file))
-                         'face 'claude-edit-stream-header)))
+(defun claude-edit-stream--line-offsets (text)
+  "Return a vector mapping 1-indexed line numbers to char offsets in TEXT.
+Index 0 is 0 (start of line 1).  Index N is the char offset where line N+1
+starts (i.e., one past the newline of line N).  The final index equals
+\(length TEXT) so we can compute the span of the last line."
+  (let ((offsets (list 0))
+        (pos 0)
+        (len (length text)))
+    (while (< pos len)
+      (when (= (aref text pos) ?\n)
+        (push (1+ pos) offsets))
+      (setq pos (1+ pos)))
+    ;; Ensure we have a sentinel at the end for span calculations.
+    (unless (and offsets (= (car offsets) len))
+      (push len offsets))
+    (vconcat (nreverse offsets))))
+
+(defun claude-edit-stream--compute-line-diff (old-text new-text)
+  "Compute line-level diff between OLD-TEXT and NEW-TEXT.
+Return a list of sub-hunk plists, each with keys:
+  :type       — symbol `context', `removed', `added', or `changed'
+  :old-lines  — list of old lines (for removed/changed)
+  :new-lines  — list of new lines (for added/changed/context)
+  :new-offset — character offset within NEW-TEXT where new lines start
+  :new-length — character length of new lines in NEW-TEXT
+Returns nil if diff fails."
+  (let (hunks)
+    (with-temp-buffer
+      (let ((old-buf (current-buffer)))
+        (insert old-text)
+        (with-temp-buffer
+          (let ((new-buf (current-buffer)))
+            (insert new-text)
+            (let ((diff-output
+                   (with-temp-buffer
+                     (diff-no-select old-buf new-buf nil t (current-buffer))
+                     (buffer-string))))
+              ;; Build line-offset table for new-text so we can convert
+              ;; line numbers to character offsets accurately.
+              (let ((new-offsets (claude-edit-stream--line-offsets new-text)))
+                ;; Parse the unified diff, tracking new-text line numbers.
+                (with-temp-buffer
+                  (insert diff-output)
+                  (goto-char (point-min))
+                  ;; Collect diff lines tagged with their new-text line number.
+                  ;; Each entry: (TYPE TEXT NEW-LINE-NUM-OR-NIL)
+                  (let ((diff-lines nil)
+                        (new-line-num 0))
+                    (while (re-search-forward
+                            "^@@ -[0-9]+\\(?:,[0-9]+\\)? \\+\\([0-9]+\\)\\(?:,\\([0-9]+\\)\\)? @@"
+                            nil t)
+                      (setq new-line-num (string-to-number (match-string 1)))
+                      (forward-line 1)
+                      (while (and (not (eobp))
+                                  (not (looking-at "^@@\\|^diff ")))
+                        (let ((line (buffer-substring-no-properties
+                                     (point)
+                                     (line-end-position))))
+                          (cond
+                           ((string-prefix-p "-" line)
+                            ;; Removed line — no new-text line number.
+                            (push (list 'removed (substring line 1) nil) diff-lines))
+                           ((string-prefix-p "+" line)
+                            (push (list 'added (substring line 1) new-line-num) diff-lines)
+                            (setq new-line-num (1+ new-line-num)))
+                           ((string-prefix-p " " line)
+                            (push (list 'context (substring line 1) new-line-num) diff-lines)
+                            (setq new-line-num (1+ new-line-num)))
+                           ((string-prefix-p "\\" line)
+                            nil) ; "\ No newline at end of file" — skip
+                           (t
+                            (push (list 'context line new-line-num) diff-lines)
+                            (setq new-line-num (1+ new-line-num)))))
+                        (forward-line 1)))
+                    (setq diff-lines (nreverse diff-lines))
+                    ;; Group consecutive same-type lines into sub-hunks.
+                    ;; Merge adjacent removed+added into 'changed'.
+                    ;; Track the first new-text line number of each group.
+                    (let ((groups nil)
+                          (cur-type nil)
+                          (cur-old nil)
+                          (cur-new nil)
+                          (cur-start-line nil)
+                          (last-new-line 1)) ; tracks last known new-text line
+                      (cl-labels
+                          ((flush ()
+                             (when cur-type
+                               (push (list :type cur-type
+                                           :old-lines (nreverse cur-old)
+                                           :new-lines (nreverse cur-new)
+                                           :start-line (or cur-start-line
+                                                           last-new-line))
+                                     groups)
+                               (setq cur-type nil cur-old nil cur-new nil
+                                     cur-start-line nil))))
+                        (dolist (dl diff-lines)
+                          (let ((tp  (nth 0 dl))
+                                (ln  (nth 1 dl))
+                                (lno (nth 2 dl)))
+                            ;; Track last known new-text line number.
+                            (when lno (setq last-new-line lno))
+                            (pcase tp
+                              ('context
+                               (flush)
+                               (setq cur-type 'context
+                                     cur-old nil
+                                     cur-new (list ln)
+                                     cur-start-line lno)
+                               (flush)
+                               ;; Next line in new-text is lno+1.
+                               (when lno (setq last-new-line (1+ lno))))
+                              ('removed
+                               (when (and cur-type
+                                          (not (memq cur-type '(removed changed))))
+                                 (flush))
+                               (setq cur-type (if (eq cur-type 'added) 'changed
+                                                (or cur-type 'removed)))
+                               (unless cur-start-line
+                                 (setq cur-start-line last-new-line))
+                               (push ln cur-old))
+                              ('added
+                               (when (and cur-type
+                                          (not (memq cur-type '(added removed changed))))
+                                 (flush))
+                               (setq cur-type (if (memq cur-type '(removed changed)) 'changed
+                                                (or cur-type 'added)))
+                               (when (and (null cur-start-line) lno)
+                                 (setq cur-start-line lno))
+                               (push ln cur-new)
+                               (when lno (setq last-new-line (1+ lno)))))))
+                        (flush))
+                      (setq groups (nreverse groups))
+                      ;; Compute new-offset and new-length using the line-offset table.
+                      (dolist (g groups)
+                        (let* ((start-line (plist-get g :start-line))
+                               (new-lines  (plist-get g :new-lines))
+                               (n-new      (length new-lines))
+                               (max-idx    (1- (length new-offsets))))
+                          (if (and start-line (> n-new 0))
+                              (let ((beg-off (aref new-offsets
+                                                   (min (1- start-line) max-idx)))
+                                    (end-off (aref new-offsets
+                                                   (min (+ (1- start-line) n-new)
+                                                        max-idx))))
+                                (plist-put g :new-offset beg-off)
+                                (plist-put g :new-length (- end-off beg-off)))
+                            ;; Pure removal or empty — offset at start-line, zero length.
+                            (plist-put g :new-offset
+                                       (if start-line
+                                           (aref new-offsets
+                                                 (min (1- start-line) max-idx))
+                                         0))
+                            (plist-put g :new-length 0))))
+                      (setq hunks groups))))))))))
+    hunks))
+
+(defun claude-edit-stream--smart-diff-applicable-p (hunks)
+  "Return non-nil if HUNKS contain at least one context line.
+If everything changed, the smart diff gives no benefit."
+  (seq-some (lambda (h) (eq (plist-get h :type) 'context)) hunks))
+
+(defun claude-edit-stream--show-smart-diff (buf beg hunks file type group)
+  "Render smart diff overlays in BUF starting at BEG for HUNKS.
+FILE and TYPE describe the change.  GROUP is the gensym linking overlays.
+Returns the first added overlay created (for change tracking)."
+  (with-current-buffer buf
+    (let ((first-added-ov nil)
+          (fold-threshold 3))
+      ;; Header overlay — thin bar at beg, extends to cover the first line.
+      (let* ((header-end (save-excursion
+                           (goto-char beg)
+                           (forward-line 1)
+                           (point)))
+             (header-ov (make-overlay beg (max (1+ beg) header-end) buf nil t))
+             (header-str (propertize
+                          (format " Claude %s  [a]ccept  [r]eject  %s\n"
+                                  (if (eq type 'edit) "Edit" "Write")
+                                  (file-name-nondirectory file))
+                          'face 'claude-edit-stream-header)))
         (overlay-put header-ov 'before-string header-str)
         (overlay-put header-ov 'claude-edit-stream t)
         (overlay-put header-ov 'claude-edit-stream-role 'header)
         (overlay-put header-ov 'claude-edit-stream-group group))
 
-      ;; 2. Removed overlay — old text shown as before-string (if non-empty).
-      ;;    Spans beg..end so it is not evaporated.
-      (when (and old-text (not (string-empty-p old-text)))
-        (let* ((prefixed (mapconcat
-                          (lambda (l) (concat "- " l))
-                          (split-string old-text "\n")
-                          "\n"))
-               (removed-str (propertize (concat prefixed "\n")
-                                        'face 'claude-edit-stream-removed))
-               (removed-ov (make-overlay beg (max (1+ beg) end) buf nil t)))
-          (overlay-put removed-ov 'before-string removed-str)
-          (overlay-put removed-ov 'claude-edit-stream t)
-          (overlay-put removed-ov 'claude-edit-stream-role 'removed)
-          (overlay-put removed-ov 'claude-edit-stream-group group)))
+      ;; Walk through hunks and create overlays only for changed regions.
+      (let ((context-run 0)
+            (prev-was-context nil))
+        (dolist (hunk hunks)
+          (let* ((tp         (plist-get hunk :type))
+                 (old-lines  (plist-get hunk :old-lines))
+                 (new-lines  (plist-get hunk :new-lines))
+                 (new-offset (plist-get hunk :new-offset))
+                 (new-length (plist-get hunk :new-length))
+                 (hunk-beg   (+ beg new-offset))
+                 (hunk-end   (+ beg new-offset new-length)))
+            (pcase tp
+              ('context
+               (setq context-run (1+ context-run))
+               (setq prev-was-context t))
 
-      ;; 3. Added overlay — spans beg..end on the actual buffer text.
-      (let ((added-ov (if (= beg end)
-                          ;; Zero-width (pure deletion) — use a marker overlay.
-                          (let ((ov (make-overlay beg beg buf nil t)))
-                            (overlay-put ov 'after-string
-                                         (propertize " [deleted]"
-                                                     'face 'claude-edit-stream-added))
-                            ov)
-                        (let ((ov (make-overlay beg end buf nil t)))
-                          (overlay-put ov 'face 'claude-edit-stream-added)
-                          ov))))
-        (overlay-put added-ov 'claude-edit-stream t)
-        (overlay-put added-ov 'claude-edit-stream-role 'added)
-        (overlay-put added-ov 'claude-edit-stream-group group)
-        (overlay-put added-ov 'claude-edit-stream-old old-text)
-        (overlay-put added-ov 'claude-edit-stream-new new-text)
-        (overlay-put added-ov 'claude-edit-stream-file file)
-        (overlay-put added-ov 'evaporate t)
+              ((or 'removed 'added 'changed)
+               ;; If there was a long context run before this change,
+               ;; add a fold indicator.
+               (when (and prev-was-context (> context-run fold-threshold))
+                 (let* ((fold-str (propertize
+                                   (format "  ··· %d unchanged lines ···\n"
+                                           context-run)
+                                   'face 'claude-edit-stream-context))
+                        (fold-ov (make-overlay hunk-beg hunk-beg buf nil t)))
+                   (overlay-put fold-ov 'before-string fold-str)
+                   (overlay-put fold-ov 'claude-edit-stream t)
+                   (overlay-put fold-ov 'claude-edit-stream-role 'fold)
+                   (overlay-put fold-ov 'claude-edit-stream-group group)))
+               (setq context-run 0)
+               (setq prev-was-context nil)
 
-        ;; Record the change.
-        (push (list :overlay added-ov
-                    :file file
-                    :old old-text
-                    :new new-text
-                    :type type
-                    :group group)
-              claude-edit-stream--changes)))
+               ;; Removed lines — show as before-string.
+               (when old-lines
+                 (let* ((prefixed (mapconcat
+                                   (lambda (l) (concat "- " l))
+                                   old-lines "\n"))
+                        (removed-str (propertize (concat prefixed "\n")
+                                                 'face 'claude-edit-stream-removed))
+                        (removed-ov (make-overlay
+                                     hunk-beg (max (1+ hunk-beg) hunk-end)
+                                     buf nil t)))
+                   (overlay-put removed-ov 'before-string removed-str)
+                   (overlay-put removed-ov 'claude-edit-stream t)
+                   (overlay-put removed-ov 'claude-edit-stream-role 'removed)
+                   (overlay-put removed-ov 'claude-edit-stream-group group)))
+
+               ;; Added/changed lines — highlight in the buffer.
+               (when (and new-lines (> new-length 0))
+                 (let ((added-ov (make-overlay hunk-beg hunk-end buf nil t)))
+                   (overlay-put added-ov 'face 'claude-edit-stream-added)
+                   (overlay-put added-ov 'claude-edit-stream t)
+                   (overlay-put added-ov 'claude-edit-stream-role 'added-region)
+                   (overlay-put added-ov 'claude-edit-stream-group group)
+                   (unless first-added-ov
+                     (setq first-added-ov added-ov))))
+
+               ;; Pure removal (no new lines) — show deletion marker.
+               (when (and (eq tp 'removed) (or (null new-lines) (= new-length 0)))
+                 (let ((del-ov (make-overlay hunk-beg hunk-beg buf nil t)))
+                   (overlay-put del-ov 'after-string
+                                (propertize " [deleted]"
+                                            'face 'claude-edit-stream-added))
+                   (overlay-put del-ov 'claude-edit-stream t)
+                   (overlay-put del-ov 'claude-edit-stream-role 'added-region)
+                   (overlay-put del-ov 'claude-edit-stream-group group)
+                   (unless first-added-ov
+                     (setq first-added-ov del-ov)))))))))
+
+      first-added-ov)))
+
+;;;; Overlay rendering ---------------------------------------------------
+
+(defun claude-edit-stream--show-change (buf beg end old-text new-text file type)
+  "Create diff overlays in BUF from BEG to END.
+OLD-TEXT is what was there before, NEW-TEXT is what replaced it.
+FILE is the absolute path.  TYPE is `edit' or `write'.
+When both OLD-TEXT and NEW-TEXT are non-empty and share context lines,
+uses a smart diff path that highlights only actually changed lines."
+  (let ((group (gensym "ces-"))
+        (use-smart nil)
+        (line-hunks nil))
+    ;; Determine whether to use smart diff.
+    (when (and old-text new-text
+               (not (string-empty-p old-text))
+               (not (string-empty-p new-text))
+               (not (string= old-text new-text)))
+      (setq line-hunks (claude-edit-stream--compute-line-diff old-text new-text))
+      (setq use-smart (and line-hunks
+                           (claude-edit-stream--smart-diff-applicable-p line-hunks))))
+
+    (if use-smart
+        ;; Smart diff path — overlays only on changed sub-hunks.
+        (progn
+          (claude-edit-stream--show-smart-diff
+           buf beg line-hunks file type group)
+          ;; Create the canonical "added" overlay spanning the full region
+          ;; for accept/reject to work correctly.  This overlay carries the
+          ;; old/new text and is invisible (no face) — it just holds metadata.
+          (with-current-buffer buf
+            (let ((meta-ov (make-overlay beg end buf nil t)))
+              (overlay-put meta-ov 'claude-edit-stream t)
+              (overlay-put meta-ov 'claude-edit-stream-role 'added)
+              (overlay-put meta-ov 'claude-edit-stream-group group)
+              (overlay-put meta-ov 'claude-edit-stream-old old-text)
+              (overlay-put meta-ov 'claude-edit-stream-new new-text)
+              (overlay-put meta-ov 'claude-edit-stream-file file)
+              (overlay-put meta-ov 'evaporate t)
+              ;; Record the change — use the meta overlay as :overlay so
+              ;; accept/reject can find the full beg..end region.
+              (push (list :overlay meta-ov
+                          :file file
+                          :old old-text
+                          :new new-text
+                          :type type
+                          :group group)
+                    claude-edit-stream--changes))))
+
+      ;; Fallback path — original full-replacement display.
+      (with-current-buffer buf
+        ;; 1. Header overlay — spans beg..end so it is not evaporated.
+        ;;    before-string renders the header line above the change.
+        (let ((header-ov (make-overlay beg (max (1+ beg) end) buf nil t))
+              (header-str (propertize
+                           (format " Claude %s  [a]ccept  [r]eject  %s\n"
+                                   (if (eq type 'edit) "Edit" "Write")
+                                   (file-name-nondirectory file))
+                           'face 'claude-edit-stream-header)))
+          (overlay-put header-ov 'before-string header-str)
+          (overlay-put header-ov 'claude-edit-stream t)
+          (overlay-put header-ov 'claude-edit-stream-role 'header)
+          (overlay-put header-ov 'claude-edit-stream-group group))
+
+        ;; 2. Removed overlay — old text shown as before-string (if non-empty).
+        ;;    Spans beg..end so it is not evaporated.
+        (when (and old-text (not (string-empty-p old-text)))
+          (let* ((prefixed (mapconcat
+                            (lambda (l) (concat "- " l))
+                            (split-string old-text "\n")
+                            "\n"))
+                 (removed-str (propertize (concat prefixed "\n")
+                                          'face 'claude-edit-stream-removed))
+                 (removed-ov (make-overlay beg (max (1+ beg) end) buf nil t)))
+            (overlay-put removed-ov 'before-string removed-str)
+            (overlay-put removed-ov 'claude-edit-stream t)
+            (overlay-put removed-ov 'claude-edit-stream-role 'removed)
+            (overlay-put removed-ov 'claude-edit-stream-group group)))
+
+        ;; 3. Added overlay — spans beg..end on the actual buffer text.
+        (let ((added-ov (if (= beg end)
+                            ;; Zero-width (pure deletion) — use a marker overlay.
+                            (let ((ov (make-overlay beg beg buf nil t)))
+                              (overlay-put ov 'after-string
+                                           (propertize " [deleted]"
+                                                       'face 'claude-edit-stream-added))
+                              ov)
+                          (let ((ov (make-overlay beg end buf nil t)))
+                            (overlay-put ov 'face 'claude-edit-stream-added)
+                            ov))))
+          (overlay-put added-ov 'claude-edit-stream t)
+          (overlay-put added-ov 'claude-edit-stream-role 'added)
+          (overlay-put added-ov 'claude-edit-stream-group group)
+          (overlay-put added-ov 'claude-edit-stream-old old-text)
+          (overlay-put added-ov 'claude-edit-stream-new new-text)
+          (overlay-put added-ov 'claude-edit-stream-file file)
+          (overlay-put added-ov 'evaporate t)
+
+          ;; Record the change.
+          (push (list :overlay added-ov
+                      :file file
+                      :old old-text
+                      :new new-text
+                      :type type
+                      :group group)
+                claude-edit-stream--changes))))
 
     ;; Display the change — only if a live frame exists (avoids blocking in
     ;; daemon/headless context where pop-to-buffer-same-window can error).
