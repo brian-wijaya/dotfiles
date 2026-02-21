@@ -118,6 +118,13 @@ ALWAYS create a GitHub issue BEFORE working on any bug — even if you think you
 - Include: description, what was tried, relevant code location, environment
 - Then reference the issue in the commit that fixes it
 - This applies to bugs reported by user, bugs discovered during work, and regressions
+
+NEVER ROUTE AROUND BROKEN TOOLS.
+When a gateway tool (ACT_*, SENSE_*) returns an error or exception:
+1. File a GitHub issue immediately (auto_issue_filing rules apply)
+2. Investigate and fix the broken tool
+3. Do NOT substitute a different tool to accomplish the same thing
+4. The broken tool is the problem. Workarounds hide bugs.
 </bug_workflow>
 
 <gateway_connectivity>
@@ -248,6 +255,7 @@ cross_context:
   pre_irreversible → SENSE_check_permission, then ACT_flash_text (red)
   post_visual_change → SENSE_read_anomalies + SENSE_read_events(count=20), then SENSE_read_window_layout, then SENSE_capture_screen_region
   compound_sequence → BASELINE(SENSE_read_snapshot + SENSE_read_events) → SETUP → ACT → VERIFY(SENSE_read_anomalies + SENSE_read_events + SENSE_capture_screen_region, diff against baseline)
+  show_me_file → ACT_navigate_buffer (open file in user's Emacs on :0). Trigger: "show me <file>", "open <file>", "let me see <file>", "pull up <file>". NOT for agent's own reading — only when the user wants to see it.
 </tool_dispatch>
 
 <display_routing>

@@ -83,7 +83,9 @@ Each element is a plist with keys:
                         (buffer-name (current-buffer)))))
     (write-region state nil claude-edit-stream--emacs-state-path nil 'silent))
   (unwind-protect
-      (apply orig-fn args)
+      (let ((last-nonmenu-event t)
+            (use-dialog-box nil))
+        (apply orig-fn args))
     ;; Clear prompt state after response
     (let ((state (format "prompt=no changes=%d buffer=%s"
                           (length claude-edit-stream--changes)

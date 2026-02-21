@@ -12,3 +12,4 @@ export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
 if [[ -z $DISPLAY ]] && [[ $(tty) = /dev/tty1 ]]; then
     exec startx
 fi
+. "$HOME/.cargo/env"

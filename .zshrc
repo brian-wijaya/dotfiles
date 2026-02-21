@@ -160,3 +160,4 @@ export NODE_OPTIONS="--dns-result-order=ipv4first"
 
 # File protection layer
 source ~/.config/shell/file-protection.sh
+. "$HOME/.cargo/env"
