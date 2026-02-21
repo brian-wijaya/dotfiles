@@ -9,6 +9,14 @@
 (setq confirm-kill-processes nil)
 (setq confirm-nonexistent-file-or-buffer nil)
 
+;; Suppress GTK dialog popups — always use minibuffer
+(setq use-dialog-box nil)
+(setq use-file-dialog nil)
+
+;; Never prompt on auto-revert — agent-edited files change frequently
+(setq revert-without-query '("."))
+(setq auto-revert-verbose nil)
+
 (setq select-enable-clipboard t)
 (setq select-enable-primary nil)
 (electric-pair-mode 1)
