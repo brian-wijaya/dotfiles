@@ -14,9 +14,9 @@ go, so that if the process is interrupted, partial results are preserved.
 ## Phase 1: Clerk Output Validation (spot-check 20% of today's outputs)
 
 1. Get today's date: `TODAY=$(date +%Y-%m-%d)`
-2. Query today's chronicle events using `SENSE_sessions_search` with the current date as query,
-   and `SENSE_sessions_list` to enumerate recent sessions.
-3. Query today's indexed documents using `SENSE_documents_search` with broad queries
+2. Query today's chronicle events using `SENSE_search_sessions` with the current date as query,
+   and `SENSE_list_sessions` to enumerate recent sessions.
+3. Query today's indexed documents using `SENSE_search_documents` with broad queries
    (e.g., the current date, common topics).
 4. From the retrieved sessions and documents, select a random 20% sample for validation.
    Use Bash to generate random indices: `shuf -i 0-N -n COUNT`.
@@ -33,7 +33,7 @@ go, so that if the process is interrupted, partial results are preserved.
 ## Phase 2: Analyst Thread/Strand Review
 
 1. Search for analyst-proposed ChronicleThreads and ChronicleStrands using
-   `SENSE_documents_search` with queries like "thread proposal", "strand proposal",
+   `SENSE_search_documents` with queries like "thread proposal", "strand proposal",
    "chronicle thread", "chronicle strand".
 2. Also check the filesystem for thread/strand data:
    - `Glob` for `~/vault/data/**/*thread*` and `~/vault/data/**/*strand*`
@@ -42,7 +42,7 @@ go, so that if the process is interrupted, partial results are preserved.
    - Score coherence (0-10): Do the linked events actually relate to each other?
      Read the source events/sessions to verify connections.
    - Check for hallucinated connections: Are referenced session IDs or document IDs real?
-     Verify with `SENSE_sessions_retrieve` or `SENSE_documents_retrieve`.
+     Verify with `SENSE_retrieve_session` or `SENSE_retrieve_document`.
    - If coherence >= 7 and no hallucinated connections: promote to PROPOSED status.
    - If coherence < 4 or hallucinated connections found: reject with written rationale.
    - If coherence 4-6: leave as-is, note concerns for human review.
@@ -50,7 +50,7 @@ go, so that if the process is interrupted, partial results are preserved.
 
 ## Phase 3: Trajectory Quality Analysis
 
-1. Use `SENSE_sessions_list` and `SENSE_sessions_search` to find today's sessions.
+1. Use `SENSE_list_sessions` and `SENSE_search_sessions` to find today's sessions.
 2. For each session, look for failure indicators:
    - Error-heavy sessions: search session content for "error", "failed", "exception",
      "timeout", "crashed", "panic".
@@ -77,19 +77,19 @@ go, so that if the process is interrupted, partial results are preserved.
 ## Phase 4: Index Maintenance
 
 1. Check for sessions that may not have been embedded during the day:
-   - Use `SENSE_sessions_list` to get all recent sessions.
-   - For each, attempt `SENSE_sessions_search` with distinctive terms from the session.
+   - Use `SENSE_list_sessions` to get all recent sessions.
+   - For each, attempt `SENSE_search_sessions` with distinctive terms from the session.
      If a session does not appear in search results for its own content, it may need
      re-indexing.
 2. Run consistency checks:
-   - Verify the SQLite database is accessible: use `SENSE_documents_search` with a
+   - Verify the SQLite database is accessible: use `SENSE_search_documents` with a
      trivial query to confirm the search path works.
    - Check for orphaned references: sessions that reference documents that no longer exist.
    - Check disk space for vault data: `du -sh ~/vault/data/` via Bash.
    - Check that the gateway service is healthy: `systemctl --user status actual-gateway`
      via Bash.
 3. If re-embedding is needed and the gateway supports it, trigger re-indexing for
-   specific sessions using `ACT_documents_index` or `ACT_sessions_save` as appropriate.
+   specific sessions using `ACT_index_documents` or `ACT_save_session` as appropriate.
 4. Log any consistency issues found.
 
 ## Phase 5: Morning Summary
@@ -165,7 +165,7 @@ Model: opus
 ```
 
 Write the summary file using Bash with a heredoc or by building the content
-incrementally. Also save session results via `ACT_sessions_save` with:
+incrementally. Also save session results via `ACT_save_session` with:
 - summary: "Overnight review for YYYY-MM-DD: N flags, N anti-patterns, N threads reviewed"
 - topics: ["overnight-review", "validation", "quality-analysis"]
 - key_facts: [list of the most important findings]

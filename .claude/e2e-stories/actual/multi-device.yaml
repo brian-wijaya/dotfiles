@@ -219,14 +219,14 @@ stories:
       - "Desktop client connected with session_id=A"
       - "Mac Pro client connected with session_id=B"
     steps:
-      - "Desktop client calls ACT_sessions_save with session-specific key_facts"
-      - "Mac Pro client calls SENSE_sessions_search"
+      - "Desktop client calls ACT_save_session with session-specific key_facts"
+      - "Mac Pro client calls SENSE_search_sessions"
       - "Mac Pro client calls ACT_set_attention_target (display_id='host')"
       - "Desktop client calls SENSE_read_snapshot"
     steps_adversarial:
       - "Mac Pro client attempts to reference session_id=A in a tool call parameter"
     verify:
-      - "Mac Pro's SENSE_sessions_search returns results from the shared Chronicle (correct — Chronicle is shared)"
+      - "Mac Pro's SENSE_search_sessions returns results from the shared Chronicle (correct — Chronicle is shared)"
       - "Mac Pro's ACT_set_attention_target targets Mac Pro's own display context, not desktop's"
       - "Desktop's SENSE_read_snapshot returns desktop sensor data, not Mac Pro's"
       - "Session-scoped state (scratchpad, deferred checks) is never leaked between sessions"
@@ -243,10 +243,10 @@ stories:
       - "User switches to phone, sends query via OpenClaw"
       - "OpenClaw connects to gateway as a new MCP session"
     steps:
-      - "OpenClaw session calls SENSE_sessions_reassemble — succeeds (knowledge query)"
+      - "OpenClaw session calls SENSE_reassemble_sessions — succeeds (knowledge query)"
       - "OpenClaw session calls SENSE_capture_screen_region — fails (no display context)"
       - "OpenClaw session calls ACT_send_keystroke — fails (no display context)"
-      - "OpenClaw session calls SENSE_documents_search — succeeds (knowledge query)"
+      - "OpenClaw session calls SENSE_search_documents — succeeds (knowledge query)"
     verify:
       - "Knowledge tools work identically from mobile and desktop"
       - "Display/sensor tools return a clear error ('no display context for this session') not a stack trace"
@@ -272,11 +272,11 @@ stories:
       - "Gateway attempts FTS5 query — succeeds (local SQLite, not on NAS)"
       - "Gateway attempts Qdrant vector search — connection timeout"
       - "Gateway attempts Neo4j graph query — connection timeout"
-      - "User invokes SENSE_documents_search"
-      - "User invokes ACT_events_write"
+      - "User invokes SENSE_search_documents"
+      - "User invokes ACT_write_event"
     verify:
-      - "SENSE_documents_search falls back to FTS5-only (local SQLite) — returns results, no semantic ranking"
-      - "ACT_events_write buffers events locally or returns a clear 'event bus unavailable' error"
+      - "SENSE_search_documents falls back to FTS5-only (local SQLite) — returns results, no semantic ranking"
+      - "ACT_write_event buffers events locally or returns a clear 'event bus unavailable' error"
       - "Gateway does NOT hang indefinitely — all remote calls have timeouts (< 5s)"
       - "Gateway health endpoint reports degraded status, not healthy"
       - "When NAS returns, gateway reconnects automatically — no manual restart"
@@ -298,7 +298,7 @@ stories:
     steps:
       - "Verify initial consistent state: local FTS5 index matches NAS PostgreSQL projections"
       - "Simulate network partition: disconnect Tailscale tunnel to NAS"
-      - "Agent writes 5 events via ACT_events_write during partition"
+      - "Agent writes 5 events via ACT_write_event during partition"
       - "Events land in local SQLite (gateway buffers locally or writes succeed to local store)"
       - "NAS has no knowledge of these 5 events (partition is active)"
       - "Heal partition: restore Tailscale tunnel to NAS"
@@ -310,7 +310,7 @@ stories:
       - "  (a) Automatic reconciliation: gateway replays buffered events to Kafka → NAS projections updated within 60s"
       - "  (b) Manual reconciliation: user runs a rebuild command (ACT_rebuild_projection) that replays local events"
       - "  (c) Accepted risk: NAS projections are stale until next full rebuild. Documented explicitly."
-      - "Whichever outcome, SENSE_sessions_search on local SQLite returns all 5 events immediately"
+      - "Whichever outcome, SENSE_search_sessions on local SQLite returns all 5 events immediately"
       - "If outcome (a): NAS-backed queries (semantic search, graph) eventually include the 5 events"
       - "If outcome (c): NAS queries are stale — user understands this limitation"
       - "No data loss: local SQLite is the source of truth during partition"
@@ -366,7 +366,7 @@ stories:
   - name: simultaneous_session_saves_from_two_devices
     status: NOT_IMPLEMENTED
     description: >
-      Desktop and Mac Pro both call ACT_sessions_save at the same instant.
+      Desktop and Mac Pro both call ACT_save_session at the same instant.
       Both write to the same SQLite database. sqlite-jdbc serializes via
       internal synchronized block — one wins, one blocks. Neither should corrupt.
     preconditions:
@@ -374,8 +374,8 @@ stories:
       - "Desktop session_id=A and Mac Pro session_id=B both active"
       - "Both sessions have accumulated key_facts to save"
     steps:
-      - "Desktop calls ACT_sessions_save(summary='desktop work', ...)"
-      - "Mac Pro calls ACT_sessions_save(summary='macpro work', ...) at the same time"
+      - "Desktop calls ACT_save_session(summary='desktop work', ...)"
+      - "Mac Pro calls ACT_save_session(summary='macpro work', ...) at the same time"
       - "sqlite-jdbc serializes the two INSERT statements (internal synchronized on Connection)"
       - "First caller acquires the lock, writes, releases"
       - "Second caller acquires the lock, writes, releases"
@@ -428,11 +428,11 @@ stories:
       - "Desktop event arrives at Kafka first (Mac Pro's event arrives 2s later in wall time)"
       - "Both events have Kafka offsets: desktop=100, macpro=101"
       - "Projection consumer processes both events"
-      - "User queries SENSE_sessions_search for recent events"
+      - "User queries SENSE_search_sessions for recent events"
       - "Materializer processes events into Worldview projection"
     verify:
       - "Both events are stored — neither is dropped due to timestamp anomaly"
-      - "SENSE_sessions_search ordering: events ordered by event timestamp, so Mac Pro's event (T=10:00) appears BEFORE desktop's (T=10:05) despite arriving later"
+      - "SENSE_search_sessions ordering: events ordered by event timestamp, so Mac Pro's event (T=10:00) appears BEFORE desktop's (T=10:05) despite arriving later"
       - "Materializer window handling: if materializer uses tumbling time windows, Mac Pro's event may land in a different window than expected — verify it is not lost"
       - "If materializer uses Kafka offset ordering (not timestamp), events are correctly ordered by arrival — but search results may show counterintuitive chronological order"
       - "Projection does not reject events with 'stale' timestamps (5 min skew is within tolerance)"
@@ -504,7 +504,7 @@ stories:
       - "OpenClaw calls tools/list"
       - "Gateway returns all 100 tools (it has no client-capability awareness)"
       - "OpenClaw filters tools client-side based on a hardcoded allowlist"
-      - "Allowed: SENSE_sessions_search, SENSE_sessions_reassemble, SENSE_documents_search, ACT_sessions_save"
+      - "Allowed: SENSE_search_sessions, SENSE_reassemble_sessions, SENSE_search_documents, ACT_save_session"
       - "Filtered out: all ACT_send_*, SENSE_capture_*, ACT_evaluate_elisp, etc."
       - "OpenClaw presents filtered tools as Telegram slash commands"
     verify:
@@ -613,13 +613,13 @@ stories:
     status: NOT_IMPLEMENTED
     description: >
       Mobile clients are on metered connections with limited bandwidth.
-      A SENSE_sessions_reassemble call could return megabytes of session history.
+      A SENSE_reassemble_sessions call could return megabytes of session history.
       Responses must be bounded.
     preconditions:
       - "OpenClaw connected via cellular data"
       - "Chronicle contains 500+ sessions spanning months of history"
     steps:
-      - "OpenClaw calls SENSE_sessions_reassemble(lookback_days=30)"
+      - "OpenClaw calls SENSE_reassemble_sessions(lookback_days=30)"
       - "Gateway assembles full session reconstruction — 2MB of JSON"
       - "Gateway returns the full 2MB response over Tailscale (cellular)"
       - "OpenClaw receives 2MB, must truncate for Telegram (message limit: 4096 chars)"
@@ -642,7 +642,7 @@ stories:
       - "K3s resource limits configured for each pod"
       - "Gateway on desktop sending concurrent requests to NAS services"
     steps:
-      - "Agent triggers a large document indexing batch (ACT_documents_index)"
+      - "Agent triggers a large document indexing batch (ACT_index_documents)"
       - "Indexer writes to PostgreSQL (projections), Qdrant (embeddings), Kafka (events) simultaneously"
       - "NAS CPU saturates at 100% — spinning disks hit IOPS ceiling"
       - "PostgreSQL query latency spikes from 5ms to 500ms"
@@ -652,7 +652,7 @@ stories:
       - "K3s resource limits prevent any single pod from starving others (CPU/memory limits)"
       - "Gateway circuit breakers trip for timed-out services — subsequent requests fail fast"
       - "Indexing batch detects degraded NAS and throttles write rate (backpressure)"
-      - "User-facing queries (SENSE_documents_search, SENSE_sessions_search) use local SQLite first — NAS degradation doesn't block them"
+      - "User-facing queries (SENSE_search_documents, SENSE_search_sessions) use local SQLite first — NAS degradation doesn't block them"
       - "Observability stack (also on NAS) may be degraded — catch-22 for monitoring"
       - "Mitigation: prioritize query pods (PostgreSQL, Qdrant) over batch pods (Kafka consumers) via K3s PriorityClass"
 
@@ -764,7 +764,7 @@ stories:
       - "All stateful services on NAS healthy"
     steps:
       - "User sends 'what were we working on last week?' via Telegram"
-      - "OpenClaw receives message, calls SENSE_sessions_search via MCP over Tailscale"
+      - "OpenClaw receives message, calls SENSE_search_sessions via MCP over Tailscale"
       - "Gateway receives request, queries FTS5 (local SQLite) — returns session IDs"
       - "Gateway queries PostgreSQL on NAS for session details — Tailscale hop"
       - "Gateway queries Qdrant on NAS for semantic matches — Tailscale hop"

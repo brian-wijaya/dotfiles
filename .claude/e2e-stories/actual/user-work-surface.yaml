@@ -35,8 +35,8 @@ stories:
     steps:
       - "User launches Actual Server UI from i3 (keybinding or dmenu)"
       - "Rust backend establishes HTTP connection to 127.0.0.1:8372/mcp"
-      - "App calls SENSE_worldview_load to get current beliefs"
-      - "App calls SENSE_sessions_search to get recent session context"
+      - "App calls SENSE_load_worldview to get current beliefs"
+      - "App calls SENSE_search_sessions to get recent session context"
       - "Data Models tab renders with domain boxes showing knowledge items"
       - "Status bar shows connection status, session ID, last sync time"
     verify:
@@ -308,7 +308,7 @@ stories:
       - "Agent creates a event for project 'brand-new-project' that has no prior domain box"
     steps:
       - "Agent writes OBSERVATION event tagged project:brand-new-project"
-      - "App receives update via next SENSE_worldview_load poll"
+      - "App receives update via next SENSE_load_worldview poll"
       - "New domain box appears"
     verify:
       - "Existing domain positions are unchanged"
@@ -334,7 +334,7 @@ stories:
       - "User presses 'd' to compose a event (opens Emacs companion)"
       - "User writes resolution rationale in Emacs buffer"
       - "User submits event (saves buffer, closes companion)"
-      - "App records DECISION event via ACT_events_write"
+      - "App records DECISION event via ACT_write_event"
       - "Item moves to 'resolved' status"
     verify:
       - "Item status progressed: untriaged → investigating → resolved"
@@ -358,7 +358,7 @@ stories:
       - "Item moves to 'dismissed' status"
       - "A DECISION event is written with: dismissed=true, rationale text, reference to dismissed item"
       - "Item disappears from active inbox but is findable via search with status:dismissed"
-      - "The rationale is retrievable: SENSE_documents_search('dismissed contradiction') returns it"
+      - "The rationale is retrievable: SENSE_search_documents('dismissed contradiction') returns it"
 
   - name: triage_defer_sets_reminder_timestamp
     status: NOT_IMPLEMENTED
@@ -586,7 +586,7 @@ stories:
       - "Template includes: item reference, event type selector, content area, tags"
       - "User writes event content in Emacs"
       - "User saves buffer (C-x C-s)"
-      - "UI detects save, reads event content, submits via ACT_events_write"
+      - "UI detects save, reads event content, submits via ACT_write_event"
       - "Emacs companion closes, UI expands back to full width"
     verify:
       - "i3 layout changes to accommodate companion"
@@ -730,7 +730,7 @@ stories:
       - "Executive writes DECISION event for project A"
       - "Analyst writes OBSERVATION event for project B within same second"
       - "Clerk writes enrichment event for project A 200ms later"
-      - "App polls SENSE_worldview_load and detects 3 new events"
+      - "App polls SENSE_load_worldview and detects 3 new events"
     verify:
       - "All three events reflected in the UI"
       - "Only affected domain boxes re-render (project A and project B), not the entire canvas"
@@ -742,9 +742,9 @@ stories:
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS2
     description: >
-      Define the poll interval for SENSE_worldview_load in the vocabulary (e.g. 5s).
+      Define the poll interval for SENSE_load_worldview in the vocabulary (e.g. 5s).
       An agent event at T=0 must be visible in the UI by T=poll_interval.
-      Test overlap: if SENSE_worldview_load takes 4s and poll interval is 5s,
+      Test overlap: if SENSE_load_worldview takes 4s and poll interval is 5s,
       does the next poll overlap or wait?
     preconditions:
       - "App connected, Data Models tab active"
@@ -752,20 +752,20 @@ stories:
       - "Agent is about to write a event"
     steps:
       - "Record timestamp T=0"
-      - "Agent writes OBSERVATION event at T=0 via ACT_events_write"
-      - "App's poll cycle fires SENSE_worldview_load at next interval (worst case T=poll_interval)"
-      - "SENSE_worldview_load returns updated Worldview including the new event"
+      - "Agent writes OBSERVATION event at T=0 via ACT_write_event"
+      - "App's poll cycle fires SENSE_load_worldview at next interval (worst case T=poll_interval)"
+      - "SENSE_load_worldview returns updated Worldview including the new event"
       - "UI renders the updated item"
       - "Record timestamp T_visible when UI reflects the change"
-      - "Simulate slow response: SENSE_worldview_load takes 4s to respond (poll_interval is 5s)"
+      - "Simulate slow response: SENSE_load_worldview takes 4s to respond (poll_interval is 5s)"
       - "Next poll fires at T=10s (not T=9s — interval measured from response, not request)"
     verify:
       - "Event visible in UI within one poll interval after it was written (T_visible <= T=0 + poll_interval + response_time)"
       - "Poll interval is documented in vocabulary (e.g. 'worldview_poll_interval: 5s')"
       - "No poll overlap: if previous poll is still in-flight (slow response), next poll does NOT fire concurrently"
       - "Poll timer resets from response completion, not from request start — prevents request pileup"
-      - "If SENSE_worldview_load returns unchanged data, UI does not re-render (no-op update)"
-      - "If SENSE_worldview_load errors, poll retries with backoff — does not stop polling permanently"
+      - "If SENSE_load_worldview returns unchanged data, UI does not re-render (no-op update)"
+      - "If SENSE_load_worldview errors, poll retries with backoff — does not stop polling permanently"
 
   - name: rapid_knowledge_state_transitions
     status: NOT_IMPLEMENTED
@@ -882,11 +882,11 @@ stories:
   - name: stale_worldview_data_clearly_marked
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS2
-    description: "When SENSE_worldview_load returns data older than a threshold, the UI marks items as potentially stale."
+    description: "When SENSE_load_worldview returns data older than a threshold, the UI marks items as potentially stale."
     preconditions:
       - "Gateway connected but Worldview materialization has not run in 24+ hours"
     steps:
-      - "App polls SENSE_worldview_load"
+      - "App polls SENSE_load_worldview"
       - "Response includes last_materialized timestamp from 24h ago"
       - "UI renders the data"
     verify:
@@ -898,12 +898,12 @@ stories:
   - name: mcp_tool_returns_error
     status: NOT_IMPLEMENTED
     ds_ref: UWS-DS1
-    description: "An MCP tool call returns an error (e.g., SENSE_graph_neighbors with invalid node ID). The error is surfaced, not swallowed."
+    description: "An MCP tool call returns an error (e.g., SENSE_find_neighbors with invalid node ID). The error is surfaced, not swallowed."
     preconditions:
       - "App connected to gateway"
     steps:
       - "User navigates to an item and pulls thread"
-      - "Thread pull calls SENSE_graph_neighbors with the item's node ID"
+      - "Thread pull calls SENSE_find_neighbors with the item's node ID"
       - "Gateway returns an error: 'Node not found in graph'"
     verify:
       - "Error message displayed inline (not a modal, not a crash)"
@@ -952,7 +952,7 @@ stories:
       - "Item X is now 'resolved' on the server (agent resolved it)"
       - "User comes back online — gateway is reachable"
       - "App detects reconnection, begins replaying queued writes"
-      - "App attempts ACT_events_write for the queued DECISION event on item X"
+      - "App attempts ACT_write_event for the queued DECISION event on item X"
     verify:
       - "One of three acceptable outcomes:"
       - "  (a) Conflict detection: App detects item X was already resolved. Shows dialog: 'Item X was resolved by [agent] while you were offline. Submit your resolution anyway?'"
@@ -1013,7 +1013,7 @@ stories:
       - "OBSERVATION event created with references field pointing to the annotated item"
       - "Event tagged as user-annotation"
       - "Item shows annotation indicator (small badge) in spatial view"
-      - "Analyst agent can detect the annotation via SENSE_documents_search"
+      - "Analyst agent can detect the annotation via SENSE_search_documents"
       - "The annotation is visible in the item's thread-pull view"
 
   # ── Adversarial: Race Conditions and Edge Cases ──
@@ -1031,7 +1031,7 @@ stories:
       - "Agent's event arrives via next poll"
       - "Item X's status changes server-side to resolved"
       - "User presses 'r' (resolve) for item X"
-      - "UI sends ACT_events_write for a DECISION event"
+      - "UI sends ACT_write_event for a DECISION event"
     verify:
       - "One of two acceptable outcomes: (a) user's event is recorded alongside agent's, item stays resolved, or (b) UI shows 'This item was resolved by [agent] while you were reading it — still submit your event?'"
       - "No crash, no unhandled error"

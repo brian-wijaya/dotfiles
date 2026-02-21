@@ -135,18 +135,18 @@ BLOCKING: If gateway MCP tools (ACT_*, SENSE_*) are not available, STOP all acti
 BLOCKING REQUIREMENTS - Execute before any other response:
 
 1. On first user message of every session:
-   gateway SENSE_sessions_search(query=user's first message verbatim, recency_bias=0.7)
+   gateway SENSE_search_sessions(query=user's first message verbatim, recency_bias=0.7)
 
 2. On resumption query ("where were we?", "continue", "what were we working on"):
-   → IMMEDIATELY call gateway SENSE_sessions_reassemble(lookback_days=10)
+   → IMMEDIATELY call gateway SENSE_reassemble_sessions(lookback_days=10)
    → Present active tasks, loose ends, open questions in structured format
    → Ask user which thread to resume
 
 3. On topic-specific session search (e.g., "sessions about emacs config"):
-   → gateway SENSE_sessions_search(query=topic keywords, recency_bias=0.0)
+   → gateway SENSE_search_sessions(query=topic keywords, recency_bias=0.0)
 
 4. On session end or context compaction:
-   gateway ACT_sessions_save(summary, topics, key_facts)
+   gateway ACT_save_session(summary, topics, key_facts)
 
    key_facts format — classify each fact at save time:
    key_facts: [
@@ -165,11 +165,11 @@ BLOCKING REQUIREMENTS - Execute before any other response:
    Plain strings still work but structured format enables proper worldview materialization.
 
 5. During work — record events at natural breakpoints:
-   Call ACT_events_write when you make a decision, discover a bug, observe something notable,
+   Call ACT_write_event when you make a decision, discover a bug, observe something notable,
    or resolve a question. Only event_type and statement are required. Examples:
-   - ACT_events_write(event_type="DECISION", statement="Chose PostgreSQL over SQLite for worldview projections due to connection pooling")
-   - ACT_events_write(event_type="BUG_FOUND", statement="Virtual thread carrier pinning caused by synchronized blocks in SqliteClient")
-   - ACT_events_write(event_type="OBSERVATION", statement="ClaudeConversationIndexer uses two-index design: sessions_fts for metadata, chunks_fts for raw content")
+   - ACT_write_event(event_type="DECISION", statement="Chose PostgreSQL over SQLite for worldview projections due to connection pooling")
+   - ACT_write_event(event_type="BUG_FOUND", statement="Virtual thread carrier pinning caused by synchronized blocks in SqliteClient")
+   - ACT_write_event(event_type="OBSERVATION", statement="ClaudeConversationIndexer uses two-index design: sessions_fts for metadata, chunks_fts for raw content")
    Aim for 1-3 events per significant task. The knowledge system depends on these.
 </session_preamble>
 
@@ -242,14 +242,14 @@ sensor:
   environment → SENSE_read_environment_snapshot (full fused state)
 
 recall:
-  search_vault → SENSE_documents_search (FTS5, semantic when P2 ready)
-  search_sessions → SENSE_sessions_search (FTS5 + recency_bias)
-  list_sessions → SENSE_sessions_list
-  get_session → SENSE_sessions_retrieve (by ID)
-  reassemble_context → SENSE_sessions_reassemble (cross-session reconstruction)
-  get_document → SENSE_documents_retrieve (by ID or source_path)
-  save_session → ACT_sessions_save (summary + topics + key_facts)
-  index_documents → ACT_documents_index (requires Qdrant + TEI P2)
+  search_vault → SENSE_search_documents (PostgreSQL tsvector/GIN, semantic via Qdrant when TEI available)
+  search_sessions → SENSE_search_sessions (PostgreSQL tsvector/GIN + recency_bias)
+  list_sessions → SENSE_list_sessions
+  get_session → SENSE_retrieve_session (by ID)
+  reassemble_context → SENSE_reassemble_sessions (cross-session reconstruction)
+  get_document → SENSE_retrieve_document (by ID or source_path)
+  save_session → ACT_save_session (summary + topics + key_facts)
+  index_documents → ACT_index_documents (requires Qdrant + TEI P2)
 
 cross_context:
   pre_irreversible → SENSE_check_permission, then ACT_flash_text (red)
@@ -344,10 +344,11 @@ i3 COMMANDS (via ACT_execute_command, display_id: "host"):
 </window_layout>
 
 <vault_resource_management>
-Background indexing: vault-rag-watcher.service (file watcher, still Python)
+Background indexing: gateway VaultWatcher (Java, virtual threads). Legacy Python vault-rag-watcher.service fully removed.
 Resource modes: Conservative (8GB/50% CPU, user active) ↔ Aggressive (32GB/100% CPU, 6hr idle)
-Services: vault-rag-watcher.service (resource scaling managed by gateway VaultResourceScaler)
-MCP knowledge tools: via gateway (SENSE_documents_search, ACT_documents_index, etc.)
+Services: actual-gateway.service (VaultWatcher runs inside gateway process, resource scaling via VaultResourceScaler)
+Search: PostgreSQL tsvector/GIN for full-text, TEI + Qdrant for semantic. No SQLite in active search paths.
+MCP knowledge tools: via gateway (SENSE_search_documents, ACT_index_documents, etc.)
 </vault_resource_management>
 
 <screenshot_legibility>

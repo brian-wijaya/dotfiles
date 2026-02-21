@@ -33,13 +33,13 @@ stories:
 
   - name: fts5-vault-search-basic
     description: >
-      Basic full-text search via SENSE_documents_search returns FTS5-only results
+      Basic full-text search via SENSE_search_documents returns FTS5-only results
       when Qdrant/TEI are unavailable. Output includes mode: "fts5_only".
     preconditions:
       - "vault.db exists with documents, chunks, and chunks_fts tables populated"
       - "Qdrant and TEI services are not running (P2 unavailable)"
     steps:
-      - "Call SENSE_documents_search with query='emacs configuration' and default limit"
+      - "Call SENSE_search_documents with query='emacs configuration' and default limit"
       - "SearchHybrid checks qdrant.isAvailable() and tei.isAvailable() — both return false"
       - "DatabaseClient.searchFulltext() runs FTS5 MATCH on chunks_fts with sanitized query"
       - "Query tokens are individually double-quoted: '\"emacs\" \"configuration\"'"
@@ -60,7 +60,7 @@ stories:
     preconditions:
       - "vault.db exists with chunks_fts populated"
     steps:
-      - "Call SENSE_documents_search with query containing FTS5 operators: 'NOT OR AND NEAR'"
+      - "Call SENSE_search_documents with query containing FTS5 operators: 'NOT OR AND NEAR'"
       - "sanitizeFts5Query() splits on whitespace, wraps each token in double quotes"
       - "Result: '\"NOT\" \"OR\" \"AND\" \"NEAR\"' — operators treated as literal tokens"
       - "Call with query containing embedded quotes: 'my \"special\" query'"
@@ -79,7 +79,7 @@ stories:
     preconditions:
       - "vault.db has >20 matching documents"
     steps:
-      - "Call SENSE_documents_search with limit=100"
+      - "Call SENSE_search_documents with limit=100"
       - "DatabaseClient.searchFulltext() applies Math.min(limit, MAX_RESULTS) → 20"
       - "SQL LIMIT clause set to cappedLimit * 2 = 40 (FTS fetches 2x for RRF merging)"
       - "Final result list truncated to user limit or MAX_RESULTS, whichever is smaller"
@@ -98,7 +98,7 @@ stories:
       - "TEI running with nomic-embed-text-v1.5 model loaded"
       - "vault.db has matching documents in both FTS5 and Qdrant"
     steps:
-      - "Call SENSE_documents_search with query='emacs org-mode workflow'"
+      - "Call SENSE_search_documents with query='emacs org-mode workflow'"
       - "FTS5 BM25 search returns up to limit*2 results from chunks_fts"
       - "TeiClient.embedQuery() prepends 'search_query: ' and calls POST /embed"
       - "QdrantVectorClient.search() sends 768-dim vector, returns up to limit*2 scored points"
@@ -121,7 +121,7 @@ stories:
       - "Qdrant nominally available but experiencing transient errors"
       - "TEI available"
     steps:
-      - "Call SENSE_documents_search with query='debugging strategy'"
+      - "Call SENSE_search_documents with query='debugging strategy'"
       - "qdrant.isAvailable() returns true, tei.isAvailable() returns true"
       - "tei.embedQuery() succeeds"
       - "qdrant.search() throws ExecutionException (transient gRPC error)"
@@ -138,12 +138,12 @@ stories:
 
   - name: session-search-pure-relevance
     description: >
-      SENSE_sessions_search with recency_bias=0.0 ranks results purely by
+      SENSE_search_sessions with recency_bias=0.0 ranks results purely by
       BM25 relevance score, ignoring how recently sessions occurred.
     preconditions:
       - "vault.db has sessions spanning multiple weeks with sessions_fts populated"
     steps:
-      - "Call SENSE_sessions_search with query='sqlite WAL mode', recency_bias=0.0"
+      - "Call SENSE_search_sessions with query='sqlite WAL mode', recency_bias=0.0"
       - "DatabaseClient.searchSessions() sanitizes query tokens"
       - "SQL queries sessions_fts MATCH with BM25 ranking, JOINs sessions table"
       - "For each result: score = abs(bm25) * ((1.0 - 0.0) + 0.0 * decay) = abs(bm25)"
@@ -157,12 +157,12 @@ stories:
 
   - name: session-search-high-recency-bias
     description: >
-      SENSE_sessions_search with recency_bias=0.7 heavily favors recent sessions,
+      SENSE_search_sessions with recency_bias=0.7 heavily favors recent sessions,
       applying exponential time-decay to BM25 scores.
     preconditions:
       - "vault.db has sessions from today and from 30 days ago, both matching the query"
     steps:
-      - "Call SENSE_sessions_search with query='emacs configuration', recency_bias=0.7"
+      - "Call SENSE_search_sessions with query='emacs configuration', recency_bias=0.7"
       - "For each result: decay = 1.0 / (1.0 + days_ago)"
       - "score = abs(bm25) * ((1.0 - 0.7) + 0.7 * decay)"
       - "Today's session (days_ago=0): decay=1.0, multiplier = 0.3 + 0.7 = 1.0"
@@ -175,12 +175,12 @@ stories:
 
   - name: session-search-pure-recency
     description: >
-      SENSE_sessions_search with recency_bias=1.0 ranks purely by recency,
+      SENSE_search_sessions with recency_bias=1.0 ranks purely by recency,
       effectively ignoring BM25 scores (multiplied by pure decay).
     preconditions:
       - "vault.db has sessions from various dates"
     steps:
-      - "Call SENSE_sessions_search with query='any keyword', recency_bias=1.0"
+      - "Call SENSE_search_sessions with query='any keyword', recency_bias=1.0"
       - "score = abs(bm25) * (0.0 + 1.0 * decay) = abs(bm25) * decay"
       - "For today: decay=1.0, for yesterday: decay=0.5"
       - "Recent sessions dominate regardless of BM25 match quality"
@@ -192,12 +192,12 @@ stories:
 
   - name: list-recent-sessions
     description: >
-      SENSE_sessions_list returns sessions in reverse chronological order
+      SENSE_list_sessions returns sessions in reverse chronological order
       with full metadata (summary, topics, key_facts, word_count, message_count).
     preconditions:
       - "vault.db has multiple sessions"
     steps:
-      - "Call SENSE_sessions_list with default limit (5)"
+      - "Call SENSE_list_sessions with default limit (5)"
       - "DatabaseClient.listRecentSessions() queries sessions ORDER BY created_at DESC LIMIT 5"
       - "Limit capped at MAX_RESULTS=20"
     verify:
@@ -208,11 +208,11 @@ stories:
 
   - name: retrieve-session-by-id
     description: >
-      SENSE_sessions_retrieve fetches a single session by integer ID with full detail.
+      SENSE_retrieve_session fetches a single session by integer ID with full detail.
     preconditions:
       - "vault.db has a session with known ID"
     steps:
-      - "Call SENSE_sessions_retrieve with session_id=42"
+      - "Call SENSE_retrieve_session with session_id=42"
       - "DatabaseClient.fetchSession(42) queries sessions WHERE id=42"
       - "Returns full session row including key_facts and topics JSON"
     verify:
@@ -221,11 +221,11 @@ stories:
 
   - name: retrieve-session-not-found
     description: >
-      SENSE_sessions_retrieve returns a structured error when session ID does not exist.
+      SENSE_retrieve_session returns a structured error when session ID does not exist.
     preconditions:
       - "vault.db exists but has no session with ID 99999"
     steps:
-      - "Call SENSE_sessions_retrieve with session_id=99999"
+      - "Call SENSE_retrieve_session with session_id=99999"
       - "DatabaseClient.fetchSession(99999) returns null"
       - "Tool returns isError=true with JSON error message"
     verify:
@@ -236,13 +236,13 @@ stories:
 
   - name: retrieve-document-by-id
     description: >
-      SENSE_documents_retrieve fetches document metadata by doc_id, plus reads
+      SENSE_retrieve_document fetches document metadata by doc_id, plus reads
       file content from disk if the file still exists at vault_root/source_path.
     preconditions:
       - "vault.db has a document record with known ID"
       - "The document file exists on disk at vaultRoot/source_path"
     steps:
-      - "Call SENSE_documents_retrieve with doc_id=7"
+      - "Call SENSE_retrieve_document with doc_id=7"
       - "DatabaseClient.fetchDocument(7, null) queries documents WHERE id=7"
       - "Result contains source_path relative to vault root"
       - "Tool resolves vaultRoot.resolve(source_path) and checks Files.exists()"
@@ -253,11 +253,11 @@ stories:
 
   - name: retrieve-document-by-source-path
     description: >
-      SENSE_documents_retrieve fetches document by source_path when doc_id not provided.
+      SENSE_retrieve_document fetches document by source_path when doc_id not provided.
     preconditions:
       - "vault.db has a document with known source_path"
     steps:
-      - "Call SENSE_documents_retrieve with source_path='org/projects/actual-server.org'"
+      - "Call SENSE_retrieve_document with source_path='org/projects/actual-server.org'"
       - "DatabaseClient.fetchDocument(null, 'org/projects/actual-server.org') queries WHERE source_path=?"
     verify:
       - "Document found and returned with metadata"
@@ -265,12 +265,12 @@ stories:
 
   - name: retrieve-document-file-missing
     description: >
-      When the indexed document file no longer exists on disk, SENSE_documents_retrieve
+      When the indexed document file no longer exists on disk, SENSE_retrieve_document
       returns the database metadata without the content field.
     preconditions:
       - "vault.db has a document record but the file has been deleted from disk"
     steps:
-      - "Call SENSE_documents_retrieve with doc_id for a deleted file"
+      - "Call SENSE_retrieve_document with doc_id for a deleted file"
       - "Files.exists(filePath) returns false"
       - "Database metadata returned without 'content' field"
     verify:
@@ -279,11 +279,11 @@ stories:
 
   - name: retrieve-document-no-params
     description: >
-      SENSE_documents_retrieve returns an error when neither doc_id nor source_path is provided.
+      SENSE_retrieve_document returns an error when neither doc_id nor source_path is provided.
     preconditions:
       - "vault.db exists"
     steps:
-      - "Call SENSE_documents_retrieve with no arguments"
+      - "Call SENSE_retrieve_document with no arguments"
       - "Both docId and sourcePath are null"
     verify:
       - "Response is error with isError=true"
@@ -291,11 +291,11 @@ stories:
 
   - name: retrieve-document-not-found
     description: >
-      SENSE_documents_retrieve returns an error when the document does not exist in the database.
+      SENSE_retrieve_document returns an error when the document does not exist in the database.
     preconditions:
       - "vault.db exists but has no matching document"
     steps:
-      - "Call SENSE_documents_retrieve with doc_id=99999"
+      - "Call SENSE_retrieve_document with doc_id=99999"
       - "DatabaseClient.fetchDocument(99999, null) returns null"
     verify:
       - "Response is error with isError=true"
@@ -305,13 +305,13 @@ stories:
 
   - name: reassemble-loose-ends-basic
     description: >
-      SENSE_sessions_reassemble aggregates recent sessions into compact intelligence:
+      SENSE_reassemble_sessions aggregates recent sessions into compact intelligence:
       topic clusters with counts, deduplicated key facts, daily session rollups,
       and recent session titles (not raw data).
     preconditions:
       - "vault.db has 50+ sessions over the past 10 days"
     steps:
-      - "Call SENSE_sessions_reassemble with default lookback_days=10"
+      - "Call SENSE_reassemble_sessions with default lookback_days=10"
       - "DatabaseClient.fetchSessionsSince(10) returns all sessions from last 10 days"
       - "For each session: daily rollup counts sessions per date"
       - "Topics JSON parsed, frequencies aggregated into topicCounts map"
@@ -351,13 +351,13 @@ stories:
 
   - name: save-session-full
     description: >
-      ACT_sessions_save persists a session with summary, topics array, key_facts
+      ACT_save_session persists a session with summary, topics array, key_facts
       array, word_count, and message_count. Topics serialized as both JSON and
       space-separated text for FTS5 indexing.
     preconditions:
       - "vault.db exists with sessions and sessions_fts tables"
     steps:
-      - "Call ACT_sessions_save with summary='Configured emacs org-mode workflow', topics=['emacs','org-mode'], key_facts=['Switched to use-package','Enabled org-babel'], word_count=5000, message_count=42"
+      - "Call ACT_save_session with summary='Configured emacs org-mode workflow', topics=['emacs','org-mode'], key_facts=['Switched to use-package','Enabled org-babel'], word_count=5000, message_count=42"
       - "Topics serialized: JSON=['emacs','org-mode'], text='emacs org-mode'"
       - "Key facts serialized: JSON=['Switched to use-package','Enabled org-babel'], text='Switched to use-package\\nEnabled org-babel'"
       - "DatabaseClient.saveSession(null, summary, topicsJson, keyFactsJson, topicsText, keyFactsText, 5000, 42)"
@@ -372,11 +372,11 @@ stories:
 
   - name: save-session-minimal
     description: >
-      ACT_sessions_save works with only the required 'summary' field.
+      ACT_save_session works with only the required 'summary' field.
     preconditions:
       - "vault.db exists"
     steps:
-      - "Call ACT_sessions_save with summary='Quick debugging session'"
+      - "Call ACT_save_session with summary='Quick debugging session'"
       - "topics defaults to empty list, key_facts defaults to empty list"
       - "word_count and message_count are null"
     verify:
@@ -402,14 +402,14 @@ stories:
 
   - name: index-documents-fts5-only
     description: >
-      ACT_documents_index runs the full read→chunk→upsert pipeline in FTS5-only
+      ACT_index_documents runs the full read→chunk→upsert pipeline in FTS5-only
       mode when Qdrant/TEI are unavailable.
     preconditions:
       - "Qdrant and TEI not running"
       - "vault.db has documents and chunks tables"
       - "Target file exists at vaultRoot/path"
     steps:
-      - "Call ACT_documents_index with paths=['org/notes/daily.org']"
+      - "Call ACT_index_documents with paths=['org/notes/daily.org']"
       - "File read from vaultRoot.resolve(path)"
       - "SHA-256 content hash computed"
       - "Source type detected from extension: .org → 'org'"
@@ -433,7 +433,7 @@ stories:
       - "Qdrant and TEI running and available"
       - "Target files exist"
     steps:
-      - "Call ACT_documents_index with paths=['org/notes/project.org']"
+      - "Call ACT_index_documents with paths=['org/notes/project.org']"
       - "Semantic available: qdrant.isAvailable() && tei.isAvailable() both true"
       - "Old chunks deleted from both SQLite and Qdrant (qdrant.delete(oldIds))"
       - "Content chunked into segments"
@@ -455,7 +455,7 @@ stories:
     preconditions:
       - "vault.db has a document with content_hash matching current file content"
     steps:
-      - "Call ACT_documents_index with paths=['org/notes/unchanged.org'], force=false"
+      - "Call ACT_index_documents with paths=['org/notes/unchanged.org'], force=false"
       - "SHA-256 of file content matches existing document's content_hash"
       - "File skipped with status='unchanged'"
       - "Call again with force=true"
@@ -470,7 +470,7 @@ stories:
     preconditions:
       - "Path does not exist at vaultRoot"
     steps:
-      - "Call ACT_documents_index with paths=['nonexistent/file.org']"
+      - "Call ACT_index_documents with paths=['nonexistent/file.org']"
       - "Files.exists() and Files.isRegularFile() return false"
     verify:
       - "File result: {path: 'nonexistent/file.org', status: 'not_found'}"
@@ -482,7 +482,7 @@ stories:
     preconditions:
       - "vault.db exists"
     steps:
-      - "Call ACT_documents_index with paths=[] or no paths argument"
+      - "Call ACT_index_documents with paths=[] or no paths argument"
     verify:
       - "Response is error with isError=true"
       - "Error: {status: 'error', reason: 'No paths provided'}"

@@ -63,13 +63,13 @@ stories:
 
   - name: self-write-stores-key-value-in-session
     description: >
-      ACT_self_write stores a key-value pair in the session-scoped scratchpad and returns
+      ACT_write_scratchpad stores a key-value pair in the session-scoped scratchpad and returns
       confirmation JSON with the key and status "written".
     preconditions:
       - "Gateway is running with MCP server accepting connections"
       - "A valid MCP session exists (session ID propagated via ThreadLocal)"
     steps:
-      - "Client calls ACT_self_write with key='my_key' and value='my_value'"
+      - "Client calls ACT_write_scratchpad with key='my_key' and value='my_value'"
       - "Handler retrieves session ID from SessionState.getCurrentSession() (falls back to 'default' if null)"
       - "SessionState.put(sessionId, 'my_key', 'my_value') stores into ConcurrentHashMap"
       - "Handler returns CallToolResult with TextContent '{\"key\":\"my_key\",\"status\":\"written\"}' and isError=false"
@@ -78,7 +78,7 @@ stories:
       - "Response contains JSON with key and status='written'"
       - "SessionState.get(sessionId, 'my_key') returns 'my_value'"
       - "ToolRegistry records the tool call in SessionState.recordToolCall()"
-      - "Metrics.recordToolCall('ACT_self_write', durationMs) is invoked"
+      - "Metrics.recordToolCall('ACT_write_scratchpad', durationMs) is invoked"
       - "Timeout class is FAST (5s max)"
 
   - name: self-write-isolated-across-sessions
@@ -88,23 +88,23 @@ stories:
     preconditions:
       - "Two MCP sessions (session-A, session-B) are active"
     steps:
-      - "Client on session-A calls ACT_self_write with key='secret' value='alpha'"
-      - "Client on session-B calls ACT_self_write with key='secret' value='beta'"
-      - "Client on session-A calls SENSE_self_read with key='secret'"
-      - "Client on session-B calls SENSE_self_read with key='secret'"
+      - "Client on session-A calls ACT_write_scratchpad with key='secret' value='alpha'"
+      - "Client on session-B calls ACT_write_scratchpad with key='secret' value='beta'"
+      - "Client on session-A calls SENSE_read_scratchpad with key='secret'"
+      - "Client on session-B calls SENSE_read_scratchpad with key='secret'"
     verify:
-      - "Session-A SENSE_self_read returns value='alpha'"
-      - "Session-B SENSE_self_read returns value='beta'"
+      - "Session-A SENSE_read_scratchpad returns value='alpha'"
+      - "Session-B SENSE_read_scratchpad returns value='beta'"
       - "Values are stored in distinct SessionData.store() instances"
 
   - name: self-read-returns-value-for-existing-key
     description: >
-      SENSE_self_read retrieves a previously written key-value pair from the session scratchpad.
+      SENSE_read_scratchpad retrieves a previously written key-value pair from the session scratchpad.
       Values with special characters are JSON-escaped in the response.
     preconditions:
-      - "ACT_self_write has been called with key='note' value='line1\\nline2\\t\"quoted\"'"
+      - "ACT_write_scratchpad has been called with key='note' value='line1\\nline2\\t\"quoted\"'"
     steps:
-      - "Client calls SENSE_self_read with key='note'"
+      - "Client calls SENSE_read_scratchpad with key='note'"
       - "Handler reads from SessionState.get(sessionId, 'note')"
       - "Value is JSON-escaped: backslash, quote, newline, carriage return, tab"
     verify:
@@ -113,34 +113,34 @@ stories:
 
   - name: self-read-returns-null-for-missing-key
     description: >
-      SENSE_self_read returns null value when the key does not exist in the session scratchpad.
+      SENSE_read_scratchpad returns null value when the key does not exist in the session scratchpad.
     preconditions:
       - "Session exists but key 'nonexistent' was never written"
     steps:
-      - "Client calls SENSE_self_read with key='nonexistent'"
+      - "Client calls SENSE_read_scratchpad with key='nonexistent'"
     verify:
       - "Response contains '{\"key\":\"nonexistent\",\"value\":null}'"
       - "isError is false (missing key is not an error)"
 
   - name: self-read-returns-null-for-unknown-session
     description: >
-      When SessionState has no data for the current session ID, SENSE_self_read returns null.
+      When SessionState has no data for the current session ID, SENSE_read_scratchpad returns null.
     preconditions:
       - "Session ID is set but no SessionData exists for it in the sessions map"
     steps:
-      - "Client calls SENSE_self_read with key='anything'"
+      - "Client calls SENSE_read_scratchpad with key='anything'"
       - "SessionState.get() returns null because sessions map has no entry"
     verify:
       - "Response contains value:null"
 
   - name: self-inspect-returns-session-metrics
     description: >
-      SENSE_self_inspect returns tool_call_count, error_count, last_tools history,
+      SENSE_inspect_session returns tool_call_count, error_count, last_tools history,
       session_elapsed_ms, and loop_score for the current session.
     preconditions:
       - "Session has had multiple tool calls including some errors"
     steps:
-      - "Client calls SENSE_self_inspect with no parameters (empty schema)"
+      - "Client calls SENSE_inspect_session with no parameters (empty schema)"
       - "Handler calls SessionState.inspect(sessionId)"
       - "inspect() computes loop_score from last 10 entries in toolHistory deque"
     verify:
@@ -156,33 +156,33 @@ stories:
       When the same tool is called repeatedly, loop_score approaches 1.0.
       This enables the LLM to detect and break out of tool call loops.
     preconditions:
-      - "Session has been calling SENSE_self_read 10 times in a row"
+      - "Session has been calling SENSE_read_scratchpad 10 times in a row"
     steps:
-      - "Client calls SENSE_self_inspect"
+      - "Client calls SENSE_inspect_session"
     verify:
       - "loop_score is 1.0 (10 out of 10 calls are the same tool)"
-      - "last_tools contains 10+ entries of 'SENSE_self_read'"
+      - "last_tools contains 10+ entries of 'SENSE_read_scratchpad'"
 
   - name: self-inspect-empty-session
     description: >
-      SENSE_self_inspect returns zero counts and empty history for a session that
+      SENSE_inspect_session returns zero counts and empty history for a session that
       has no prior tool calls (or does not exist in the sessions map).
     preconditions:
       - "Session ID exists but no tool calls have been recorded"
     steps:
-      - "Client calls SENSE_self_inspect"
+      - "Client calls SENSE_inspect_session"
     verify:
       - "tool_call_count is 0, error_count is 0, last_tools is [], session_elapsed_ms is 0, loop_score is 0.0"
 
   - name: self-defer-schedules-deferred-execution
     description: >
-      ACT_self_defer schedules a deferred task that writes its result to the session scratchpad
-      after a specified delay. The result can be retrieved later via SENSE_self_read using the
+      ACT_defer_tool schedules a deferred task that writes its result to the session scratchpad
+      after a specified delay. The result can be retrieved later via SENSE_read_scratchpad using the
       returned retrieve_key.
     preconditions:
       - "Gateway is running with a valid session"
     steps:
-      - "Client calls ACT_self_defer with tool_name='SENSE_graph_neighbors', delay_seconds=5"
+      - "Client calls ACT_defer_tool with tool_name='SENSE_find_neighbors', delay_seconds=5"
       - "Handler validates delay_seconds is between 1 and 300"
       - "Handler generates UUID-based deferId and constructs retrieve_key='__deferred:<uuid>'"
       - "SessionState.scheduleDeferred() schedules a Runnable on the session's single-threaded ScheduledExecutorService"
@@ -190,17 +190,17 @@ stories:
       - "After 5 seconds, the scheduled Runnable executes and writes 'executed at <ISO timestamp>' to the retrieve_key"
     verify:
       - "Immediate response contains defer_id (UUID), scheduled_for_seconds=5, retrieve_key prefix '__deferred:'"
-      - "After delay, SENSE_self_read with the retrieve_key returns the execution timestamp"
+      - "After delay, SENSE_read_scratchpad with the retrieve_key returns the execution timestamp"
       - "The deferred task runs on a virtual thread named 'defer-<sessionId>'"
 
   - name: self-defer-rejects-out-of-range-delay
     description: >
-      ACT_self_defer rejects delay_seconds values outside the 1-300 range.
+      ACT_defer_tool rejects delay_seconds values outside the 1-300 range.
     preconditions:
       - "Gateway is running"
     steps:
-      - "Client calls ACT_self_defer with delay_seconds=0"
-      - "Client calls ACT_self_defer with delay_seconds=301"
+      - "Client calls ACT_defer_tool with delay_seconds=0"
+      - "Client calls ACT_defer_tool with delay_seconds=301"
     verify:
       - "Both calls return isError=true with message 'delay_seconds must be between 1 and 300'"
       - "No task is scheduled"
@@ -267,13 +267,13 @@ stories:
 
   - name: graph-neighbors-returns-connected-entities
     description: >
-      SENSE_graph_neighbors queries Neo4j for 1-hop neighbors of a named entity
+      SENSE_find_neighbors queries Neo4j for 1-hop neighbors of a named entity
       and returns them as a JSON array with relationship type, labels, name, and properties.
     preconditions:
       - "Neo4j is connected and contains entities with relationships"
       - "Entity 'Emacs' exists with neighbors 'elisp', 'org-mode', 'magit'"
     steps:
-      - "Client calls SENSE_graph_neighbors with name='Emacs'"
+      - "Client calls SENSE_find_neighbors with name='Emacs'"
       - "Handler calls neo4j.neighbors('Emacs', 20)"
       - "Neo4j executes: MATCH (n {name: $name})-[r]-(m) RETURN ... LIMIT $limit"
     verify:
@@ -283,23 +283,23 @@ stories:
 
   - name: graph-neighbors-with-custom-limit
     description: >
-      SENSE_graph_neighbors respects the optional limit parameter.
+      SENSE_find_neighbors respects the optional limit parameter.
     preconditions:
       - "Neo4j is connected, entity 'Emacs' has 50 neighbors"
     steps:
-      - "Client calls SENSE_graph_neighbors with name='Emacs', limit=5"
+      - "Client calls SENSE_find_neighbors with name='Emacs', limit=5"
     verify:
       - "Response contains at most 5 neighbor entries"
 
   - name: graph-path-finds-shortest-path
     description: >
-      SENSE_graph_path finds the shortest path between two entities using Neo4j's
+      SENSE_find_path finds the shortest path between two entities using Neo4j's
       shortestPath algorithm with configurable max depth.
     preconditions:
       - "Neo4j is connected"
       - "Path exists: Emacs -[CONTAINS]-> org-mode -[TAGGED_WITH]-> productivity"
     steps:
-      - "Client calls SENSE_graph_path with from='Emacs', to='productivity'"
+      - "Client calls SENSE_find_path with from='Emacs', to='productivity'"
       - "Handler calls neo4j.shortestPath('Emacs', 'productivity', 5)"
       - "Neo4j executes: MATCH p = shortestPath((a {name: $from})-[*1..5]-(b {name: $to})) RETURN ..."
     verify:
@@ -309,22 +309,22 @@ stories:
 
   - name: graph-path-no-path-exists
     description: >
-      SENSE_graph_path returns empty results when no path exists between entities.
+      SENSE_find_path returns empty results when no path exists between entities.
     preconditions:
       - "Neo4j is connected but entities 'A' and 'Z' are in disconnected subgraphs"
     steps:
-      - "Client calls SENSE_graph_path with from='A', to='Z'"
+      - "Client calls SENSE_find_path with from='A', to='Z'"
     verify:
       - "Response is an empty JSON array []"
       - "isError is false (no path is not an error)"
 
   - name: graph-query-executes-read-only-cypher
     description: >
-      SENSE_graph_query executes arbitrary read-only Cypher queries with optional parameters.
+      SENSE_query_graph executes arbitrary read-only Cypher queries with optional parameters.
     preconditions:
       - "Neo4j is connected"
     steps:
-      - "Client calls SENSE_graph_query with cypher='MATCH (n:Document) RETURN n.name LIMIT 10'"
+      - "Client calls SENSE_query_graph with cypher='MATCH (n:Document) RETURN n.name LIMIT 10'"
       - "Handler verifies query doesn't contain write keywords"
       - "neo4j.query() executes the Cypher and returns result records"
     verify:
@@ -334,15 +334,15 @@ stories:
 
   - name: graph-query-rejects-write-operations
     description: >
-      SENSE_graph_query blocks Cypher queries containing write keywords:
+      SENSE_query_graph blocks Cypher queries containing write keywords:
       CREATE, DELETE, SET, REMOVE, MERGE, DROP.
     preconditions:
       - "Neo4j is connected"
     steps:
-      - "Client calls SENSE_graph_query with cypher='CREATE (n:Test {name: \"bad\"})'"
+      - "Client calls SENSE_query_graph with cypher='CREATE (n:Test {name: \"bad\"})'"
       - "Handler checks upper-cased query for forbidden keywords"
     verify:
-      - "Response is error: 'Write operations not allowed via SENSE_graph_query. Use a dedicated ACT_ tool.'"
+      - "Response is error: 'Write operations not allowed via SENSE_query_graph. Use a dedicated ACT_ tool.'"
       - "isError is true"
       - "Query is never sent to Neo4j"
 
@@ -359,8 +359,8 @@ stories:
 
   - name: graph-tools-unavailable-when-neo4j-down
     description: >
-      When Neo4j connection fails at startup, graph tools (SENSE_graph_neighbors,
-      SENSE_graph_path, SENSE_graph_query) are not registered at all.
+      When Neo4j connection fails at startup, graph tools (SENSE_find_neighbors,
+      SENSE_find_path, SENSE_query_graph) are not registered at all.
     preconditions:
       - "Neo4j is unreachable at bolt://127.0.0.1:7687"
     steps:
@@ -379,7 +379,7 @@ stories:
     preconditions:
       - "Neo4j was connected at startup but becomes unreachable during operation"
     steps:
-      - "Client calls SENSE_graph_neighbors with name='anything'"
+      - "Client calls SENSE_find_neighbors with name='anything'"
       - "neo4j.neighbors() throws an exception"
     verify:
       - "Response is isError=true with message 'Graph neighbors query failed: <exception message>'"
@@ -461,12 +461,12 @@ stories:
 
   - name: worldview-load-returns-cached
     description: >
-      SENSE_worldview_load returns the cached worldview JSON when available
+      SENSE_load_worldview returns the cached worldview JSON when available
       and refresh is not requested.
     preconditions:
       - "cachedWorldview AtomicReference contains a previously materialized worldview JSON"
     steps:
-      - "Client calls SENSE_worldview_load with no parameters (refresh defaults to false)"
+      - "Client calls SENSE_load_worldview with no parameters (refresh defaults to false)"
       - "Handler reads cachedWorldview.get() which returns non-null JSON"
     verify:
       - "Response is the cached JSON string directly"
@@ -475,12 +475,12 @@ stories:
 
   - name: worldview-load-materializes-on-demand
     description: >
-      SENSE_worldview_load materializes a fresh worldview when cache is empty.
+      SENSE_load_worldview materializes a fresh worldview when cache is empty.
     preconditions:
       - "cachedWorldview AtomicReference is null (first call or cache cleared)"
       - "SQLite vault.db exists with sessions data"
     steps:
-      - "Client calls SENSE_worldview_load"
+      - "Client calls SENSE_load_worldview"
       - "Handler sees json == null"
       - "materializer.materialize() is called"
       - "L1, L2, L3 layers are materialized sequentially"
@@ -492,11 +492,11 @@ stories:
 
   - name: worldview-load-force-refresh
     description: >
-      SENSE_worldview_load with refresh=true forces re-materialization even when cache exists.
+      SENSE_load_worldview with refresh=true forces re-materialization even when cache exists.
     preconditions:
       - "cachedWorldview contains stale data"
     steps:
-      - "Client calls SENSE_worldview_load with refresh=true"
+      - "Client calls SENSE_load_worldview with refresh=true"
       - "Handler ignores cached value and calls materializer.materialize()"
     verify:
       - "New worldview has a fresh materializedAt timestamp"
@@ -627,12 +627,12 @@ stories:
 
   - name: events-write-produces-to-kafka
     description: >
-      ACT_events_write creates a Event record and produces it to the chronicle.events
+      ACT_write_event creates a Event record and produces it to the chronicle.events
       Kafka topic synchronously, returning the event_id, topic, partition, and offset.
     preconditions:
       - "Kafka is connected and the chronicle.events topic exists"
     steps:
-      - "Client calls ACT_events_write with event_type='OBSERVATION', content='User prefers dark themes'"
+      - "Client calls ACT_write_event with event_type='OBSERVATION', content='User prefers dark themes'"
       - "Handler verifies kafka.isConnected() is true"
       - "Event.create() generates UUID event_id and current Instant timestamp"
       - "kafka.produceSync() serializes Event to JSON and sends to chronicle.events topic"
@@ -644,7 +644,7 @@ stories:
 
   - name: events-write-all-event-types
     description: >
-      ACT_events_write accepts five event types: OBSERVATION, DECISION, ARTIFACT, QUESTION, CORRECTION.
+      ACT_write_event accepts five event types: OBSERVATION, DECISION, ARTIFACT, QUESTION, CORRECTION.
     preconditions:
       - "Kafka is connected"
     steps:
@@ -655,12 +655,12 @@ stories:
 
   - name: events-write-with-optional-fields
     description: >
-      ACT_events_write handles optional pass_number, tags, and references fields.
+      ACT_write_event handles optional pass_number, tags, and references fields.
     preconditions:
       - "Kafka is connected"
     steps:
-      - "Client calls ACT_events_write with only required fields (event_type, content)"
-      - "Client calls ACT_events_write with pass_number=3, tags=['design','ui'], references=['dep-123']"
+      - "Client calls ACT_write_event with only required fields (event_type, content)"
+      - "Client calls ACT_write_event with pass_number=3, tags=['design','ui'], references=['dep-123']"
     verify:
       - "Default pass_number is 1 when not provided"
       - "Default tags is empty list when not provided"
@@ -669,11 +669,11 @@ stories:
 
   - name: events-write-kafka-not-connected
     description: >
-      ACT_events_write returns an error when Kafka is not connected.
+      ACT_write_event returns an error when Kafka is not connected.
     preconditions:
       - "Kafka client exists but isConnected() returns false"
     steps:
-      - "Client calls ACT_events_write"
+      - "Client calls ACT_write_event"
       - "Handler checks kafka.isConnected()"
     verify:
       - "Response is isError=true with message 'Kafka not connected - events unavailable'"
@@ -681,7 +681,7 @@ stories:
 
   - name: events-write-not-registered-when-kafka-unavailable
     description: >
-      When Kafka connection fails at startup, ACT_events_write is not registered at all.
+      When Kafka connection fails at startup, ACT_write_event is not registered at all.
     preconditions:
       - "Kafka is unreachable at bootstrap servers"
     steps:
@@ -689,7 +689,7 @@ stories:
       - "kafka variable is set to null"
       - "The 'if (kafka != null)' guard around EventsWrite.register() is false"
     verify:
-      - "ACT_events_write does not appear in the tool list"
+      - "ACT_write_event does not appear in the tool list"
       - "Warning is logged about Kafka unavailability"
 
   - name: event-model-auto-fields
@@ -1678,7 +1678,7 @@ enforced_constraints:
 
   - name: read-only-cypher-enforcement
     description: >
-      SENSE_graph_query blocks Cypher queries containing CREATE, DELETE, SET, REMOVE, MERGE,
+      SENSE_query_graph blocks Cypher queries containing CREATE, DELETE, SET, REMOVE, MERGE,
       or DROP keywords via upper-case string matching.
     rationale: >
       Prevents accidental or malicious modification of the knowledge graph via the read-only
@@ -1708,14 +1708,14 @@ enforced_constraints:
 
   - name: deferred-task-delay-bounds
     description: >
-      ACT_self_defer delay_seconds must be between 1 and 300 (5 minutes).
+      ACT_defer_tool delay_seconds must be between 1 and 300 (5 minutes).
     rationale: >
       Prevents zero-delay busy loops and excessively long-lived deferred tasks that
       could outlive the session.
 
   - name: kafka-disconnection-guard
     description: >
-      ACT_events_write checks kafka.isConnected() before attempting to produce.
+      ACT_write_event checks kafka.isConnected() before attempting to produce.
       Returns error immediately if Kafka is not available.
     rationale: >
       Prevents blocking on Kafka connection timeout during tool execution.
