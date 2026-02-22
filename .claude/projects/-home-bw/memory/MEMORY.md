@@ -17,10 +17,11 @@
 ## Gateway project status
 - **Repo**: `~/actual/` (SignalAssembly/actual). Single repo — all prior repos deleted.
 - **Production**: `actual-gateway.service` (systemd user). Config: `~/.config/actual/gateway.toml`. MCP: `"gateway"` in `~/.claude.json`. Build: `~/actual/build/libs/actual-1.0.0.jar`.
-- **31 tools** after pruning (was 106). Includes ACT_send_notification (ntfy, config-gated).
+- **32 tools**, verb-first naming convention (ACT_verb_noun, SENSE_verb_noun). Renamed from noun-first 2026-02-21.
 - **REST API for debugging**: GET /api/tools, GET/POST /api/tool/{name} on port 8372.
-- **VaultWatcher**: background pipeline — DocumentIndexer, ClaudeConversationIndexer, EmailIndexer. All virtual threads. FTS5-only by default, adds embeddings if Qdrant+TEI available.
-- **FTS5 query sanitization**: all MATCH queries quote each token. Fixed in SqliteClient + Python vault-rag db/sqlite.py.
+- **VaultWatcher**: background pipeline — DocumentIndexer, ClaudeConversationIndexer, EmailIndexer. All virtual threads. PostgreSQL tsvector/GIN for full-text, TEI→Qdrant for embeddings (conditional on availability). DocumentIndexer emits `chronicle.documents` Kafka events.
+- **Semantic pipeline** (2026-02-21): All indexers (DocumentIndexer, ClaudeConversationIndexer) write embeddings when TEI+Qdrant available. SemanticProjectionConsumer implemented (was placeholder). ACT_index_documents supports `reindex_all=true`. Qdrant coverage: 99.8% of 214K chunks. All Kafka topics active (chronicle.documents, .events, .sessions, .turns). SENSE_search_sessions and SENSE_search_documents both use hybrid RRF search.
+- **Legacy Python vault-rag**: fully deleted (2026-02-21). No Python in indexing pipeline.
 - **Display isolation** (ADR-007): Xvfb :99 + i3 + per-display sensor via `SENSOR_SHM_SUFFIX`. Auto-attaches xpra viewer to workspace 9.
 - **HTTP daemon mode**: Streamable HTTP via Jetty 12.1.5 on `127.0.0.1:8372`. Multi-session. Config: `server.transport = "http"`.
 - **Protocol version shim**: `ProtocolVersionFilter.java` patches `2024-11-05` → `2025-11-25`. Remove when SDK updates.
@@ -33,7 +34,8 @@
 - **Observability stack** (Docker): Prometheus, Grafana, Tempo, Loki, OTel Collector. All three pipelines operational (metrics→Prometheus, traces→Tempo, logs→Loki). JFR enabled (`-XX:StartFlightRecording`).
 - **Resource allocation** (2026-02-20): Liberal limits — gateway: -Xmx8g, MemoryMax=32G, MemoryHigh=24G, CPUQuota=400%, TasksMax=4096. Docker: Prometheus 4g, Grafana 2g, Tempo 4g, Loki 4g, OTel Collector 2g. Machine: 128GB RAM, 48 cores (Threadripper PRO 5965WX).
 - **All hooks now C++**: save_session (libpq, 21ms), capture-user-turn (libpq, 29ms), sensor_awareness (SHM, 3ms). SQLite completely eliminated from hook chain.
-- **SQLite→Postgres migration complete**: 478 sessions + 873 turns migrated. vault.db no longer written to by any active hook.
+- **SQLite→Postgres migration complete**: 478 sessions + 873 turns migrated. vault.db no longer written to by any active hook. Archive at ~/vault/data/vault.db (1.7GB, read-only).
+- **No SQLite in active search paths**: all SENSE_search_documents / SENSE_search_sessions queries go through PostgreSQL tsvector/GIN. Semantic search uses TEI + Qdrant. Legacy vault-rag Python service and its systemd unit fully removed.
 - **Naming**: All "actual-server" references renamed to "actual" (config path, systemd, source code, dashboards).
 
 ## Architecture decisions
@@ -101,11 +103,22 @@
 ## Gateway connectivity protocol
 - If gateway MCP tools (ACT_*, SENSE_*) are unavailable, STOP and ask user to reconnect via `/mcp`. No workarounds.
 
+## Account setup preference
+- **Default accounts**: GitHub (SignalAssembly) or bw1animation@gmail.com for any service that needs signup/login.
+- **Browser access**: User grants access to browser, email, and all local services. Handle account setup autonomously.
+
 ## Communication protocols
 - **Literal-first answering**: Always give a complete literal answer first, then proceed with action.
 - **Progress updates**: `ACT_emit_overlay_message` at least every 15 seconds during multi-step work.
 - **Show-me default**: After visible UI changes, auto-screenshot :99 and open on user's display. Don't ask.
 - **Attention prerequisite**: Detect user's workspace via `SENSE_read_window_layout(format=workspaces)` before visual communication.
+
+## Engineering philosophy
+- **Enterprise-grade over provisional**: Always choose architecturally correct solutions over convenient shortcuts. Adding dependencies is justified when it eliminates intermediaries or ad-hoc integration. Never choose "easy now" over "right long-term."
+- **No unnecessary intermediaries**: Components should talk to their natural integration point directly (e.g., hook → Kafka directly via librdkafka, not hook → REST → gateway → Kafka).
+- **REST only where required**: MCP protocol (spec requires HTTP) and human-facing debug endpoints (curl-friendly). All internal service communication uses the natural protocol for the integration point.
+- **Be opinionated**: Present tradeoffs with real numbers, not vague hedging. Have a clear recommendation and defend it. Don't offer to build something without first saying whether it should be built.
+- **Scrutinize before proposing**: Every proposal must pass: "does a downstream system change behavior based on this, and is that change correct more often than wrong?" If you can't answer yes, don't propose it.
 
 ## Desktop app testing on :99
 - Use actual app on :99, not Chromium. Kill :0 instance first (Tauri single-instance).
