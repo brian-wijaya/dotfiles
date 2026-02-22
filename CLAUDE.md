@@ -135,18 +135,18 @@ BLOCKING: If gateway MCP tools (ACT_*, SENSE_*) are not available, STOP all acti
 BLOCKING REQUIREMENTS - Execute before any other response:
 
 1. On first user message of every session:
-   gateway SENSE_search_sessions(query=user's first message verbatim, recency_bias=0.7)
+   gateway SENSE_sessions_search(query=user's first message verbatim, recency_bias=0.7)
 
 2. On resumption query ("where were we?", "continue", "what were we working on"):
-   → IMMEDIATELY call gateway SENSE_reassemble_sessions(lookback_days=10)
+   → IMMEDIATELY call gateway SENSE_sessions_reassemble(lookback_days=10)
    → Present active tasks, loose ends, open questions in structured format
    → Ask user which thread to resume
 
 3. On topic-specific session search (e.g., "sessions about emacs config"):
-   → gateway SENSE_search_sessions(query=topic keywords, recency_bias=0.0)
+   → gateway SENSE_sessions_search(query=topic keywords, recency_bias=0.0)
 
 4. On session end or context compaction:
-   gateway ACT_save_session(summary, topics, key_facts)
+   gateway ACT_sessions_save(summary, topics, key_facts)
 
    key_facts format — classify each fact at save time:
    key_facts: [
@@ -165,11 +165,11 @@ BLOCKING REQUIREMENTS - Execute before any other response:
    Plain strings still work but structured format enables proper worldview materialization.
 
 5. During work — record events at natural breakpoints:
-   Call ACT_write_event when you make a decision, discover a bug, observe something notable,
+   Call ACT_events_write when you make a decision, discover a bug, observe something notable,
    or resolve a question. Only event_type and statement are required. Examples:
-   - ACT_write_event(event_type="DECISION", statement="Chose PostgreSQL over SQLite for worldview projections due to connection pooling")
-   - ACT_write_event(event_type="BUG_FOUND", statement="Virtual thread carrier pinning caused by synchronized blocks in SqliteClient")
-   - ACT_write_event(event_type="OBSERVATION", statement="ClaudeConversationIndexer uses two-index design: sessions_fts for metadata, chunks_fts for raw content")
+   - ACT_events_write(event_type="DECISION", statement="Chose PostgreSQL over SQLite for worldview projections due to connection pooling")
+   - ACT_events_write(event_type="BUG_FOUND", statement="Virtual thread carrier pinning caused by synchronized blocks in SqliteClient")
+   - ACT_events_write(event_type="OBSERVATION", statement="ClaudeConversationIndexer uses two-index design: sessions_fts for metadata, chunks_fts for raw content")
    Aim for 1-3 events per significant task. The knowledge system depends on these.
 </session_preamble>
 
@@ -242,113 +242,15 @@ sensor:
   environment → SENSE_read_environment_snapshot (full fused state)
 
 recall:
-  search_vault → SENSE_search_documents (PostgreSQL tsvector/GIN, semantic via Qdrant when TEI available)
-  search_sessions → SENSE_search_sessions (PostgreSQL tsvector/GIN + recency_bias)
-  list_sessions → SENSE_list_sessions
-  get_session → SENSE_retrieve_session (by ID)
-  reassemble_context → SENSE_reassemble_sessions (cross-session reconstruction)
-  get_document → SENSE_retrieve_document (by ID or source_path)
-  save_session → ACT_save_session (summary + topics + key_facts)
-  index_documents → ACT_index_documents (requires Qdrant + TEI P2)
-
-cross_context:
-  pre_irreversible → SENSE_check_permission, then ACT_flash_text (red)
-  post_visual_change → SENSE_read_anomalies + SENSE_read_events(count=20), then SENSE_read_window_layout, then SENSE_capture_screen_region
-  compound_sequence → BASELINE(SENSE_read_snapshot + SENSE_read_events) → SETUP → ACT → VERIFY(SENSE_read_anomalies + SENSE_read_events + SENSE_capture_screen_region, diff against baseline)
-  show_me_file → ACT_navigate_buffer (open file in user's Emacs on :0). Trigger: "show me <file>", "open <file>", "let me see <file>", "pull up <file>". NOT for agent's own reading — only when the user wants to see it.
-
-self_restart:
-  restart_session → Bash: tmux split-window + tmux-tui-nav + tmux send-keys
-    Procedure (all via Bash, no MCP dependency):
-    1. tmux split-window -h → get NEW_PANE id from tmux list-panes
-    2. tmux send-keys -t NEW_PANE "cld" Enter → wait 4s for startup
-    3. tmux send-keys -t NEW_PANE "/resume" Enter → wait 1s → Enter again (dismiss autocomplete) → wait 3s for session picker
-    4. Enter to select current session (first in list, already highlighted) → wait 5s for load
-    5. If MCP reconnection needed: tmux send-keys -t NEW_PANE "/mcp" Enter → Enter (dismiss autocomplete) → navigate to server → Enter to reconnect → Escape to close
-    6. tmux send-keys -t NEW_PANE "<continuation message>" Enter → message acts as user input for new instance
-    7. tmux swap-pane -s OLD_PANE -t NEW_PANE
-    8. tmux kill-pane -t OLD_PANE (kills current instance, new one continues)
-    Triggers: context running low, MCP broken, need fresh instance, session corruption
-    Key: entire flow is tmux-only, works even when all MCPs are down
-</tool_dispatch>
-
-<display_routing>
-Every tool call that takes a `display_id` parameter requires an intent classification.
-Do NOT default blindly. Classify the operation:
-
-DEMONSTRATE (display_id: "host" → :0)
-  User wants to observe the result in real-time.
-  Signals: "show me", "let me see", "watch", "on my screen", "test it" (with visual context),
-  "pull up", "arrange", "put X next to Y", any window management on user's desktop.
-  Also: features whose entire purpose is user observation (edit-stream, mosaic).
-
-DEVELOP (display_id: "99" → :99, or omit for gateway default)
-  Agent working independently. User doesn't need to see it.
-  Signals: "run tests", "build", "deploy", automated work, headless testing,
-  "work on X" (without observation request), background tasks.
-
-INSPECT (display_id: "host" → :0)
-  Reading the user's current environment state.
-  Signals: "what's on my screen", "what workspace am I on", querying user's window layout,
-  checking what the user is doing, any SENSE_ call about the user's desktop.
-
-AMBIGUOUS → Ask. "Should I do this on your screen or in the background?"
-
-HARD RULES:
-- edit-stream, mosaic slides → ALWAYS :0 (inherently user-facing)
-- SENSE_read_window_layout for user context → ALWAYS display_id: "host"
-- Screenshots for user verification → display_id: "host"
-- e2e-loop-demonstration → :0; e2e-loop-headless → :99
-- Window arrangement requests → ALWAYS display_id: "host"
-- If the user just said "let's test it" or "show me" → :0
-
-The C++ edit-stream hook targets whichever Emacs is running.
-The emacsclient in the hook connects to the Emacs daemon — ensure the Emacs frame
-is on the correct display BEFORE triggering edits.
-</display_routing>
-
-<window_layout>
-Window sizing rules for :0 (user display, 3440x1440 ultrawide, 40px polybar).
-
-EQUAL SPLIT BY DEFAULT:
-- 2 windows → 50% / 50% (1710px each)
-- 3 windows → 33% / 33% / 33% (1140px each)
-- 4 windows → 25% each (rare, avoid when possible)
-
-WEIGHTED SPLIT (2/3 + 1/3) — only when justified:
-- Code review: editor 2/3, reference 1/3
-- Writing with documentation: editor 2/3, docs 1/3
-- Debugging: code 2/3, logs/output 1/3
-- Video/media playback: player 2/3, controls/chat 1/3
-
-JUDGMENT HEURISTIC:
-- The window the user is actively working IN gets the most space
-- The window being OBSERVED gets minimum viable space
-- Terminal running Claude Code = working window (user reads output here)
-- Emacs showing edit-stream = observation window (user watches, not types)
-- Chrome with YouTube = passive/background (candidate to move to another workspace)
-- When adding Emacs for edit-stream alongside terminal: 50/50 (both need readable text)
-
-ACTIONS BEFORE REARRANGING:
-1. SENSE_read_window_layout(display_id: "host") to see current state
-2. Classify each window: active-work / observation / passive / background
-3. Background windows → move to another workspace rather than squeeze
-4. Apply equal split unless a weighted split is clearly better
-5. Never go below 1/3 width (1140px) for any text-bearing window — below this, code/text wraps too aggressively on an ultrawide
-
-i3 COMMANDS (via ACT_execute_command, display_id: "host"):
-- Move window: i3-msg '[id=WINDOW_ID] move container to workspace N'
-- Resize: i3-msg '[con_id=CONTAINER_ID] resize set WIDTH ppt 0 ppt'
-- Focus: i3-msg '[id=WINDOW_ID] focus'
-- Layout: i3-msg 'layout splith' (horizontal split, the default)
-</window_layout>
-
-<vault_resource_management>
-Background indexing: gateway VaultWatcher (Java, virtual threads). Legacy Python vault-rag-watcher.service fully removed.
-Resource modes: Conservative (8GB/50% CPU, user active) ↔ Aggressive (32GB/100% CPU, 6hr idle)
-Services: actual-gateway.service (VaultWatcher runs inside gateway process, resource scaling via VaultResourceScaler)
-Search: PostgreSQL tsvector/GIN for full-text, TEI + Qdrant for semantic. No SQLite in active search paths.
-MCP knowledge tools: via gateway (SENSE_search_documents, ACT_index_documents, etc.)
+  search_vault → SENSE_documents_search (FTS5, semantic when P2 ready)
+  search_sessions → SENSE_sessions_search (FTS5 + recency_bias)
+  list_sessions → SENSE_sessions_list
+  get_session → SENSE_sessions_retrieve (by ID)
+  reassemble_context → SENSE_sessions_reassemble (cross-session reconstruction)
+  get_document → SENSE_documents_retrieve (by ID or source_path)
+  save_session → ACT_sessions_save (summary + topics + key_facts)
+  index_documents → ACT_documents_index (requires Qdrant + TEI P2)
+MCP knowledge tools: via gateway (SENSE_documents_search, ACT_documents_index, etc.)
 </vault_resource_management>
 
 <screenshot_legibility>

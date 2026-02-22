@@ -902,5 +902,8 @@ to display inline diff overlays for Edit and Write tool calls."
     (claude-edit-stream--accept-all)
     (message "Claude Edit Stream disabled")))
 
+;; Enable globally on load
+(claude-edit-stream-mode 1)
+
 (provide 'claude-edit-stream)
 ;;; claude-edit-stream.el ends here
